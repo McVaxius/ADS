@@ -9,12 +9,14 @@ namespace ADS.Services;
 public sealed class MapFlagService
 {
     private readonly IDataManager dataManager;
+    private readonly IClientState clientState;
     private readonly ICondition condition;
     private readonly IPluginLog log;
 
-    public MapFlagService(IDataManager dataManager, ICondition condition, IPluginLog log)
+    public MapFlagService(IDataManager dataManager, IClientState clientState, ICondition condition, IPluginLog log)
     {
         this.dataManager = dataManager;
+        this.clientState = clientState;
         this.condition = condition;
         this.log = log;
     }
@@ -53,10 +55,17 @@ public sealed class MapFlagService
                 return false;
             }
 
-            var mapId = territory.Map.RowId;
+            var mapId = clientState.MapId != 0 ? clientState.MapId : territory.Map.RowId;
+            if (mapId == 0)
+            {
+                status = $"Skipped map flag for {objectName}: no active map id was available.";
+                log.Warning($"[ADS] {status}");
+                return false;
+            }
+
             var flagPosition = new Vector3(worldPosition.X, 0f, worldPosition.Z);
             agentMap->SetFlagMapMarker(territoryId, mapId, flagPosition);
-            status = $"Placed map flag for {objectName} at {worldPosition.X:0.0}, {worldPosition.Z:0.0}.";
+            status = $"Placed map flag for {objectName} on map {mapId} at {worldPosition.X:0.0}, {worldPosition.Z:0.0}.";
             log.Information($"[ADS] {status}");
             return true;
         }

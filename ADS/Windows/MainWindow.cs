@@ -31,16 +31,16 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
 
         DrawTopRow();
-        ImGui.Separator();
-        DrawCurrentState();
         ImGui.Spacing();
         DrawActionRow();
+        ImGui.Spacing();
+        DrawJsonButtons();
+        ImGui.Separator();
+        DrawCurrentState();
         ImGui.Spacing();
         DrawDutyCatalog();
         ImGui.Spacing();
         DrawObservationSummary();
-        ImGui.Spacing();
-        DrawJsonButtons();
     }
 
     private void DrawTopRow()
@@ -67,6 +67,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Rules"))
             plugin.ToggleRuleEditorUi();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Dialogs"))
+            plugin.ToggleDialogRuleEditorUi();
 
         ImGui.TextWrapped(PluginInfo.Summary);
         ImGui.TextWrapped(PluginInfo.PilotDutySummary);

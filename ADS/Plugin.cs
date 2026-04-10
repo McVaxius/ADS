@@ -5,6 +5,7 @@ using ADS.Services;
 using ADS.Windows;
 using Dalamud.Game.Command;
 using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.Dtr;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -23,6 +24,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
@@ -44,9 +46,11 @@ public sealed class Plugin : IDalamudPlugin
     public DutyContextService DutyContextService { get; }
     public ObjectPriorityRuleService ObjectPriorityRuleService { get; }
     public ObservationMemoryService ObservationMemoryService { get; }
+    public DialogYesNoRuleService DialogYesNoRuleService { get; }
     public DungeonFrontierService DungeonFrontierService { get; }
     public ObjectivePlannerService ObjectivePlannerService { get; }
     public ExecutionService ExecutionService { get; }
+    public DialogAutomationService DialogAutomationService { get; }
     public AdsIpcService AdsIpcService { get; }
     public MapFlagService MapFlagService { get; }
 
@@ -55,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ObjectExplorerWindow objectExplorerWindow;
     private readonly FrontierLabelWindow frontierLabelWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
+    private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
 
@@ -66,11 +71,13 @@ public sealed class Plugin : IDalamudPlugin
         DutyCatalogService = new DutyCatalogService(DataManager, Log);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
         ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
-        MapFlagService = new MapFlagService(DataManager, Condition, Log);
+        MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         ExecutionService = new ExecutionService(ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, Log);
+        DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
             StartDutyFromOutside,
@@ -85,11 +92,13 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow = new ObjectExplorerWindow(this);
         frontierLabelWindow = new FrontierLabelWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
+        dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
         WindowSystem.AddWindow(frontierLabelWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
+        WindowSystem.AddWindow(dialogRuleEditorWindow);
 
         RegisterCommands();
 
@@ -125,6 +134,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.Dispose();
         frontierLabelWindow.Dispose();
         objectRuleEditorWindow.Dispose();
+        dialogRuleEditorWindow.Dispose();
     }
 
     public void OpenMainUi()
@@ -151,6 +161,12 @@ public sealed class Plugin : IDalamudPlugin
     public void OpenRuleEditorUi()
         => objectRuleEditorWindow.IsOpen = true;
 
+    public void ToggleDialogRuleEditorUi()
+        => dialogRuleEditorWindow.IsOpen = !dialogRuleEditorWindow.IsOpen;
+
+    public void OpenDialogRuleEditorUi()
+        => dialogRuleEditorWindow.IsOpen = true;
+
     public void SaveConfiguration()
     {
         Configuration.Save();
@@ -164,6 +180,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.QueueResetToOrigin();
         frontierLabelWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
+        dialogRuleEditorWindow.QueueResetToOrigin();
     }
 
     public void JumpWindows()
@@ -173,6 +190,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.QueueRandomVisibleJump();
         frontierLabelWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
+        dialogRuleEditorWindow.QueueRandomVisibleJump();
     }
 
     public string ObjectExplorerStatus
@@ -239,6 +257,7 @@ public sealed class Plugin : IDalamudPlugin
                 executionStatus = ExecutionService.LastStatus,
                 duty = DutyContextService.Current.CurrentDuty?.EnglishName,
                 territoryTypeId = DutyContextService.Current.TerritoryTypeId,
+                mapId = DutyContextService.Current.MapId,
                 contentFinderConditionId = DutyContextService.Current.ContentFinderConditionId,
                 inDuty = DutyContextService.Current.InDuty,
                 supportedDuty = DutyContextService.Current.IsSupportedDuty,
@@ -261,14 +280,18 @@ public sealed class Plugin : IDalamudPlugin
                 targetDistance = ObjectivePlannerService.Current.TargetDistance,
                 targetVerticalDelta = ObjectivePlannerService.Current.TargetVerticalDelta,
                 capturedAtUtc = ObjectivePlannerService.Current.CapturedAtUtc,
+                mapId = DutyContextService.Current.MapId,
                 frontier = new
                 {
                     mode = DungeonFrontierService.CurrentMode.ToString(),
+                    activeMapId = DungeonFrontierService.ActiveMapId,
+                    activeMapName = DungeonFrontierService.ActiveMapName,
                     totalPoints = DungeonFrontierService.TotalPoints,
                     visitedPoints = DungeonFrontierService.VisitedPoints,
                     manualMapXzDestinationCount = DungeonFrontierService.ManualMapXzDestinationCount,
                     visitedManualMapXzDestinations = DungeonFrontierService.VisitedManualMapXzDestinations,
                     currentTarget = DungeonFrontierService.CurrentTarget?.Name,
+                    currentTargetMapId = DungeonFrontierService.CurrentTarget?.MapId,
                     currentTargetPosition = DungeonFrontierService.CurrentTarget is { } frontierPoint
                         ? BuildPositionPayload(frontierPoint.Position)
                         : null,
@@ -337,6 +360,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         DutyContextService.Update(Configuration.PluginEnabled);
         ObjectPriorityRuleService.ReloadIfChanged();
+        DialogYesNoRuleService.ReloadIfChanged();
         ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
         DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current);
         ObjectivePlannerService.Update(
@@ -345,6 +369,7 @@ public sealed class Plugin : IDalamudPlugin
             ExecutionService.CurrentMode,
             Configuration.ConsiderTreasureCoffers);
         ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled);
+        DialogAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
         UpdateDtrBar();
     }
 
@@ -375,6 +400,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads obj - toggle the object explorer\n" +
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads rules - toggle the rules editor\n" +
+                "/ads dialogs - toggle the dialog rules editor\n" +
                 "/ads ws - reset windows to 1,1\n" +
                 "/ads j - jump windows to visible random positions\n" +
                 "/ads outside - queue outside ownership\n" +
@@ -427,6 +453,12 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("rules", StringComparison.OrdinalIgnoreCase))
         {
             ToggleRuleEditorUi();
+            return;
+        }
+
+        if (trimmed.Equals("dialogs", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleDialogRuleEditorUi();
             return;
         }
 

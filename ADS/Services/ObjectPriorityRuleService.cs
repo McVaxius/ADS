@@ -360,7 +360,7 @@ public sealed class ObjectPriorityRuleService
             return false;
 
         if (!string.IsNullOrWhiteSpace(rule.DutyEnglishName)
-            && !string.Equals(rule.DutyEnglishName, context.CurrentDuty?.EnglishName, StringComparison.OrdinalIgnoreCase))
+            && !DutyNamesMatch(rule.DutyEnglishName, context.CurrentDuty?.EnglishName))
         {
             return false;
         }
@@ -386,6 +386,25 @@ public sealed class ObjectPriorityRuleService
 
         return score;
     }
+
+    private static bool DutyNamesMatch(string configuredName, string? currentName)
+    {
+        if (string.IsNullOrWhiteSpace(currentName))
+            return false;
+
+        var configured = NormalizeDutyName(configuredName);
+        var current = NormalizeDutyName(currentName);
+        return string.Equals(configured, current, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(TrimLeadingArticle(configured), TrimLeadingArticle(current), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeDutyName(string value)
+        => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static string TrimLeadingArticle(string value)
+        => value.StartsWith("the ", StringComparison.OrdinalIgnoreCase)
+            ? value[4..]
+            : value;
 
     private static bool TryParseClassification(string value, out InteractableClass classification)
         => Enum.TryParse(value, ignoreCase: true, out classification);

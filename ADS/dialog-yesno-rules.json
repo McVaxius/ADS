@@ -1,0 +1,13 @@
+{
+  "SchemaVersion": 1,
+  "Description": "Human-edited ADS SelectYesno rules. These are global, not duty-scoped. Match prompt text and choose whether ADS should click Yes or No when it owns a supported duty.",
+  "Rules": [
+    {
+      "Enabled": true,
+      "PromptPattern": "Use the ",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": "Keeper of the Lake barrier confirmation."
+    }
+  ]
+}

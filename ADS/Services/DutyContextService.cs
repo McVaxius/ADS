@@ -26,6 +26,7 @@ public sealed class DutyContextService
             BetweenAreas51 = false,
             InCombat = false,
             TerritoryTypeId = 0,
+            MapId = 0,
             ContentFinderConditionId = 0,
             CurrentDuty = null,
         };
@@ -36,11 +37,14 @@ public sealed class DutyContextService
     public unsafe void Update(bool pluginEnabled)
     {
         uint territoryTypeId = clientState.TerritoryType;
+        uint mapId = clientState.MapId;
         uint contentFinderConditionId = 0;
         var gameMain = GameMain.Instance();
         if (gameMain is not null)
         {
             territoryTypeId = gameMain->CurrentTerritoryTypeId;
+            if (gameMain->CurrentMapId != 0)
+                mapId = gameMain->CurrentMapId;
             contentFinderConditionId = gameMain->CurrentContentFinderConditionId;
         }
 
@@ -55,6 +59,7 @@ public sealed class DutyContextService
             BetweenAreas51 = condition[ConditionFlag.BetweenAreas51],
             InCombat = condition[ConditionFlag.InCombat],
             TerritoryTypeId = territoryTypeId,
+            MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,
             CurrentDuty = currentDuty,
         };

@@ -51,10 +51,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(960f, 480f),
+            MinimumSize = new Vector2(1200f, 520f),
             MaximumSize = new Vector2(3600f, 2400f),
         };
-        Size = new Vector2(1700f, 980f);
+        Size = new Vector2(2400f, 980f);
     }
 
     public void Dispose()
@@ -68,6 +68,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use '+' to add a row, '-' to remove one, then Save to write the authoritative config file.");
         ImGui.TextWrapped("Classification = Ignored removes matching objects from ADS observation/planning. Required on BattleNpc makes ADS seek/kill by rule priority. Follow is BattleNpc-only: it turns a live NPC such as Cid into a live-only movement anchor that yields to real monsters/interactables and never becomes a ghost target. MapXzDestination plus DestinationType=MapXZ and Map XZ like 11.3,10.4 creates a manual no-live-object waypoint that ghosts at 1y XZ using the player's current Y. Non-BattleNpc Follow rules are ignored. Territory/CFC/BaseId zero means wildcard. MaxDistance zero means no cap.");
+        ImGui.TextWrapped("Tip: this table is intentionally wide. Drag the window wider or use the horizontal scrollbar to reach Map XZ, distance, wait, notes, and delete columns.");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
         ImGui.TextWrapped(editorStatus);
         if (dirty)
@@ -144,22 +145,23 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 40f);
-        ImGui.TableSetupColumn("Duty", ImGuiTableColumnFlags.WidthFixed, 200f);
+        ImGui.TableSetupColumn("Duty", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Terr", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("CFC", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableSetupColumn("BaseId", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 180f);
+        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Dest", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Map XZ", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 160f);
+        ImGui.TableSetupColumn("Dest", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Map XZ", ImGuiTableColumnFlags.WidthFixed, 140f);
         ImGui.TableSetupColumn("Pri", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Wait", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch, 260f);
+        ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch, 420f);
         ImGui.TableSetupColumn("-", ImGuiTableColumnFlags.WidthFixed, 30f);
+        ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
         var rowToRemove = -1;

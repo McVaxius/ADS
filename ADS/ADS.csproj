@@ -19,5 +19,6 @@
     <None Include="ADS.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="duty-object-rules.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="dialog-yesno-rules.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

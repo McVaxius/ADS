@@ -21,11 +21,14 @@ public sealed class ExecutionService
     private const float RecoveryGhostRetireRadius = 8.0f;
     private const float RecoveryClusterArrivalRange = RecoveryGhostRetireRadius;
     private const float RecoveryTargetSimilarityRadius = RecoveryGhostRetireRadius;
+    private const float TreasureCofferProgressMargin = 2.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan NavigationRetryCooldown = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan MapFlagNavigationRetryCooldown = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan RecoveryTruthSettleDelay = TimeSpan.FromSeconds(1.0);
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
+    private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
+    private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
 
     private readonly IObjectTable objectTable;
     private readonly ITargetManager targetManager;
@@ -47,6 +50,10 @@ public sealed class ExecutionService
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
     private DateTime pendingProgressionInteractResultUntilUtc;
+    private string? treasureCofferRouteKey;
+    private DateTime treasureCofferRouteStartedUtc;
+    private DateTime treasureCofferLastProgressUtc;
+    private float treasureCofferBestHorizontalDistance = float.MaxValue;
 
     public ExecutionService(
         IObjectTable objectTable,
@@ -573,8 +580,7 @@ public sealed class ExecutionService
         if (targetHorizontalDistance > arrivalRange)
         {
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
-            var usedMapFlagNavigation = !isMapXzDestination
-                && dungeonFrontierService.CurrentMode == FrontierMode.Label
+            var usedMapFlagNavigation = (isMapXzDestination || dungeonFrontierService.CurrentMode == FrontierMode.Label)
                 && TryBeginMapFlagNavigation(context, frontierTargetId, frontierPoint.Name, frontierPoint.Position);
             if (!usedMapFlagNavigation)
             {
@@ -631,6 +637,8 @@ public sealed class ExecutionService
         }
 
         var preferredApproachPoint = BuildPreferredInteractApproachPoint(playerPosition.Value, gameObject.Position);
+        if (TrySkipStuckTreasureCoffer(observedInteractable, targetHorizontalDistance, prefix))
+            return;
 
         if (targetHorizontalDistance > DirectInteractAttemptRange)
         {
@@ -692,6 +700,9 @@ public sealed class ExecutionService
         if (committedInteractableKey == interactable.Key && committedInteractableObjectiveKind == objectiveKind)
             return;
 
+        if (objectiveKind != PlannerObjectiveKind.TreasureCoffer || committedInteractableKey != interactable.Key)
+            ResetTreasureCofferRouteTracking();
+
         committedInteractableKey = interactable.Key;
         committedInteractableObjectiveKind = objectiveKind;
         lastInteractGameObjectId = 0;
@@ -720,7 +731,59 @@ public sealed class ExecutionService
         committedInteractableObjectiveKind = PlannerObjectiveKind.None;
         lastInteractGameObjectId = 0;
         nextInteractAttemptUtc = DateTime.MinValue;
+        ResetTreasureCofferRouteTracking();
         ClearPendingProgressionInteractResult();
+    }
+
+    private bool TrySkipStuckTreasureCoffer(ObservedInteractable observedInteractable, float targetHorizontalDistance, string prefix)
+    {
+        if (observedInteractable.Classification != InteractableClass.TreasureCoffer)
+            return false;
+
+        var now = DateTime.UtcNow;
+        if (treasureCofferRouteKey != observedInteractable.Key)
+        {
+            treasureCofferRouteKey = observedInteractable.Key;
+            treasureCofferRouteStartedUtc = now;
+            treasureCofferLastProgressUtc = now;
+            treasureCofferBestHorizontalDistance = targetHorizontalDistance;
+            return false;
+        }
+
+        if (targetHorizontalDistance + TreasureCofferProgressMargin < treasureCofferBestHorizontalDistance)
+        {
+            treasureCofferBestHorizontalDistance = targetHorizontalDistance;
+            treasureCofferLastProgressUtc = now;
+            return false;
+        }
+
+        if (targetHorizontalDistance <= NavigationPhaseRange)
+            return false;
+
+        var noProgressTooLong = now - treasureCofferLastProgressUtc > TreasureCofferNoProgressTimeout;
+        var routeTooLong = now - treasureCofferRouteStartedUtc > TreasureCofferMaxNavigationDuration;
+        if (!noProgressTooLong && !routeTooLong)
+            return false;
+
+        var reason = routeTooLong
+            ? $"route exceeded {TreasureCofferMaxNavigationDuration.TotalSeconds:0}s"
+            : $"no XZ progress for {TreasureCofferNoProgressTimeout.TotalSeconds:0}s";
+        var bestHorizontalDistance = treasureCofferBestHorizontalDistance;
+        observationMemoryService.MarkTreasureCofferSkipped(observedInteractable, reason);
+        ClearInteractableCommitment();
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.ReadyForInteractableObjective,
+            $"{prefix} Skipping optional treasure coffer after {reason}; best XZ was {bestHorizontalDistance:0.0}y and current XZ is {targetHorizontalDistance:0.0}y.");
+        return true;
+    }
+
+    private void ResetTreasureCofferRouteTracking()
+    {
+        treasureCofferRouteKey = null;
+        treasureCofferRouteStartedUtc = DateTime.MinValue;
+        treasureCofferLastProgressUtc = DateTime.MinValue;
+        treasureCofferBestHorizontalDistance = float.MaxValue;
     }
 
     private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, string prefix)

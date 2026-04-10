@@ -9,6 +9,7 @@ namespace ADS.Services;
 public sealed class ObservationMemoryService
 {
     private static readonly TimeSpan TreasureSuppressionDuration = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SkippedTreasureSuppressionDuration = TimeSpan.FromMinutes(5);
     private const float RetiredRecoveryClusterSuppressRadius = 12.0f;
     private const float RecoveryResetTeleportDistance = 40.0f;
 
@@ -274,11 +275,17 @@ public sealed class ObservationMemoryService
     }
 
     public void MarkTreasureInteractionSent(ObservedInteractable interactable)
+        => MarkTreasureSuppressed(interactable, TreasureSuppressionDuration, "interaction sent");
+
+    public void MarkTreasureCofferSkipped(ObservedInteractable interactable, string reason)
+        => MarkTreasureSuppressed(interactable, SkippedTreasureSuppressionDuration, reason);
+
+    private void MarkTreasureSuppressed(ObservedInteractable interactable, TimeSpan duration, string reason)
     {
         if (interactable.Classification != InteractableClass.TreasureCoffer)
             return;
 
-        treasureSuppressionUntil[interactable.Key] = DateTime.UtcNow + TreasureSuppressionDuration;
+        treasureSuppressionUntil[interactable.Key] = DateTime.UtcNow + duration;
         knownInteractables[interactable.Key] = new ObservedInteractable
         {
             Key = interactable.Key,
@@ -291,6 +298,7 @@ public sealed class ObservationMemoryService
             Classification = interactable.Classification,
             GhostReason = GhostReason.Consumed,
         };
+        log.Information($"[ADS] Suppressing treasure coffer {interactable.Name} for {duration.TotalSeconds:0}s after {reason}.");
     }
 
     public void MarkProgressionInteractionSent(DutyContextSnapshot context, ObservedInteractable interactable)

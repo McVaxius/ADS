@@ -11,6 +11,7 @@ public sealed class DungeonFrontierService
 {
     private const float FrontierVisitRadius = 8f;
     private const float FrontierVisitVerticalCap = 12f;
+    private const float FrontierBlockingVerticalSanityCap = 100f;
     private const float ManualMapXzDestinationVisitRadius = 1f;
     private const float HeadingSampleMinDistance = 6f;
     private const float HeadingScoutProjectionDistance = 18f;
@@ -23,15 +24,18 @@ public sealed class DungeonFrontierService
     private readonly IObjectTable objectTable;
     private readonly IPluginLog log;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
-    private readonly Dictionary<uint, IReadOnlyList<DungeonFrontierPoint>> frontierCache = [];
-    private readonly Dictionary<uint, IReadOnlyList<MapLabelMarker>> labelMarkerCache = [];
-    private readonly Dictionary<uint, string> labelMarkerStatusCache = [];
+    private readonly Dictionary<ulong, IReadOnlyList<DungeonFrontierPoint>> frontierCache = [];
+    private readonly Dictionary<ulong, IReadOnlyList<MapLabelMarker>> labelMarkerCache = [];
+    private readonly Dictionary<ulong, string> labelMarkerStatusCache = [];
     private readonly HashSet<string> visitedFrontierKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedActiveMapSelections = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedInvalidMapXzDestinationRules = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedResolvedMapXzDestinationRules = new(StringComparer.Ordinal);
     private uint activeDutyKey;
     private Vector3? lastProgressSamplePosition;
     private Vector3? currentHeading;
     private DungeonFrontierPoint? headingScoutTarget;
+    private DungeonFrontierPoint? lastValidManualMapXzDestination;
     private int headingScoutSequence;
 
     public DungeonFrontierService(
@@ -57,6 +61,10 @@ public sealed class DungeonFrontierService
 
     public string CurrentLabelStatus { get; private set; } = "No current map labels loaded.";
 
+    public uint ActiveMapId { get; private set; }
+
+    public string ActiveMapName { get; private set; } = "No current map resolved.";
+
     public int TotalPoints { get; private set; }
 
     public int VisitedPoints { get; private set; }
@@ -75,10 +83,13 @@ public sealed class DungeonFrontierService
         }
 
         var previousTarget = CurrentTarget;
+        RememberManualMapXzDestination(previousTarget);
         CurrentTarget = null;
         CurrentMode = FrontierMode.None;
         CurrentLabelMarkers = [];
         CurrentLabelStatus = "No current map labels loaded.";
+        ActiveMapId = 0;
+        ActiveMapName = "No current map resolved.";
         TotalPoints = 0;
         VisitedPoints = 0;
         ManualMapXzDestinationCount = 0;
@@ -88,54 +99,71 @@ public sealed class DungeonFrontierService
             return;
 
         var playerPosition = objectTable.LocalPlayer?.Position;
-        UpdateHeadingMemory(playerPosition, observation);
-        CurrentLabelMarkers = GetLabelMarkers(context.TerritoryTypeId);
-        CurrentLabelStatus = labelMarkerStatusCache.TryGetValue(context.TerritoryTypeId, out var labelStatus)
-            ? labelStatus
-            : "No cached map-label status.";
-        var noLiveObjects = observation.LiveMonsters.Count == 0
-            && observation.LiveInteractables.Count == 0
-            && observation.LiveFollowTargets.Count == 0;
+        if (context.BetweenAreas)
+            GhostCurrentOrLastManualMapXzDestination(previousTarget);
 
-        var manualMapXzDestinations = playerPosition.HasValue
-            ? BuildMapXzDestinationPoints(context, playerPosition.Value)
+        var hasActiveMap = TryResolveActiveMap(context, out var activeMap, out var activeMapStatus);
+        CurrentLabelStatus = activeMapStatus;
+        if (hasActiveMap)
+        {
+            ActiveMapId = activeMap.RowId;
+            ActiveMapName = BuildMapName(activeMap);
+        }
+
+        UpdateHeadingMemory(playerPosition, observation);
+        if (hasActiveMap)
+        {
+            CurrentLabelMarkers = GetLabelMarkers(context.TerritoryTypeId, activeMap.RowId);
+            var labelCacheKey = BuildCacheKey(context.TerritoryTypeId, activeMap.RowId);
+            if (labelMarkerStatusCache.TryGetValue(labelCacheKey, out var labelStatus))
+                CurrentLabelStatus = labelStatus;
+        }
+
+        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(observation, playerPosition);
+
+        var manualMapXzDestinations = hasActiveMap && playerPosition.HasValue
+            ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
         ManualMapXzDestinationCount = manualMapXzDestinations.Count;
         if (playerPosition.HasValue && manualMapXzDestinations.Count > 0)
             MarkVisitedPoints(manualMapXzDestinations, playerPosition.Value, ManualMapXzDestinationVisitRadius, float.MaxValue);
 
         VisitedManualMapXzDestinations = manualMapXzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
-        if (noLiveObjects)
+        if (noFrontierBlockingLiveObjects)
         {
             CurrentTarget = SelectCurrentMapXzDestination(manualMapXzDestinations, playerPosition);
             if (CurrentTarget is not null)
             {
                 CurrentMode = FrontierMode.MapXzDestination;
+                RememberManualMapXzDestination(CurrentTarget);
                 return;
             }
         }
 
-        var points = GetFrontierPoints(context.TerritoryTypeId);
-        TotalPoints = points.Count;
-        if (points.Count > 0)
+        if (hasActiveMap)
         {
-            headingScoutTarget = null;
+            var points = GetFrontierPoints(context.TerritoryTypeId, activeMap.RowId);
+            TotalPoints = points.Count;
+            if (points.Count > 0)
+            {
+                headingScoutTarget = null;
 
-            if (playerPosition.HasValue)
-                MarkVisitedPoints(points, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
+                if (playerPosition.HasValue)
+                    MarkVisitedPoints(points, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
 
-            VisitedPoints = points.Count(x => visitedFrontierKeys.Contains(x.Key));
-            if (!noLiveObjects)
+                VisitedPoints = points.Count(x => visitedFrontierKeys.Contains(x.Key));
+                if (!noFrontierBlockingLiveObjects)
+                    return;
+
+                CurrentTarget = SelectCurrentTarget(points, playerPosition, previousTarget);
+                if (CurrentTarget is not null)
+                    CurrentMode = FrontierMode.Label;
+
                 return;
-
-            CurrentTarget = SelectCurrentTarget(points, playerPosition, previousTarget);
-            if (CurrentTarget is not null)
-                CurrentMode = FrontierMode.Label;
-
-            return;
+            }
         }
 
-        if (!playerPosition.HasValue)
+        if (!playerPosition.HasValue || !noFrontierBlockingLiveObjects)
             return;
 
         CurrentTarget = SelectHeadingScoutTarget(context, playerPosition.Value);
@@ -150,9 +178,12 @@ public sealed class DungeonFrontierService
         CurrentMode = FrontierMode.None;
         TotalPoints = 0;
         VisitedPoints = 0;
+        ActiveMapId = 0;
+        ActiveMapName = "No current map resolved.";
         lastProgressSamplePosition = null;
         currentHeading = null;
         headingScoutTarget = null;
+        lastValidManualMapXzDestination = null;
         headingScoutSequence = 0;
         CurrentLabelMarkers = [];
         CurrentLabelStatus = "No current map labels loaded.";
@@ -165,45 +196,40 @@ public sealed class DungeonFrontierService
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
+        ClearRememberedManualMapXzDestination(point);
         if (point.IsManualMapXzDestination)
         {
             log.Information($"[ADS] Ghosted map XZ destination {point.Name} at {FormatVector(point.Position)} after reaching XZ {GetHorizontalDistance(playerPosition, point.Position):0.0}y.");
         }
     }
 
-    private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId)
+    private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId, uint mapId)
     {
-        if (frontierCache.TryGetValue(territoryTypeId, out var cached))
+        var cacheKey = BuildCacheKey(territoryTypeId, mapId);
+        if (frontierCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        var built = BuildFrontierPoints(territoryTypeId);
-        frontierCache[territoryTypeId] = built;
+        var built = BuildFrontierPoints(territoryTypeId, mapId);
+        frontierCache[cacheKey] = built;
         return built;
     }
 
-    private IReadOnlyList<MapLabelMarker> GetLabelMarkers(uint territoryTypeId)
+    private IReadOnlyList<MapLabelMarker> GetLabelMarkers(uint territoryTypeId, uint mapId)
     {
-        if (labelMarkerCache.TryGetValue(territoryTypeId, out var cached))
+        var cacheKey = BuildCacheKey(territoryTypeId, mapId);
+        if (labelMarkerCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        var built = BuildLabelMarkers(territoryTypeId);
-        labelMarkerCache[territoryTypeId] = built;
+        var built = BuildLabelMarkers(territoryTypeId, mapId);
+        labelMarkerCache[cacheKey] = built;
         return built;
     }
 
-    private IReadOnlyList<DungeonFrontierPoint> BuildMapXzDestinationPoints(DutyContextSnapshot context, Vector3 playerPosition)
+    private IReadOnlyList<DungeonFrontierPoint> BuildMapXzDestinationPoints(DutyContextSnapshot context, Map map, Vector3 playerPosition)
     {
         var destinationRules = objectPriorityRuleService.GetMapXzDestinationRules(context);
         if (destinationRules.Count == 0)
             return [];
-
-        if (!TryGetCurrentMap(context.TerritoryTypeId, out var map))
-        {
-            LogMapXzDestinationWarning(
-                $"map-missing:{context.TerritoryTypeId}",
-                $"[ADS] Map XZ destination rules are configured for territory {context.TerritoryTypeId}, but ADS could not resolve the active map row.");
-            return [];
-        }
 
         var points = new List<DungeonFrontierPoint>();
         foreach (var rule in destinationRules)
@@ -217,10 +243,15 @@ public sealed class DungeonFrontierService
                 continue;
             }
 
-            var worldPosition = ConvertMapCoordinatesToWorld(mapCoordinates, map, playerPosition.Y);
             var name = string.IsNullOrWhiteSpace(rule.ObjectName)
                 ? $"Map XZ {mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}"
                 : rule.ObjectName;
+            var worldPosition = ConvertMapCoordinatesToWorld(mapCoordinates, map, playerPosition.Y);
+            if (loggedResolvedMapXzDestinationRules.Add(ruleKey))
+            {
+                log.Information(
+                    $"[ADS] Resolved Map XZ destination {name} ({mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}) on map row {map.RowId} to world {FormatVector(worldPosition)} using sizeFactor {map.SizeFactor} and offsets {map.OffsetX},{map.OffsetY}.");
+            }
 
             points.Add(new DungeonFrontierPoint
             {
@@ -228,6 +259,7 @@ public sealed class DungeonFrontierService
                 Name = name,
                 Position = worldPosition,
                 LevelRowId = 0,
+                MapId = map.RowId,
                 Priority = rule.Priority,
                 MapCoordinates = mapCoordinates,
                 UsePlayerYForNavigation = true,
@@ -239,7 +271,7 @@ public sealed class DungeonFrontierService
         return points;
     }
 
-    private IReadOnlyList<DungeonFrontierPoint> BuildFrontierPoints(uint territoryTypeId)
+    private IReadOnlyList<DungeonFrontierPoint> BuildFrontierPoints(uint territoryTypeId, uint mapId)
     {
         try
         {
@@ -248,22 +280,21 @@ public sealed class DungeonFrontierService
             var mapMarkerSheet = dataManager.GetSubrowExcelSheet<MapMarker>();
             if (territorySheet is null || levelSheet is null || mapMarkerSheet is null)
             {
-                return BuildMapMarkerRangeFrontierPoints(territoryTypeId, "level-backed sheet lookup failed");
+                return BuildMapMarkerRangeFrontierPoints(territoryTypeId, mapId, "level-backed sheet lookup failed");
             }
 
             if (!territorySheet.TryGetRow(territoryTypeId, out var territory))
             {
-                LogUnavailableFrontierLabels(territoryTypeId, "territory row was missing");
+                LogUnavailableFrontierLabels(territoryTypeId, mapId, "territory row was missing");
                 return [];
             }
 
-            var mapId = territory.Map.RowId;
             var levelsByRowId = levelSheet
                 .Where(level => level.Territory.RowId == territoryTypeId && level.Map.RowId == mapId)
                 .ToDictionary(level => level.RowId, level => level);
             if (levelsByRowId.Count == 0)
             {
-                return BuildMapMarkerRangeFrontierPoints(territoryTypeId, $"no matching Level rows for map {mapId}");
+                return BuildMapMarkerRangeFrontierPoints(territoryTypeId, mapId, $"no matching Level rows for map {mapId}");
             }
 
             var points = new List<DungeonFrontierPoint>();
@@ -283,7 +314,7 @@ public sealed class DungeonFrontierService
                         continue;
 
                     var position = new Vector3(level.X, level.Y, level.Z);
-                    var dedupeKey = $"{territoryTypeId}:{name}:{Quantize(position)}";
+                    var dedupeKey = $"{territoryTypeId}:{mapId}:{name}:{Quantize(position)}";
                     if (!seenKeys.Add(dedupeKey))
                         continue;
 
@@ -293,6 +324,7 @@ public sealed class DungeonFrontierService
                         Name = name,
                         Position = position,
                         LevelRowId = level.RowId,
+                        MapId = mapId,
                     });
                 }
             }
@@ -307,25 +339,25 @@ public sealed class DungeonFrontierService
             });
 
             if (points.Count > 0)
-                log.Information($"[ADS] Built {points.Count} frontier label point(s) for territory {territoryTypeId}.");
+                log.Information($"[ADS] Built {points.Count} frontier label point(s) for territory {territoryTypeId} on map {mapId}.");
 
             return points.Count > 0
                 ? points
-                : BuildMapMarkerRangeFrontierPoints(territoryTypeId, $"matched {levelsByRowId.Count} Level row(s) but found no DataKey-backed MapMarker labels");
+                : BuildMapMarkerRangeFrontierPoints(territoryTypeId, mapId, $"matched {levelsByRowId.Count} Level row(s) but found no DataKey-backed MapMarker labels");
         }
         catch (Exception ex)
         {
-            log.Warning(ex, $"[ADS] Failed to build frontier label points for territory {territoryTypeId}.");
-            return BuildMapMarkerRangeFrontierPoints(territoryTypeId, $"level-backed lookup threw {ex.GetType().Name}");
+            log.Warning(ex, $"[ADS] Failed to build frontier label points for territory {territoryTypeId} on map {mapId}.");
+            return BuildMapMarkerRangeFrontierPoints(territoryTypeId, mapId, $"level-backed lookup threw {ex.GetType().Name}");
         }
     }
 
-    private IReadOnlyList<DungeonFrontierPoint> BuildMapMarkerRangeFrontierPoints(uint territoryTypeId, string levelBackedFailureReason)
+    private IReadOnlyList<DungeonFrontierPoint> BuildMapMarkerRangeFrontierPoints(uint territoryTypeId, uint mapId, string levelBackedFailureReason)
     {
-        var labels = GetLabelMarkers(territoryTypeId);
+        var labels = GetLabelMarkers(territoryTypeId, mapId);
         if (labels.Count == 0)
         {
-            LogUnavailableFrontierLabels(territoryTypeId, $"{levelBackedFailureReason}; MapMarkerRange fallback produced 0 labels");
+            LogUnavailableFrontierLabels(territoryTypeId, mapId, $"{levelBackedFailureReason}; MapMarkerRange fallback produced 0 labels");
             return [];
         }
 
@@ -340,16 +372,18 @@ public sealed class DungeonFrontierService
                 Name = label.Name,
                 Position = label.WorldPosition,
                 LevelRowId = BuildLabelSortOrder(label),
+                MapId = label.MapId,
                 UsePlayerYForNavigation = true,
             })
             .ToList();
 
-        log.Information($"[ADS] Built {points.Count} frontier MapMarkerRange point(s) for territory {territoryTypeId} after level-backed frontier was unavailable ({levelBackedFailureReason}).");
+        log.Information($"[ADS] Built {points.Count} frontier MapMarkerRange point(s) for territory {territoryTypeId} on map {mapId} after level-backed frontier was unavailable ({levelBackedFailureReason}).");
         return points;
     }
 
-    private IReadOnlyList<MapLabelMarker> BuildLabelMarkers(uint territoryTypeId)
+    private IReadOnlyList<MapLabelMarker> BuildLabelMarkers(uint territoryTypeId, uint mapId)
     {
+        var cacheKey = BuildCacheKey(territoryTypeId, mapId);
         try
         {
             var territorySheet = dataManager.GetExcelSheet<TerritoryType>();
@@ -357,74 +391,67 @@ public sealed class DungeonFrontierService
             var mapMarkerSheet = dataManager.GetSubrowExcelSheet<MapMarker>();
             if (territorySheet is null || mapSheet is null || mapMarkerSheet is null)
             {
-                labelMarkerStatusCache[territoryTypeId] = "Map-label lookup failed: one or more sheets were unavailable.";
+                labelMarkerStatusCache[cacheKey] = $"Map-label lookup failed for territory {territoryTypeId} map {mapId}: one or more sheets were unavailable.";
                 return [];
             }
 
             if (!territorySheet.TryGetRow(territoryTypeId, out var territory))
             {
-                labelMarkerStatusCache[territoryTypeId] = $"Map-label lookup failed: territory {territoryTypeId} was not found.";
+                labelMarkerStatusCache[cacheKey] = $"Map-label lookup failed: territory {territoryTypeId} was not found.";
                 return [];
             }
 
-            var maps = mapSheet
-                .Where(x => x.TerritoryType.RowId == territoryTypeId)
-                .OrderBy(x => x.RowId)
-                .ToList();
-            if (maps.Count == 0 && territory.Map.RowId != 0 && mapSheet.TryGetRow(territory.Map.RowId, out var fallbackMap))
-                maps.Add(fallbackMap);
-
-            if (maps.Count == 0)
+            if (!mapSheet.TryGetRow(mapId, out var map) || map.TerritoryType.RowId != territoryTypeId)
             {
-                labelMarkerStatusCache[territoryTypeId] = $"Map-label lookup failed: territory {territoryTypeId} had no associated map rows.";
+                labelMarkerStatusCache[cacheKey] = $"Map-label lookup failed: territory {territoryTypeId} active map {mapId} was not found.";
                 return [];
             }
 
             var points = new List<MapLabelMarker>();
             var seenKeys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var map in maps)
+            var mapName = BuildMapName(map);
+            var markerRangeId = (uint)map.MapMarkerRange;
+            if (markerRangeId == 0)
             {
-                var mapName = BuildMapName(map);
-                var markerRangeId = (uint)map.MapMarkerRange;
-                if (markerRangeId == 0)
-                    continue;
+                labelMarkerStatusCache[cacheKey] = $"Loaded 0 map label marker(s) for territory {territoryTypeId} on active map {mapName} ({mapId}): no MapMarkerRange row was assigned.";
+                return [];
+            }
 
-                foreach (var subrowCollection in mapMarkerSheet)
+            foreach (var subrowCollection in mapMarkerSheet)
+            {
+                foreach (var marker in subrowCollection)
                 {
-                    foreach (var marker in subrowCollection)
+                    if (marker.RowId != markerRangeId)
+                        continue;
+
+                    if (marker.PlaceNameSubtext.ValueNullable is null)
+                        continue;
+
+                    var name = NormalizeName(marker.PlaceNameSubtext.Value.Name.ToString());
+                    if (string.IsNullOrWhiteSpace(name))
+                        continue;
+
+                    var worldPosition = ConvertTextureToWorld(marker.X, marker.Y, map);
+                    var mapCoordinates = MapUtil.WorldToMap(new Vector2(worldPosition.X, worldPosition.Z), map);
+                    var key = $"{territoryTypeId}:{map.RowId}:{markerRangeId}:{marker.SubrowId}:{name}:{marker.X}:{marker.Y}";
+                    if (!seenKeys.Add(key))
+                        continue;
+
+                    points.Add(new MapLabelMarker
                     {
-                        if (marker.RowId != markerRangeId)
-                            continue;
-
-                        if (marker.PlaceNameSubtext.ValueNullable is null)
-                            continue;
-
-                        var name = NormalizeName(marker.PlaceNameSubtext.Value.Name.ToString());
-                        if (string.IsNullOrWhiteSpace(name))
-                            continue;
-
-                        var worldPosition = ConvertTextureToWorld(marker.X, marker.Y, map);
-                        var mapCoordinates = MapUtil.WorldToMap(new Vector2(worldPosition.X, worldPosition.Z), map);
-                        var key = $"{territoryTypeId}:{map.RowId}:{markerRangeId}:{marker.SubrowId}:{name}:{marker.X}:{marker.Y}";
-                        if (!seenKeys.Add(key))
-                            continue;
-
-                        points.Add(new MapLabelMarker
-                        {
-                            Key = key,
-                            Name = name,
-                            MapId = map.RowId,
-                            MarkerRangeId = markerRangeId,
-                            MapName = mapName,
-                            SubrowId = marker.SubrowId,
-                            DataType = marker.DataType,
-                            Icon = marker.Icon,
-                            TextureX = marker.X,
-                            TextureY = marker.Y,
-                            WorldPosition = worldPosition,
-                            MapCoordinates = mapCoordinates,
-                        });
-                    }
+                        Key = key,
+                        Name = name,
+                        MapId = map.RowId,
+                        MarkerRangeId = markerRangeId,
+                        MapName = mapName,
+                        SubrowId = marker.SubrowId,
+                        DataType = marker.DataType,
+                        Icon = marker.Icon,
+                        TextureX = marker.X,
+                        TextureY = marker.Y,
+                        WorldPosition = worldPosition,
+                        MapCoordinates = mapCoordinates,
+                    });
                 }
             }
 
@@ -445,23 +472,23 @@ public sealed class DungeonFrontierService
                 return string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
             });
 
-            labelMarkerStatusCache[territoryTypeId] = points.Count > 0
-                ? $"Loaded {points.Count} map label marker(s) for territory {territoryTypeId}."
-                : $"Loaded 0 map label marker(s) for territory {territoryTypeId}.";
+            labelMarkerStatusCache[cacheKey] = points.Count > 0
+                ? $"Loaded {points.Count} map label marker(s) for territory {territoryTypeId} on active map {mapName} ({mapId})."
+                : $"Loaded 0 map label marker(s) for territory {territoryTypeId} on active map {mapName} ({mapId}).";
 
-            log.Information($"[ADS] {labelMarkerStatusCache[territoryTypeId]}");
+            log.Information($"[ADS] {labelMarkerStatusCache[cacheKey]}");
             return points;
         }
         catch (Exception ex)
         {
-            labelMarkerStatusCache[territoryTypeId] = $"Map-label lookup failed for territory {territoryTypeId}: {ex.Message}";
-            log.Warning(ex, $"[ADS] Failed to build map label markers for territory {territoryTypeId}.");
+            labelMarkerStatusCache[cacheKey] = $"Map-label lookup failed for territory {territoryTypeId} map {mapId}: {ex.Message}";
+            log.Warning(ex, $"[ADS] Failed to build map label markers for territory {territoryTypeId} map {mapId}.");
             return [];
         }
     }
 
-    private void LogUnavailableFrontierLabels(uint territoryTypeId, string reason)
-        => log.Information($"[ADS] Built 0 frontier label point(s) for territory {territoryTypeId}; label frontier unavailable ({reason}).");
+    private void LogUnavailableFrontierLabels(uint territoryTypeId, uint mapId, string reason)
+        => log.Information($"[ADS] Built 0 frontier label point(s) for territory {territoryTypeId} on map {mapId}; label frontier unavailable ({reason}).");
 
     private void UpdateHeadingMemory(Vector3? playerPosition, ObservationSnapshot observation)
     {
@@ -509,6 +536,7 @@ public sealed class DungeonFrontierService
             Name = $"Heading Scout {headingScoutSequence}",
             Position = scoutPosition,
             LevelRowId = 0,
+            MapId = context.MapId,
         };
         log.Information(
             $"[ADS] Activated heading frontier scout for territory {context.TerritoryTypeId}: target {FormatVector(scoutPosition)} from heading {FormatVector(currentHeading.Value)}.");
@@ -690,6 +718,48 @@ public sealed class DungeonFrontierService
     private static string NormalizeName(string value)
         => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
+    private void GhostCurrentOrLastManualMapXzDestination(DungeonFrontierPoint? previousTarget)
+    {
+        var pointToGhost = previousTarget is { IsManualMapXzDestination: true }
+            ? previousTarget
+            : lastValidManualMapXzDestination;
+        if (pointToGhost is null)
+            return;
+
+        if (!visitedFrontierKeys.Add(pointToGhost.Key))
+        {
+            ClearRememberedManualMapXzDestination(pointToGhost);
+            return;
+        }
+
+        ClearRememberedManualMapXzDestination(pointToGhost);
+        log.Information($"[ADS] Ghosted map XZ destination {pointToGhost.Name} at {FormatVector(pointToGhost.Position)} after BetweenAreas transition.");
+    }
+
+    private void RememberManualMapXzDestination(DungeonFrontierPoint? point)
+    {
+        if (point is { IsManualMapXzDestination: true })
+            lastValidManualMapXzDestination = point;
+    }
+
+    private void ClearRememberedManualMapXzDestination(DungeonFrontierPoint point)
+    {
+        if (!point.IsManualMapXzDestination || lastValidManualMapXzDestination is null)
+            return;
+
+        if (string.Equals(lastValidManualMapXzDestination.Key, point.Key, StringComparison.Ordinal))
+            lastValidManualMapXzDestination = null;
+    }
+
+    private static bool HasNoFrontierBlockingLiveObjects(ObservationSnapshot observation, Vector3? playerPosition)
+        => !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
+           && !observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
+           && !observation.LiveInteractables.Any(static x => x.Classification is InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable);
+
+    private static bool IsSaneVerticalBlocker(Vector3? playerPosition, Vector3 targetPosition)
+        => !playerPosition.HasValue
+           || MathF.Abs(targetPosition.Y - playerPosition.Value.Y) <= FrontierBlockingVerticalSanityCap;
+
     private static string Quantize(Vector3 value)
         => $"{MathF.Round(value.X, 0):0},{MathF.Round(value.Y, 0):0},{MathF.Round(value.Z, 0):0}";
 
@@ -707,6 +777,7 @@ public sealed class DungeonFrontierService
             Name = point.Name,
             Position = new Vector3(point.Position.X, playerPosition.Value.Y, point.Position.Z),
             LevelRowId = point.LevelRowId,
+            MapId = point.MapId,
             Priority = point.Priority,
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = true,
@@ -715,27 +786,47 @@ public sealed class DungeonFrontierService
         };
     }
 
-    private bool TryGetCurrentMap(uint territoryTypeId, out Map map)
+    private bool TryResolveActiveMap(DutyContextSnapshot context, out Map map, out string status)
     {
         map = default;
-        var territorySheet = dataManager.GetExcelSheet<TerritoryType>();
         var mapSheet = dataManager.GetExcelSheet<Map>();
-        if (territorySheet is null || mapSheet is null)
+        var territorySheet = dataManager.GetExcelSheet<TerritoryType>();
+        if (mapSheet is null || territorySheet is null)
+        {
+            status = $"Map-row lookup failed for territory {context.TerritoryTypeId}: one or more sheets were unavailable.";
             return false;
+        }
 
-        if (territorySheet.TryGetRow(territoryTypeId, out var territory)
+        if (context.MapId != 0
+            && mapSheet.TryGetRow(context.MapId, out map)
+            && map.TerritoryType.RowId == context.TerritoryTypeId)
+        {
+            var mapSelectionKey = $"{context.TerritoryTypeId}:{map.RowId}";
+            if (loggedActiveMapSelections.Add(mapSelectionKey))
+            {
+                log.Information($"[ADS] Using live map row {map.RowId} ({BuildMapName(map)}) for territory {context.TerritoryTypeId}; frontier labels, map flags, and Map XZ conversion are restricted to this sub-area.");
+            }
+
+            status = $"Using live map row {map.RowId} ({BuildMapName(map)}) for frontier labels.";
+            return true;
+        }
+
+        if (territorySheet.TryGetRow(context.TerritoryTypeId, out var territory)
             && territory.Map.RowId != 0
             && mapSheet.TryGetRow(territory.Map.RowId, out map))
         {
+            status = $"Live map id {context.MapId} was unavailable; falling back to territory default map row {map.RowId} ({BuildMapName(map)}).";
             return true;
         }
 
-        foreach (var candidate in mapSheet.Where(x => x.TerritoryType.RowId == territoryTypeId).OrderBy(x => x.RowId))
+        foreach (var candidate in mapSheet.Where(x => x.TerritoryType.RowId == context.TerritoryTypeId).OrderBy(x => x.RowId))
         {
             map = candidate;
+            status = $"Live map id {context.MapId} was unavailable; falling back to first territory map row {map.RowId} ({BuildMapName(map)}).";
             return true;
         }
 
+        status = $"Map-row lookup failed: territory {context.TerritoryTypeId} had no associated map rows.";
         return false;
     }
 
@@ -766,13 +857,17 @@ public sealed class DungeonFrontierService
     {
         var mapScale = scale / 100f;
         if (mapScale <= float.Epsilon)
-            return -offset;
+            return 0f;
 
-        return (((mapCoordinate - 1f) * mapScale) / 41f * 2048f) - offset;
+        var textureCoordinate = (((mapCoordinate - 1f) * mapScale) / 41f) * 2048f;
+        return (textureCoordinate - (offset + 1024f)) / mapScale;
     }
 
     private static string BuildMapXzDestinationRuleKey(DutyContextSnapshot context, ObjectPriorityRule rule)
-        => $"map-xz:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{rule.Priority}:{rule.ObjectName}:{rule.MapCoordinates}";
+        => $"map-xz:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{context.MapId}:{rule.Priority}:{rule.ObjectName}:{rule.MapCoordinates}";
+
+    private static ulong BuildCacheKey(uint territoryTypeId, uint mapId)
+        => ((ulong)territoryTypeId << 32) | mapId;
 
     private void LogMapXzDestinationWarning(string key, string message)
     {

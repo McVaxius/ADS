@@ -36,9 +36,10 @@ public sealed class FrontierLabelWindow : PositionedWindow, IDisposable
             .ToList();
 
         ImGui.TextUnformatted("Map Label Marker Inspector");
-        ImGui.TextWrapped("These entries come from the Lumina MapMarker range referenced by each current territory map, converted from marker texture-space back to world X/Z so you can flag and inspect where the game thinks named labels live.");
+        ImGui.TextWrapped("These entries come from the Lumina MapMarker range for the current live map row only, converted from marker texture-space back to world X/Z so you can flag and inspect where the active sub-area thinks named labels live.");
         ImGui.TextUnformatted($"Duty: {context.CurrentDuty?.EnglishName ?? "None"}");
-        ImGui.TextUnformatted($"Territory / CFC: {context.TerritoryTypeId} / {context.ContentFinderConditionId}");
+        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {plugin.DungeonFrontierService.ActiveMapId} / {context.ContentFinderConditionId}");
+        ImGui.TextUnformatted($"Active map: {plugin.DungeonFrontierService.ActiveMapName}");
         ImGui.TextWrapped($"Status: {plugin.DungeonFrontierService.CurrentLabelStatus}");
         ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerStatus}");
 

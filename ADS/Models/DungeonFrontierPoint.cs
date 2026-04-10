@@ -8,6 +8,7 @@ public sealed class DungeonFrontierPoint
     public required string Name { get; init; }
     public required Vector3 Position { get; init; }
     public required uint LevelRowId { get; init; }
+    public uint MapId { get; init; }
     public int Priority { get; init; } = 1000;
     public Vector2? MapCoordinates { get; init; }
     public bool UsePlayerYForNavigation { get; init; }
