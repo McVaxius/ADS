@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/goatcorp/Dalamud/master/Dalamud/Configuration/PluginManifest/pluginmanifest.schema.json",
+  "Author": "McVaxius",
+  "Name": "AI Duty Solver",
+  "Punchline": "Observer-first duty solver shell for safe 4-man dungeon planning and ownership control.",
+  "Description": "AI Duty Solver starts with the honest v1 foundation: a Lumina-backed 4-man dungeon catalog, passive observation for supported duties, a monster-first planner explanation surface, and explicit ownership controls before live execution work expands.",
+  "InternalName": "ADS",
+  "AssemblyVersion": "0.0.0.1",
+  "RepoUrl": "https://github.com/McVaxius/ADS",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 14,
+  "Tags": [
+    "duty",
+    "dungeon",
+    "automation",
+    "analysis"
+  ],
+  "CategoryTags": [
+    "utility"
+  ]
+}

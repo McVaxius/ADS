@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. waitAtDestinationSeconds is included now for future execution timing.",
+  "rules": [
+    {
+      "enabled": true,
+      "territoryTypeId": 0,
+      "contentFinderConditionId": 0,
+      "dutyEnglishName": "The Tam-Tara Deepcroft",
+      "objectKind": "EventObj",
+      "baseId": 0,
+      "objectName": "Cultist Rosary",
+      "nameMatchMode": "Exact",
+      "classification": "Required",
+      "priority": 10,
+      "priorityVerticalRadius": 100.0,
+      "maxDistance": 100.0,
+      "waitAtDestinationSeconds": 0.0,
+      "notes": "Key object should beat the nearby Sealed Barrier."
+    },
+    {
+      "enabled": true,
+      "territoryTypeId": 0,
+      "contentFinderConditionId": 0,
+      "dutyEnglishName": "The Tam-Tara Deepcroft",
+      "objectKind": "EventObj",
+      "baseId": 0,
+      "objectName": "Sealed Barrier",
+      "nameMatchMode": "Exact",
+      "classification": "Required",
+      "priority": 100,
+      "priorityVerticalRadius": 10.0,
+      "maxDistance": 20.0,
+      "waitAtDestinationSeconds": 0.0,
+      "notes": "Barrier stays below the rosary until the key is handled."
+    }
+  ]
+}

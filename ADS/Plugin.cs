@@ -1,0 +1,485 @@
+using System.Diagnostics;
+using System.Text.Json;
+using ADS.Models;
+using ADS.Services;
+using ADS.Windows;
+using Dalamud.Game.Command;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Game.Text.SeStringHandling.Payloads;
+using Dalamud.IoC;
+using Dalamud.Interface.Windowing;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+
+namespace ADS;
+
+public sealed class Plugin : IDalamudPlugin
+{
+    [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
+    [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
+    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
+    [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
+    [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = false,
+    };
+
+    public string Name
+        => PluginInfo.DisplayName;
+
+    public Configuration Configuration { get; }
+    public WindowSystem WindowSystem { get; } = new(PluginInfo.InternalName);
+    public DutyCatalogService DutyCatalogService { get; }
+    public DutyContextService DutyContextService { get; }
+    public ObjectPriorityRuleService ObjectPriorityRuleService { get; }
+    public ObservationMemoryService ObservationMemoryService { get; }
+    public ObjectivePlannerService ObjectivePlannerService { get; }
+    public ExecutionService ExecutionService { get; }
+    public AdsIpcService AdsIpcService { get; }
+    public MapFlagService MapFlagService { get; }
+
+    private readonly MainWindow mainWindow;
+    private readonly ConfigWindow configWindow;
+    private readonly ObjectExplorerWindow objectExplorerWindow;
+    private IDtrBarEntry? dtrEntry;
+    private string objectExplorerStatus = "Ready.";
+
+    public Plugin()
+    {
+        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        ApplyConfigurationMigrations(Configuration);
+
+        DutyCatalogService = new DutyCatalogService(DataManager, Log);
+        DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        ObservationMemoryService = new ObservationMemoryService(ObjectTable, Log, ObjectPriorityRuleService);
+        ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService);
+        ExecutionService = new ExecutionService(ObjectTable, TargetManager, CommandManager, ObservationMemoryService, Log);
+        MapFlagService = new MapFlagService(DataManager, Condition, Log);
+        AdsIpcService = new AdsIpcService(
+            PluginInterface,
+            StartDutyFromOutside,
+            StartDutyFromInside,
+            ResumeDutyFromInside,
+            LeaveDuty,
+            GetStatusJson,
+            GetCurrentAnalysisJson);
+
+        mainWindow = new MainWindow(this);
+        configWindow = new ConfigWindow(this);
+        objectExplorerWindow = new ObjectExplorerWindow(this);
+        WindowSystem.AddWindow(mainWindow);
+        WindowSystem.AddWindow(configWindow);
+        WindowSystem.AddWindow(objectExplorerWindow);
+
+        RegisterCommands();
+
+        PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
+        PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
+        PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
+        Framework.Update += OnFrameworkUpdate;
+        DutyState.DutyCompleted += OnDutyCompleted;
+
+        SetupDtrBar();
+        UpdateDtrBar();
+
+        if (Configuration.OpenMainWindowOnLoad)
+            OpenMainUi();
+
+        Log.Information("[ADS] Plugin loaded.");
+    }
+
+    public void Dispose()
+    {
+        Framework.Update -= OnFrameworkUpdate;
+        PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
+        PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
+        PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
+        DutyState.DutyCompleted -= OnDutyCompleted;
+
+        UnregisterCommands();
+        AdsIpcService.Dispose();
+        WindowSystem.RemoveAllWindows();
+        dtrEntry?.Remove();
+        configWindow.Dispose();
+        mainWindow.Dispose();
+        objectExplorerWindow.Dispose();
+    }
+
+    public void OpenMainUi()
+        => mainWindow.IsOpen = true;
+
+    public void OpenConfigUi()
+        => configWindow.IsOpen = true;
+
+    public void ToggleMainUi()
+        => mainWindow.IsOpen = !mainWindow.IsOpen;
+
+    public void ToggleObjectExplorerUi()
+        => objectExplorerWindow.IsOpen = !objectExplorerWindow.IsOpen;
+
+    public void SaveConfiguration()
+    {
+        Configuration.Save();
+        UpdateDtrBar();
+    }
+
+    public void ResetWindowPositions()
+    {
+        mainWindow.QueueResetToOrigin();
+        configWindow.QueueResetToOrigin();
+        objectExplorerWindow.QueueResetToOrigin();
+    }
+
+    public void JumpWindows()
+    {
+        mainWindow.QueueRandomVisibleJump();
+        configWindow.QueueRandomVisibleJump();
+        objectExplorerWindow.QueueRandomVisibleJump();
+    }
+
+    public string ObjectExplorerStatus
+        => objectExplorerStatus;
+
+    public bool TryPlaceObjectFlag(string objectName, System.Numerics.Vector3 worldPosition)
+    {
+        var territoryId = DutyContextService.Current.TerritoryTypeId != 0
+            ? DutyContextService.Current.TerritoryTypeId
+            : ClientState.TerritoryType;
+
+        var result = MapFlagService.TryPlaceFlag(territoryId, worldPosition, objectName, out var status);
+        objectExplorerStatus = status;
+        return result;
+    }
+
+    public bool StartDutyFromOutside()
+    {
+        var result = ExecutionService.StartDutyFromOutside();
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+        return result;
+    }
+
+    public bool StartDutyFromInside()
+    {
+        var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+        return result;
+    }
+
+    public bool ResumeDutyFromInside()
+    {
+        var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+        return result;
+    }
+
+    public bool LeaveDuty()
+    {
+        var result = ExecutionService.LeaveDuty(DutyContextService.Current);
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+        return result;
+    }
+
+    public void StopOwnership()
+    {
+        ExecutionService.Stop(DutyContextService.Current);
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+    }
+
+    public string GetStatusJson()
+        => JsonSerializer.Serialize(
+            new
+            {
+                pluginEnabled = Configuration.PluginEnabled,
+                version = PluginInfo.GetVersion(),
+                ownershipMode = ExecutionService.CurrentMode.ToString(),
+                executionPhase = ExecutionService.CurrentPhase.ToString(),
+                executionStatus = ExecutionService.LastStatus,
+                duty = DutyContextService.Current.CurrentDuty?.EnglishName,
+                territoryTypeId = DutyContextService.Current.TerritoryTypeId,
+                contentFinderConditionId = DutyContextService.Current.ContentFinderConditionId,
+                inDuty = DutyContextService.Current.InDuty,
+                supportedDuty = DutyContextService.Current.IsSupportedDuty,
+                allowsActiveExecution = DutyContextService.Current.AllowsActiveExecution,
+                unsafeTransition = DutyContextService.Current.IsUnsafeTransition,
+            },
+            JsonOptions);
+
+    public string GetCurrentAnalysisJson()
+        => JsonSerializer.Serialize(
+            new
+            {
+                plannerMode = ObjectivePlannerService.Current.Mode.ToString(),
+                objectiveKind = ObjectivePlannerService.Current.ObjectiveKind.ToString(),
+                objective = ObjectivePlannerService.Current.Objective,
+                explanation = ObjectivePlannerService.Current.Explanation,
+                executionPhase = ExecutionService.CurrentPhase.ToString(),
+                executionStatus = ExecutionService.LastStatus,
+                targetName = ObjectivePlannerService.Current.TargetName,
+                targetDistance = ObjectivePlannerService.Current.TargetDistance,
+                targetVerticalDelta = ObjectivePlannerService.Current.TargetVerticalDelta,
+                capturedAtUtc = ObjectivePlannerService.Current.CapturedAtUtc,
+                observations = new
+                {
+                    liveMonsters = ObservationMemoryService.Current.LiveMonsters.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position) }),
+                    monsterGhosts = ObservationMemoryService.Current.MonsterGhosts.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position) }),
+                    liveInteractables = ObservationMemoryService.Current.LiveInteractables.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString() }),
+                    interactableGhosts = ObservationMemoryService.Current.InteractableGhosts.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString(), ghostReason = x.GhostReason.ToString() }),
+                },
+            },
+            JsonOptions);
+
+    public void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, $"[ADS] Failed to open URL: {url}");
+        }
+    }
+
+    public void OpenPath(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, $"[ADS] Failed to open path: {path}");
+        }
+    }
+
+    public void PrintStatus(string message)
+        => ChatGui.Print($"[ADS] {message}");
+
+    private static object BuildPositionPayload(System.Numerics.Vector3 value)
+        => new
+        {
+            x = MathF.Round(value.X, 2),
+            y = MathF.Round(value.Y, 2),
+            z = MathF.Round(value.Z, 2),
+        };
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        DutyContextService.Update(Configuration.PluginEnabled);
+        ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+        ObjectivePlannerService.Update(
+            DutyContextService.Current,
+            ObservationMemoryService.Current,
+            ExecutionService.CurrentMode,
+            Configuration.ConsiderTreasureCoffers);
+        ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled);
+        UpdateDtrBar();
+    }
+
+    private void OnDutyCompleted(object? sender, ushort territoryId)
+    {
+        var dutyName = DutyContextService.Current.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
+        ObservationMemoryService.Reset();
+        if (!ExecutionService.IsOwned)
+        {
+            Log.Information($"[ADS] DutyCompleted event for {dutyName}; observation memory cleared while ADS was not executing.");
+            return;
+        }
+
+        ExecutionService.CompleteDuty(dutyName);
+        PrintStatus(ExecutionService.LastStatus);
+        UpdateDtrBar();
+        Log.Information($"[ADS] DutyCompleted event for {dutyName}; ownership released and observation memory cleared.");
+    }
+
+    private void RegisterCommands()
+    {
+        var info = new CommandInfo(OnCommand)
+        {
+            HelpMessage =
+                "/ads - toggle the main window\n" +
+                "/ads config - open settings\n" +
+                "/ads obj - toggle the object explorer\n" +
+                "/ads ws - reset windows to 1,1\n" +
+                "/ads j - jump windows to visible random positions\n" +
+                "/ads outside - queue outside ownership\n" +
+                "/ads inside - claim ownership inside duty\n" +
+                "/ads resume - resume inside duty\n" +
+                "/ads leave - request leave state\n" +
+                "/ads stop - drop ownership",
+            ShowInHelp = true,
+        };
+
+        CommandManager.AddHandler(PluginInfo.Command, info);
+        CommandManager.AddHandler(PluginInfo.AliasCommand, new CommandInfo(OnCommand) { HelpMessage = "Alias for /ads." });
+        CommandManager.AddHandler(PluginInfo.SecondaryAliasCommand, new CommandInfo(OnCommand) { HelpMessage = "Alias for /ads." });
+    }
+
+    private void UnregisterCommands()
+    {
+        CommandManager.RemoveHandler(PluginInfo.Command);
+        CommandManager.RemoveHandler(PluginInfo.AliasCommand);
+        CommandManager.RemoveHandler(PluginInfo.SecondaryAliasCommand);
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        var trimmed = (args ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            ToggleMainUi();
+            return;
+        }
+
+        if (trimmed.Equals("config", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenConfigUi();
+            return;
+        }
+
+        if (trimmed.Equals("obj", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleObjectExplorerUi();
+            return;
+        }
+
+        if (trimmed.Equals("ws", StringComparison.OrdinalIgnoreCase))
+        {
+            ResetWindowPositions();
+            return;
+        }
+
+        if (trimmed.Equals("j", StringComparison.OrdinalIgnoreCase))
+        {
+            JumpWindows();
+            return;
+        }
+
+        if (trimmed.Equals("outside", StringComparison.OrdinalIgnoreCase))
+        {
+            StartDutyFromOutside();
+            return;
+        }
+
+        if (trimmed.Equals("inside", StringComparison.OrdinalIgnoreCase))
+        {
+            StartDutyFromInside();
+            return;
+        }
+
+        if (trimmed.Equals("resume", StringComparison.OrdinalIgnoreCase))
+        {
+            ResumeDutyFromInside();
+            return;
+        }
+
+        if (trimmed.Equals("leave", StringComparison.OrdinalIgnoreCase))
+        {
+            LeaveDuty();
+            return;
+        }
+
+        if (trimmed.Equals("stop", StringComparison.OrdinalIgnoreCase))
+        {
+            StopOwnership();
+            return;
+        }
+
+        ToggleMainUi();
+    }
+
+    private void SetupDtrBar()
+    {
+        dtrEntry = DtrBar.Get(PluginInfo.ShortDisplayName);
+        dtrEntry.OnClick = _ => OpenMainUi();
+    }
+
+    public void UpdateDtrBar()
+    {
+        if (dtrEntry is null)
+            return;
+
+        dtrEntry.Shown = Configuration.DtrBarEnabled;
+        if (!Configuration.DtrBarEnabled)
+            return;
+
+        var glyph = Configuration.PluginEnabled ? Configuration.DtrIconEnabled : Configuration.DtrIconDisabled;
+        var state = ExecutionService.CurrentMode switch
+        {
+            OwnershipMode.Observing => "Obs",
+            OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside => "Run",
+            OwnershipMode.Leaving => "Leave",
+            OwnershipMode.Failed => "Fail",
+            _ => Configuration.PluginEnabled ? "On" : "Off",
+        };
+        var phase = ExecutionService.CurrentPhase switch
+        {
+            ExecutionPhase.ObservingOnly => "Observe",
+            ExecutionPhase.OutsideQueue => "Queue",
+            ExecutionPhase.AwaitingSupportedPilotDuty => "WaitPilot",
+            ExecutionPhase.TransitionHold => "Transit",
+            ExecutionPhase.CombatHold => "Combat",
+            ExecutionPhase.ReadyForMonsterObjective => "Monster",
+            ExecutionPhase.NavigatingToMonsterObjective => "MonNav",
+            ExecutionPhase.ReadyForInteractableObjective => "Interact",
+            ExecutionPhase.NavigatingToRecoveryObjective => "RecNav",
+            ExecutionPhase.RecoveryHint => "Recover",
+            ExecutionPhase.WaitingForTruth => "Wait",
+            ExecutionPhase.LeavingDuty => "Leaving",
+            ExecutionPhase.Failure => "Fail",
+            _ => "Idle",
+        };
+
+        dtrEntry.Text = Configuration.DtrBarMode switch
+        {
+            1 => new SeString(new TextPayload($"{glyph} ADS:{state}/{phase}")),
+            2 => new SeString(new TextPayload(glyph)),
+            _ => new SeString(new TextPayload($"ADS: {state}/{phase}")),
+        };
+
+        var tooltipDuty = DutyContextService.Current.CurrentDuty?.EnglishName ?? "No active duty";
+        dtrEntry.Tooltip = new SeString(new TextPayload($"{PluginInfo.DisplayName} {state}/{phase}. {tooltipDuty}. Click to open the main window."));
+    }
+
+    private static void ApplyConfigurationMigrations(Configuration configuration)
+    {
+        if (configuration.Version < 1)
+            configuration.Version = 1;
+        if (configuration.Version < 2)
+        {
+            configuration.ConsiderTreasureCoffers = true;
+            configuration.Version = 2;
+        }
+
+        configuration.DtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
+        if (string.IsNullOrWhiteSpace(configuration.DtrIconEnabled))
+            configuration.DtrIconEnabled = Configuration.DefaultDtrIconEnabled;
+        if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
+            configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
+    }
+}
