@@ -13,6 +13,9 @@ public abstract class PositionedWindow : Window
     protected PositionedWindow(string name, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
         : base(name, flags)
     {
+        SizeCondition = ImGuiCond.FirstUseEver;
+        Flags &= ~ImGuiWindowFlags.AlwaysAutoResize;
+        Flags &= ~ImGuiWindowFlags.NoResize;
     }
 
     public void QueueResetToOrigin()

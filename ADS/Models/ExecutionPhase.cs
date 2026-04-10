@@ -19,4 +19,10 @@ public enum ExecutionPhase
     WaitingForTruth = 14,
     LeavingDuty = 15,
     Failure = 16,
+    FrontierHint = 17,
+    NavigatingToFrontierObjective = 18,
+    ReadyForFollowObjective = 19,
+    NavigatingToFollowObjective = 20,
+    NavigatingToMapXzDestination = 21,
+    MapXzDestinationHint = 22,
 }

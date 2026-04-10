@@ -8,14 +8,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
     private readonly Plugin plugin;
 
     public ConfigWindow(Plugin plugin)
-        : base("ADS Settings###ADSSettings", ImGuiWindowFlags.AlwaysAutoResize)
+        : base("ADS Settings###ADSSettings")
     {
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new System.Numerics.Vector2(420f, 280f),
-            MaximumSize = new System.Numerics.Vector2(720f, 720f),
+            MaximumSize = new System.Numerics.Vector2(2200f, 1600f),
         };
+        Size = new System.Numerics.Vector2(720f, 620f);
     }
 
     public void Dispose()
@@ -62,7 +63,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped("When treasure-coffer scan is enabled, ADS can pick a coffer only when it is actually closer than the competing monster and progression targets. Turning the scan off removes coffers from observation and planning entirely.");
+        ImGui.TextWrapped("When treasure-coffer scan is enabled, ADS treats coffers as optional pickups: they must materially beat competing targets on XZ, ADS still tries to stand within about 1y on approach, and coffers more than 5y away in Y are skipped.");
 
         ImGui.Separator();
         ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");
@@ -70,11 +71,17 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         if (ImGui.Button("Open rules JSON"))
             plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath);
         ImGui.SameLine();
+        if (ImGui.Button("Open frontier labels"))
+            plugin.OpenFrontierLabelUi();
+        ImGui.SameLine();
+        if (ImGui.Button("Open rules table"))
+            plugin.OpenRuleEditorUi();
+        ImGui.SameLine();
         if (ImGui.Button("Reload rules JSON"))
             plugin.ObjectPriorityRuleService.Reload();
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override, lower-is-better priority, priorityVerticalRadius, optional maxDistance, and waitAtDestinationSeconds for future timing hooks.");
-        ImGui.TextWrapped("On first run, ADS copies the bundled rules JSON here. After that, this config file is authoritative, so manual edits survive plugin enable and reload.");
+        ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds, and for manual sub-area waypoints classification MapXzDestination + destinationType MapXZ + mapCoordinates like 11.3,10.4.");
+        ImGui.TextWrapped("On first run, ADS copies the bundled rules JSON here. After that, this config file is authoritative, so manual edits survive plugin enable/reload and are auto-reloaded while ADS is running.");
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
         var dtrMode = plugin.Configuration.DtrBarMode;

@@ -17,9 +17,9 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(640f, 420f),
-            MaximumSize = new Vector2(1600f, 1200f),
+            MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(820f, 620f);
+        Size = new Vector2(1040f, 900f);
     }
 
     public void Dispose()

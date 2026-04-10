@@ -10,4 +10,8 @@ public enum PlannerObjectiveKind
     TreasureCoffer = 5,
     MonsterGhost = 6,
     InteractableGhost = 7,
+    Frontier = 8,
+    FollowTarget = 9,
+    MapXzDestination = 10,
+    ExpendableInteractable = 11,
 }

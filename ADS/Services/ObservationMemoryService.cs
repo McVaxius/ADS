@@ -56,6 +56,7 @@ public sealed class ObservationMemoryService
     private readonly Dictionary<string, ObservedMonster> knownMonsters = [];
     private readonly Dictionary<string, ObservedInteractable> knownInteractables = [];
     private readonly Dictionary<string, DateTime> treasureSuppressionUntil = [];
+    private readonly Dictionary<string, ObservedInteractable> usedProgressionInteractables = [];
     private readonly List<Vector3> retiredMonsterGhostClusters = [];
     private readonly List<Vector3> retiredInteractableGhostClusters = [];
     private uint activeDutyKey;
@@ -100,12 +101,17 @@ public sealed class ObservationMemoryService
             Current = new ObservationSnapshot
             {
                 LiveMonsters = [],
+                LiveFollowTargets = [],
                 MonsterGhosts = knownMonsters.Values
+                    .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
+                    .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
                     .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
                     .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
                 LiveInteractables = [],
                 InteractableGhosts = knownInteractables.Values
+                    .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
+                    .Where(x => !IsSuppressedInteractionGhost(x))
                     .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
                     .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
@@ -114,8 +120,10 @@ public sealed class ObservationMemoryService
         }
 
         var liveMonsters = new Dictionary<string, ObservedMonster>(StringComparer.Ordinal);
+        var liveFollowTargets = new Dictionary<string, ObservedMonster>(StringComparer.Ordinal);
         var liveInteractables = new Dictionary<string, ObservedInteractable>(StringComparer.Ordinal);
         var now = DateTime.UtcNow;
+        var playerPosition = objectTable.LocalPlayer?.Position;
         CleanupExpiredTreasureSuppressions(now);
 
         foreach (var gameObject in objectTable)
@@ -131,6 +139,36 @@ public sealed class ObservationMemoryService
             {
                 case ObjectKind.BattleNpc:
                     {
+                        var monsterKey = BuildKey(gameObject);
+                        if (objectPriorityRuleService.ShouldIgnoreObject(
+                                context,
+                                gameObject.ObjectKind,
+                                gameObject.BaseId,
+                                name,
+                                GetDistance(playerPosition, gameObject.Position),
+                                GetVerticalDelta(playerPosition, gameObject.Position)))
+                        {
+                            knownMonsters.Remove(monsterKey);
+                            break;
+                        }
+
+                        if (objectPriorityRuleService.ShouldFollowObject(
+                                context,
+                                gameObject.ObjectKind,
+                                gameObject.BaseId,
+                                name,
+                                GetDistance(playerPosition, gameObject.Position),
+                                GetVerticalDelta(playerPosition, gameObject.Position)))
+                        {
+                            knownMonsters.Remove(monsterKey);
+                            if (!gameObject.IsTargetable || IsDeadMonster(gameObject))
+                                break;
+
+                            var followTarget = CreateMonster(gameObject, name, now);
+                            liveFollowTargets[followTarget.Key] = followTarget;
+                            break;
+                        }
+
                         if (IsDeadMonster(gameObject))
                         {
                             var deadMonster = CreateMonster(gameObject, name, now);
@@ -151,7 +189,22 @@ public sealed class ObservationMemoryService
                         if (!gameObject.IsTargetable)
                             break;
 
-                        var interactable = CreateInteractable(gameObject, name, context, now);
+                        var interactableKey = BuildKey(gameObject);
+                        var classification = ClassifyInteractable(gameObject, name, context);
+                        if (classification == InteractableClass.Ignored)
+                        {
+                            knownInteractables.Remove(interactableKey);
+                            break;
+                        }
+
+                        if (IsDurablySuppressedInteractableClass(classification)
+                            && TryCreateUsedProgressionInteractable(context, gameObject, name, classification, now, out var usedInteractable))
+                        {
+                            knownInteractables[usedInteractable!.Key] = usedInteractable;
+                            break;
+                        }
+
+                        var interactable = CreateInteractable(gameObject, name, classification, now);
                         liveInteractables[interactable.Key] = interactable;
                         knownInteractables[interactable.Key] = interactable;
                         break;
@@ -159,6 +212,13 @@ public sealed class ObservationMemoryService
                 case ObjectKind.Treasure when considerTreasureCoffers:
                     {
                         var treasureKey = BuildKey(gameObject);
+                        if (objectPriorityRuleService.ShouldIgnoreInteractable(context, gameObject.ObjectKind, gameObject.BaseId, name))
+                        {
+                            knownInteractables.Remove(treasureKey);
+                            treasureSuppressionUntil.Remove(treasureKey);
+                            break;
+                        }
+
                         if (treasureSuppressionUntil.TryGetValue(treasureKey, out var suppressedUntil) && suppressedUntil > now)
                         {
                             knownInteractables[treasureKey] = CreateTreasureCoffer(gameObject, name, now, GhostReason.Consumed);
@@ -178,11 +238,15 @@ public sealed class ObservationMemoryService
 
         var monsterGhosts = knownMonsters.Values
             .Where(x => !liveMonsters.ContainsKey(x.Key))
+            .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
+            .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
             .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var interactableGhosts = knownInteractables.Values
             .Where(x => !liveInteractables.ContainsKey(x.Key))
+            .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
+            .Where(x => !IsSuppressedInteractionGhost(x))
             .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -190,6 +254,7 @@ public sealed class ObservationMemoryService
         Current = new ObservationSnapshot
         {
             LiveMonsters = liveMonsters.Values.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(),
+            LiveFollowTargets = liveFollowTargets.Values.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(),
             MonsterGhosts = monsterGhosts,
             LiveInteractables = liveInteractables.Values.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(),
             InteractableGhosts = interactableGhosts,
@@ -201,6 +266,7 @@ public sealed class ObservationMemoryService
         knownMonsters.Clear();
         knownInteractables.Clear();
         treasureSuppressionUntil.Clear();
+        usedProgressionInteractables.Clear();
         retiredMonsterGhostClusters.Clear();
         retiredInteractableGhostClusters.Clear();
         lastPlayerPosition = null;
@@ -227,6 +293,22 @@ public sealed class ObservationMemoryService
         };
     }
 
+    public void MarkProgressionInteractionSent(DutyContextSnapshot context, ObservedInteractable interactable)
+    {
+        if (!IsDurablySuppressedInteractableClass(interactable.Classification))
+            return;
+
+        var spatialKey = BuildProgressionUseKey(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position);
+        if (usedProgressionInteractables.ContainsKey(spatialKey))
+            return;
+
+        var usedInteractable = CreateTransitionUsedInteractable(spatialKey, interactable);
+        usedProgressionInteractables[spatialKey] = usedInteractable;
+        knownInteractables.Remove(interactable.Key);
+        knownInteractables[usedInteractable.Key] = usedInteractable;
+        log.Information($"[ADS] Marked {interactable.Name} at {Quantize(interactable.Position)} as used; suppressing this interactable position until duty reset or large relocation.");
+    }
+
     public int RetireNearbyRecoveryGhosts(PlannerObjectiveKind objectiveKind, Vector3 center, float radius)
     {
         return objectiveKind switch
@@ -248,7 +330,7 @@ public sealed class ObservationMemoryService
             LastSeenUtc = now,
         };
 
-    private ObservedInteractable CreateInteractable(IGameObject gameObject, string name, DutyContextSnapshot context, DateTime now)
+    private static ObservedInteractable CreateInteractable(IGameObject gameObject, string name, InteractableClass classification, DateTime now)
         => new()
         {
             Key = BuildKey(gameObject),
@@ -258,7 +340,7 @@ public sealed class ObservationMemoryService
             Name = name,
             Position = gameObject.Position,
             LastSeenUtc = now,
-            Classification = ClassifyInteractable(gameObject, name, context),
+            Classification = classification,
             GhostReason = GhostReason.SeenPreviously,
         };
 
@@ -276,6 +358,53 @@ public sealed class ObservationMemoryService
             GhostReason = ghostReason,
         };
 
+    private static ObservedInteractable CreateTransitionUsedInteractable(string spatialKey, ObservedInteractable interactable)
+        => new()
+        {
+            Key = $"used:{spatialKey}",
+            GameObjectId = interactable.GameObjectId,
+            DataId = interactable.DataId,
+            ObjectKind = interactable.ObjectKind,
+            Name = interactable.Name,
+            Position = interactable.Position,
+            LastSeenUtc = DateTime.UtcNow,
+            Classification = interactable.Classification,
+            GhostReason = GhostReason.TransitionUsed,
+        };
+
+    private static ObservedInteractable CreateTransitionUsedInteractable(string spatialKey, IGameObject gameObject, string name, InteractableClass classification, DateTime now)
+        => new()
+        {
+            Key = $"used:{spatialKey}",
+            GameObjectId = gameObject.GameObjectId,
+            DataId = gameObject.BaseId,
+            ObjectKind = gameObject.ObjectKind,
+            Name = name,
+            Position = gameObject.Position,
+            LastSeenUtc = now,
+            Classification = classification,
+            GhostReason = GhostReason.TransitionUsed,
+        };
+
+    private bool TryCreateUsedProgressionInteractable(
+        DutyContextSnapshot context,
+        IGameObject gameObject,
+        string name,
+        InteractableClass classification,
+        DateTime now,
+        out ObservedInteractable? interactable)
+    {
+        var spatialKey = BuildProgressionUseKey(context, gameObject.ObjectKind, gameObject.BaseId, name, gameObject.Position);
+        if (!usedProgressionInteractables.ContainsKey(spatialKey))
+        {
+            interactable = null;
+            return false;
+        }
+
+        interactable = CreateTransitionUsedInteractable(spatialKey, gameObject, name, classification, now);
+        return true;
+    }
+
     private static string BuildKey(IGameObject gameObject)
     {
         if (gameObject.GameObjectId != 0)
@@ -287,10 +416,18 @@ public sealed class ObservationMemoryService
     private static string Quantize(Vector3 value)
         => $"{MathF.Round(value.X, 0):0},{MathF.Round(value.Y, 0):0},{MathF.Round(value.Z, 0):0}";
 
+    private static string BuildProgressionUseKey(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string name, Vector3 position)
+        => $"{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{objectKind}:{baseId}:{name}:{Quantize(position)}";
+
     private InteractableClass ClassifyInteractable(IGameObject gameObject, string name, DutyContextSnapshot context)
     {
         if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification))
+        {
+            if (overrideClassification is InteractableClass.Follow or InteractableClass.MapXzDestination)
+                return InteractableClass.Ignored;
+
             return overrideClassification;
+        }
 
         var loweredName = name.ToLowerInvariant();
         if (ExpendableTokens.Any(loweredName.Contains))
@@ -310,6 +447,18 @@ public sealed class ObservationMemoryService
             ? InteractableClass.Required
             : InteractableClass.Optional;
     }
+
+    private static bool IsDurablySuppressedInteractableClass(InteractableClass classification)
+        => classification is InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable;
+
+    private static bool IsSuppressedInteractionGhost(ObservedInteractable interactable)
+        => interactable.GhostReason is GhostReason.Consumed or GhostReason.TransitionUsed;
+
+    private static float? GetDistance(Vector3? playerPosition, Vector3 targetPosition)
+        => playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, targetPosition) : null;
+
+    private static float? GetVerticalDelta(Vector3? playerPosition, Vector3 targetPosition)
+        => playerPosition.HasValue ? MathF.Abs(targetPosition.Y - playerPosition.Value.Y) : null;
 
     private void CleanupExpiredTreasureSuppressions(DateTime now)
     {
@@ -382,9 +531,29 @@ public sealed class ObservationMemoryService
                 retiredInteractableGhostClusters.Clear();
                 log.Information($"[ADS] Cleared {retiredCount} retired recovery ghost cluster(s) after a large duty relocation.");
             }
+
+            ClearUsedProgressionInteractablesAfterRelocation();
         }
 
         lastPlayerPosition = playerPosition.Value;
+    }
+
+    private void ClearUsedProgressionInteractablesAfterRelocation()
+    {
+        if (usedProgressionInteractables.Count == 0)
+            return;
+
+        var knownKeys = usedProgressionInteractables.Values
+            .Select(x => x.Key)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var key in knownKeys)
+            knownInteractables.Remove(key);
+
+        var clearedCount = usedProgressionInteractables.Count;
+        usedProgressionInteractables.Clear();
+        log.Information($"[ADS] Cleared {clearedCount} used progression interactable suppression(s) after a large duty relocation.");
     }
 
     private bool IsSuppressedByRetiredMonsterCluster(Vector3 position)

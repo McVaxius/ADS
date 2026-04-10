@@ -13,12 +13,13 @@ public sealed class DutyCatalogService
         "the thousand maws of toto-rak",
         "brayflox's longstop",
         "the stone vigil",
+        "the aurum vale",
+        "castrum meridianum",
     ];
 
     private static readonly HashSet<string> LaterWaveDutyNames =
     [
         "sastasha",
-        "castrum meridianum",
         "copperbell mines",
         "haukke manor",
         "the praetorium",
@@ -27,6 +28,9 @@ public sealed class DutyCatalogService
     private static readonly Dictionary<string, DutyClearanceStatus> ClearanceStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["castrum meridianum"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
     };
 
     private readonly List<DutyCatalogEntry> entries = [];
@@ -67,8 +71,8 @@ public sealed class DutyCatalogService
             if (string.IsNullOrWhiteSpace(englishName))
                 englishName = localizedName;
 
-            var supportLevel = DutySupportLevel.Unsupported;
-            var supportNote = "Catalog only until a solver profile exists.";
+            var supportLevel = DutySupportLevel.PassiveOnly;
+            var supportNote = "Passive observation and owned FSM testing are allowed; pilot execution still needs validation.";
             if (PilotDutyNames.Contains(englishName.ToLowerInvariant()))
             {
                 supportLevel = DutySupportLevel.ActiveSupported;
@@ -76,7 +80,7 @@ public sealed class DutyCatalogService
             }
             else if (LaterWaveDutyNames.Contains(englishName.ToLowerInvariant()))
             {
-                supportNote = "Planned test list; visible but not yet owned by ADS.";
+                supportNote = "Planned test list; passive observation and owned FSM testing are allowed before pilot promotion.";
             }
 
             var entry = new DutyCatalogEntry
@@ -121,7 +125,7 @@ public sealed class DutyCatalogService
             return string.Compare(left.EnglishName, right.EnglishName, StringComparison.OrdinalIgnoreCase);
         });
 
-        log.Information($"[ADS] Built 4-man duty catalog with {entries.Count} rows and {entries.Count(x => x.SupportsActiveExecution)} active pilot duties.");
+        log.Information($"[ADS] Built 4-man duty catalog with {entries.Count} rows, {entries.Count(x => x.SupportsPassiveObservation)} supported observation duties, and {entries.Count(x => x.SupportsActiveExecution)} active pilot duties.");
     }
 
     public IReadOnlyList<DutyCatalogEntry> Entries

@@ -7,4 +7,7 @@ public enum InteractableClass
     Expendable = 2,
     CombatFriendly = 3,
     TreasureCoffer = 4,
+    Ignored = 5,
+    Follow = 6,
+    MapXzDestination = 7,
 }

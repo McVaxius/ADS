@@ -21,7 +21,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 - Show a real Lumina-backed catalog of all 4-man dungeons in the ADS main window.
 - Keep the implementation honest: staged execution, passive observation, planner explanation, ownership controls, IPC surfaces, and live movement/interaction only where currently validated.
-- Seed active support only for the first simple ARR pilot wave: Tam-Tara, Toto-Rak, Brayflox, and Stone Vigil.
+- Seed active support only for the validated ARR pilot wave: Tam-Tara, Toto-Rak, Brayflox, Stone Vigil, Aurum Vale, and Castrum Meridianum.
 - Keep harder duties visible but non-actionable until their duty-profile overlays are written.
 - Treat monsters as the default objective, with marked progression interactables allowed to outrank monsters when they are materially closer.
 - Status colors in the catalog:
@@ -33,5 +33,17 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 ## Current Validation
 
 - The Tam-Tara Deepcroft is marked `[1P Unsync Cleared]`.
-- The Praetorium and Castrum Meridianum are on the planned test list.
+- The Thousand Maws of Toto-Rak, Aurum Vale, and Castrum Meridianum are marked `[1P Unsync Cleared]`.
+- The Praetorium is on the planned test list.
 - ADS stops owned execution and clears recovery memory when Dalamud reports `DutyCompleted`.
+- When the object table goes empty mid-duty, ADS can promote the next unvisited map-label frontier point instead of backtracking through stale ghosts.
+- The frontier label inspector reads the `MapMarker` collection referenced by `Map.MapMarkerRange`; this is required for Toto-Rak, where the territory map row and marker collection row are different.
+- Automation now also uses those `MapMarkerRange` labels as frontier waypoints when the older level-backed label join fails, so Toto-Rak should prefer labels like `Abacination Chamber` over synthetic heading scouts.
+- Label frontier navigation now places an in-game map flag and sends `/vnav moveflag`, falling back to direct `/vnav moveto` only if map flag placement fails.
+- ADS continues tracking visited frontier labels while live objects are present, but it only exposes a current frontier target once the live monster/interactable list is empty.
+- Duty-object rules now auto-reload while ADS is running; `Ignored` can suppress `BattleNpc` rows such as Cid, any matched in-gate rule counts as a human priority override, and used progression interactables are suppressed by stable duty/object/position until duty reset or a large relocation.
+- `Required` BattleNpc rules make ADS seek/kill by configured priority before distance tie-breaks.
+- `Follow` rules are BattleNpc-only and turn live NPCs such as Cid into live-only movement anchors that yield to real monsters/interactables and never become ghost targets; non-BattleNpc Follow rows are migrated to `Ignored`.
+- Treasure coffer execution is sticky once ADS commits to the coffer, so a coffer that legitimately wins planning should be approached and handled instead of bouncing back to a monster objective mid-route.
+- `MapXzDestination` rules create manual no-live-object waypoints from player-facing map coordinates such as `11.3,10.4`; ADS converts those to world X/Z with the current player Y, navigates directly, and ghosts the waypoint once it reaches within 1y on X/Z.
+- Fallback map-label frontier selection now prefers labels ahead of the current route heading instead of raw sheet order.

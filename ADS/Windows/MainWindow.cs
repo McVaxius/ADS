@@ -17,9 +17,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(860f, 640f),
-            MaximumSize = new Vector2(1800f, 1400f),
+            MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1100f, 760f);
+        Size = new Vector2(1240f, 960f);
     }
 
     public void Dispose()
@@ -61,6 +61,12 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Objects"))
             plugin.ToggleObjectExplorerUi();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Labels"))
+            plugin.ToggleFrontierLabelUi();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Rules"))
+            plugin.ToggleRuleEditorUi();
 
         ImGui.TextWrapped(PluginInfo.Summary);
         ImGui.TextWrapped(PluginInfo.PilotDutySummary);
@@ -85,6 +91,17 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount}");
         ImGui.TextUnformatted($"Territory / CFC: {context.TerritoryTypeId} / {context.ContentFinderConditionId}");
         ImGui.TextUnformatted($"Objective kind: {planner.ObjectiveKind}");
+        ImGui.TextUnformatted($"Frontier mode: {plugin.DungeonFrontierService.CurrentMode}");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"Labels: {plugin.DungeonFrontierService.VisitedPoints} / {plugin.DungeonFrontierService.TotalPoints}");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"Map XZ: {plugin.DungeonFrontierService.VisitedManualMapXzDestinations} / {plugin.DungeonFrontierService.ManualMapXzDestinationCount}");
+        if (plugin.DungeonFrontierService.CurrentTarget is { } frontierPoint)
+            ImGui.TextWrapped(frontierPoint.MapCoordinates.HasValue
+                ? $"Frontier target: {frontierPoint.Name} map {frontierPoint.MapCoordinates.Value.X:0.0}, {frontierPoint.MapCoordinates.Value.Y:0.0}"
+                : $"Frontier target: {frontierPoint.Name}");
+        if (plugin.DungeonFrontierService.CurrentHeading is { } scoutHeading)
+            ImGui.TextWrapped($"Frontier heading: {scoutHeading.X:0.00}, {scoutHeading.Z:0.00}");
         ImGui.TextWrapped($"Objective: {planner.Objective}");
         ImGui.TextWrapped($"Explanation: {planner.Explanation}");
         if (planner.TargetDistance.HasValue || planner.TargetVerticalDelta.HasValue)
@@ -105,7 +122,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             plugin.StartDutyFromOutside();
         ImGui.SameLine();
 
-        var canStartInside = plugin.DutyContextService.Current.InDuty && plugin.DutyContextService.Current.AllowsActiveExecution;
+        var canStartInside = plugin.DutyContextService.Current.InDuty && plugin.DutyContextService.Current.IsSupportedDuty;
         using (new ImGuiDisabledBlock(!canStartInside))
         {
             if (ImGui.Button("Start Inside"))
@@ -129,16 +146,24 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("Stop"))
             plugin.StopOwnership();
+
+        if (plugin.DutyContextService.Current.InDuty
+            && plugin.DutyContextService.Current.IsSupportedDuty
+            && !plugin.DutyContextService.Current.AllowsActiveExecution)
+        {
+            ImGui.TextWrapped("Pilot flag is still NO for this duty, but Start/Resume are allowed so you can exercise the ADS observer/FSM test surface.");
+        }
     }
 
     private void DrawDutyCatalog()
     {
         ImGui.TextUnformatted("All 4-Man Dungeons");
         DrawDutyCatalogStats();
-        if (!ImGui.BeginTable("AdsDutyCatalog", 7, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, 320f)))
+        if (!ImGui.BeginTable("AdsDutyCatalog", 8, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, 320f)))
             return;
 
         ImGui.TableSetupColumn("Duty");
+        ImGui.TableSetupColumn("Territory", ImGuiTableColumnFlags.WidthFixed, 80f);
         ImGui.TableSetupColumn("Clearance", ImGuiTableColumnFlags.WidthFixed, 150f);
         ImGui.TableSetupColumn("Level", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("Expansion", ImGuiTableColumnFlags.WidthFixed, 70f);
@@ -162,23 +187,26 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(1);
+            ImGui.TextUnformatted(entry.TerritoryTypeId.ToString());
+
+            ImGui.TableSetColumnIndex(2);
             ImGui.PushStyleColor(ImGuiCol.Text, GetClearanceColor(entry.ClearanceStatus));
             ImGui.TextUnformatted(GetClearanceLabel(entry.ClearanceStatus));
             ImGui.PopStyleColor();
 
-            ImGui.TableSetColumnIndex(2);
+            ImGui.TableSetColumnIndex(3);
             ImGui.TextUnformatted(entry.LevelRequired.ToString());
 
-            ImGui.TableSetColumnIndex(3);
+            ImGui.TableSetColumnIndex(4);
             ImGui.TextUnformatted(entry.ExpansionName);
 
-            ImGui.TableSetColumnIndex(4);
+            ImGui.TableSetColumnIndex(5);
             ImGui.TextUnformatted(entry.SupportsPassiveObservation ? "YES" : "NO");
 
-            ImGui.TableSetColumnIndex(5);
+            ImGui.TableSetColumnIndex(6);
             ImGui.TextUnformatted(entry.SupportsActiveExecution ? "YES" : "NO");
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(7);
             ImGui.TextWrapped(entry.SupportNote);
         }
 
@@ -205,6 +233,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted("Observation Summary");
         ImGui.TextUnformatted($"Live monsters: {observation.LiveMonsters.Count}");
         ImGui.SameLine();
+        ImGui.TextUnformatted($"Live follow: {observation.LiveFollowTargets.Count}");
+        ImGui.SameLine();
         ImGui.TextUnformatted($"Monster ghosts: {observation.MonsterGhosts.Count}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Live interactables: {observation.LiveInteractables.Count}");
@@ -218,6 +248,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
         ImGui.TextUnformatted("Debug Preview");
         DrawNameList("Live monster sample", observation.LiveMonsters.Select(x => x.Name));
+        DrawNameList("Live follow sample", observation.LiveFollowTargets.Select(x => x.Name));
         DrawNameList("Monster ghost sample", observation.MonsterGhosts.Select(x => x.Name));
         DrawNameList("Live interactable sample", observation.LiveInteractables.Select(x => $"{x.Name} [{x.Classification}]"));
         DrawNameList("Interactable ghost sample", observation.InteractableGhosts.Select(x => $"{x.Name} [{x.Classification}]"));
