@@ -29,6 +29,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
   - Blue `[1P Unsync Cleared]`
   - Yellow `[1P Duty Support]`
   - Green `[4P Sync Cleared]`
+- The catalog summary now groups those four readiness states into separate color-coded maturity cards instead of one wrapped status line.
 
 ## Current Validation
 
@@ -48,7 +49,10 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - `Required` progression interactables only hard-override monster-first flow when their effective rule priority actually beats the best live monster; equal priorities fall back to the distance and Y-space heuristics.
 - `Follow` rules are BattleNpc-only and turn live NPCs such as Cid into live-only movement anchors that yield to real monsters/interactables and never become ghost targets; non-BattleNpc Follow rows are migrated to `Ignored`.
 - Treasure coffer execution is sticky once ADS commits to the coffer, so a coffer that legitimately wins planning should be approached and handled instead of bouncing back to a monster objective mid-route.
-- `MapXzDestination` rules create manual no-live-object waypoints from player-facing map coordinates such as `11.3,10.4`; ADS converts those to world X/Z with the current player Y, prefers map-flag navigation with `/vnav moveflag`, falls back to direct `/vnav moveto`, and ghosts the waypoint once it reaches within 1y on X/Z or when `BetweenAreas` fires during the area handoff.
+- Expendable interactables now stay in interaction follow-through after ADS sends the interact, and ADS keeps retrying them from the same `<1y` `moveto` stand-off until the object actually disappears.
+- Required interactables now get a bounded 3-attempt stationary follow-through window after ADS sends the interact; if `BetweenAreas` starts, the retry window ends immediately.
+- Rule-backed interactable ghosts now only enter recovery after live monsters, live progression interactables, live follow anchors, and frontier/Map XZ options are exhausted, so they no longer steal control from stronger live truth.
+- `MapXzDestination` rules create manual no-live-object waypoints from player-facing map coordinates such as `11.3,10.4`; ADS converts those to world X/Z with the current player Y, prefers map-flag navigation with `/vnav moveflag`, falls back to direct `/vnav moveto`, keeps a selected manual target sticky even if live objects appear before arrival, does not select fresh manual targets during unsafe transition frames, and ghosts the waypoint only once execution reaches within 1y on X/Z or when `BetweenAreas` fires during the area handoff.
 - Fallback map-label frontier selection now prefers labels ahead of the current route heading instead of raw sheet order.
 
 ## Rule Guide

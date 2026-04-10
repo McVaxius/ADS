@@ -248,29 +248,6 @@ public sealed class ObjectivePlannerService
             }
         }
 
-        if (nearestRuleBackedInteractableGhost is not null && playerPosition.HasValue)
-        {
-            var distance = Vector3.Distance(nearestRuleBackedInteractableGhost.Position, playerPosition.Value);
-            var verticalDelta = MathF.Abs(nearestRuleBackedInteractableGhost.Position.Y - playerPosition.Value.Y);
-            Current = new PlannerSnapshot
-            {
-                Mode = PlannerMode.Recovery,
-                ObjectiveKind = PlannerObjectiveKind.InteractableGhost,
-                Objective = $"Recover toward priority interactable ghost: {nearestRuleBackedInteractableGhost.Name}",
-                Explanation = BuildRuleBackedInteractableGhostExplanation(
-                    context,
-                    nearestRuleBackedInteractableGhost,
-                    distance,
-                    verticalDelta,
-                    nearestMonster is not null ? Vector3.Distance(nearestMonster.Position, playerPosition.Value) : null),
-                TargetName = nearestRuleBackedInteractableGhost.Name,
-                TargetDistance = distance,
-                TargetVerticalDelta = verticalDelta,
-                CapturedAtUtc = now,
-            };
-            return;
-        }
-
         if (nearestMonster is not null)
         {
             var distance = playerPosition.HasValue
@@ -351,6 +328,32 @@ public sealed class ObjectivePlannerService
                     : $"Advance toward map frontier: {frontierPoint.Name}",
                 Explanation = BuildFrontierExplanation(context, frontierPoint, observation),
                 TargetName = frontierPoint.Name,
+                TargetDistance = distance,
+                TargetVerticalDelta = verticalDelta,
+                CapturedAtUtc = now,
+            };
+            return;
+        }
+
+        if (nearestMonster is null
+            && nearestFollowTarget is null
+            && !observation.LiveInteractables.Any(IsProgressionInteractable)
+            && nearestRuleBackedInteractableGhost is not null
+            && playerPosition.HasValue)
+        {
+            var distance = Vector3.Distance(nearestRuleBackedInteractableGhost.Position, playerPosition.Value);
+            var verticalDelta = MathF.Abs(nearestRuleBackedInteractableGhost.Position.Y - playerPosition.Value.Y);
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.Recovery,
+                ObjectiveKind = PlannerObjectiveKind.InteractableGhost,
+                Objective = $"Recover toward priority interactable ghost: {nearestRuleBackedInteractableGhost.Name}",
+                Explanation = BuildRuleBackedInteractableGhostExplanation(
+                    context,
+                    nearestRuleBackedInteractableGhost,
+                    distance,
+                    verticalDelta),
+                TargetName = nearestRuleBackedInteractableGhost.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = verticalDelta,
                 CapturedAtUtc = now,
@@ -645,16 +648,14 @@ public sealed class ObjectivePlannerService
         DutyContextSnapshot context,
         ObservedInteractable interactable,
         float distance,
-        float verticalDelta,
-        float? monsterDistance)
+        float verticalDelta)
     {
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(context, interactable, distance, verticalDelta);
         var priorityText = effectiveRule is not null
             ? $"priority rule {effectiveRule.Priority}"
             : "a priority rule";
-        var monsterText = monsterDistance.HasValue ? monsterDistance.Value.ToString("0.0") : "none";
 
-        return $"Live truth no longer contains {interactable.Name}, but {priorityText} still matches its ghost within the configured distance/Y gates ({distance:0.0}y, Y {verticalDelta:0.0}). ADS is using that ghost as a recovery objective before continuing monster-first flow. Nearest live monster distance: {monsterText}.";
+        return $"No live monsters, follow anchors, or progression interactables are currently visible, but {priorityText} still matches the ghost of {interactable.Name} within the configured distance/Y gates ({distance:0.0}y, Y {verticalDelta:0.0}). ADS is using that rule-backed ghost as a recovery objective instead of toggling away from stronger live truth.";
     }
 
     private static bool ShouldSelectTreasureCoffer(

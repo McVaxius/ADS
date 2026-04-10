@@ -99,8 +99,13 @@ public sealed class DungeonFrontierService
             return;
 
         var playerPosition = objectTable.LocalPlayer?.Position;
-        if (context.BetweenAreas)
-            GhostCurrentOrLastManualMapXzDestination(previousTarget);
+        if (context.IsUnsafeTransition)
+        {
+            if (context.BetweenAreas)
+                GhostCurrentOrLastManualMapXzDestination(previousTarget);
+
+            return;
+        }
 
         var hasActiveMap = TryResolveActiveMap(context, out var activeMap, out var activeMapStatus);
         CurrentLabelStatus = activeMapStatus;
@@ -125,9 +130,6 @@ public sealed class DungeonFrontierService
             ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
         ManualMapXzDestinationCount = manualMapXzDestinations.Count;
-        if (playerPosition.HasValue && manualMapXzDestinations.Count > 0)
-            MarkVisitedPoints(manualMapXzDestinations, playerPosition.Value, ManualMapXzDestinationVisitRadius, float.MaxValue);
-
         VisitedManualMapXzDestinations = manualMapXzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
         if (noFrontierBlockingLiveObjects)
         {
@@ -201,6 +203,17 @@ public sealed class DungeonFrontierService
         {
             log.Information($"[ADS] Ghosted map XZ destination {point.Name} at {FormatVector(point.Position)} after reaching XZ {GetHorizontalDistance(playerPosition, point.Position):0.0}y.");
         }
+    }
+
+    public DungeonFrontierPoint? GetCurrentOrRememberedManualMapXzDestination(Vector3? playerPosition)
+    {
+        var point = CurrentTarget is { IsManualMapXzDestination: true }
+            ? CurrentTarget
+            : lastValidManualMapXzDestination;
+        if (point is null)
+            return null;
+
+        return BuildNavigationPoint(point, playerPosition);
     }
 
     private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId, uint mapId)

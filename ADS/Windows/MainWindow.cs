@@ -219,15 +219,57 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private void DrawDutyCatalogStats()
     {
         var entries = plugin.DutyCatalogService.Entries;
-        ImGui.TextWrapped(
-            $"Stats: {CountStatus(DutyClearanceStatus.NotCleared)} [Not Cleared] | " +
-            $"{CountStatus(DutyClearanceStatus.OnePlayerUnsyncCleared)} [1P Unsync Cleared] | " +
-            $"{CountStatus(DutyClearanceStatus.OnePlayerDutySupport)} [1P Duty Support] | " +
-            $"{CountStatus(DutyClearanceStatus.FourPlayerSyncCleared)} [4P Sync Cleared] | " +
-            $"{entries.Count(x => x.IsPlannedTest)} planned test(s)");
+        var cards = new[]
+        {
+            (MaturityLevel: 0, Label: "Not Cleared", Count: CountStatus(DutyClearanceStatus.NotCleared), Accent: GetClearanceColor(DutyClearanceStatus.NotCleared)),
+            (MaturityLevel: 1, Label: "1P Unsync Cleared", Count: CountStatus(DutyClearanceStatus.OnePlayerUnsyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerUnsyncCleared)),
+            (MaturityLevel: 2, Label: "1P Duty Support", Count: CountStatus(DutyClearanceStatus.OnePlayerDutySupport), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerDutySupport)),
+            (MaturityLevel: 3, Label: "4P Sync Cleared", Count: CountStatus(DutyClearanceStatus.FourPlayerSyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.FourPlayerSyncCleared)),
+        };
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        var columnCount = availableWidth >= 880f ? 4 : 2;
+        if (ImGui.BeginTable("AdsDutyCatalogStats", columnCount, ImGuiTableFlags.SizingStretchSame))
+        {
+            for (var index = 0; index < cards.Length; index++)
+            {
+                if (index % columnCount == 0)
+                    ImGui.TableNextRow();
+
+                ImGui.TableSetColumnIndex(index % columnCount);
+                DrawDutyCatalogStatCard(cards[index].MaturityLevel, cards[index].Label, cards[index].Count, cards[index].Accent);
+            }
+
+            ImGui.EndTable();
+        }
+
+        var plannedTests = entries.Count(x => x.IsPlannedTest);
+        ImGui.TextDisabled($"{plannedTests} planned test{(plannedTests == 1 ? string.Empty : "s")} flagged in the catalog.");
 
         int CountStatus(DutyClearanceStatus status)
             => entries.Count(x => x.ClearanceStatus == status);
+    }
+
+    private static void DrawDutyCatalogStatCard(int maturityLevel, string label, int count, Vector4 accent)
+    {
+        var background = new Vector4(
+            MathF.Min(accent.X * 0.18f, 1f),
+            MathF.Min(accent.Y * 0.18f, 1f),
+            MathF.Min(accent.Z * 0.18f, 1f),
+            0.32f);
+
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, background);
+        ImGui.PushStyleColor(ImGuiCol.Border, accent);
+        if (ImGui.BeginChild($"##DutyCatalogStatCard{maturityLevel}", new Vector2(-1f, 76f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.TextColored(accent, $"Maturity {maturityLevel}");
+            ImGui.TextUnformatted($"{count} {(count == 1 ? "duty" : "duties")}");
+            ImGui.TextWrapped(label);
+        }
+
+        ImGui.EndChild();
+        ImGui.PopStyleColor(2);
+        ImGui.PopStyleVar();
     }
 
     private void DrawObservationSummary()

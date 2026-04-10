@@ -14,6 +14,7 @@ public sealed class ExecutionService
     private const float NavigationPhaseRange = 6f;
     private const float PreferredInteractArrivalRange = 0.8f;
     private const float DirectInteractAttemptRange = 2.0f;
+    private const int RequiredInteractionAttemptLimit = 3;
     private const float PreferredMonsterArrivalRange = 2.0f;
     private const float PreferredFollowArrivalRange = 3.0f;
     private const float PreferredRecoveryArrivalRange = 2.0f;
@@ -23,6 +24,7 @@ public sealed class ExecutionService
     private const float RecoveryTargetSimilarityRadius = RecoveryGhostRetireRadius;
     private const float TreasureCofferProgressMargin = 2.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan RequiredInteractionRetryDelay = InteractAttemptCooldown;
     private static readonly TimeSpan NavigationRetryCooldown = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan MapFlagNavigationRetryCooldown = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan RecoveryTruthSettleDelay = TimeSpan.FromSeconds(1.0);
@@ -50,6 +52,7 @@ public sealed class ExecutionService
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
     private DateTime pendingProgressionInteractResultUntilUtc;
+    private int pendingRequiredInteractionAttemptsSent;
     private string? treasureCofferRouteKey;
     private DateTime treasureCofferRouteStartedUtc;
     private DateTime treasureCofferLastProgressUtc;
@@ -265,6 +268,9 @@ public sealed class ExecutionService
     {
         if (context.IsUnsafeTransition || planner.Mode == PlannerMode.UnsafeTransition)
         {
+            if (pendingProgressionInteractable?.Classification == InteractableClass.Required)
+                ClearInteractableCommitment();
+
             ResetRecoveryHold();
             StopMovementAssists();
             SetPhase(ExecutionPhase.TransitionHold, $"{prefix} Waiting for safe post-transition duty truth before advancing.");
@@ -279,7 +285,7 @@ public sealed class ExecutionService
             return;
         }
 
-        if (TryHoldPendingProgressionInteractResult(context, prefix))
+        if (TryHoldPendingProgressionInteractResult(context, observation, prefix))
             return;
 
         if (planner.Mode == PlannerMode.Recovery)
@@ -340,6 +346,12 @@ public sealed class ExecutionService
             if (committedInteractable is not null)
             {
                 TryAdvanceInteractableObjective(context, committedInteractable, $"{prefix} Following through on the previously selected interactable.");
+                return;
+            }
+
+            if (planner.ObjectiveKind != PlannerObjectiveKind.MapXzDestination
+                && TryAdvanceCommittedManualMapXzDestination(context, $"{prefix}"))
+            {
                 return;
             }
 
@@ -550,9 +562,28 @@ public sealed class ExecutionService
             return;
         }
 
-        var playerPosition = objectTable.LocalPlayer?.Position;
         var isMapXzDestination = planner.ObjectiveKind == PlannerObjectiveKind.MapXzDestination
             || frontierPoint.IsManualMapXzDestination;
+        TryAdvanceFrontierPoint(context, frontierPoint, isMapXzDestination, prefix);
+    }
+
+    private bool TryAdvanceCommittedManualMapXzDestination(DutyContextSnapshot context, string prefix)
+    {
+        var frontierPoint = dungeonFrontierService.GetCurrentOrRememberedManualMapXzDestination(objectTable.LocalPlayer?.Position);
+        if (frontierPoint is null)
+            return false;
+
+        TryAdvanceFrontierPoint(
+            context,
+            frontierPoint,
+            true,
+            $"{prefix} Following through on the committed manual Map XZ destination until ADS reaches the configured XZ point or hits BetweenAreas.");
+        return true;
+    }
+
+    private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, string prefix)
+    {
+        var playerPosition = objectTable.LocalPlayer?.Position;
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : isMapXzDestination
@@ -672,13 +703,27 @@ public sealed class ExecutionService
             }
             else
             {
+                var continuingRequiredFollowThrough = observedInteractable.Classification == InteractableClass.Required
+                    && pendingProgressionInteractable is not null
+                    && string.Equals(pendingProgressionInteractable.Key, observedInteractable.Key, StringComparison.Ordinal);
                 pendingProgressionInteractable = observedInteractable;
-                pendingProgressionInteractResultUntilUtc = now + ProgressionInteractResultSettleDelay;
+                pendingProgressionInteractResultUntilUtc = observedInteractable.Classification == InteractableClass.Required
+                    ? now + RequiredInteractionRetryDelay
+                    : now + ProgressionInteractResultSettleDelay;
+                pendingRequiredInteractionAttemptsSent = observedInteractable.Classification == InteractableClass.Required
+                    ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
+                    : 0;
             }
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
             nextInteractAttemptUtc = now + InteractAttemptCooldown;
-            SetPhase(ExecutionPhase.AttemptingInteractableObjective, $"{prefix} Direct interact sent to {observedInteractable.Name}.");
+            var interactResult = observedInteractable.Classification switch
+            {
+                InteractableClass.Required => $"Direct interact sent to {observedInteractable.Name} (required attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
+                InteractableClass.Expendable => $"Direct interact sent to {observedInteractable.Name}; ADS will keep retrying this expendable until it disappears.",
+                _ => $"Direct interact sent to {observedInteractable.Name}.",
+            };
+            SetPhase(ExecutionPhase.AttemptingInteractableObjective, $"{prefix} {interactResult}");
             return;
         }
 
@@ -786,28 +831,79 @@ public sealed class ExecutionService
         treasureCofferBestHorizontalDistance = float.MaxValue;
     }
 
-    private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, string prefix)
+    private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, ObservationSnapshot observation, string prefix)
     {
         if (pendingProgressionInteractable is null)
             return false;
 
         var pendingInteractable = pendingProgressionInteractable;
+        var pendingLiveInteractable = ResolvePendingProgressionInteractable(observation, pendingInteractable);
+        var isExpendableFollowThrough = pendingInteractable.Classification == InteractableClass.Expendable;
+        var isRequiredFollowThrough = pendingInteractable.Classification == InteractableClass.Required;
+        if (isRequiredFollowThrough && context.IsUnsafeTransition)
+        {
+            ClearInteractableCommitment();
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Required interact follow-through for {pendingInteractable.Name} ended because BetweenAreas is active.");
+            return true;
+        }
+
         var now = DateTime.UtcNow;
         if (now < pendingProgressionInteractResultUntilUtc)
         {
             StopMovementAssists();
+            var holdReason = isRequiredFollowThrough
+                ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
+                : isExpendableFollowThrough
+                    ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
+                    : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.");
+                $"{prefix} {holdReason}");
+            return true;
+        }
+
+        if (isRequiredFollowThrough && pendingLiveInteractable is not null)
+        {
+            if (pendingRequiredInteractionAttemptsSent >= RequiredInteractionAttemptLimit)
+            {
+                ClearInteractableCommitment();
+                StopMovementAssists();
+                SetPhase(
+                    ExecutionPhase.AttemptingInteractableObjective,
+                    $"{prefix} Required interact follow-through finished {RequiredInteractionAttemptLimit} sent attempt(s) for {pendingInteractable.Name}; ADS is releasing this attempt window.");
+                return true;
+            }
+
+            TryAdvanceInteractableObjective(
+                context,
+                pendingLiveInteractable,
+                $"{prefix} Required interact follow-through is still live, so ADS is retrying attempt {pendingRequiredInteractionAttemptsSent + 1}/{RequiredInteractionAttemptLimit} while holding the target steady.");
+            return true;
+        }
+
+        if (isExpendableFollowThrough && pendingLiveInteractable is not null)
+        {
+            TryAdvanceInteractableObjective(
+                context,
+                pendingLiveInteractable,
+                $"{prefix} Expendable interact follow-through is still live, so ADS is retrying it from the same <1y XZ stand-off.");
             return true;
         }
 
         observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
         ClearInteractableCommitment();
         StopMovementAssists();
+        var completionReason = isRequiredFollowThrough
+            ? $"Required interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
+            : isExpendableFollowThrough
+                ? $"Expendable interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
+                : $"Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.";
         SetPhase(
             ExecutionPhase.AttemptingInteractableObjective,
-            $"{prefix} Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.");
+            $"{prefix} {completionReason}");
         return true;
     }
 
@@ -815,6 +911,21 @@ public sealed class ExecutionService
     {
         pendingProgressionInteractable = null;
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
+        pendingRequiredInteractionAttemptsSent = 0;
+    }
+
+    private static ObservedInteractable? ResolvePendingProgressionInteractable(ObservationSnapshot observation, ObservedInteractable pendingInteractable)
+    {
+        var liveInteractable = observation.LiveInteractables.FirstOrDefault(x => x.Key == pendingInteractable.Key);
+        if (liveInteractable is not null)
+            return liveInteractable;
+
+        return observation.LiveInteractables.FirstOrDefault(x =>
+            x.ObjectKind == pendingInteractable.ObjectKind
+            && x.DataId == pendingInteractable.DataId
+            && x.Classification == pendingInteractable.Classification
+            && string.Equals(x.Name, pendingInteractable.Name, StringComparison.OrdinalIgnoreCase)
+            && GetHorizontalDistance(x.Position, pendingInteractable.Position) <= DirectInteractAttemptRange);
     }
 
     private bool MatchesRecoveryTarget(PlannerObjectiveKind objectiveKind, Vector3 position)

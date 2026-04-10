@@ -2,6 +2,13 @@
 
 ## 2026-04-10
 
+- Stopped the frontier service from selecting fresh frontier / manual Map XZ targets during unsafe transition frames, preventing transition-time double ghosting and stale run carryover.
+- Moved rule-backed interactable-ghost recovery behind live monster, live progression, live follow-anchor, and frontier / Map XZ choices so stale ghosts no longer steal control from stronger live truth.
+- Kept selected manual `MapXzDestination` waypoints sticky during execution, so ADS no longer abandons them just because live monsters or interactables become visible before the configured X/Z arrival point.
+- Added a bounded 3-attempt stationary follow-through for `Required` interactables, with immediate cancellation if `Svc.Condition[BetweenAreas]` starts.
+- Reworked the duty-catalog readiness summary into four color-coded maturity cards for `[Not Cleared]`, `[1P Unsync Cleared]`, `[1P Duty Support]`, and `[4P Sync Cleared]`.
+- Stopped the frontier service from pre-ghosting manual `MapXzDestination` points during the background sweep; they now only ghost on the execution-side 1y X/Z arrival check or on `Svc.Condition[BetweenAreas]`.
+- Changed expendable interact follow-through so ADS keeps retrying the same live expendable from the same `<1y` `moveto` stand-off until the object actually disappears.
 - Marked Castrum Meridianum as `[1P Unsync Cleared]` and promoted it into the active pilot set after successful validation.
 - Added JSON-backed `MapXzDestination` / `MapXZ` manual waypoints. These parse `mapCoordinates` values like `11.3,10.4`, convert them to world X/Z on the current map, use the current player Y, prefer map-flag navigation with `/vnav moveflag`, fall back to direct `/vnav moveto`, and ghost the waypoint at 1y X/Z instead of waiting for an exact navigation finish.
 - Froze the top header row in the duty-object and dialog-rule editors, and now ghost the current or last valid manual `MapXzDestination` waypoint as soon as `Svc.Condition[BetweenAreas]` confirms the area handoff.

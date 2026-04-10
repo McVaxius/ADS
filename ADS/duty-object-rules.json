@@ -265,12 +265,12 @@
       "NameMatchMode": "Exact",
       "Classification": "MapXzDestination",
       "DestinationType": "MapXZ",
-      "MapCoordinates": "11,11.2",
+      "MapCoordinates": "10.8,11.2",
       "Priority": 1000,
       "PriorityVerticalRadius": 20,
       "MaxDistance": 80,
       "WaitAtDestinationSeconds": 0,
-      "Notes": ""
+      "Notes": "after boss 1"
     },
     {
       "Enabled": true,
@@ -384,11 +384,11 @@
       "Enabled": true,
       "TerritoryTypeId": 0,
       "ContentFinderConditionId": 0,
-      "DutyEnglishName": "MCH Pet haha",
+      "DutyEnglishName": "",
       "ObjectKind": "",
       "BaseId": 0,
       "ObjectName": "Automaton Queen",
-      "NameMatchMode": "Exact",
+      "NameMatchMode": "Contains",
       "Classification": "Ignored",
       "DestinationType": "",
       "MapCoordinates": "",
@@ -396,7 +396,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
-      "Notes": ""
+      "Notes": "MCH Pet haha"
     },
     {
       "Enabled": true,
@@ -499,7 +499,7 @@
       "NameMatchMode": "Exact",
       "Classification": "MapXzDestination",
       "DestinationType": "MapXZ",
-      "MapCoordinates": "11.4,9.2",
+      "MapCoordinates": "11.3,9.3",
       "Priority": 1000,
       "PriorityVerticalRadius": 20,
       "MaxDistance": 80,
@@ -557,6 +557,24 @@
       "Priority": 1000,
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": false,
+      "TerritoryTypeId": 1063,
+      "ContentFinderConditionId": 32,
+      "DutyEnglishName": "The Keeper of the Lake",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Magitek Terminal",
+      "NameMatchMode": "Exact",
+      "Classification": "Required",
+      "DestinationType": "",
+      "MapCoordinates": "",
+      "Priority": 1000,
+      "PriorityVerticalRadius": 5,
+      "MaxDistance": 10,
       "WaitAtDestinationSeconds": 0,
       "Notes": ""
     }
