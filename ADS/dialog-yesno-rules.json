@@ -8,6 +8,34 @@
       "MatchMode": "Contains",
       "Response": "Yes",
       "Notes": "Keeper of the Lake barrier confirmation."
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Enter the",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": "whatever"
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Place the",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Open the",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Unlock",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
     }
   ]
 }

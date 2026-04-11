@@ -36,6 +36,12 @@ public sealed class DutyCatalogService
         ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["castrum meridianum"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the praetorium"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["dzemael darkhold"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the burn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["cutter's cry"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["pharos sirius"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["hullbreaker isle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
     };
 
     private readonly List<DutyCatalogEntry> entries = [];

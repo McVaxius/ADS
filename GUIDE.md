@@ -6,6 +6,12 @@
 - Lower `Priority` wins.
 - Equal priorities do not automatically force a required interactable over the best live monster. In that case ADS falls back to distance and Y-space heuristics.
 - `PriorityVerticalRadius` and `MaxDistance` act as rule gates for normal monster and interactable rules.
+- `ObjectMapCoordinates` / `ObjectWorldCoordinates` are positional selectors for ordinary same-name rows. They are not manual destinations.
+- `ObjectMatchRadius` defaults to `6y` when a positional selector is authored and the radius is left blank.
+- The rules editor now collapses those coordinate choices into one `Coords` field:
+  - `a,b` means map `X,Z`
+  - `a,b,c` means world `X,Y,Z`
+  - manual destination rows use that same field too
 - `BossFight` and `Follow` are BattleNpc-only classifications.
 - `Layer` now scopes any rule to the current live map/sub-area only, not just `MapXzDestination` rows.
 - Legacy rows that stored layer scope in `DestinationType` auto-migrate on load into the real `Layer` field.
@@ -24,6 +30,32 @@
 - Duty name matching is article-tolerant for leading `The`, but it is still a real duty-name match.
 - If `Layer` is non-empty, the rule only matches on that live sub-area. Use `frontier.activeMapName` / `Using live map row ... (...)` to capture the correct layer string.
 - The rules editor's `Current Area + Global` filter is intentionally broader than runtime matching: it shows rules for the current duty/territory/CFC scope plus global rows, and does not hide them just because the current live `Layer` is different.
+
+## Positional Same-Name Rules
+
+- Use `ObjectMapCoordinates` when you want one ordinary row to match a specific object instance by player-facing map X/Z, for example one `Lift Lever` but not another same-name lever on the same layer.
+- Use `ObjectWorldCoordinates` when Y matters or when you already captured an exact world-space object position.
+- If both object coordinate fields are populated, ADS uses `ObjectWorldCoordinates` and ignores `ObjectMapCoordinates`.
+- `ObjectMatchRadius` is the selector radius, not the player gate:
+  - `ObjectMapCoordinates` uses horizontal X/Z distance to the object's live position.
+  - `ObjectWorldCoordinates` uses full 3D distance to the object's live position.
+- Positional selectors are evaluated after duty/layer/kind/base-id/name scope but before planner classification and distance/Y gate application.
+- `MaxDistance` and `PriorityVerticalRadius` still remain player-relative gates after the row matches. They do not identify which same-name object instance the row belongs to.
+- Manual destination fields stay separate:
+  - `MapCoordinates` is still only for `Classification: MapXzDestination`.
+  - `WorldCoordinates` is still only for `Classification: XYZ`.
+
+## Unified Coords Editor Surface
+
+- In the editor, use `Coords` instead of thinking about four separate coordinate columns.
+- ADS interprets the value by shape:
+  - `a,b` -> map `X,Z`
+  - `a,b,c` -> world `X,Y,Z`
+- ADS interprets the same field by row type:
+  - manual destination rows: `Coords` becomes the destination point and auto-selects `MapXzDestination` versus `XYZ`
+  - ordinary rows: `Coords` becomes the physical object selector
+- `R` is only the ordinary-row positional selector radius. Manual destination rows ignore it.
+- Runtime storage stays backward-compatible for now, so the live JSON can still carry the older internal fields while the authoring surface stays simple.
 
 ## Treasure Coffers
 

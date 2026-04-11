@@ -37,7 +37,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - The Keeper of the Lake is now also marked `[1P Unsync Cleared]`.
 - Sastasha is now also marked `[1P Unsync Cleared]`.
 - The Thousand Maws of Toto-Rak, Aurum Vale, and Castrum Meridianum are marked `[1P Unsync Cleared]`.
-- The Praetorium is on the planned test list.
+- The Praetorium is now also marked `[1P Unsync Cleared]`.
 - ADS stops owned execution and clears recovery memory when Dalamud reports `DutyCompleted`.
 - When the object table goes empty mid-duty, ADS can promote the next unvisited map-label frontier point instead of backtracking through stale ghosts.
 - The frontier label inspector reads the `MapMarker` collection referenced by `Map.MapMarkerRange`; this is required for Toto-Rak, where the territory map row and marker collection row are different.
@@ -68,6 +68,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - If ADS sends an interact to a progression target and `Svc.Condition[Mounted]` becomes true during follow-through, execution now treats that as a successful consume/use seam, marks the interactable position used, clears the old commitment, and waits for refreshed duty truth instead of retrying the same mount object again.
 - While mounted in Praetorium territory `1044`, ADS now bypasses the generic `CombatHold` and uses the current mount row's live mount-action list to fight nearby mobs. It prefers mounted ground-target actions such as `Magitek Cannon` / `Magitek Thunder` at the best nearby cluster, then falls back to the other live mount weapon such as `Photon Stream` / `Magitek Pulse` while enemies remain in range.
 - Manual destinations now support both `MapXzDestination` rows with `mapCoordinates` and precise `XYZ` rows with `worldCoordinates`. `XYZ` uses authored world X/Y/Z directly instead of converting map-space X/Z onto the current player Y plane.
+- Ordinary same-name rows can now bind to one physical object instance with the new positional selector support, and the rules editor now exposes that through one unified `Coords` field plus radius instead of four separate coordinate columns.
 - Frontier/manual blocking is now gate-aware. Live progression interactables that are visible but currently fail their own distance/Y rule gates no longer block manual destinations, which fixes Praetorium-style `WaitingForTruth` deadlocks where a terminal was visible on the layer but not yet eligible.
 - Rule-backed interactable ghosts now only enter recovery after live monsters, live progression interactables, live follow anchors, and frontier/Map XZ options are exhausted, so they no longer steal control from stronger live truth.
 - `MapXzDestination` rules create manual no-live-object waypoints from player-facing map coordinates such as `11.3,10.4`; ADS converts those to world X/Z with the current player Y, prefers map-flag navigation with `/vnav moveflag`, falls back to direct `/vnav moveto`, keeps a selected manual target sticky through transient live-monster visibility, yields that remembered target once the planner has promoted a live interactable, stops `/vnav` immediately on `BetweenAreas`, does not select fresh manual targets during unsafe transition frames, ghosts the waypoint only once execution reaches within 1y on X/Z or when `BetweenAreas` fires during the area handoff, and now uses `Layer` as the optional live-map selector. Human-readable active subarea names such as `Forecastle` are preferred over raw numeric map ids when you know them. Legacy `DestinationType` layer rows auto-migrate on load.
@@ -78,4 +79,4 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 ## Rule Guide
 
-- See [GUIDE.md](GUIDE.md) for duty-object rule authoring notes, dialog yes/no rules, global scope behavior, BattleNpc-only `BossFight` / `Follow` behavior, layer semantics, editor-filter semantics, mounted interact follow-through behavior, ghost inspector usage, treasure clamp examples, close-range interact fallback behavior, and `MapXzDestination` / `XYZ` usage.
+- See [GUIDE.md](GUIDE.md) for duty-object rule authoring notes, positional same-name rule matching, the unified `Coords` editor surface, dialog yes/no rules, global scope behavior, BattleNpc-only `BossFight` / `Follow` behavior, layer semantics, editor-filter semantics, mounted interact follow-through behavior, ghost inspector usage, treasure clamp examples, close-range interact fallback behavior, and `MapXzDestination` / `XYZ` usage.

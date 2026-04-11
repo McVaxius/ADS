@@ -104,8 +104,8 @@ public sealed class ObservationMemoryService
                 LiveMonsters = [],
                 LiveFollowTargets = [],
                 MonsterGhosts = knownMonsters.Values
-                    .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
-                    .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
+                    .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
+                    .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
                     .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
                     .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList(),
@@ -146,6 +146,8 @@ public sealed class ObservationMemoryService
                                 gameObject.ObjectKind,
                                 gameObject.BaseId,
                                 name,
+                                gameObject.Position,
+                                context.MapId,
                                 GetDistance(playerPosition, gameObject.Position),
                                 GetVerticalDelta(playerPosition, gameObject.Position)))
                         {
@@ -158,6 +160,8 @@ public sealed class ObservationMemoryService
                                 gameObject.ObjectKind,
                                 gameObject.BaseId,
                                 name,
+                                gameObject.Position,
+                                context.MapId,
                                 GetDistance(playerPosition, gameObject.Position),
                                 GetVerticalDelta(playerPosition, gameObject.Position)))
                         {
@@ -232,7 +236,7 @@ public sealed class ObservationMemoryService
                 case ObjectKind.Treasure when considerTreasureCoffers:
                     {
                         var treasureKey = BuildKey(gameObject);
-                        if (objectPriorityRuleService.ShouldIgnoreInteractable(context, gameObject.ObjectKind, gameObject.BaseId, name))
+                        if (objectPriorityRuleService.ShouldIgnoreInteractable(context, gameObject.ObjectKind, gameObject.BaseId, name, gameObject.Position, context.MapId))
                         {
                             knownInteractables.Remove(treasureKey);
                             treasureSuppressionUntil.Remove(treasureKey);
@@ -258,8 +262,8 @@ public sealed class ObservationMemoryService
 
         var monsterGhosts = knownMonsters.Values
             .Where(x => !liveMonsters.ContainsKey(x.Key))
-            .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
-            .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name))
+            .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
+            .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
             .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -454,7 +458,7 @@ public sealed class ObservationMemoryService
 
     private InteractableClass ClassifyInteractable(IGameObject gameObject, string name, DutyContextSnapshot context)
     {
-        if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification))
+        if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification, gameObject.Position, context.MapId))
         {
             if (overrideClassification is InteractableClass.Follow or InteractableClass.MapXzDestination or InteractableClass.BossFight)
                 return InteractableClass.Ignored;
@@ -490,7 +494,7 @@ public sealed class ObservationMemoryService
         out InteractableClass classification)
     {
         classification = default;
-        return objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out classification)
+        return objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out classification, gameObject.Position, context.MapId)
                && classification == InteractableClass.CombatFriendly;
     }
 

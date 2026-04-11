@@ -2,6 +2,8 @@
 
 ## 2026-04-11
 
+- Collapsed the rules-editor coordinate authoring surface back down to one `Coords` field plus one radius field. `a,b` now means map `X,Z`, `a,b,c` means world `X,Y,Z`, manual destination rows use that same single field, and the runtime storage remains backward-compatible underneath.
+- Added positional matching for ordinary same-name rules. `ObjectMapCoordinates` / `ObjectWorldCoordinates` plus `ObjectMatchRadius` now let one row bind to one physical object instance without overloading manual `MapXzDestination` / `XYZ` fields.
 - Pending progression interact follow-through now marks the interacted position used as soon as `BetweenAreas` starts. This restores the original Meridianum-style ghosting seam for one-shot objects that immediately transition or leave visibility after interact, such as `Disposal Chute`.
 - Required progression-interactable suppression no longer clears on generic large relocations, and ADS now treats a non-disappearing required interactable as consumed when the interact displaces the player materially away from that same object. This restores durable ghosting for one-shot objects like Castrum Meridianum `Disposal Chute`.
 - Manual `MapXzDestination` / `XYZ` staging can now beat tied live `Expendable` or `Optional` progression interactables, so Praetorium-style staging rows are not blocked by a same-priority generic `Shortcut`.

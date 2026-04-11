@@ -22,6 +22,9 @@ public sealed class ObjectPriorityRule
     public string Layer { get; set; } = string.Empty;
     public string MapCoordinates { get; set; } = string.Empty;
     public string WorldCoordinates { get; set; } = string.Empty;
+    public string ObjectMapCoordinates { get; set; } = string.Empty;
+    public string ObjectWorldCoordinates { get; set; } = string.Empty;
+    public float? ObjectMatchRadius { get; set; }
     public int Priority { get; set; } = 1000;
     public float PriorityVerticalRadius { get; set; }
     public float? MaxDistance { get; set; }

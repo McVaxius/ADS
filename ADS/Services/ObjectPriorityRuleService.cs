@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.ClientState.Objects.Enums;
@@ -13,6 +14,7 @@ public sealed class ObjectPriorityRuleService
     private const string FileName = "duty-object-rules.json";
     private const string MapXzDestinationType = "MapXZ";
     private const string XyzDestinationType = "XYZ";
+    private const float DefaultObjectMatchRadius = 6f;
     private static readonly TimeSpan ReloadPollInterval = TimeSpan.FromSeconds(1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -27,6 +29,7 @@ public sealed class ObjectPriorityRuleService
     private readonly IDataManager dataManager;
     private readonly string configPath;
     private readonly string bundledPath;
+    private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
@@ -141,12 +144,18 @@ public sealed class ObjectPriorityRuleService
     public bool MatchesCurrentDutyScopeForEditor(ObjectPriorityRule rule, DutyContextSnapshot context)
         => MatchesDutyScope(rule, context, includeLayerScope: false);
 
-    public ObjectPriorityRule? MatchObjectRule(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string objectName)
+    public ObjectPriorityRule? MatchObjectRule(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3? objectPosition = null,
+        uint objectMapId = 0)
     {
         return Current.Rules
             .Where(x => x.Enabled)
             .Where(x => !IsManualDestinationRule(x))
-            .Where(x => Matches(x, context, objectKind, baseId, objectName))
+            .Where(x => Matches(x, context, objectKind, baseId, objectName, objectPosition, objectMapId))
             .OrderByDescending(x => GetSpecificityScore(x))
             .ThenBy(x => x.Priority)
             .FirstOrDefault();
@@ -180,10 +189,12 @@ public sealed class ObjectPriorityRuleService
         ObjectKind objectKind,
         uint baseId,
         string objectName,
-        out InteractableClass classification)
+        out InteractableClass classification,
+        Vector3? objectPosition = null,
+        uint objectMapId = 0)
     {
         classification = default;
-        var rule = MatchObjectRule(context, objectKind, baseId, objectName);
+        var rule = MatchObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId);
         return rule is not null
             && TryParseClassification(rule.Classification, out classification);
     }
@@ -204,7 +215,7 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name);
+        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId);
         if (rule is null)
             return null;
 
@@ -217,7 +228,7 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name);
+        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name, monster.Position, monster.MapId);
         if (rule is null)
             return null;
 
@@ -252,7 +263,7 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name);
+        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name, monster.Position, monster.MapId);
         return rule is not null && !RulePassesDistanceGates(rule, distance, verticalDelta);
     }
 
@@ -262,12 +273,12 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name);
+        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId);
         return rule is not null && !RulePassesDistanceGates(rule, distance, verticalDelta);
     }
 
     public ObjectPriorityRule? GetMatchedRule(DutyContextSnapshot context, ObservedInteractable interactable)
-        => MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name);
+        => MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId);
 
     public bool ShouldIgnoreObject(
         DutyContextSnapshot context,
@@ -278,6 +289,22 @@ public sealed class ObjectPriorityRuleService
         float? verticalDelta = null)
     {
         var rule = MatchObjectRule(context, objectKind, baseId, objectName);
+        return rule is not null
+            && IsIgnoredRule(rule)
+            && RulePassesDistanceGates(rule, distance, verticalDelta);
+    }
+
+    public bool ShouldIgnoreObject(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3 objectPosition,
+        uint objectMapId = 0,
+        float? distance = null,
+        float? verticalDelta = null)
+    {
+        var rule = MatchObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId);
         return rule is not null
             && IsIgnoredRule(rule)
             && RulePassesDistanceGates(rule, distance, verticalDelta);
@@ -294,10 +321,21 @@ public sealed class ObjectPriorityRuleService
 
     public bool ShouldIgnoreInteractable(
         DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3 objectPosition,
+        uint objectMapId = 0,
+        float? distance = null,
+        float? verticalDelta = null)
+        => ShouldIgnoreObject(context, objectKind, baseId, objectName, objectPosition, objectMapId, distance, verticalDelta);
+
+    public bool ShouldIgnoreInteractable(
+        DutyContextSnapshot context,
         ObservedInteractable interactable,
         float? distance = null,
         float? verticalDelta = null)
-        => ShouldIgnoreInteractable(context, interactable.ObjectKind, interactable.DataId, interactable.Name, distance, verticalDelta);
+        => ShouldIgnoreInteractable(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId, distance, verticalDelta);
 
     public bool ShouldFollowObject(
         DutyContextSnapshot context,
@@ -311,6 +349,25 @@ public sealed class ObjectPriorityRuleService
             return false;
 
         var rule = MatchObjectRule(context, objectKind, baseId, objectName);
+        return rule is not null
+            && IsFollowRule(rule)
+            && RulePassesDistanceGates(rule, distance, verticalDelta);
+    }
+
+    public bool ShouldFollowObject(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3 objectPosition,
+        uint objectMapId = 0,
+        float? distance = null,
+        float? verticalDelta = null)
+    {
+        if (objectKind != ObjectKind.BattleNpc)
+            return false;
+
+        var rule = MatchObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId);
         return rule is not null
             && IsFollowRule(rule)
             && RulePassesDistanceGates(rule, distance, verticalDelta);
@@ -359,7 +416,9 @@ public sealed class ObjectPriorityRuleService
         DutyContextSnapshot context,
         ObjectKind objectKind,
         uint baseId,
-        string objectName)
+        string objectName,
+        Vector3? objectPosition,
+        uint objectMapId)
     {
         if (!MatchesDutyScope(rule, context, includeLayerScope: true))
             return false;
@@ -371,6 +430,9 @@ public sealed class ObjectPriorityRuleService
         }
 
         if (rule.BaseId != 0 && rule.BaseId != baseId)
+            return false;
+
+        if (!MatchesObjectSpatialScope(rule, context, objectPosition, objectMapId))
             return false;
 
         if (string.IsNullOrWhiteSpace(rule.ObjectName))
@@ -444,6 +506,10 @@ public sealed class ObjectPriorityRuleService
             score += 15;
         if (!string.IsNullOrWhiteSpace(rule.ObjectName))
             score += rule.NameMatchMode.Equals("Contains", StringComparison.OrdinalIgnoreCase) ? 5 : 10;
+        if (!string.IsNullOrWhiteSpace(rule.ObjectMapCoordinates))
+            score += 15;
+        if (!string.IsNullOrWhiteSpace(rule.ObjectWorldCoordinates))
+            score += 20;
 
         return score;
     }
@@ -523,6 +589,51 @@ public sealed class ObjectPriorityRuleService
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
         => IsMapXzDestinationRule(rule) || IsXyzDestinationRule(rule);
 
+    private bool MatchesObjectSpatialScope(
+        ObjectPriorityRule rule,
+        DutyContextSnapshot context,
+        Vector3? objectPosition,
+        uint objectMapId)
+    {
+        var hasObjectMapCoordinates = !string.IsNullOrWhiteSpace(rule.ObjectMapCoordinates);
+        var hasObjectWorldCoordinates = !string.IsNullOrWhiteSpace(rule.ObjectWorldCoordinates);
+        if (!hasObjectMapCoordinates && !hasObjectWorldCoordinates)
+            return true;
+
+        if (!objectPosition.HasValue)
+            return false;
+
+        var ruleKey = BuildObjectSpatialRuleKey(context, rule);
+        var matchRadius = GetObjectMatchRadius(rule);
+        if (hasObjectWorldCoordinates)
+        {
+            if (!TryParseWorldCoordinates(rule.ObjectWorldCoordinates, out var worldCoordinates))
+            {
+                LogObjectSpatialWarning(
+                    $"bad-world:{ruleKey}",
+                    $"[ADS] Ignoring positional object-match rule {rule.ObjectName}: could not parse objectWorldCoordinates '{rule.ObjectWorldCoordinates}'. Use a value like 154.1,101.9,-34.2.");
+                return false;
+            }
+
+            return Vector3.Distance(objectPosition.Value, worldCoordinates) <= matchRadius;
+        }
+
+        if (!TryParseMapCoordinates(rule.ObjectMapCoordinates, out var mapCoordinates))
+        {
+            LogObjectSpatialWarning(
+                $"bad-map:{ruleKey}",
+                $"[ADS] Ignoring positional object-match rule {rule.ObjectName}: could not parse objectMapCoordinates '{rule.ObjectMapCoordinates}'. Use a value like 11.3,10.4.");
+            return false;
+        }
+
+        var resolvedMapId = objectMapId != 0 ? objectMapId : context.MapId;
+        if (resolvedMapId == 0 || !TryResolveMapRow(resolvedMapId, context.TerritoryTypeId, out var map))
+            return false;
+
+        var worldPosition = ConvertMapCoordinatesToWorld(mapCoordinates, map, objectPosition.Value.Y);
+        return GetHorizontalDistance(objectPosition.Value, worldPosition) <= matchRadius;
+    }
+
     private static ObjectPriorityRule CloneRule(ObjectPriorityRule rule)
         => new()
         {
@@ -539,6 +650,9 @@ public sealed class ObjectPriorityRuleService
             Layer = rule.Layer,
             MapCoordinates = rule.MapCoordinates,
             WorldCoordinates = rule.WorldCoordinates,
+            ObjectMapCoordinates = rule.ObjectMapCoordinates,
+            ObjectWorldCoordinates = rule.ObjectWorldCoordinates,
+            ObjectMatchRadius = rule.ObjectMatchRadius,
             Priority = rule.Priority,
             PriorityVerticalRadius = rule.PriorityVerticalRadius,
             MaxDistance = rule.MaxDistance,
@@ -551,6 +665,12 @@ public sealed class ObjectPriorityRuleService
         var changed = false;
         foreach (var rule in manifest.Rules)
         {
+            if (rule.ObjectMatchRadius.HasValue && rule.ObjectMatchRadius.Value <= 0f)
+            {
+                rule.ObjectMatchRadius = null;
+                changed = true;
+            }
+
             var legacyLayer = NormalizeLayerSelector(rule.DestinationType);
             if (string.IsNullOrWhiteSpace(rule.Layer)
                 && !string.IsNullOrWhiteSpace(legacyLayer)
@@ -699,11 +819,93 @@ public sealed class ObjectPriorityRuleService
         return true;
     }
 
+    private bool TryResolveMapRow(uint mapId, uint territoryTypeId, out Map map)
+    {
+        map = default;
+        var mapSheet = dataManager.GetExcelSheet<Map>();
+        if (mapSheet is null || !mapSheet.TryGetRow(mapId, out map))
+            return false;
+
+        return territoryTypeId == 0 || map.TerritoryType.RowId == territoryTypeId;
+    }
+
+    private void LogObjectSpatialWarning(string key, string message)
+    {
+        if (loggedInvalidObjectSpatialRules.Add(key))
+            log.Warning(message);
+    }
+
+    private static float GetObjectMatchRadius(ObjectPriorityRule rule)
+        => rule.ObjectMatchRadius.HasValue && rule.ObjectMatchRadius.Value > 0f
+            ? rule.ObjectMatchRadius.Value
+            : DefaultObjectMatchRadius;
+
+    private static string BuildObjectSpatialRuleKey(DutyContextSnapshot context, ObjectPriorityRule rule)
+        => $"obj:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{context.MapId}:{rule.ObjectKind}:{rule.BaseId}:{rule.ObjectName}:{rule.Layer}:{rule.ObjectMapCoordinates}:{rule.ObjectWorldCoordinates}";
+
+    private static bool TryParseMapCoordinates(string value, out Vector2 coordinates)
+    {
+        coordinates = default;
+        var parts = value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+            return false;
+
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            return false;
+        }
+
+        coordinates = new Vector2(x, z);
+        return true;
+    }
+
+    private static bool TryParseWorldCoordinates(string value, out Vector3 coordinates)
+    {
+        coordinates = default;
+        var parts = value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 3)
+            return false;
+
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+            || !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            return false;
+        }
+
+        coordinates = new Vector3(x, y, z);
+        return true;
+    }
+
+    private static Vector3 ConvertMapCoordinatesToWorld(Vector2 mapCoordinates, Map map, float currentObjectY)
+        => new(
+            ConvertMapCoordinateToWorld(mapCoordinates.X, map.SizeFactor, map.OffsetX),
+            currentObjectY,
+            ConvertMapCoordinateToWorld(mapCoordinates.Y, map.SizeFactor, map.OffsetY));
+
+    private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint scale, int offset)
+    {
+        var mapScale = scale / 100f;
+        if (mapScale <= float.Epsilon)
+            return 0f;
+
+        var textureCoordinate = (((mapCoordinate - 1f) * mapScale) / 41f) * 2048f;
+        return (textureCoordinate - (offset + 1024f)) / mapScale;
+    }
+
+    private static float GetHorizontalDistance(Vector3 a, Vector3 b)
+    {
+        var x = a.X - b.X;
+        var z = a.Z - b.Z;
+        return MathF.Sqrt((x * x) + (z * z));
+    }
+
     private static string GetDefaultJson()
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds is included now for future execution timing.",
+  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. objectMapCoordinates or objectWorldCoordinates can pin an ordinary same-name row to one physical object instance, and objectMatchRadius defaults to 6y when left blank on a positional row. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds is included now for future execution timing.",
   "rules": [
     {
       "enabled": true,

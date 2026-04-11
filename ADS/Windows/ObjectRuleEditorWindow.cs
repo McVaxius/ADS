@@ -64,10 +64,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(1400f, 560f),
+            MinimumSize = new Vector2(1680f, 560f),
             MaximumSize = new Vector2(3600f, 2400f),
         };
-        Size = new Vector2(2600f, 1040f);
+        Size = new Vector2(3000f, 1040f);
     }
 
     public void Dispose()
@@ -80,7 +80,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         EnsureDraftLoaded();
 
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
-        ImGui.TextWrapped("Layer now scopes any rule to the current live sub-area only. For Map XZ and XYZ rows, Layer still means the active map/sub-area selector. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
+        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination versus XYZ. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
         ImGui.TextWrapped(editorStatus);
         if (dirty)
@@ -181,8 +181,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 170f);
         ImGui.TableSetupColumn("Layer", ImGuiTableColumnFlags.WidthFixed, 130f);
-        ImGui.TableSetupColumn("Map XZ", ImGuiTableColumnFlags.WidthFixed, 130f);
-        ImGui.TableSetupColumn("World XYZ", ImGuiTableColumnFlags.WidthFixed, 180f);
+        ImGui.TableSetupColumn("Coords", ImGuiTableColumnFlags.WidthFixed, 190f);
+        ImGui.TableSetupColumn("R", ImGuiTableColumnFlags.WidthFixed, 76f);
         ImGui.TableSetupColumn("Pri", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 88f);
@@ -269,17 +269,21 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(10);
-            if (EditTextCell("##MapCoordinates", rule.MapCoordinates, 32, out var mapCoordinates))
+            var unifiedCoordinates = GetUnifiedCoordinatesValue(rule);
+            if (EditTextCell("##Coords", unifiedCoordinates, 48, out var editedCoordinates))
             {
-                rule.MapCoordinates = mapCoordinates;
+                SetUnifiedCoordinatesValue(rule, editedCoordinates);
                 dirty = true;
             }
 
             ImGui.TableSetColumnIndex(11);
-            if (EditTextCell("##WorldCoordinates", rule.WorldCoordinates, 48, out var worldCoordinates))
+            using (new ImGuiDisabledBlock(IsManualDestinationRule(rule)))
             {
-                rule.WorldCoordinates = worldCoordinates;
-                dirty = true;
+                if (EditNullableFloatCell("##ObjectMatchRadius", rule.ObjectMatchRadius, out var objectMatchRadius))
+                {
+                    rule.ObjectMatchRadius = objectMatchRadius;
+                    dirty = true;
+                }
             }
 
             ImGui.TableSetColumnIndex(12);
@@ -356,8 +360,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(7, "Match", "Exact or substring name matching.");
         DrawHeaderCell(8, "Class", "Planner/execution behavior override such as Required, CombatFriendly, BossFight, MapXzDestination, or XYZ.");
         DrawHeaderCell(9, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
-        DrawHeaderCell(10, "Map XZ", "Player-facing map coordinates for manual staging / Map XZ rows, like 11.3,10.4.");
-        DrawHeaderCell(11, "World XYZ", "World-space X,Y,Z coordinates for precise XYZ rows, like 154.1,101.9,-34.2.");
+        DrawHeaderCell(10, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
+        DrawHeaderCell(11, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
         DrawHeaderCell(12, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
         DrawHeaderCell(13, "Y", "Priority vertical radius gate. Zero means no Y gate.");
         DrawHeaderCell(14, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
@@ -367,6 +371,68 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(18, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
         DrawHeaderCell(19, "-", "Delete this row.");
     }
+
+    private static bool IsManualDestinationRule(ObjectPriorityRule rule)
+        => string.Equals(rule.Classification, "MapXzDestination", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.Classification, "XYZ", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.DestinationType, "MapXZ", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.DestinationType, "XYZ", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetUnifiedCoordinatesValue(ObjectPriorityRule rule)
+    {
+        if (IsManualDestinationRule(rule))
+            return !string.IsNullOrWhiteSpace(rule.WorldCoordinates) ? rule.WorldCoordinates : rule.MapCoordinates;
+
+        return !string.IsNullOrWhiteSpace(rule.ObjectWorldCoordinates) ? rule.ObjectWorldCoordinates : rule.ObjectMapCoordinates;
+    }
+
+    private static void SetUnifiedCoordinatesValue(ObjectPriorityRule rule, string value)
+    {
+        var normalized = NormalizeCoordinateText(value);
+        var partCount = CountCoordinateParts(normalized);
+        var isWorldCoordinates = partCount == 3;
+
+        if (IsManualDestinationRule(rule))
+        {
+            rule.MapCoordinates = string.Empty;
+            rule.WorldCoordinates = string.Empty;
+            rule.DestinationType = string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                if (isWorldCoordinates)
+                {
+                    rule.WorldCoordinates = normalized;
+                    rule.Classification = "XYZ";
+                }
+                else
+                {
+                    rule.MapCoordinates = normalized;
+                    rule.Classification = "MapXzDestination";
+                }
+            }
+
+            return;
+        }
+
+        rule.ObjectMapCoordinates = string.Empty;
+        rule.ObjectWorldCoordinates = string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        if (isWorldCoordinates)
+            rule.ObjectWorldCoordinates = normalized;
+        else
+            rule.ObjectMapCoordinates = normalized;
+    }
+
+    private static int CountCoordinateParts(string value)
+        => string.IsNullOrWhiteSpace(value)
+            ? 0
+            : value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+
+    private static string NormalizeCoordinateText(string value)
+        => string.Join(',', value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private void DrawHeaderCell(int columnIndex, string label, string tooltip)
     {
