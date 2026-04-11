@@ -758,11 +758,15 @@ public sealed class ObjectivePlannerService
         float monsterVerticalDelta)
     {
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(context, interactable, interactableDistance, interactableVerticalDelta);
-        var nearestMonsterPriority = objectPriorityRuleService.GetEffectiveBattleNpcPriority(context, nearestMonster, monsterDistance, monsterVerticalDelta);
-        if (effectiveRule is not null
-            && interactable.Classification != InteractableClass.Expendable
-            && effectiveRule.Priority < nearestMonsterPriority)
-            return true;
+        var nearestMonsterRule = objectPriorityRuleService.GetEffectiveBattleNpcRule(context, nearestMonster, monsterDistance, monsterVerticalDelta);
+        if (effectiveRule is not null && nearestMonsterRule is not null)
+        {
+            if (effectiveRule.Priority < nearestMonsterRule.Priority)
+                return true;
+
+            if (effectiveRule.Priority > nearestMonsterRule.Priority)
+                return false;
+        }
 
         if (interactableDistance + RequiredInteractableMaterialLead < monsterDistance)
             return true;
@@ -786,13 +790,14 @@ public sealed class ObjectivePlannerService
         float monsterVerticalDelta)
     {
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(context, interactable, interactableDistance, interactableVerticalDelta);
-        var nearestMonsterPriority = objectPriorityRuleService.GetEffectiveBattleNpcPriority(context, nearestMonster, monsterDistance, monsterVerticalDelta);
+        var nearestMonsterRule = objectPriorityRuleService.GetEffectiveBattleNpcRule(context, nearestMonster, monsterDistance, monsterVerticalDelta);
+        var nearestMonsterPriority = nearestMonsterRule?.Priority ?? ObjectPriorityRuleService.DefaultPriority;
         var rulePrefix = effectiveRule is not null
-            ? $"Priority rule {effectiveRule.Priority} selected {interactable.Name} before other interactables in this duty. "
+            ? $"Priority rule {effectiveRule.Priority} selected {interactable.Name} as the best live interactable in this duty. "
             : string.Empty;
 
         if (effectiveRule is not null
-            && interactable.Classification != InteractableClass.Expendable
+            && nearestMonsterRule is not null
             && effectiveRule.Priority < nearestMonsterPriority)
         {
             return $"{rulePrefix}Monster-first bias was overridden because this interactable's effective priority ({effectiveRule.Priority}) beats the nearest live monster's effective priority ({nearestMonsterPriority}).";
@@ -800,12 +805,22 @@ public sealed class ObjectivePlannerService
 
         if (interactableDistance + RequiredInteractableMaterialLead < monsterDistance)
         {
+            if (effectiveRule is not null && nearestMonsterRule is not null && effectiveRule.Priority == nearestMonsterPriority)
+            {
+                return $"{rulePrefix}Both sides have active priority rules at {effectiveRule.Priority}, so ADS spent the tie on closeness: the marked {interactable.Classification} interactable is materially closer ({interactableDistance:0.0}) than the nearest live monster ({monsterDistance:0.0}).";
+            }
+
             return $"{rulePrefix}Monster-first bias was overridden because the marked {interactable.Classification} interactable is materially closer ({interactableDistance:0.0}) than the nearest live monster ({monsterDistance:0.0}).";
         }
 
         if (interactableVerticalDelta + RequiredInteractableVerticalSlack < monsterVerticalDelta
             && interactableDistance <= monsterDistance + RequiredInteractableDistanceTieWindow)
         {
+            if (effectiveRule is not null && nearestMonsterRule is not null && effectiveRule.Priority == nearestMonsterPriority)
+            {
+                return $"{rulePrefix}Both sides have active priority rules at {effectiveRule.Priority}, so ADS spent the tie on Y-space: the marked {interactable.Classification} interactable is closer in Y-space ({interactableVerticalDelta:0.0} vs {monsterVerticalDelta:0.0}) while staying inside the distance tie window.";
+            }
+
             return $"{rulePrefix}Monster-first bias was overridden because the marked {interactable.Classification} interactable is closer in Y-space ({interactableVerticalDelta:0.0} vs {monsterVerticalDelta:0.0}) while staying inside the distance tie window.";
         }
 

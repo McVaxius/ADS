@@ -4,6 +4,7 @@
 
 - Rules live in `ADS/duty-object-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
 - Lower `Priority` wins.
+- For monster-versus-progression arbitration, if both sides have active rules, ADS now spends that comparison on rule priority first. Distance and Y-space only break ties or no-rule cases.
 - Equal priorities do not automatically force a required interactable over the best live monster. In that case ADS falls back to distance and Y-space heuristics.
 - `PriorityVerticalRadius` and `MaxDistance` act as rule gates for normal monster and interactable rules.
 - `ObjectMapCoordinates` / `ObjectWorldCoordinates` are positional selectors for ordinary same-name rows. They are not manual destinations.

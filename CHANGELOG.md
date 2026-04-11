@@ -2,6 +2,7 @@
 
 ## 2026-04-11
 
+- Fixed monster-versus-progression arbitration so if both the live monster and the live progression interactable have active rules, ADS now spends that decision on rule priority first. Distance/Y only break ties or no-rule cases, which fixes Copperbell-style `Firesand` beating a better-priority `Blasting Cap`.
 - Collapsed the rules-editor coordinate authoring surface back down to one `Coords` field plus one radius field. `a,b` now means map `X,Z`, `a,b,c` means world `X,Y,Z`, manual destination rows use that same single field, and the runtime storage remains backward-compatible underneath.
 - Added positional matching for ordinary same-name rules. `ObjectMapCoordinates` / `ObjectWorldCoordinates` plus `ObjectMatchRadius` now let one row bind to one physical object instance without overloading manual `MapXzDestination` / `XYZ` fields.
 - Pending progression interact follow-through now marks the interacted position used as soon as `BetweenAreas` starts. This restores the original Meridianum-style ghosting seam for one-shot objects that immediately transition or leave visibility after interact, such as `Disposal Chute`.

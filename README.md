@@ -23,7 +23,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - Keep the implementation honest: staged execution, passive observation, planner explanation, ownership controls, IPC surfaces, and live movement/interaction only where currently validated.
 - Seed active support only for the validated ARR pilot wave: Tam-Tara, Toto-Rak, Brayflox, Stone Vigil, Aurum Vale, and Castrum Meridianum.
 - Keep harder duties visible but non-actionable until their duty-profile overlays are written.
-- Treat monsters as the default objective, with marked progression interactables allowed to outrank monsters when they are materially closer.
+- Treat monsters as the default objective, but when both a live monster and a live progression interactable have active rules, lower rule priority wins first. Distance/Y only breaks ties or no-rule cases.
 - Status colors in the catalog:
   - Red `[Not Cleared]`
   - Blue `[1P Unsync Cleared]`
