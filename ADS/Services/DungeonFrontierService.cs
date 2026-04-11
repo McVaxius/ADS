@@ -31,11 +31,13 @@ public sealed class DungeonFrontierService
     private readonly HashSet<string> loggedActiveMapSelections = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedInvalidMapXzDestinationRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedResolvedMapXzDestinationRules = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedInvalidXyzDestinationRules = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedResolvedXyzDestinationRules = new(StringComparer.Ordinal);
     private uint activeDutyKey;
     private Vector3? lastProgressSamplePosition;
     private Vector3? currentHeading;
     private DungeonFrontierPoint? headingScoutTarget;
-    private DungeonFrontierPoint? lastValidManualMapXzDestination;
+    private DungeonFrontierPoint? lastValidManualDestination;
     private int headingScoutSequence;
 
     public DungeonFrontierService(
@@ -73,6 +75,16 @@ public sealed class DungeonFrontierService
 
     public int VisitedManualMapXzDestinations { get; private set; }
 
+    public int ManualXyzDestinationCount { get; private set; }
+
+    public int VisitedManualXyzDestinations { get; private set; }
+
+    public DungeonFrontierPoint? LastGhostedManualDestination { get; private set; }
+
+    public DateTime? LastGhostedManualDestinationUtc { get; private set; }
+
+    public string LastGhostedManualDestinationReason { get; private set; } = string.Empty;
+
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
     {
         var dutyKey = context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
@@ -83,7 +95,7 @@ public sealed class DungeonFrontierService
         }
 
         var previousTarget = CurrentTarget;
-        RememberManualMapXzDestination(previousTarget);
+        RememberManualDestination(previousTarget);
         CurrentTarget = null;
         CurrentMode = FrontierMode.None;
         CurrentLabelMarkers = [];
@@ -94,6 +106,8 @@ public sealed class DungeonFrontierService
         VisitedPoints = 0;
         ManualMapXzDestinationCount = 0;
         VisitedManualMapXzDestinations = 0;
+        ManualXyzDestinationCount = 0;
+        VisitedManualXyzDestinations = 0;
 
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
             return;
@@ -102,7 +116,7 @@ public sealed class DungeonFrontierService
         if (context.IsUnsafeTransition)
         {
             if (context.BetweenAreas)
-                GhostCurrentOrLastManualMapXzDestination(previousTarget);
+                GhostCurrentOrLastManualDestination(previousTarget);
 
             return;
         }
@@ -124,20 +138,35 @@ public sealed class DungeonFrontierService
                 CurrentLabelStatus = labelStatus;
         }
 
-        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(observation, playerPosition);
+        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(context, observation, playerPosition);
 
         var manualMapXzDestinations = hasActiveMap && playerPosition.HasValue
             ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
+        var manualXyzDestinations = hasActiveMap
+            ? BuildXyzDestinationPoints(context, activeMap)
+            : [];
         ManualMapXzDestinationCount = manualMapXzDestinations.Count;
         VisitedManualMapXzDestinations = manualMapXzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
-        if (noFrontierBlockingLiveObjects)
+        ManualXyzDestinationCount = manualXyzDestinations.Count;
+        VisitedManualXyzDestinations = manualXyzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
+        var manualDestinations = manualMapXzDestinations
+            .Concat(manualXyzDestinations)
+            .ToList();
+        var manualDestinationCanBeatLiveProgression = ShouldPrioritizeManualDestinationBeforeLiveProgression(
+            context,
+            observation,
+            playerPosition,
+            manualDestinations);
+        if (noFrontierBlockingLiveObjects || manualDestinationCanBeatLiveProgression)
         {
-            CurrentTarget = SelectCurrentMapXzDestination(manualMapXzDestinations, playerPosition);
+            CurrentTarget = SelectCurrentManualDestination(manualDestinations, playerPosition);
             if (CurrentTarget is not null)
             {
-                CurrentMode = FrontierMode.MapXzDestination;
-                RememberManualMapXzDestination(CurrentTarget);
+                CurrentMode = CurrentTarget.IsManualXyzDestination
+                    ? FrontierMode.XyzDestination
+                    : FrontierMode.MapXzDestination;
+                RememberManualDestination(CurrentTarget);
                 return;
             }
         }
@@ -185,12 +214,17 @@ public sealed class DungeonFrontierService
         lastProgressSamplePosition = null;
         currentHeading = null;
         headingScoutTarget = null;
-        lastValidManualMapXzDestination = null;
+        lastValidManualDestination = null;
         headingScoutSequence = 0;
         CurrentLabelMarkers = [];
         CurrentLabelStatus = "No current map labels loaded.";
         ManualMapXzDestinationCount = 0;
         VisitedManualMapXzDestinations = 0;
+        ManualXyzDestinationCount = 0;
+        VisitedManualXyzDestinations = 0;
+        LastGhostedManualDestination = null;
+        LastGhostedManualDestinationUtc = null;
+        LastGhostedManualDestinationReason = string.Empty;
     }
 
     public void MarkVisited(DungeonFrontierPoint point, Vector3 playerPosition)
@@ -198,23 +232,31 @@ public sealed class DungeonFrontierService
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
-        ClearRememberedManualMapXzDestination(point);
-        if (point.IsManualMapXzDestination)
+        ClearRememberedManualDestination(point);
+        if (point.IsManualDestination)
         {
-            log.Information($"[ADS] Ghosted map XZ destination {point.Name} at {FormatVector(point.Position)} after reaching XZ {GetHorizontalDistance(playerPosition, point.Position):0.0}y.");
+            var ghostReason = point.IsManualXyzDestination ? "ReachedXyzArrival" : "ReachedXzArrival";
+            RememberGhostedManualDestination(point, ghostReason);
+            var reachText = point.IsManualXyzDestination
+                ? $"after reaching 3D {Vector3.Distance(playerPosition, point.Position):0.0}y"
+                : $"after reaching XZ {GetHorizontalDistance(playerPosition, point.Position):0.0}y";
+            log.Information($"[ADS] Ghosted {GetManualDestinationLabel(point)} {point.Name} at {FormatVector(point.Position)} {reachText}.");
         }
     }
 
-    public DungeonFrontierPoint? GetCurrentOrRememberedManualMapXzDestination(Vector3? playerPosition)
+    public DungeonFrontierPoint? GetCurrentOrRememberedManualDestination(Vector3? playerPosition)
     {
-        var point = CurrentTarget is { IsManualMapXzDestination: true }
+        var point = CurrentTarget is { IsManualDestination: true }
             ? CurrentTarget
-            : lastValidManualMapXzDestination;
+            : lastValidManualDestination;
         if (point is null)
             return null;
 
         return BuildNavigationPoint(point, playerPosition);
     }
+
+    public DungeonFrontierPoint? GetCurrentOrRememberedManualMapXzDestination(Vector3? playerPosition)
+        => GetCurrentOrRememberedManualDestination(playerPosition);
 
     private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId, uint mapId)
     {
@@ -248,6 +290,9 @@ public sealed class DungeonFrontierService
         foreach (var rule in destinationRules)
         {
             var ruleKey = BuildMapXzDestinationRuleKey(context, rule);
+            if (!DoesManualDestinationRuleMatchActiveMap(rule, map))
+                continue;
+
             if (!TryParseMapCoordinates(rule.MapCoordinates, out var mapCoordinates))
             {
                 LogMapXzDestinationWarning(
@@ -276,8 +321,54 @@ public sealed class DungeonFrontierService
                 Priority = rule.Priority,
                 MapCoordinates = mapCoordinates,
                 UsePlayerYForNavigation = true,
-                IsManualMapXzDestination = true,
+                ManualDestinationKind = ManualDestinationKind.MapXz,
                 ArrivalRadiusXz = ManualMapXzDestinationVisitRadius,
+            });
+        }
+
+        return points;
+    }
+
+    private IReadOnlyList<DungeonFrontierPoint> BuildXyzDestinationPoints(DutyContextSnapshot context, Map map)
+    {
+        var destinationRules = objectPriorityRuleService.GetXyzDestinationRules(context);
+        if (destinationRules.Count == 0)
+            return [];
+
+        var points = new List<DungeonFrontierPoint>();
+        foreach (var rule in destinationRules)
+        {
+            var ruleKey = BuildXyzDestinationRuleKey(context, rule);
+            if (!DoesManualDestinationRuleMatchActiveMap(rule, map))
+                continue;
+
+            if (!TryParseWorldCoordinates(rule.WorldCoordinates, out var worldCoordinates))
+            {
+                LogXyzDestinationWarning(
+                    $"bad-coordinates:{ruleKey}",
+                    $"[ADS] Ignoring XYZ destination rule {rule.ObjectName}: could not parse worldCoordinates '{rule.WorldCoordinates}'. Use a value like 154.1,101.9,-34.2.");
+                continue;
+            }
+
+            var name = string.IsNullOrWhiteSpace(rule.ObjectName)
+                ? $"XYZ {worldCoordinates.X:0.0}, {worldCoordinates.Y:0.0}, {worldCoordinates.Z:0.0}"
+                : rule.ObjectName;
+            if (loggedResolvedXyzDestinationRules.Add(ruleKey))
+            {
+                log.Information(
+                    $"[ADS] Resolved XYZ destination {name} on map row {map.RowId} to world {FormatVector(worldCoordinates)}.");
+            }
+
+            points.Add(new DungeonFrontierPoint
+            {
+                Key = $"{ruleKey}:{map.RowId}:{worldCoordinates.X:0.###},{worldCoordinates.Y:0.###},{worldCoordinates.Z:0.###}",
+                Name = name,
+                Position = worldCoordinates,
+                LevelRowId = 0,
+                MapId = map.RowId,
+                Priority = rule.Priority,
+                ManualDestinationKind = ManualDestinationKind.Xyz,
+                ArrivalRadius3d = ManualMapXzDestinationVisitRadius,
             });
         }
 
@@ -570,7 +661,7 @@ public sealed class DungeonFrontierService
         }
     }
 
-    private DungeonFrontierPoint? SelectCurrentMapXzDestination(IReadOnlyList<DungeonFrontierPoint> points, Vector3? playerPosition)
+    private DungeonFrontierPoint? SelectCurrentManualDestination(IReadOnlyList<DungeonFrontierPoint> points, Vector3? playerPosition)
     {
         if (points.Count == 0)
             return null;
@@ -592,10 +683,12 @@ public sealed class DungeonFrontierService
                 .Select(point => new
                 {
                     Point = point,
-                    Distance = GetHorizontalDistance(playerPosition.Value, point.Position),
+                    Distance = GetManualDestinationDistance(playerPosition.Value, point),
+                    VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Value.Y),
                 })
                 .OrderBy(x => x.Point.Priority)
                 .ThenBy(x => x.Distance)
+                .ThenBy(x => x.VerticalDelta)
                 .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.Point)
                 .First(),
@@ -731,43 +824,88 @@ public sealed class DungeonFrontierService
     private static string NormalizeName(string value)
         => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
-    private void GhostCurrentOrLastManualMapXzDestination(DungeonFrontierPoint? previousTarget)
+    private void GhostCurrentOrLastManualDestination(DungeonFrontierPoint? previousTarget)
     {
-        var pointToGhost = previousTarget is { IsManualMapXzDestination: true }
+        var pointToGhost = previousTarget is { IsManualDestination: true }
             ? previousTarget
-            : lastValidManualMapXzDestination;
+            : lastValidManualDestination;
         if (pointToGhost is null)
             return;
 
         if (!visitedFrontierKeys.Add(pointToGhost.Key))
         {
-            ClearRememberedManualMapXzDestination(pointToGhost);
+            ClearRememberedManualDestination(pointToGhost);
             return;
         }
 
-        ClearRememberedManualMapXzDestination(pointToGhost);
-        log.Information($"[ADS] Ghosted map XZ destination {pointToGhost.Name} at {FormatVector(pointToGhost.Position)} after BetweenAreas transition.");
+        ClearRememberedManualDestination(pointToGhost);
+        RememberGhostedManualDestination(pointToGhost, "BetweenAreas");
+        log.Information($"[ADS] Ghosted {GetManualDestinationLabel(pointToGhost)} {pointToGhost.Name} at {FormatVector(pointToGhost.Position)} after BetweenAreas transition.");
     }
 
-    private void RememberManualMapXzDestination(DungeonFrontierPoint? point)
+    private void RememberGhostedManualDestination(DungeonFrontierPoint point, string reason)
     {
-        if (point is { IsManualMapXzDestination: true })
-            lastValidManualMapXzDestination = point;
+        LastGhostedManualDestination = point;
+        LastGhostedManualDestinationUtc = DateTime.UtcNow;
+        LastGhostedManualDestinationReason = reason;
     }
 
-    private void ClearRememberedManualMapXzDestination(DungeonFrontierPoint point)
+    private void RememberManualDestination(DungeonFrontierPoint? point)
     {
-        if (!point.IsManualMapXzDestination || lastValidManualMapXzDestination is null)
+        if (point is { IsManualDestination: true })
+            lastValidManualDestination = point;
+    }
+
+    private void ClearRememberedManualDestination(DungeonFrontierPoint point)
+    {
+        if (!point.IsManualDestination || lastValidManualDestination is null)
             return;
 
-        if (string.Equals(lastValidManualMapXzDestination.Key, point.Key, StringComparison.Ordinal))
-            lastValidManualMapXzDestination = null;
+        if (string.Equals(lastValidManualDestination.Key, point.Key, StringComparison.Ordinal))
+            lastValidManualDestination = null;
     }
 
-    private static bool HasNoFrontierBlockingLiveObjects(ObservationSnapshot observation, Vector3? playerPosition)
+    private bool HasNoFrontierBlockingLiveObjects(DutyContextSnapshot context, ObservationSnapshot observation, Vector3? playerPosition)
         => !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
            && !observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-           && !observation.LiveInteractables.Any(static x => x.Classification is InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable);
+           && !observation.LiveInteractables.Any(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition));
+
+    private bool ShouldPrioritizeManualDestinationBeforeLiveProgression(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+    {
+        if (manualDestinations.Count == 0)
+            return false;
+
+        if (observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
+            || observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        {
+            return false;
+        }
+
+        var bestUnvisitedManualPriority = manualDestinations
+            .Where(point => !visitedFrontierKeys.Contains(point.Key))
+            .Select(point => (int?)point.Priority)
+            .OrderBy(x => x)
+            .FirstOrDefault();
+        if (!bestUnvisitedManualPriority.HasValue)
+            return false;
+
+        var bestLiveProgressionPriority = observation.LiveInteractables
+            .Where(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition))
+            .Select(x => objectPriorityRuleService.GetEffectivePriority(
+                context,
+                x,
+                playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : null,
+                playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : null))
+            .Cast<int?>()
+            .OrderBy(x => x)
+            .FirstOrDefault();
+        return bestLiveProgressionPriority.HasValue
+               && bestUnvisitedManualPriority.Value < bestLiveProgressionPriority.Value;
+    }
 
     private static bool IsSaneVerticalBlocker(Vector3? playerPosition, Vector3 targetPosition)
         => !playerPosition.HasValue
@@ -794,8 +932,9 @@ public sealed class DungeonFrontierService
             Priority = point.Priority,
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = true,
-            IsManualMapXzDestination = point.IsManualMapXzDestination,
+            ManualDestinationKind = point.ManualDestinationKind,
             ArrivalRadiusXz = point.ArrivalRadiusXz,
+            ArrivalRadius3d = point.ArrivalRadius3d,
         };
     }
 
@@ -817,7 +956,7 @@ public sealed class DungeonFrontierService
             var mapSelectionKey = $"{context.TerritoryTypeId}:{map.RowId}";
             if (loggedActiveMapSelections.Add(mapSelectionKey))
             {
-                log.Information($"[ADS] Using live map row {map.RowId} ({BuildMapName(map)}) for territory {context.TerritoryTypeId}; frontier labels, map flags, and Map XZ conversion are restricted to this sub-area.");
+                log.Information($"[ADS] Using live map row {map.RowId} ({BuildMapName(map)}) for territory {context.TerritoryTypeId}; frontier labels, map flags, and manual destination resolution are restricted to this sub-area.");
             }
 
             status = $"Using live map row {map.RowId} ({BuildMapName(map)}) for frontier labels.";
@@ -860,11 +999,74 @@ public sealed class DungeonFrontierService
         return true;
     }
 
+    private static bool TryParseWorldCoordinates(string value, out Vector3 coordinates)
+    {
+        coordinates = default;
+        var parts = value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 3)
+            return false;
+
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x))
+            return false;
+
+        if (!float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
+            return false;
+
+        if (!float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+            return false;
+
+        coordinates = new Vector3(x, y, z);
+        return true;
+    }
+
     private static Vector3 ConvertMapCoordinatesToWorld(Vector2 mapCoordinates, Map map, float currentPlayerY)
         => new(
             ConvertMapCoordinateToWorld(mapCoordinates.X, map.SizeFactor, map.OffsetX),
             currentPlayerY,
             ConvertMapCoordinateToWorld(mapCoordinates.Y, map.SizeFactor, map.OffsetY));
+
+    private static bool DoesManualDestinationRuleMatchActiveMap(ObjectPriorityRule rule, Map map)
+    {
+        var selector = GetMapLayerSelector(rule);
+        if (string.IsNullOrWhiteSpace(selector))
+            return true;
+
+        if (uint.TryParse(selector, NumberStyles.Integer, CultureInfo.InvariantCulture, out var mapRowId))
+            return mapRowId == map.RowId;
+
+        var activeMapName = BuildMapName(map);
+        if (string.Equals(selector, activeMapName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var placeName = NormalizeName(map.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(placeName)
+            && string.Equals(selector, placeName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var placeNameSub = NormalizeName(map.PlaceNameSub.ValueNullable?.Name.ToString() ?? string.Empty);
+        return !string.IsNullOrWhiteSpace(placeNameSub)
+               && string.Equals(selector, placeNameSub, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeMapLayerSelector(string? value)
+    {
+        var selector = NormalizeName(value ?? string.Empty);
+        return string.Equals(selector, "MapXZ", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(selector, "XYZ", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : selector;
+    }
+
+    private static string GetMapLayerSelector(ObjectPriorityRule rule)
+    {
+        var explicitLayer = NormalizeMapLayerSelector(rule.Layer);
+        if (!string.IsNullOrWhiteSpace(explicitLayer))
+            return explicitLayer;
+
+        return NormalizeMapLayerSelector(rule.DestinationType);
+    }
 
     private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint scale, int offset)
     {
@@ -877,7 +1079,10 @@ public sealed class DungeonFrontierService
     }
 
     private static string BuildMapXzDestinationRuleKey(DutyContextSnapshot context, ObjectPriorityRule rule)
-        => $"map-xz:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{context.MapId}:{rule.Priority}:{rule.ObjectName}:{rule.MapCoordinates}";
+        => $"map-xz:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{context.MapId}:{rule.Priority}:{rule.ObjectName}:{GetMapLayerSelector(rule)}:{rule.MapCoordinates}";
+
+    private static string BuildXyzDestinationRuleKey(DutyContextSnapshot context, ObjectPriorityRule rule)
+        => $"xyz:{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{context.MapId}:{rule.Priority}:{rule.ObjectName}:{GetMapLayerSelector(rule)}:{rule.WorldCoordinates}";
 
     private static ulong BuildCacheKey(uint territoryTypeId, uint mapId)
         => ((ulong)territoryTypeId << 32) | mapId;
@@ -885,6 +1090,12 @@ public sealed class DungeonFrontierService
     private void LogMapXzDestinationWarning(string key, string message)
     {
         if (loggedInvalidMapXzDestinationRules.Add(key))
+            log.Warning(message);
+    }
+
+    private void LogXyzDestinationWarning(string key, string message)
+    {
+        if (loggedInvalidXyzDestinationRules.Add(key))
             log.Warning(message);
     }
 
@@ -917,6 +1128,28 @@ public sealed class DungeonFrontierService
 
     private static string FormatVector(Vector3 value)
         => string.Create(CultureInfo.InvariantCulture, $"{value.X:0.00},{value.Y:0.00},{value.Z:0.00}");
+
+    private bool IsEligibleFrontierBlockingInteractable(DutyContextSnapshot context, ObservedInteractable interactable, Vector3? playerPosition)
+    {
+        if (interactable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable))
+            return false;
+
+        var distance = playerPosition.HasValue
+            ? Vector3.Distance(playerPosition.Value, interactable.Position)
+            : (float?)null;
+        var verticalDelta = playerPosition.HasValue
+            ? MathF.Abs(interactable.Position.Y - playerPosition.Value.Y)
+            : (float?)null;
+        return !objectPriorityRuleService.IsSuppressedByRuleGates(context, interactable, distance, verticalDelta);
+    }
+
+    private static float GetManualDestinationDistance(Vector3 playerPosition, DungeonFrontierPoint point)
+        => point.IsManualXyzDestination
+            ? Vector3.Distance(playerPosition, point.Position)
+            : GetHorizontalDistance(playerPosition, point.Position);
+
+    private static string GetManualDestinationLabel(DungeonFrontierPoint point)
+        => point.IsManualXyzDestination ? "XYZ destination" : "map XZ destination";
 
     private static float GetHorizontalDistance(Vector3 a, Vector3 b)
     {

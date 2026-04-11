@@ -10,4 +10,6 @@ public enum InteractableClass
     Ignored = 5,
     Follow = 6,
     MapXzDestination = 7,
+    BossFight = 8,
+    XYZ = 9,
 }

@@ -80,7 +80,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         if (ImGui.Button("Reload rules JSON"))
             plugin.ObjectPriorityRuleService.Reload();
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds, and for manual sub-area waypoints classification MapXzDestination + destinationType MapXZ + mapCoordinates like 11.3,10.4.");
+        ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds, BossFight for BattleNpc bosses that should beat nearby trash/objectives once in range, CombatFriendly on BattleNpc for direct-interact talk targets such as Goblin Pathfinder, and for manual waypoints classification MapXzDestination + mapCoordinates like 11.3,10.4 or XYZ + worldCoordinates like 154.1,101.9,-34.2. Layer now scopes any rule to the current live sub-area only: leave it blank for any layer, or set it to a live subarea name / map row id. Legacy DestinationType layer rows are auto-migrated on load.");
         ImGui.TextWrapped("On first run, ADS copies the bundled rules JSON here. After that, this config file is authoritative, so manual edits survive plugin enable/reload and are auto-reloaded while ADS is running.");
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
@@ -106,7 +106,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         }
 
         ImGui.Separator();
-        ImGui.TextWrapped("ADS v1 now includes staged execution phases, explicit planner objective kinds, immediate dead/opened ghosting for monsters and treasure coffers, and a human-edited duty-object-rules.json override seam on top of the observer, planner explanation, duty catalog, ownership shell, and IPC.");
+        ImGui.TextWrapped("ADS v1 now includes staged execution phases, explicit planner objective kinds, immediate dead/opened ghosting for monsters and treasure coffers, a ghost inspector window, and a human-edited duty-object-rules.json override seam on top of the observer, planner explanation, duty catalog, ownership shell, and IPC.");
 
         if (changed)
             plugin.SaveConfiguration();

@@ -113,6 +113,7 @@ public sealed class ObjectivePlannerService
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
+        var nearestBossFightMonster = GetBestBossFightBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestMonster = GetBestBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestFollowTarget = GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
         var nearestRequiredInteractable = GetBestInteractable(
@@ -134,7 +135,9 @@ public sealed class ObjectivePlannerService
             playerPosition,
             context);
         var nearestRuleBackedInteractableGhost = GetBestRuleBackedInteractableGhost(
-            observation.InteractableGhosts.Where(IsProgressionInteractable),
+            observation.InteractableGhosts
+                .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
+                .Where(IsProgressionInteractable),
             playerPosition,
             context);
 
@@ -161,12 +164,48 @@ public sealed class ObjectivePlannerService
                 return;
             }
 
+            if (nearestBossFightMonster is not null)
+            {
+                var distance = GetDistance(playerPosition, nearestBossFightMonster.Position);
+                var verticalDelta = GetVerticalDelta(playerPosition, nearestBossFightMonster.Position);
+                Current = new PlannerSnapshot
+                {
+                    Mode = PlannerMode.Progression,
+                    ObjectiveKind = PlannerObjectiveKind.BossFightMonster,
+                    Objective = $"Engage boss-fight target: {nearestBossFightMonster.Name}",
+                    Explanation = BuildBossFightExplanation(context, nearestBossFightMonster, playerPosition, true),
+                    TargetName = nearestBossFightMonster.Name,
+                    TargetDistance = distance,
+                    TargetVerticalDelta = verticalDelta,
+                    CapturedAtUtc = now,
+                };
+                return;
+            }
+
             Current = new PlannerSnapshot
             {
                 Mode = PlannerMode.Combat,
                 ObjectiveKind = PlannerObjectiveKind.None,
                 Objective = "Combat owns the next decision",
                 Explanation = "ADS stays monster-first but does not become the combat brain; it waits for combat to clear before progression decisions resume.",
+                CapturedAtUtc = now,
+            };
+            return;
+        }
+
+        if (nearestBossFightMonster is not null)
+        {
+            var distance = GetDistance(playerPosition, nearestBossFightMonster.Position);
+            var verticalDelta = GetVerticalDelta(playerPosition, nearestBossFightMonster.Position);
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.Progression,
+                ObjectiveKind = PlannerObjectiveKind.BossFightMonster,
+                Objective = $"Engage boss-fight target: {nearestBossFightMonster.Name}",
+                Explanation = BuildBossFightExplanation(context, nearestBossFightMonster, playerPosition, false),
+                TargetName = nearestBossFightMonster.Name,
+                TargetDistance = distance,
+                TargetVerticalDelta = verticalDelta,
                 CapturedAtUtc = now,
             };
             return;
@@ -267,6 +306,35 @@ public sealed class ObjectivePlannerService
             return;
         }
 
+        if (nearestMonster is null
+            && nearestFollowTarget is null
+            && dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
+            && dungeonFrontierService.CurrentTarget is { } manualDestinationTarget
+            && ShouldPrioritizeManualDestinationBeforeProgression(context, manualDestinationTarget, nearestRequiredInteractable, playerPosition))
+        {
+            var distance = playerPosition.HasValue
+                ? GetManualDestinationDistance(playerPosition.Value, manualDestinationTarget)
+                : (float?)null;
+            var verticalDelta = playerPosition.HasValue ? MathF.Abs(manualDestinationTarget.Position.Y - playerPosition.Value.Y) : (float?)null;
+            var isXyzDestination = manualDestinationTarget.IsManualXyzDestination;
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.Progression,
+                ObjectiveKind = isXyzDestination
+                    ? PlannerObjectiveKind.XyzDestination
+                    : PlannerObjectiveKind.MapXzDestination,
+                Objective = isXyzDestination
+                    ? $"Advance toward XYZ destination: {manualDestinationTarget.Name}"
+                    : $"Advance toward map XZ destination: {manualDestinationTarget.Name}",
+                Explanation = BuildManualDestinationPriorityExplanation(context, manualDestinationTarget, nearestRequiredInteractable, playerPosition),
+                TargetName = manualDestinationTarget.Name,
+                TargetDistance = distance,
+                TargetVerticalDelta = verticalDelta,
+                CapturedAtUtc = now,
+            };
+            return;
+        }
+
         if (nearestRequiredInteractable is not null)
         {
             var distance = playerPosition.HasValue
@@ -287,7 +355,7 @@ public sealed class ObjectivePlannerService
         }
 
         if (nearestMonster is null
-            && !observation.LiveInteractables.Any(IsProgressionInteractable)
+            && nearestRequiredInteractable is null
             && nearestFollowTarget is not null)
         {
             var distance = playerPosition.HasValue
@@ -309,21 +377,26 @@ public sealed class ObjectivePlannerService
 
         if (nearestMonster is null
             && nearestFollowTarget is null
-            && !observation.LiveInteractables.Any(IsProgressionInteractable)
+            && nearestRequiredInteractable is null
             && dungeonFrontierService.CurrentTarget is { } frontierPoint)
         {
             var distance = playerPosition.HasValue
-                ? GetHorizontalDistance(playerPosition, frontierPoint.Position)
+                ? GetManualOrFrontierDistance(playerPosition.Value, frontierPoint)
                 : (float?)null;
             var verticalDelta = playerPosition.HasValue ? MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y) : (float?)null;
             var isMapXzDestination = dungeonFrontierService.CurrentMode == FrontierMode.MapXzDestination;
+            var isXyzDestination = dungeonFrontierService.CurrentMode == FrontierMode.XyzDestination;
             Current = new PlannerSnapshot
             {
                 Mode = PlannerMode.Progression,
-                ObjectiveKind = isMapXzDestination
+                ObjectiveKind = isXyzDestination
+                    ? PlannerObjectiveKind.XyzDestination
+                    : isMapXzDestination
                     ? PlannerObjectiveKind.MapXzDestination
                     : PlannerObjectiveKind.Frontier,
-                Objective = isMapXzDestination
+                Objective = isXyzDestination
+                    ? $"Advance toward XYZ destination: {frontierPoint.Name}"
+                    : isMapXzDestination
                     ? $"Advance toward map XZ destination: {frontierPoint.Name}"
                     : $"Advance toward map frontier: {frontierPoint.Name}",
                 Explanation = BuildFrontierExplanation(context, frontierPoint, observation),
@@ -337,7 +410,7 @@ public sealed class ObjectivePlannerService
 
         if (nearestMonster is null
             && nearestFollowTarget is null
-            && !observation.LiveInteractables.Any(IsProgressionInteractable)
+            && nearestRequiredInteractable is null
             && nearestRuleBackedInteractableGhost is not null
             && playerPosition.HasValue)
         {
@@ -362,8 +435,11 @@ public sealed class ObjectivePlannerService
         }
 
         var nearestMonsterGhost = playerPosition.HasValue
-            ? observation.MonsterGhosts.OrderBy(x => Vector3.Distance(x.Position, playerPosition.Value)).FirstOrDefault()
-            : observation.MonsterGhosts.FirstOrDefault();
+            ? observation.MonsterGhosts
+                .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
+                .OrderBy(x => Vector3.Distance(x.Position, playerPosition.Value))
+                .FirstOrDefault()
+            : observation.MonsterGhosts.FirstOrDefault(x => MatchesCurrentMap(context.MapId, x.MapId));
         if (nearestMonsterGhost is not null)
         {
             Current = new PlannerSnapshot
@@ -397,8 +473,11 @@ public sealed class ObjectivePlannerService
         }
 
         var nearestInteractableGhost = playerPosition.HasValue
-            ? observation.InteractableGhosts.OrderBy(x => Vector3.Distance(x.Position, playerPosition.Value)).FirstOrDefault()
-            : observation.InteractableGhosts.FirstOrDefault();
+            ? observation.InteractableGhosts
+                .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
+                .OrderBy(x => Vector3.Distance(x.Position, playerPosition.Value))
+                .FirstOrDefault()
+            : observation.InteractableGhosts.FirstOrDefault(x => MatchesCurrentMap(context.MapId, x.MapId));
         if (nearestInteractableGhost is not null)
         {
             Current = new PlannerSnapshot
@@ -420,7 +499,9 @@ public sealed class ObjectivePlannerService
             Mode = ownershipMode == OwnershipMode.Observing ? PlannerMode.IdleObserve : PlannerMode.Progression,
             ObjectiveKind = PlannerObjectiveKind.None,
             Objective = "Await new duty state",
-            Explanation = "No live monsters or interactables are currently visible. ADS is holding until the duty state changes again.",
+            Explanation = observation.LiveInteractables.Any(IsProgressionInteractable)
+                ? "Live progression interactables are visible, but all currently fail the active distance/Y rule gates, so ADS is holding until a manual destination, live monster, or eligible interactable becomes available."
+                : "No live monsters or interactables are currently visible. ADS is holding until the duty state changes again.",
             CapturedAtUtc = now,
         };
     }
@@ -463,6 +544,49 @@ public sealed class ObjectivePlannerService
             .FirstOrDefault();
     }
 
+    private ObservedMonster? GetBestBossFightBattleNpc(
+        IEnumerable<ObservedMonster> monsters,
+        Vector3? playerPosition,
+        DutyContextSnapshot context)
+    {
+        return monsters
+            .Select(x => new
+            {
+                Monster = x,
+                Distance = GetDistance(playerPosition, x.Position),
+                VerticalDelta = GetVerticalDelta(playerPosition, x.Position),
+            })
+            .Select(x => new
+            {
+                x.Monster,
+                x.Distance,
+                x.VerticalDelta,
+                Rule = objectPriorityRuleService.GetEffectiveBattleNpcRule(
+                    context,
+                    x.Monster,
+                    x.Distance,
+                    x.VerticalDelta),
+                Classification = objectPriorityRuleService.GetEffectiveBattleNpcClassification(
+                    context,
+                    x.Monster,
+                    x.Distance,
+                    x.VerticalDelta),
+                SuppressedByRuleGates = objectPriorityRuleService.IsBattleNpcSuppressedByRuleGates(
+                    context,
+                    x.Monster,
+                    x.Distance,
+                    x.VerticalDelta),
+            })
+            .Where(x => !x.VerticalDelta.HasValue || x.VerticalDelta.Value <= BattleNpcVerticalSanityCap)
+            .Where(x => !x.SuppressedByRuleGates)
+            .Where(x => x.Classification == InteractableClass.BossFight)
+            .OrderBy(x => x.Rule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
+            .ThenBy(x => x.Distance ?? float.MaxValue)
+            .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
+            .Select(x => x.Monster)
+            .FirstOrDefault();
+    }
+
     private string BuildMonsterExplanation(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
@@ -479,6 +603,25 @@ public sealed class ObjectivePlannerService
         }
 
         return $"Monster-first bias is active. {observation.LiveMonsters.Count} live monsters outrank optional interactables in {context.CurrentDuty?.EnglishName}.";
+    }
+
+    private string BuildBossFightExplanation(
+        DutyContextSnapshot context,
+        ObservedMonster monster,
+        Vector3? playerPosition,
+        bool combatActive)
+    {
+        var distance = GetDistance(playerPosition, monster.Position);
+        var verticalDelta = GetVerticalDelta(playerPosition, monster.Position);
+        var rule = objectPriorityRuleService.GetEffectiveBattleNpcRule(context, monster, distance, verticalDelta);
+        var priorityText = rule is not null
+            ? $"rule priority {rule.Priority}"
+            : "its matched boss-fight rule";
+        var combatText = combatActive
+            ? "Combat is already active, but "
+            : string.Empty;
+
+        return $"{combatText}ADS selected live boss-fight target {monster.Name} via {priorityText}. BossFight BattleNpc rules beat nearby trash, treasure, ghosts, and frontier/manual follow-through once the rule distance/Y gates pass.";
     }
 
     private string BuildFollowTargetExplanation(
@@ -561,6 +704,28 @@ public sealed class ObjectivePlannerService
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .Select(x => x.Interactable)
             .FirstOrDefault();
+    }
+
+    private bool ShouldPrioritizeManualDestinationBeforeProgression(
+        DutyContextSnapshot context,
+        DungeonFrontierPoint manualDestinationTarget,
+        ObservedInteractable? nearestRequiredInteractable,
+        Vector3? playerPosition)
+    {
+        if (!manualDestinationTarget.IsManualDestination)
+            return false;
+
+        if (nearestRequiredInteractable is null)
+            return false;
+
+        var distance = GetDistance(playerPosition, nearestRequiredInteractable.Position);
+        var verticalDelta = GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position);
+        var nearestRequiredPriority = objectPriorityRuleService.GetEffectivePriority(
+            context,
+            nearestRequiredInteractable,
+            distance,
+            verticalDelta);
+        return manualDestinationTarget.Priority < nearestRequiredPriority;
     }
 
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)
@@ -658,6 +823,26 @@ public sealed class ObjectivePlannerService
         return $"No live monsters, follow anchors, or progression interactables are currently visible, but {priorityText} still matches the ghost of {interactable.Name} within the configured distance/Y gates ({distance:0.0}y, Y {verticalDelta:0.0}). ADS is using that rule-backed ghost as a recovery objective instead of toggling away from stronger live truth.";
     }
 
+    private string BuildManualDestinationPriorityExplanation(
+        DutyContextSnapshot context,
+        DungeonFrontierPoint frontierPoint,
+        ObservedInteractable? deferredInteractable,
+        Vector3? playerPosition)
+    {
+        if (deferredInteractable is null)
+            return BuildFrontierExplanation(context, frontierPoint, ObservationSnapshot.Empty);
+
+        var distance = GetDistance(playerPosition, deferredInteractable.Position);
+        var verticalDelta = GetVerticalDelta(playerPosition, deferredInteractable.Position);
+        var deferredPriority = objectPriorityRuleService.GetEffectivePriority(
+            context,
+            deferredInteractable,
+            distance,
+            verticalDelta);
+        var manualLabel = frontierPoint.IsManualXyzDestination ? "XYZ destination" : "Map XZ destination";
+        return $"Human-authored {manualLabel} {frontierPoint.Name} has better priority ({frontierPoint.Priority}) than the best currently visible progression interactable {deferredInteractable.Name} ({deferredPriority}), so ADS is using the staging waypoint first instead of going directly to that interactable.";
+    }
+
     private static bool ShouldSelectTreasureCoffer(
         float treasureHorizontalDistance,
         float treasureVerticalDelta,
@@ -697,10 +882,12 @@ public sealed class ObjectivePlannerService
         return dungeonFrontierService.CurrentMode switch
         {
             FrontierMode.MapXzDestination
-                => $"No live monsters, follow anchors, or progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z.",
+                => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z.",
+            FrontierMode.XyzDestination
+                => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
             FrontierMode.HeadingScout
-                => $"No live monsters, follow anchors, or progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
-            _ => $"No live monsters, follow anchors, or progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited map label ({frontierPoint.Name}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable. Frontier progress: {dungeonFrontierService.VisitedPoints}/{dungeonFrontierService.TotalPoints}.",
+                => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
+            _ => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited map label ({frontierPoint.Name}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable. Frontier progress: {dungeonFrontierService.VisitedPoints}/{dungeonFrontierService.TotalPoints}.",
         };
     }
 
@@ -708,5 +895,23 @@ public sealed class ObjectivePlannerService
         => frontierPoint.MapCoordinates.HasValue
             ? $"{frontierPoint.MapCoordinates.Value.X:0.0}, {frontierPoint.MapCoordinates.Value.Y:0.0}"
             : "no map coordinates";
+
+    private static string FormatWorldCoordinates(DungeonFrontierPoint frontierPoint)
+        => $"{frontierPoint.Position.X:0.0}, {frontierPoint.Position.Y:0.0}, {frontierPoint.Position.Z:0.0}";
+
+    private static float GetManualDestinationDistance(Vector3 playerPosition, DungeonFrontierPoint frontierPoint)
+        => frontierPoint.IsManualXyzDestination
+            ? Vector3.Distance(playerPosition, frontierPoint.Position)
+            : GetHorizontalDistance(playerPosition, frontierPoint.Position) ?? 0f;
+
+    private static float GetManualOrFrontierDistance(Vector3 playerPosition, DungeonFrontierPoint frontierPoint)
+        => frontierPoint.IsManualDestination
+            ? GetManualDestinationDistance(playerPosition, frontierPoint)
+            : GetHorizontalDistance(playerPosition, frontierPoint.Position) ?? 0f;
+
+    private static bool MatchesCurrentMap(uint activeMapId, uint candidateMapId)
+        => activeMapId == 0
+           || candidateMapId == 0
+           || activeMapId == candidateMapId;
 
 }

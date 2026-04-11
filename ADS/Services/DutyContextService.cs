@@ -25,6 +25,7 @@ public sealed class DutyContextService
             BetweenAreas = false,
             BetweenAreas51 = false,
             InCombat = false,
+            Mounted = false,
             TerritoryTypeId = 0,
             MapId = 0,
             ContentFinderConditionId = 0,
@@ -37,16 +38,24 @@ public sealed class DutyContextService
     public unsafe void Update(bool pluginEnabled)
     {
         uint territoryTypeId = clientState.TerritoryType;
-        uint mapId = clientState.MapId;
+        var clientStateMapId = clientState.MapId;
+        uint mapId = clientStateMapId;
+        uint gameMainMapId = 0;
         uint contentFinderConditionId = 0;
         var gameMain = GameMain.Instance();
         if (gameMain is not null)
         {
             territoryTypeId = gameMain->CurrentTerritoryTypeId;
-            if (gameMain->CurrentMapId != 0)
-                mapId = gameMain->CurrentMapId;
+            gameMainMapId = gameMain->CurrentMapId;
             contentFinderConditionId = gameMain->CurrentContentFinderConditionId;
         }
+
+        // ClientState.MapId has proven to settle faster across Praetorium layer swaps.
+        // Prefer it when available so layer-scoped rules do not keep running on the previous sub-area.
+        if (clientStateMapId != 0)
+            mapId = clientStateMapId;
+        else if (gameMainMapId != 0)
+            mapId = gameMainMapId;
 
         var currentDuty = dutyCatalogService.ResolveCurrentDuty(contentFinderConditionId, territoryTypeId);
         Current = new DutyContextSnapshot
@@ -58,6 +67,7 @@ public sealed class DutyContextService
             BetweenAreas = condition[ConditionFlag.BetweenAreas],
             BetweenAreas51 = condition[ConditionFlag.BetweenAreas51],
             InCombat = condition[ConditionFlag.InCombat],
+            Mounted = condition[ConditionFlag.Mounted],
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,

@@ -62,6 +62,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Objects"))
             plugin.ToggleObjectExplorerUi();
         ImGui.SameLine();
+        if (ImGui.SmallButton("Ghosts"))
+            plugin.ToggleGhostListUi();
+        ImGui.SameLine();
         if (ImGui.SmallButton("Labels"))
             plugin.ToggleFrontierLabelUi();
         ImGui.SameLine();
@@ -99,10 +102,17 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Labels: {plugin.DungeonFrontierService.VisitedPoints} / {plugin.DungeonFrontierService.TotalPoints}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Map XZ: {plugin.DungeonFrontierService.VisitedManualMapXzDestinations} / {plugin.DungeonFrontierService.ManualMapXzDestinationCount}");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"XYZ: {plugin.DungeonFrontierService.VisitedManualXyzDestinations} / {plugin.DungeonFrontierService.ManualXyzDestinationCount}");
         if (plugin.DungeonFrontierService.CurrentTarget is { } frontierPoint)
-            ImGui.TextWrapped(frontierPoint.MapCoordinates.HasValue
-                ? $"Frontier target: {frontierPoint.Name} map {frontierPoint.MapCoordinates.Value.X:0.0}, {frontierPoint.MapCoordinates.Value.Y:0.0}"
-                : $"Frontier target: {frontierPoint.Name}");
+        {
+            var frontierTargetText = frontierPoint.IsManualXyzDestination
+                ? $"Frontier target: {frontierPoint.Name} world {frontierPoint.Position.X:0.0}, {frontierPoint.Position.Y:0.0}, {frontierPoint.Position.Z:0.0}"
+                : frontierPoint.MapCoordinates.HasValue
+                    ? $"Frontier target: {frontierPoint.Name} map {frontierPoint.MapCoordinates.Value.X:0.0}, {frontierPoint.MapCoordinates.Value.Y:0.0}"
+                    : $"Frontier target: {frontierPoint.Name}";
+            ImGui.TextWrapped(frontierTargetText);
+        }
         if (plugin.DungeonFrontierService.CurrentHeading is { } scoutHeading)
             ImGui.TextWrapped($"Frontier heading: {scoutHeading.X:0.00}, {scoutHeading.Z:0.00}");
         ImGui.TextWrapped($"Objective: {planner.Objective}");

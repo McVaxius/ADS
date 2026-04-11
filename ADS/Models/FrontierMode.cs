@@ -6,4 +6,5 @@ public enum FrontierMode
     Label = 1,
     HeadingScout = 2,
     MapXzDestination = 3,
+    XyzDestination = 4,
 }

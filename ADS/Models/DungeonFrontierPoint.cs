@@ -12,6 +12,13 @@ public sealed class DungeonFrontierPoint
     public int Priority { get; init; } = 1000;
     public Vector2? MapCoordinates { get; init; }
     public bool UsePlayerYForNavigation { get; init; }
-    public bool IsManualMapXzDestination { get; init; }
+    public ManualDestinationKind ManualDestinationKind { get; init; }
+    public bool IsManualDestination
+        => ManualDestinationKind != ManualDestinationKind.None;
+    public bool IsManualMapXzDestination
+        => ManualDestinationKind == ManualDestinationKind.MapXz;
+    public bool IsManualXyzDestination
+        => ManualDestinationKind == ManualDestinationKind.Xyz;
     public float ArrivalRadiusXz { get; init; } = 8f;
+    public float ArrivalRadius3d { get; init; }
 }

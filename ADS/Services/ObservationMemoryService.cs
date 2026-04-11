@@ -165,14 +165,33 @@ public sealed class ObservationMemoryService
                             if (!gameObject.IsTargetable || IsDeadMonster(gameObject))
                                 break;
 
-                            var followTarget = CreateMonster(gameObject, name, now);
+                            var followTarget = CreateMonster(gameObject, name, context.MapId, now);
                             liveFollowTargets[followTarget.Key] = followTarget;
+                            break;
+                        }
+
+                        if (TryGetBattleNpcDirectInteractClassification(context, gameObject, name, out var battleNpcInteractClassification))
+                        {
+                            knownMonsters.Remove(monsterKey);
+                            if (!gameObject.IsTargetable)
+                                break;
+
+                            if (IsDurablySuppressedInteractableClass(battleNpcInteractClassification)
+                                && TryCreateUsedProgressionInteractable(context, gameObject, name, battleNpcInteractClassification, now, out var usedBattleNpcInteractable))
+                            {
+                                knownInteractables[usedBattleNpcInteractable!.Key] = usedBattleNpcInteractable;
+                                break;
+                            }
+
+                            var battleNpcInteractable = CreateInteractable(gameObject, name, context.MapId, battleNpcInteractClassification, now);
+                            liveInteractables[battleNpcInteractable.Key] = battleNpcInteractable;
+                            knownInteractables[battleNpcInteractable.Key] = battleNpcInteractable;
                             break;
                         }
 
                         if (IsDeadMonster(gameObject))
                         {
-                            var deadMonster = CreateMonster(gameObject, name, now);
+                            var deadMonster = CreateMonster(gameObject, name, context.MapId, now);
                             knownMonsters[deadMonster.Key] = deadMonster;
                             break;
                         }
@@ -180,7 +199,7 @@ public sealed class ObservationMemoryService
                         if (!gameObject.IsTargetable)
                             break;
 
-                        var monster = CreateMonster(gameObject, name, now);
+                        var monster = CreateMonster(gameObject, name, context.MapId, now);
                         liveMonsters[monster.Key] = monster;
                         knownMonsters[monster.Key] = monster;
                         break;
@@ -205,7 +224,7 @@ public sealed class ObservationMemoryService
                             break;
                         }
 
-                        var interactable = CreateInteractable(gameObject, name, classification, now);
+                        var interactable = CreateInteractable(gameObject, name, context.MapId, classification, now);
                         liveInteractables[interactable.Key] = interactable;
                         knownInteractables[interactable.Key] = interactable;
                         break;
@@ -222,14 +241,14 @@ public sealed class ObservationMemoryService
 
                         if (treasureSuppressionUntil.TryGetValue(treasureKey, out var suppressedUntil) && suppressedUntil > now)
                         {
-                            knownInteractables[treasureKey] = CreateTreasureCoffer(gameObject, name, now, GhostReason.Consumed);
+                            knownInteractables[treasureKey] = CreateTreasureCoffer(gameObject, name, context.MapId, now, GhostReason.Consumed);
                             break;
                         }
 
                         if (!gameObject.IsTargetable)
                             break;
 
-                        var interactable = CreateTreasureCoffer(gameObject, name, now);
+                        var interactable = CreateTreasureCoffer(gameObject, name, context.MapId, now);
                         liveInteractables[interactable.Key] = interactable;
                         knownInteractables[interactable.Key] = interactable;
                         break;
@@ -291,6 +310,7 @@ public sealed class ObservationMemoryService
             Key = interactable.Key,
             GameObjectId = interactable.GameObjectId,
             DataId = interactable.DataId,
+            MapId = interactable.MapId,
             ObjectKind = interactable.ObjectKind,
             Name = interactable.Name,
             Position = interactable.Position,
@@ -327,23 +347,25 @@ public sealed class ObservationMemoryService
         };
     }
 
-    private static ObservedMonster CreateMonster(IGameObject gameObject, string name, DateTime now)
+    private static ObservedMonster CreateMonster(IGameObject gameObject, string name, uint mapId, DateTime now)
         => new()
         {
             Key = BuildKey(gameObject),
             GameObjectId = gameObject.GameObjectId,
             DataId = gameObject.BaseId,
+            MapId = mapId,
             Name = name,
             Position = gameObject.Position,
             LastSeenUtc = now,
         };
 
-    private static ObservedInteractable CreateInteractable(IGameObject gameObject, string name, InteractableClass classification, DateTime now)
+    private static ObservedInteractable CreateInteractable(IGameObject gameObject, string name, uint mapId, InteractableClass classification, DateTime now)
         => new()
         {
             Key = BuildKey(gameObject),
             GameObjectId = gameObject.GameObjectId,
             DataId = gameObject.BaseId,
+            MapId = mapId,
             ObjectKind = gameObject.ObjectKind,
             Name = name,
             Position = gameObject.Position,
@@ -352,12 +374,13 @@ public sealed class ObservationMemoryService
             GhostReason = GhostReason.SeenPreviously,
         };
 
-    private static ObservedInteractable CreateTreasureCoffer(IGameObject gameObject, string name, DateTime now, GhostReason ghostReason = GhostReason.SeenPreviously)
+    private static ObservedInteractable CreateTreasureCoffer(IGameObject gameObject, string name, uint mapId, DateTime now, GhostReason ghostReason = GhostReason.SeenPreviously)
         => new()
         {
             Key = BuildKey(gameObject),
             GameObjectId = gameObject.GameObjectId,
             DataId = gameObject.BaseId,
+            MapId = mapId,
             ObjectKind = gameObject.ObjectKind,
             Name = name,
             Position = gameObject.Position,
@@ -372,6 +395,7 @@ public sealed class ObservationMemoryService
             Key = $"used:{spatialKey}",
             GameObjectId = interactable.GameObjectId,
             DataId = interactable.DataId,
+            MapId = interactable.MapId,
             ObjectKind = interactable.ObjectKind,
             Name = interactable.Name,
             Position = interactable.Position,
@@ -380,12 +404,13 @@ public sealed class ObservationMemoryService
             GhostReason = GhostReason.TransitionUsed,
         };
 
-    private static ObservedInteractable CreateTransitionUsedInteractable(string spatialKey, IGameObject gameObject, string name, InteractableClass classification, DateTime now)
+    private static ObservedInteractable CreateTransitionUsedInteractable(string spatialKey, IGameObject gameObject, uint mapId, string name, InteractableClass classification, DateTime now)
         => new()
         {
             Key = $"used:{spatialKey}",
             GameObjectId = gameObject.GameObjectId,
             DataId = gameObject.BaseId,
+            MapId = mapId,
             ObjectKind = gameObject.ObjectKind,
             Name = name,
             Position = gameObject.Position,
@@ -409,7 +434,7 @@ public sealed class ObservationMemoryService
             return false;
         }
 
-        interactable = CreateTransitionUsedInteractable(spatialKey, gameObject, name, classification, now);
+        interactable = CreateTransitionUsedInteractable(spatialKey, gameObject, context.MapId, name, classification, now);
         return true;
     }
 
@@ -431,7 +456,7 @@ public sealed class ObservationMemoryService
     {
         if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification))
         {
-            if (overrideClassification is InteractableClass.Follow or InteractableClass.MapXzDestination)
+            if (overrideClassification is InteractableClass.Follow or InteractableClass.MapXzDestination or InteractableClass.BossFight)
                 return InteractableClass.Ignored;
 
             return overrideClassification;
@@ -454,6 +479,19 @@ public sealed class ObservationMemoryService
         return GenericRequiredTokens.Any(loweredName.Contains)
             ? InteractableClass.Required
             : InteractableClass.Optional;
+    }
+
+    // Keep the BattleNpc direct-interact seam intentionally narrow so
+    // existing Required/BossFight kill-priority rules continue to behave as monsters.
+    private bool TryGetBattleNpcDirectInteractClassification(
+        DutyContextSnapshot context,
+        IGameObject gameObject,
+        string name,
+        out InteractableClass classification)
+    {
+        classification = default;
+        return objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out classification)
+               && classification == InteractableClass.CombatFriendly;
     }
 
     private static bool IsDurablySuppressedInteractableClass(InteractableClass classification)

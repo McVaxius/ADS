@@ -14,4 +14,6 @@ public enum PlannerObjectiveKind
     FollowTarget = 9,
     MapXzDestination = 10,
     ExpendableInteractable = 11,
+    BossFightMonster = 12,
+    XyzDestination = 13,
 }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Plugin.Services;
+using Lumina.Excel.Sheets;
 
 namespace ADS.Services;
 
@@ -10,6 +11,7 @@ public sealed class ObjectPriorityRuleService
     internal const int DefaultPriority = 1000;
     private const string FileName = "duty-object-rules.json";
     private const string MapXzDestinationType = "MapXZ";
+    private const string XyzDestinationType = "XYZ";
     private static readonly TimeSpan ReloadPollInterval = TimeSpan.FromSeconds(1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -21,14 +23,16 @@ public sealed class ObjectPriorityRuleService
     };
 
     private readonly IPluginLog log;
+    private readonly IDataManager dataManager;
     private readonly string configPath;
     private readonly string bundledPath;
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
-    public ObjectPriorityRuleService(IPluginLog log, string configDirectory, string? assemblyDirectory)
+    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory, string? assemblyDirectory)
     {
         this.log = log;
+        this.dataManager = dataManager;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
@@ -133,11 +137,14 @@ public sealed class ObjectPriorityRuleService
         }
     }
 
+    public bool MatchesCurrentDutyScopeForEditor(ObjectPriorityRule rule, DutyContextSnapshot context)
+        => MatchesDutyScope(rule, context, includeLayerScope: false);
+
     public ObjectPriorityRule? MatchObjectRule(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string objectName)
     {
         return Current.Rules
             .Where(x => x.Enabled)
-            .Where(x => !IsMapXzDestinationRule(x))
+            .Where(x => !IsManualDestinationRule(x))
             .Where(x => Matches(x, context, objectKind, baseId, objectName))
             .OrderByDescending(x => GetSpecificityScore(x))
             .ThenBy(x => x.Priority)
@@ -148,8 +155,18 @@ public sealed class ObjectPriorityRuleService
         => Current.Rules
             .Where(x => x.Enabled)
             .Where(IsMapXzDestinationRule)
-            .Where(x => MatchesDutyScope(x, context))
+            .Where(x => MatchesDutyScope(x, context, includeLayerScope: true))
             .Where(x => !string.IsNullOrWhiteSpace(x.MapCoordinates))
+            .OrderByDescending(GetSpecificityScore)
+            .ThenBy(x => x.Priority)
+            .ToList();
+
+    public IReadOnlyList<ObjectPriorityRule> GetXyzDestinationRules(DutyContextSnapshot context)
+        => Current.Rules
+            .Where(x => x.Enabled)
+            .Where(IsXyzDestinationRule)
+            .Where(x => MatchesDutyScope(x, context, includeLayerScope: true))
+            .Where(x => !string.IsNullOrWhiteSpace(x.WorldCoordinates))
             .OrderByDescending(GetSpecificityScore)
             .ThenBy(x => x.Priority)
             .ToList();
@@ -214,6 +231,18 @@ public sealed class ObjectPriorityRuleService
     {
         var rule = GetEffectiveBattleNpcRule(context, monster, distance, verticalDelta);
         return rule?.Priority ?? DefaultPriority;
+    }
+
+    public InteractableClass? GetEffectiveBattleNpcClassification(
+        DutyContextSnapshot context,
+        ObservedMonster monster,
+        float? distance,
+        float? verticalDelta)
+    {
+        var rule = GetEffectiveBattleNpcRule(context, monster, distance, verticalDelta);
+        return rule is not null && TryParseClassification(rule.Classification, out var classification)
+            ? classification
+            : null;
     }
 
     public bool IsBattleNpcSuppressedByRuleGates(
@@ -324,14 +353,14 @@ public sealed class ObjectPriorityRuleService
         }
     }
 
-    private static bool Matches(
+    private bool Matches(
         ObjectPriorityRule rule,
         DutyContextSnapshot context,
         ObjectKind objectKind,
         uint baseId,
         string objectName)
     {
-        if (!MatchesDutyScope(rule, context))
+        if (!MatchesDutyScope(rule, context, includeLayerScope: true))
             return false;
 
         if (!string.IsNullOrWhiteSpace(rule.ObjectKind)
@@ -351,7 +380,7 @@ public sealed class ObjectPriorityRuleService
             : string.Equals(objectName, rule.ObjectName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MatchesDutyScope(ObjectPriorityRule rule, DutyContextSnapshot context)
+    private bool MatchesDutyScope(ObjectPriorityRule rule, DutyContextSnapshot context, bool includeLayerScope)
     {
         if (rule.ContentFinderConditionId != 0 && rule.ContentFinderConditionId != context.ContentFinderConditionId)
             return false;
@@ -365,7 +394,38 @@ public sealed class ObjectPriorityRuleService
             return false;
         }
 
+        if (includeLayerScope && !MatchesLayerScope(rule, context))
+            return false;
+
         return true;
+    }
+
+    private bool MatchesLayerScope(ObjectPriorityRule rule, DutyContextSnapshot context)
+    {
+        var selector = GetLayerSelector(rule);
+        if (string.IsNullOrWhiteSpace(selector))
+            return true;
+
+        if (context.MapId == 0)
+            return false;
+
+        if (uint.TryParse(selector, out var mapId))
+            return mapId == context.MapId;
+
+        var mapSheet = dataManager.GetExcelSheet<Map>();
+        if (mapSheet is null || !mapSheet.TryGetRow(context.MapId, out var map))
+            return false;
+
+        var activeMapName = BuildMapName(map);
+        if (string.Equals(selector, activeMapName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var placeName = NormalizeName(map.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty);
+        if (string.Equals(selector, placeName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var placeNameSub = NormalizeName(map.PlaceNameSub.ValueNullable?.Name.ToString() ?? string.Empty);
+        return string.Equals(selector, placeNameSub, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int GetSpecificityScore(ObjectPriorityRule rule)
@@ -401,6 +461,38 @@ public sealed class ObjectPriorityRuleService
     private static string NormalizeDutyName(string value)
         => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
+    private static string NormalizeName(string value)
+        => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static string NormalizeLayerSelector(string? value)
+        => NormalizeName(value ?? string.Empty);
+
+    private static string GetLayerSelector(ObjectPriorityRule rule)
+    {
+        var explicitLayer = NormalizeLayerSelector(rule.Layer);
+        if (!string.IsNullOrWhiteSpace(explicitLayer))
+            return explicitLayer;
+
+        var legacyLayer = NormalizeLayerSelector(rule.DestinationType);
+        return string.Equals(legacyLayer, MapXzDestinationType, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(legacyLayer, XyzDestinationType, StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : legacyLayer;
+    }
+
+    private static string BuildMapName(Map map)
+    {
+        var placeName = NormalizeName(map.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty);
+        var placeNameSub = NormalizeName(map.PlaceNameSub.ValueNullable?.Name.ToString() ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(placeNameSub))
+            return placeNameSub;
+
+        if (!string.IsNullOrWhiteSpace(placeName))
+            return placeName;
+
+        return $"Map {map.RowId}";
+    }
+
     private static string TrimLeadingArticle(string value)
         => value.StartsWith("the ", StringComparison.OrdinalIgnoreCase)
             ? value[4..]
@@ -422,6 +514,14 @@ public sealed class ObjectPriorityRuleService
            || (TryParseClassification(rule.Classification, out var classification)
                && classification == InteractableClass.MapXzDestination);
 
+    private static bool IsXyzDestinationRule(ObjectPriorityRule rule)
+        => string.Equals(rule.DestinationType, XyzDestinationType, StringComparison.OrdinalIgnoreCase)
+           || (TryParseClassification(rule.Classification, out var classification)
+               && classification == InteractableClass.XYZ);
+
+    private static bool IsManualDestinationRule(ObjectPriorityRule rule)
+        => IsMapXzDestinationRule(rule) || IsXyzDestinationRule(rule);
+
     private static ObjectPriorityRule CloneRule(ObjectPriorityRule rule)
         => new()
         {
@@ -435,7 +535,9 @@ public sealed class ObjectPriorityRuleService
             NameMatchMode = rule.NameMatchMode,
             Classification = rule.Classification,
             DestinationType = rule.DestinationType,
+            Layer = rule.Layer,
             MapCoordinates = rule.MapCoordinates,
+            WorldCoordinates = rule.WorldCoordinates,
             Priority = rule.Priority,
             PriorityVerticalRadius = rule.PriorityVerticalRadius,
             MaxDistance = rule.MaxDistance,
@@ -448,11 +550,65 @@ public sealed class ObjectPriorityRuleService
         var changed = false;
         foreach (var rule in manifest.Rules)
         {
+            var legacyLayer = NormalizeLayerSelector(rule.DestinationType);
+            if (string.IsNullOrWhiteSpace(rule.Layer)
+                && !string.IsNullOrWhiteSpace(legacyLayer)
+                && !string.Equals(legacyLayer, MapXzDestinationType, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(legacyLayer, XyzDestinationType, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.Layer = rule.DestinationType;
+                rule.DestinationType = string.Empty;
+                changed = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(rule.Layer)
+                && !string.IsNullOrWhiteSpace(legacyLayer)
+                && !string.Equals(legacyLayer, MapXzDestinationType, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(legacyLayer, XyzDestinationType, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.DestinationType = string.Empty;
+                changed = true;
+            }
+
+            if (TryParseClassification(rule.Classification, out var ruleClassification)
+                && ruleClassification == InteractableClass.MapXzDestination
+                && string.Equals(rule.DestinationType, MapXzDestinationType, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.DestinationType = string.Empty;
+                changed = true;
+            }
+
+            if (TryParseClassification(rule.Classification, out ruleClassification)
+                && ruleClassification == InteractableClass.XYZ
+                && string.Equals(rule.DestinationType, XyzDestinationType, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.DestinationType = string.Empty;
+                changed = true;
+            }
+
+            if (string.Equals(rule.DutyEnglishName, "Brayflox's Longstop", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectName, "Goblin Pathfinder", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectKind, "EventNpc", StringComparison.OrdinalIgnoreCase))
+            {
+                rule.ObjectKind = ObjectKind.BattleNpc.ToString();
+                if (string.Equals(rule.Classification, InteractableClass.Required.ToString(), StringComparison.OrdinalIgnoreCase))
+                    rule.Classification = InteractableClass.CombatFriendly.ToString();
+
+                var migrationNote = "Goblin Pathfinder is a BattleNpc talk target; migrated from EventNpc into the CombatFriendly BattleNpc direct-interact path.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
             if (!string.Equals(rule.ObjectKind, ObjectKind.BattleNpc.ToString(), StringComparison.OrdinalIgnoreCase)
-                && string.Equals(rule.Classification, InteractableClass.Follow.ToString(), StringComparison.OrdinalIgnoreCase))
+                && TryParseClassification(rule.Classification, out var classification)
+                && classification is InteractableClass.Follow or InteractableClass.BossFight)
             {
                 rule.Classification = InteractableClass.Ignored.ToString();
-                const string migrationNote = "Follow is BattleNpc-only; migrated to Ignored to keep this object out of planner truth.";
+                var migrationNote = $"{classification} is BattleNpc-only; migrated to Ignored to keep this object out of planner truth.";
                 rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
                     ? migrationNote
                     : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
@@ -486,7 +642,7 @@ public sealed class ObjectPriorityRuleService
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, and MapXzDestination with destinationType MapXZ plus mapCoordinates like 11.3,10.4 for manual sub-area waypoints. Non-BattleNpc Follow rules are ignored. waitAtDestinationSeconds is included now for future execution timing.",
+  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds is included now for future execution timing.",
   "rules": [
     {
       "enabled": true,

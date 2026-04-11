@@ -25,4 +25,7 @@ public enum ExecutionPhase
     NavigatingToFollowObjective = 20,
     NavigatingToMapXzDestination = 21,
     MapXzDestinationHint = 22,
+    MountedDutyCombat = 23,
+    NavigatingToXyzDestination = 24,
+    XyzDestinationHint = 25,
 }

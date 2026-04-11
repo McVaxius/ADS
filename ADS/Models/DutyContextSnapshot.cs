@@ -9,6 +9,7 @@ public sealed class DutyContextSnapshot
     public required bool BetweenAreas { get; init; }
     public required bool BetweenAreas51 { get; init; }
     public required bool InCombat { get; init; }
+    public required bool Mounted { get; init; }
     public required uint TerritoryTypeId { get; init; }
     public required uint MapId { get; init; }
     public required uint ContentFinderConditionId { get; init; }

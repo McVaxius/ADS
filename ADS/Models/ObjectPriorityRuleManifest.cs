@@ -19,7 +19,9 @@ public sealed class ObjectPriorityRule
     public string NameMatchMode { get; set; } = "Exact";
     public string Classification { get; set; } = string.Empty;
     public string DestinationType { get; set; } = string.Empty;
+    public string Layer { get; set; } = string.Empty;
     public string MapCoordinates { get; set; } = string.Empty;
+    public string WorldCoordinates { get; set; } = string.Empty;
     public int Priority { get; set; } = 1000;
     public float PriorityVerticalRadius { get; set; }
     public float? MaxDistance { get; set; }

@@ -57,6 +57,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
     private readonly ObjectExplorerWindow objectExplorerWindow;
+    private readonly GhostListWindow ghostListWindow;
     private readonly FrontierLabelWindow frontierLabelWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
@@ -70,13 +71,13 @@ public sealed class Plugin : IDalamudPlugin
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
-        ExecutionService = new ExecutionService(ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, Log);
+        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
@@ -90,12 +91,14 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new MainWindow(this);
         configWindow = new ConfigWindow(this);
         objectExplorerWindow = new ObjectExplorerWindow(this);
+        ghostListWindow = new GhostListWindow(this);
         frontierLabelWindow = new FrontierLabelWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
+        WindowSystem.AddWindow(ghostListWindow);
         WindowSystem.AddWindow(frontierLabelWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
@@ -132,6 +135,7 @@ public sealed class Plugin : IDalamudPlugin
         configWindow.Dispose();
         mainWindow.Dispose();
         objectExplorerWindow.Dispose();
+        ghostListWindow.Dispose();
         frontierLabelWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
@@ -148,6 +152,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ToggleObjectExplorerUi()
         => objectExplorerWindow.IsOpen = !objectExplorerWindow.IsOpen;
+
+    public void ToggleGhostListUi()
+        => ghostListWindow.IsOpen = !ghostListWindow.IsOpen;
 
     public void ToggleFrontierLabelUi()
         => frontierLabelWindow.IsOpen = !frontierLabelWindow.IsOpen;
@@ -178,6 +185,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow.QueueResetToOrigin();
         configWindow.QueueResetToOrigin();
         objectExplorerWindow.QueueResetToOrigin();
+        ghostListWindow.QueueResetToOrigin();
         frontierLabelWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
@@ -188,6 +196,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow.QueueRandomVisibleJump();
         configWindow.QueueRandomVisibleJump();
         objectExplorerWindow.QueueRandomVisibleJump();
+        ghostListWindow.QueueRandomVisibleJump();
         frontierLabelWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
@@ -263,6 +272,7 @@ public sealed class Plugin : IDalamudPlugin
                 supportedDuty = DutyContextService.Current.IsSupportedDuty,
                 allowsActiveExecution = DutyContextService.Current.AllowsActiveExecution,
                 unsafeTransition = DutyContextService.Current.IsUnsafeTransition,
+                mounted = DutyContextService.Current.Mounted,
             },
             JsonOptions);
 
@@ -276,6 +286,7 @@ public sealed class Plugin : IDalamudPlugin
                 explanation = ObjectivePlannerService.Current.Explanation,
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                mounted = DutyContextService.Current.Mounted,
                 targetName = ObjectivePlannerService.Current.TargetName,
                 targetDistance = ObjectivePlannerService.Current.TargetDistance,
                 targetVerticalDelta = ObjectivePlannerService.Current.TargetVerticalDelta,
@@ -290,6 +301,8 @@ public sealed class Plugin : IDalamudPlugin
                     visitedPoints = DungeonFrontierService.VisitedPoints,
                     manualMapXzDestinationCount = DungeonFrontierService.ManualMapXzDestinationCount,
                     visitedManualMapXzDestinations = DungeonFrontierService.VisitedManualMapXzDestinations,
+                    manualXyzDestinationCount = DungeonFrontierService.ManualXyzDestinationCount,
+                    visitedManualXyzDestinations = DungeonFrontierService.VisitedManualXyzDestinations,
                     currentTarget = DungeonFrontierService.CurrentTarget?.Name,
                     currentTargetMapId = DungeonFrontierService.CurrentTarget?.MapId,
                     currentTargetPosition = DungeonFrontierService.CurrentTarget is { } frontierPoint
@@ -298,17 +311,20 @@ public sealed class Plugin : IDalamudPlugin
                     currentTargetMapCoordinates = DungeonFrontierService.CurrentTarget?.MapCoordinates is { } mapCoordinates
                         ? new { x = MathF.Round(mapCoordinates.X, 2), z = MathF.Round(mapCoordinates.Y, 2) }
                         : null,
+                    currentTargetWorldCoordinates = DungeonFrontierService.CurrentTarget is { IsManualXyzDestination: true } xyzFrontierPoint
+                        ? BuildPositionPayload(xyzFrontierPoint.Position)
+                        : null,
                     scoutHeading = DungeonFrontierService.CurrentHeading.HasValue
                         ? BuildPositionPayload(DungeonFrontierService.CurrentHeading.Value)
                         : null,
                 },
                 observations = new
                 {
-                    liveMonsters = ObservationMemoryService.Current.LiveMonsters.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position) }),
-                    liveFollowTargets = ObservationMemoryService.Current.LiveFollowTargets.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position) }),
-                    monsterGhosts = ObservationMemoryService.Current.MonsterGhosts.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position) }),
-                    liveInteractables = ObservationMemoryService.Current.LiveInteractables.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString() }),
-                    interactableGhosts = ObservationMemoryService.Current.InteractableGhosts.Select(x => new { x.Name, x.DataId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString(), ghostReason = x.GhostReason.ToString() }),
+                    liveMonsters = ObservationMemoryService.Current.LiveMonsters.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),
+                    liveFollowTargets = ObservationMemoryService.Current.LiveFollowTargets.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),
+                    monsterGhosts = ObservationMemoryService.Current.MonsterGhosts.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),
+                    liveInteractables = ObservationMemoryService.Current.LiveInteractables.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString() }),
+                    interactableGhosts = ObservationMemoryService.Current.InteractableGhosts.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString(), ghostReason = x.GhostReason.ToString() }),
                 },
             },
             JsonOptions);
@@ -398,6 +414,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads - toggle the main window\n" +
                 "/ads config - open settings\n" +
                 "/ads obj - toggle the object explorer\n" +
+                "/ads ghosts - toggle the ghost inspector\n" +
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
@@ -441,6 +458,12 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("obj", StringComparison.OrdinalIgnoreCase))
         {
             ToggleObjectExplorerUi();
+            return;
+        }
+
+        if (trimmed.Equals("ghosts", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleGhostListUi();
             return;
         }
 
@@ -547,8 +570,11 @@ public sealed class Plugin : IDalamudPlugin
             ExecutionPhase.FrontierHint => "Frontier",
             ExecutionPhase.NavigatingToMapXzDestination => "MapXZ",
             ExecutionPhase.MapXzDestinationHint => "MapXZ",
+            ExecutionPhase.NavigatingToXyzDestination => "XYZ",
+            ExecutionPhase.XyzDestinationHint => "XYZ",
             ExecutionPhase.NavigatingToFollowObjective => "Follow",
             ExecutionPhase.ReadyForFollowObjective => "Follow",
+            ExecutionPhase.MountedDutyCombat => "MountAtk",
             ExecutionPhase.WaitingForTruth => "Wait",
             ExecutionPhase.LeavingDuty => "Leaving",
             ExecutionPhase.Failure => "Fail",

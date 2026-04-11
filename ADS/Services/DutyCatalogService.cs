@@ -22,13 +22,18 @@ public sealed class DutyCatalogService
         "sastasha",
         "copperbell mines",
         "haukke manor",
+        "the keeper of the lake",
         "the praetorium",
     ];
 
     private static readonly Dictionary<string, DutyClearanceStatus> ClearanceStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the keeper of the lake"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["castrum meridianum"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
     };
