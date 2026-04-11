@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.ClientState.Objects.Enums;
@@ -586,6 +587,23 @@ public sealed class ObjectPriorityRuleService
                 changed = true;
             }
 
+            if (TryParseClassification(rule.Classification, out ruleClassification)
+                && ruleClassification == InteractableClass.XYZ
+                && string.IsNullOrWhiteSpace(rule.WorldCoordinates)
+                && TryNormalizeLegacyWorldCoordinates(rule.MapCoordinates, out var migratedWorldCoordinates))
+            {
+                rule.WorldCoordinates = migratedWorldCoordinates;
+                rule.MapCoordinates = string.Empty;
+
+                var migrationNote = "XYZ destinations must author world X,Y,Z in WorldCoordinates; migrated a stale 3-value MapCoordinates payload.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
             if (string.Equals(rule.DutyEnglishName, "Brayflox's Longstop", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(rule.ObjectName, "Goblin Pathfinder", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(rule.ObjectKind, "EventNpc", StringComparison.OrdinalIgnoreCase))
@@ -595,6 +613,26 @@ public sealed class ObjectPriorityRuleService
                     rule.Classification = InteractableClass.CombatFriendly.ToString();
 
                 var migrationNote = "Goblin Pathfinder is a BattleNpc talk target; migrated from EventNpc into the CombatFriendly BattleNpc direct-interact path.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
+            if (string.Equals(rule.DutyEnglishName, "the Praetorium", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Layer, "Castrum Defense", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectName, "Magitek Terminal", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Classification, InteractableClass.Ignored.ToString(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectKind, "EventNpc", StringComparison.OrdinalIgnoreCase))
+            {
+                rule.ObjectKind = string.Empty;
+                rule.MaxDistance = null;
+                if (rule.Priority == 0)
+                    rule.Priority = DefaultPriority;
+
+                var migrationNote = "Castrum Defense Magitek Terminal is observed as EventObj, so this stale EventNpc ignore row was widened to wildcard kind.";
                 rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
                     ? migrationNote
                     : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
@@ -636,6 +674,29 @@ public sealed class ObjectPriorityRuleService
         }
 
         return changed;
+    }
+
+    private static bool TryNormalizeLegacyWorldCoordinates(string value, out string normalizedCoordinates)
+    {
+        normalizedCoordinates = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var parts = value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 3)
+            return false;
+
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+            || !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            return false;
+        }
+
+        normalizedCoordinates = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{x:0.###},{y:0.###},{z:0.###}");
+        return true;
     }
 
     private static string GetDefaultJson()

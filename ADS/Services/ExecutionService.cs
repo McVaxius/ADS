@@ -21,6 +21,7 @@ public sealed class ExecutionService
     private const float PreferredFollowArrivalRange = 3.0f;
     private const float PreferredRecoveryArrivalRange = 2.0f;
     private const float PreferredFrontierArrivalRange = 4.0f;
+    private const float RequiredInteractionConsumedRelocationRange = 20.0f;
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const float MountedCombatClusterRadius = 6.0f;
     private const float RecoveryGhostRetireRadius = 8.0f;
@@ -296,8 +297,11 @@ public sealed class ExecutionService
     {
         if (context.IsUnsafeTransition || planner.Mode == PlannerMode.UnsafeTransition)
         {
-            if (pendingProgressionInteractable?.Classification == InteractableClass.Required)
+            if (pendingProgressionInteractable is not null)
+            {
+                observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
                 ClearInteractableCommitment();
+            }
 
             ResetRecoveryHold();
             StopMovementAssists();
@@ -1127,6 +1131,24 @@ public sealed class ExecutionService
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} Interact follow-through finished for {pendingInteractable.Name}; Mounted became active after the interact, so ADS treated that interactable position as consumed and is waiting for refreshed duty truth.");
             return true;
+        }
+
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        if (isRequiredFollowThrough
+            && pendingLiveInteractable is not null
+            && playerPosition.HasValue)
+        {
+            var pendingHorizontalDistance = GetHorizontalDistance(pendingLiveInteractable.Position, playerPosition.Value);
+            if (pendingHorizontalDistance >= RequiredInteractionConsumedRelocationRange)
+            {
+                observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                ClearInteractableCommitment();
+                StopMovementAssists();
+                SetPhase(
+                    ExecutionPhase.AttemptingInteractableObjective,
+                    $"{prefix} Required interact follow-through for {pendingInteractable.Name} stayed live, but the player was displaced to XZ {pendingHorizontalDistance:0.0}y after the interact. ADS is treating that interactable position as consumed and suppressing it until duty reset.");
+                return true;
+            }
         }
 
         var now = DateTime.UtcNow;

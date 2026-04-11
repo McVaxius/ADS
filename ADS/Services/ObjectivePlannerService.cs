@@ -725,7 +725,10 @@ public sealed class ObjectivePlannerService
             nearestRequiredInteractable,
             distance,
             verticalDelta);
-        return manualDestinationTarget.Priority < nearestRequiredPriority;
+        return ShouldManualDestinationBeatProgressionInteractable(
+            manualDestinationTarget.Priority,
+            nearestRequiredInteractable,
+            nearestRequiredPriority);
     }
 
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)
@@ -840,7 +843,27 @@ public sealed class ObjectivePlannerService
             distance,
             verticalDelta);
         var manualLabel = frontierPoint.IsManualXyzDestination ? "XYZ destination" : "Map XZ destination";
+        if (frontierPoint.Priority == deferredPriority
+            && deferredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
+        {
+            return $"Human-authored {manualLabel} {frontierPoint.Name} ties the currently visible {deferredInteractable.Classification} progression interactable {deferredInteractable.Name} at priority ({deferredPriority}), so ADS spends the tie on the staging waypoint instead of the lower-value live interactable.";
+        }
+
         return $"Human-authored {manualLabel} {frontierPoint.Name} has better priority ({frontierPoint.Priority}) than the best currently visible progression interactable {deferredInteractable.Name} ({deferredPriority}), so ADS is using the staging waypoint first instead of going directly to that interactable.";
+    }
+
+    private static bool ShouldManualDestinationBeatProgressionInteractable(
+        int manualPriority,
+        ObservedInteractable interactable,
+        int interactablePriority)
+    {
+        if (manualPriority < interactablePriority)
+            return true;
+
+        if (manualPriority > interactablePriority)
+            return false;
+
+        return interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
     }
 
     private static bool ShouldSelectTreasureCoffer(

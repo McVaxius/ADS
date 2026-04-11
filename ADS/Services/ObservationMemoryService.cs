@@ -334,7 +334,7 @@ public sealed class ObservationMemoryService
         usedProgressionInteractables[spatialKey] = usedInteractable;
         knownInteractables.Remove(interactable.Key);
         knownInteractables[usedInteractable.Key] = usedInteractable;
-        log.Information($"[ADS] Marked {interactable.Name} at {Quantize(interactable.Position)} as used; suppressing this interactable position until duty reset or large relocation.");
+        log.Information($"[ADS] Marked {interactable.Name} at {Quantize(interactable.Position)} as used; suppressing this interactable position until duty reset.");
     }
 
     public int RetireNearbyRecoveryGhosts(PlannerObjectiveKind objectiveKind, Vector3 center, float radius)
@@ -578,28 +578,9 @@ public sealed class ObservationMemoryService
                 log.Information($"[ADS] Cleared {retiredCount} retired recovery ghost cluster(s) after a large duty relocation.");
             }
 
-            ClearUsedProgressionInteractablesAfterRelocation();
         }
 
         lastPlayerPosition = playerPosition.Value;
-    }
-
-    private void ClearUsedProgressionInteractablesAfterRelocation()
-    {
-        if (usedProgressionInteractables.Count == 0)
-            return;
-
-        var knownKeys = usedProgressionInteractables.Values
-            .Select(x => x.Key)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        foreach (var key in knownKeys)
-            knownInteractables.Remove(key);
-
-        var clearedCount = usedProgressionInteractables.Count;
-        usedProgressionInteractables.Clear();
-        log.Information($"[ADS] Cleared {clearedCount} used progression interactable suppression(s) after a large duty relocation.");
     }
 
     private bool IsSuppressedByRetiredMonsterCluster(Vector3 position)

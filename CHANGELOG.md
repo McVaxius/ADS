@@ -2,6 +2,11 @@
 
 ## 2026-04-11
 
+- Pending progression interact follow-through now marks the interacted position used as soon as `BetweenAreas` starts. This restores the original Meridianum-style ghosting seam for one-shot objects that immediately transition or leave visibility after interact, such as `Disposal Chute`.
+- Required progression-interactable suppression no longer clears on generic large relocations, and ADS now treats a non-disappearing required interactable as consumed when the interact displaces the player materially away from that same object. This restores durable ghosting for one-shot objects like Castrum Meridianum `Disposal Chute`.
+- Manual `MapXzDestination` / `XYZ` staging can now beat tied live `Expendable` or `Optional` progression interactables, so Praetorium-style staging rows are not blocked by a same-priority generic `Shortcut`.
+- Fixed stale Praetorium `Classification: XYZ` rows that were authored with 3D values in `MapCoordinates` instead of `WorldCoordinates`, and added a built-in migration so older live configs auto-promote those legacy 3-value payloads on load.
+- Added a built-in migration for stale Praetorium `Castrum Defense` `Magitek Terminal` ignore rows that were authored as `EventNpc`. ADS now widens those legacy rows to wildcard-kind on load so the ignore still matches the live `EventObj`.
 - Added precise manual `XYZ` destinations. New `Classification: XYZ` rows read `worldCoordinates` as authored world X/Y/Z, navigate directly to that point, expose separate XYZ counters in status/analysis JSON, and show up in the rules editor and ghost inspector.
 - Fixed Praetorium-style deadlocks where visible progression interactables still blocked manual destinations even though they were outside their own distance/Y rule gates. Frontier/manual blocking now only respects live progression interactables that are actually eligible under the active rule gates, and the planner's idle explanation now says so.
 - Added a Praetorium-only mounted combat branch. While `Mounted` stays true in territory `1044`, ADS now bypasses the generic `CombatHold`, reads the live mount-action list from the current mount row, prefers the best nearby cluster for mounted ground-target weapons, and fires the second mounted weapon while enemies stay in range.

@@ -893,18 +893,44 @@ public sealed class DungeonFrontierService
         if (!bestUnvisitedManualPriority.HasValue)
             return false;
 
-        var bestLiveProgressionPriority = observation.LiveInteractables
+        var bestLiveProgressionInteractable = observation.LiveInteractables
             .Where(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition))
-            .Select(x => objectPriorityRuleService.GetEffectivePriority(
-                context,
-                x,
-                playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : null,
-                playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : null))
-            .Cast<int?>()
-            .OrderBy(x => x)
+            .Select(x => new
+            {
+                Interactable = x,
+                Distance = playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : (float?)null,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : (float?)null,
+            })
+            .Select(x => new
+            {
+                x.Interactable,
+                x.Distance,
+                x.VerticalDelta,
+                Priority = objectPriorityRuleService.GetEffectivePriority(context, x.Interactable, x.Distance, x.VerticalDelta),
+            })
+            .OrderBy(x => x.Priority)
+            .ThenBy(x => x.Distance ?? float.MaxValue)
+            .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .FirstOrDefault();
-        return bestLiveProgressionPriority.HasValue
-               && bestUnvisitedManualPriority.Value < bestLiveProgressionPriority.Value;
+        return bestLiveProgressionInteractable is not null
+               && ShouldManualDestinationBeatProgressionInteractable(
+                   bestUnvisitedManualPriority.Value,
+                   bestLiveProgressionInteractable.Interactable,
+                   bestLiveProgressionInteractable.Priority);
+    }
+
+    private static bool ShouldManualDestinationBeatProgressionInteractable(
+        int manualPriority,
+        ObservedInteractable interactable,
+        int interactablePriority)
+    {
+        if (manualPriority < interactablePriority)
+            return true;
+
+        if (manualPriority > interactablePriority)
+            return false;
+
+        return interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
     }
 
     private static bool IsSaneVerticalBlocker(Vector3? playerPosition, Vector3 targetPosition)
