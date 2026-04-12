@@ -2,6 +2,8 @@
 
 ## 2026-04-12
 
+- Restored the missing GitHub Actions release surface for ADS by adding the standard `build-release.yml` workflow with ADS-specific solution, manifest, and packaged `latest.zip` paths.
+- Expanded `GUIDE.md` with a beginner-first duty-maturity testing walkthrough, command list, window tour, rule-authoring quick start, and evidence checklist for helpers who are scouting or validating ADS rules.
 - Fixed Brayflox-style manual staging reactivation after talk-NPC progression. ADS now stages a nearby authored `MapXzDestination` / `XYZ` against the live progression interactable, then ghosts that exact manual destination when the interact is actually consumed, instead of only ghosting it later if ADS walks back over the point or hits `BetweenAreas`.
 - Reset ADS frontier/manual state and observation memory when leaving supported duty context, so repeated entries into the same duty do not inherit stale ghosts, visited manual waypoints, or remembered manual follow-through from a prior run.
 - Added a planner safety seam that refuses stale-ghost backtracking while unvisited human-authored `MapXzDestination` / `XYZ` stages still remain unresolved.

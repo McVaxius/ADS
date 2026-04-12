@@ -86,4 +86,4 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 ## Rule Guide
 
-- See [GUIDE.md](GUIDE.md) for duty-object rule authoring notes, positional same-name rule matching, the unified `Coords` editor surface, dialog yes/no rules, global scope behavior, BattleNpc-only `BossFight` / `Follow` behavior, layer semantics, editor-filter semantics, mounted interact follow-through behavior, ghost inspector usage, treasure clamp examples, close-range interact fallback behavior, and `MapXzDestination` / `XYZ` usage.
+- See [GUIDE.md](GUIDE.md) for the full tester walkthrough, every ADS window/command, duty-maturity rule-testing workflow, duty-object rule authoring notes, positional same-name rule matching, the unified `Coords` editor surface, dialog yes/no rules, global scope behavior, BattleNpc-only `BossFight` / `Follow` behavior, layer semantics, editor-filter semantics, mounted interact follow-through behavior, ghost inspector usage, treasure clamp examples, close-range interact fallback behavior, and `MapXzDestination` / `XYZ` usage.

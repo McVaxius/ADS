@@ -1,5 +1,243 @@
 # ADS Guide
 
+## If You Are Helping With Duty Maturity Testing
+
+- ADS has two different rule surfaces:
+  - bundled repo rules in `ADS/duty-object-rules.json`
+  - live runtime rules in the active Dalamud profile config
+- During active scouting/testing, the live runtime file is the one ADS actually uses.
+- The rules editor `DEFAULT` preset is the live runtime dataset.
+- Parked `PRESET`s are just parked manifests. They do not affect runtime until you copy/import them back into `DEFAULT`.
+- For ordinary maturity-testing work, use the live runtime rules first, prove the behavior in-game, and only then promote permanent repo changes.
+
+## What A Helper Is Actually Trying To Do
+
+- Make ADS finish a duty cleanly enough that the duty can be promoted in maturity.
+- Find missing or wrong object rules when ADS picks the wrong target, ignores the right target, or gets stuck.
+- Capture enough evidence that a permanent repo fix can be made without guessing.
+
+## ADS Windows And Commands
+
+- `/ads`: toggle the main window
+- `/ads config`: open Settings
+- `/ads obj`: open Object Explorer
+- `/ads ghosts`: open Ghost Inspector
+- `/ads labels`: open Frontier Labels
+- `/ads rules`: open Rules Editor
+- `/ads dialogs`: open Dialog Rules
+- `/ads ws`: reset all ADS window positions to `1,1`
+- `/ads j`: jump ADS windows to visible random positions
+- `/ads outside`: queue outside ownership
+- `/ads inside`: claim ownership inside the current supported duty
+- `/ads resume`: resume ownership inside the current supported duty
+- `/ads leave`: request duty leave
+- `/ads stop`: drop ADS ownership
+
+## Main Window
+
+- This is the control and truth-summary window.
+- Top row:
+  - version
+  - Ko-fi / Discord / Repo links
+  - quick-open buttons for Settings, Objects, Ghosts, Labels, Rules, and Dialogs
+- Action row:
+  - `Start Outside`: queue ADS before entering the duty
+  - `Start Inside`: claim active ownership while already inside a supported duty
+  - `Resume`: reclaim ownership after a stop/reload
+  - `Leave`: request a duty exit while owned
+  - `Stop`: release ADS ownership immediately
+- State block:
+  - ownership mode
+  - execution phase
+  - planner mode
+  - duty name
+  - pilot eligibility
+  - treasure toggle
+  - active rule count
+  - territory / CFC ids
+  - objective kind
+  - frontier/manual counters
+  - current frontier target
+  - planner objective/explanation
+  - execution summary
+- JSON buttons:
+  - `Copy Status JSON`: compact runtime state snapshot
+  - `Copy Analysis JSON`: deeper planner/observer/frontier state
+- Duty catalog:
+  - shows all 4-man duties
+  - `Rules` column is the explicit authored-rule count for that duty
+  - clearance colors are the maturity states
+- Observation Summary:
+  - live monsters
+  - live follow targets
+  - live interactables
+  - ghost counts
+
+## Settings Window
+
+- Use this for global ADS toggles and quick links.
+- Important fields:
+  - `Plugin enabled`
+  - `Open main window on load`
+  - `Enable DTR bar`
+  - `Show debug sections in the main window`
+  - `Consider treasure coffers in planner`
+- Important buttons:
+  - `Open rules JSON`
+  - `Open frontier labels`
+  - `Open rules table`
+  - `Reload rules JSON`
+- This window also shows the exact live rule-file path ADS is using.
+
+## Object Explorer
+
+- Shows live loaded game objects near the player.
+- Best use:
+  - confirm exact object name
+  - confirm `ObjectKind`
+  - confirm distance / Y delta
+  - capture `BaseId`
+  - confirm whether the object is targetable
+- Buttons:
+  - `[FLAG]`: place an in-game map flag at that object's world position
+  - `CREATE RULE`: seed a new row into the rules editor using the current duty scope, current live layer, object kind, base id, exact name, and world position
+- This is usually the fastest way to start a new rule without typing boilerplate.
+
+## Ghost Inspector
+
+- Shows ADS recovery ghosts plus manual-destination state.
+- Best use:
+  - prove whether ADS is carrying stale monster/interactable ghosts
+  - confirm the current manual destination
+  - confirm remembered manual follow-through
+  - confirm the last ghosted manual destination and reason
+- `Current Map Only` is important in multi-layer duties. It filters out stale ghosts from other sub-areas.
+
+## Frontier Labels
+
+- Shows the current live map row's Lumina `MapMarker` labels.
+- Best use:
+  - see where ADS thinks the named frontier labels are
+  - verify active sub-area map resolution
+  - drop flags on labels when manual waypoints/frontier routing look suspicious
+- This is a label/map debugging tool, not a rule-authoring tool.
+
+## Rules Editor
+
+- This is the main window for duty-object rule work.
+- `DEFAULT` is the live runtime rule set.
+- Other `PRESET`s are parked manifests only.
+- Toolbar:
+  - `+ Row`: add a blank row
+  - `Save`: write the current preset to disk
+  - `Reload From Disk`
+  - `Open JSON`
+  - `Current Area + Global`: filter to current duty/territory/CFC scope plus global rows
+  - `Sort By Duty`
+- Preset bar:
+  - `Export` / `Import`: full-manifest clipboard transfer
+  - `Disk+`: full-manifest file import/export
+  - `+`: create parked preset
+  - `-`: delete parked preset
+  - `@`: reload packaged bundled rules into the live `DEFAULT` draft
+- New rows from `+ Row` or `CREATE RULE` stay highlighted until saved.
+
+## Dialog Rules
+
+- Spreadsheet editor for `dialog-yesno-rules.json`.
+- These are global `SelectYesno` prompt matches, not duty-scoped object rules.
+- Use this only when ADS needs to answer a yes/no prompt while it owns a supported duty.
+
+## The Columns That Matter Most In The Rules Editor
+
+- `Duty`: which duty the row belongs to. `GLOBAL` means wildcard scope.
+- `Terr` / `CFC`: numeric scope. Usually auto-filled from the duty dropdown.
+- `Kind`: live object kind such as `BattleNpc`, `EventObj`, `EventNpc`, `Treasure`.
+- `BaseId`: stable object/base sheet id. Useful when names collide.
+- `Name`: object name text.
+- `Match`: `Exact` or `Contains`.
+- `Class`: what ADS should do with it.
+- `Layer`: current live sub-area restriction. Leave blank for any layer.
+- `Coords`: one coordinate field for both manual destinations and ordinary positional selectors.
+- `R`: positional selector radius for ordinary rows only.
+- `Pri`: lower wins.
+- `Y`: vertical gate.
+- `Dist`: distance gate.
+- `Wait-before`: hold before first interact.
+- `Wait-after`: hold after successful interact.
+- `Notes`: human explanation only.
+
+## What The Classifications Mean In Plain English
+
+- `(none)`: no special override, just scoped matching/gating
+- `Ignored`: ADS should pretend this object does not exist
+- `Follow`: use this BattleNpc as a live movement anchor, not as a combat or interact target
+- `BossFight`: boss BattleNpc that should beat nearby trash/objectives once its gates pass
+- `Required`: progression interactable that should usually win when eligible
+- `Optional`: interactable that can be used if nothing better is active
+- `Expendable`: use/consume object; ADS keeps retrying until it disappears
+- `CombatFriendly`: interactable that ADS is allowed to route/use even while combat is active
+- `TreasureCoffer`: special optional treasure behavior
+- `MapXzDestination`: manual 2D map waypoint
+- `XYZ`: manual 3D world waypoint
+
+## Coords And Radius
+
+- `Coords` is the only coordinate field you type into now.
+- `a,b` means map `X,Z`.
+- `a,b,c` means world `X,Y,Z`.
+- On manual destination rows:
+  - `a,b` becomes `MapXzDestination`
+  - `a,b,c` becomes `XYZ`
+- On ordinary rows:
+  - `Coords` identifies one physical object instance
+  - `R` is the match radius for that object selector
+
+## Typical Maturity-Testing Workflow
+
+1. Open the Main window, Rules Editor, and Object Explorer.
+2. Start or resume ADS ownership in the duty.
+3. Let ADS fail or choose the wrong thing once.
+4. In Main, copy:
+   - `Status JSON`
+   - `Analysis JSON`
+5. In Object Explorer, confirm the exact live object name, kind, base id, position, and whether it is targetable.
+6. Use `CREATE RULE` or `+ Row`.
+7. Set the smallest rule that solves the problem:
+   - correct duty scope
+   - correct layer if needed
+   - exact name before wildcard matching
+   - exact `Kind` if known
+   - `BaseId` if names collide
+   - positional selector only when same-name objects need to be separated
+8. Save the live `DEFAULT` rules and retest immediately.
+9. If ADS still behaves strangely:
+   - check Ghost Inspector for stale ghosts/manual follow-through
+   - check Frontier Labels for wrong active map/sub-area assumptions
+10. Once the duty is stable, record what changed and what the tester should verify next.
+
+## What Evidence To Capture When Something Fails
+
+- one fresh `Status JSON`
+- one fresh `Analysis JSON`
+- the visible `Exec phase`
+- the planner objective and explanation line
+- if object identity is suspicious:
+  - Object Explorer row details
+- if ghosting/recovery is suspicious:
+  - Ghost Inspector rows
+- if sub-area / label resolution is suspicious:
+  - Frontier Labels rows or the `Using live map row ... (...)` log line
+
+## Good Rule-Authoring Habits
+
+- Prefer the narrowest rule that explains the behavior.
+- Start with exact name matching before switching to `Contains`.
+- Add `Layer` only when the duty actually has multiple live sub-areas and the row should not apply everywhere.
+- Use positional selectors only when same-name objects really need to be separated.
+- Do not use a manual waypoint when a normal object rule is enough.
+- Do not promote a repo/bundled rule until the live runtime version is proven.
+
 ## Duty-Object Rules
 
 - Rules live in `ADS/duty-object-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
