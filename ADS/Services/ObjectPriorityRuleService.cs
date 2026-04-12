@@ -1123,13 +1123,10 @@ public sealed class ObjectPriorityRuleService
 
             if (string.Equals(rule.DutyEnglishName, "Brayflox's Longstop", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(rule.ObjectName, "Goblin Pathfinder", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(rule.ObjectKind, "EventNpc", StringComparison.OrdinalIgnoreCase))
+                && string.Equals(rule.Classification, InteractableClass.Required.ToString(), StringComparison.OrdinalIgnoreCase))
             {
-                rule.ObjectKind = ObjectKind.BattleNpc.ToString();
-                if (string.Equals(rule.Classification, InteractableClass.Required.ToString(), StringComparison.OrdinalIgnoreCase))
-                    rule.Classification = InteractableClass.CombatFriendly.ToString();
-
-                var migrationNote = "Goblin Pathfinder is a BattleNpc talk target; migrated from EventNpc into the CombatFriendly BattleNpc direct-interact path.";
+                rule.Classification = InteractableClass.CombatFriendly.ToString();
+                var migrationNote = "Goblin Pathfinder talk targets should use CombatFriendly so ADS routes them through the direct-interact pipeline.";
                 rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
                     ? migrationNote
                     : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
@@ -1337,7 +1334,7 @@ public sealed class ObjectPriorityRuleService
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. objectMapCoordinates or objectWorldCoordinates can pin an ordinary same-name row to one physical object instance, and objectMatchRadius defaults to 6y when left blank on a positional row. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds now means the pre-interact arrival hold, and waitAfterInteractSeconds is the post-interact follow-through hold.",
+  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, CombatFriendly on BattleNpc or EventNpc for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. objectMapCoordinates or objectWorldCoordinates can pin an ordinary same-name row to one physical object instance, and objectMatchRadius defaults to 6y when left blank on a positional row. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds now means the pre-interact arrival hold, and waitAfterInteractSeconds is the post-interact follow-through hold.",
   "rules": [
     {
       "enabled": true,

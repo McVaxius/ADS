@@ -2,6 +2,7 @@
 
 ## 2026-04-11
 
+- Added `EventNpc` observation support to the interactable pipeline, so targetable talk NPCs can now be surfaced as live interactables instead of being silently skipped. Brayflox `Goblin Pathfinder` rules can now stay authored as `EventNpc + CombatFriendly`, and stale Brayflox migration no longer rewrites them back to `BattleNpc`.
 - Added parked full-manifest rules-editor `PRESET`s alongside the live `DEFAULT` file, including full-manifest clipboard export/import, disk import/export for large manifests, non-deletable `DEFAULT`, and bundled-rule reset into the `DEFAULT` draft via `@`.
 - Added `CREATE RULE` to Object Explorer so a new rules-editor row can be seeded directly from the current duty scope, live layer, object kind, base id, and exact object name.
 - Added unsaved new-row highlighting/auto-scroll in the rules editor, plus a territory-aware `Layer` dropdown with a blank top option when live sub-area labels are known.

@@ -106,7 +106,7 @@
 
 - Use `CombatFriendly` for progression interactables that must still be routed and used while `Svc.Condition[InCombat]` is active.
 - If the planner emits `Use combat-friendly interactable: ...`, execution now bypasses the generic `CombatHold` and continues the live interactable route during combat.
-- `CombatFriendly` on `BattleNpc` is the narrow direct-interact seam for talk targets. ADS observes those rows as live interactables instead of monsters, so it can route to and interact with a targetable NPC such as Brayflox's `Goblin Pathfinder`.
+- `CombatFriendly` on `BattleNpc` or `EventNpc` is the narrow direct-interact seam for talk targets. ADS observes those rows as live interactables instead of monsters or silently dropped NPCs, so it can route to and interact with a targetable NPC such as Brayflox's `Goblin Pathfinder`.
 - If you author a manual `MapXzDestination` staging row with a better priority than a currently visible later progression interactable, ADS can now use that staging point first as long as no live monsters or follow anchors are visible.
 
 ## Praetorium Mounted Combat

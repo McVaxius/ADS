@@ -219,6 +219,7 @@ public sealed class ObservationMemoryService
                         break;
                     }
                 case ObjectKind.EventObj:
+                case ObjectKind.EventNpc:
                     {
                         if (!gameObject.IsTargetable)
                             break;
