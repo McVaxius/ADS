@@ -9,7 +9,7 @@ public sealed class Configuration : IPluginConfiguration
 
     public int Version { get; set; } = 1;
     public bool PluginEnabled { get; set; } = true;
-    public bool OpenMainWindowOnLoad { get; set; } = true;
+    public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool DtrBarEnabled { get; set; } = true;
     public int DtrBarMode { get; set; } = 1;
     public string DtrIconEnabled { get; set; } = DefaultDtrIconEnabled;
