@@ -244,6 +244,19 @@ public sealed class DungeonFrontierService
         }
     }
 
+    public void RetireManualDestination(DungeonFrontierPoint point, string reason, string detail)
+    {
+        if (!visitedFrontierKeys.Add(point.Key))
+            return;
+
+        ClearRememberedManualDestination(point);
+        if (!point.IsManualDestination)
+            return;
+
+        RememberGhostedManualDestination(point, reason);
+        log.Information($"[ADS] Ghosted {GetManualDestinationLabel(point)} {point.Name} at {FormatVector(point.Position)} {detail}.");
+    }
+
     public DungeonFrontierPoint? GetCurrentOrRememberedManualDestination(Vector3? playerPosition)
     {
         var point = CurrentTarget is { IsManualDestination: true }

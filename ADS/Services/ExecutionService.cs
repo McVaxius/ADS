@@ -31,6 +31,7 @@ public sealed class ExecutionService
     private const float CloseRangeInteractFallbackVerticalCap = 4.0f;
     private const float CloseRangeInteractFallbackProgressMargin = 0.2f;
     private const float TreasureCofferProgressMargin = 2.0f;
+    private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
     private static readonly TimeSpan RequiredInteractionRetryDelay = InteractAttemptCooldown;
@@ -827,6 +828,8 @@ public sealed class ExecutionService
             return;
         }
 
+        TryRetireSatisfiedManualDestinationForLiveProgression(observedInteractable, playerPosition.Value);
+
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(
             context,
             observedInteractable,
@@ -941,6 +944,34 @@ public sealed class ExecutionService
         }
 
         SetPhase(ExecutionPhase.ReadyForInteractableObjective, $"{prefix} Direct interact attempt failed for {observedInteractable.Name}; waiting to retry.");
+    }
+
+    private void TryRetireSatisfiedManualDestinationForLiveProgression(ObservedInteractable observedInteractable, Vector3 playerPosition)
+    {
+        if (observedInteractable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable))
+            return;
+
+        var frontierPoint = dungeonFrontierService.GetCurrentOrRememberedManualDestination(playerPosition);
+        if (frontierPoint is null)
+            return;
+
+        var playerDistanceFromManual = frontierPoint.IsManualXyzDestination
+            ? Vector3.Distance(frontierPoint.Position, playerPosition)
+            : GetHorizontalDistance(frontierPoint.Position, playerPosition);
+        if (playerDistanceFromManual > ManualDestinationSatisfiedByProgressionRadius)
+            return;
+
+        var interactableDistanceFromManual = frontierPoint.IsManualXyzDestination
+            ? Vector3.Distance(frontierPoint.Position, observedInteractable.Position)
+            : GetHorizontalDistance(frontierPoint.Position, observedInteractable.Position);
+        if (interactableDistanceFromManual > ManualDestinationSatisfiedByProgressionRadius)
+            return;
+
+        var distanceLabel = frontierPoint.IsManualXyzDestination ? "3D" : "XZ";
+        dungeonFrontierService.RetireManualDestination(
+            frontierPoint,
+            "SatisfiedByLiveProgression",
+            $"after staging into nearby live progression interactable {observedInteractable.Name} ({distanceLabel} player {playerDistanceFromManual:0.0}y, {distanceLabel} interactable {interactableDistanceFromManual:0.0}y)");
     }
 
     private void CommitInteractable(ObservedInteractable interactable, PlannerObjectiveKind objectiveKind)
