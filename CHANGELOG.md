@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-04-12
+
+- Reset ADS frontier/manual state and observation memory when leaving supported duty context, so repeated entries into the same duty do not inherit stale ghosts, visited manual waypoints, or remembered manual follow-through from a prior run.
+- Added a planner safety seam that refuses stale-ghost backtracking while unvisited human-authored `MapXzDestination` / `XYZ` stages still remain unresolved.
+
 ## 2026-04-11
 
 - Added `EventNpc` observation support to the interactable pipeline, so targetable talk NPCs can now be surfaced as live interactables instead of being silently skipped. Brayflox `Goblin Pathfinder` rules can now stay authored as `EventNpc + CombatFriendly`, and stale Brayflox migration no longer rewrites them back to `BattleNpc`.

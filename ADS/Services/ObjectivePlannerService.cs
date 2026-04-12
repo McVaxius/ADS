@@ -411,6 +411,22 @@ public sealed class ObjectivePlannerService
         if (nearestMonster is null
             && nearestFollowTarget is null
             && nearestRequiredInteractable is null
+            && dungeonFrontierService.HasRemainingManualDestinations)
+        {
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.Progression,
+                ObjectiveKind = PlannerObjectiveKind.None,
+                Objective = "Await manual destination resolution",
+                Explanation = $"Unvisited human-authored Map XZ / XYZ destinations still remain in {context.CurrentDuty?.EnglishName}, so ADS is refusing to backtrack to stale ghosts until frontier/manual resolution surfaces the next stage.",
+                CapturedAtUtc = now,
+            };
+            return;
+        }
+
+        if (nearestMonster is null
+            && nearestFollowTarget is null
+            && nearestRequiredInteractable is null
             && nearestRuleBackedInteractableGhost is not null
             && playerPosition.HasValue)
         {

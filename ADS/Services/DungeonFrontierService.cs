@@ -79,6 +79,10 @@ public sealed class DungeonFrontierService
 
     public int VisitedManualXyzDestinations { get; private set; }
 
+    public bool HasRemainingManualDestinations
+        => ManualMapXzDestinationCount > VisitedManualMapXzDestinations
+           || ManualXyzDestinationCount > VisitedManualXyzDestinations;
+
     public DungeonFrontierPoint? LastGhostedManualDestination { get; private set; }
 
     public DateTime? LastGhostedManualDestinationUtc { get; private set; }
@@ -87,6 +91,17 @@ public sealed class DungeonFrontierService
 
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
     {
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
+        {
+            if (activeDutyKey != 0)
+            {
+                Reset();
+                activeDutyKey = 0;
+            }
+
+            return;
+        }
+
         var dutyKey = context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
         if (dutyKey != activeDutyKey)
         {
@@ -108,9 +123,6 @@ public sealed class DungeonFrontierService
         VisitedManualMapXzDestinations = 0;
         ManualXyzDestinationCount = 0;
         VisitedManualXyzDestinations = 0;
-
-        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
-            return;
 
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (context.IsUnsafeTransition)

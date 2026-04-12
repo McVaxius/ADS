@@ -76,23 +76,35 @@ public sealed class ObservationMemoryService
 
     public void Update(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
-        var dutyKey = context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
-        if (dutyKey != activeDutyKey)
-        {
-            Reset();
-            activeDutyKey = dutyKey;
-        }
-
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty)
         {
             if (!loggedReset && (knownMonsters.Count > 0 || knownInteractables.Count > 0))
             {
                 log.Debug("[ADS] Observation memory parked because ADS is outside a supported observation context.");
-                loggedReset = true;
             }
 
+            if (activeDutyKey != 0
+                || knownMonsters.Count > 0
+                || knownInteractables.Count > 0
+                || usedProgressionInteractables.Count > 0
+                || retiredMonsterGhostClusters.Count > 0
+                || retiredInteractableGhostClusters.Count > 0
+                || lastPlayerPosition.HasValue)
+            {
+                Reset();
+                activeDutyKey = 0;
+            }
+
+            loggedReset = true;
             Current = ObservationSnapshot.Empty;
             return;
+        }
+
+        var dutyKey = context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
+        if (dutyKey != activeDutyKey)
+        {
+            Reset();
+            activeDutyKey = dutyKey;
         }
 
         loggedReset = false;
