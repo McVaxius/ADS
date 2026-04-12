@@ -47,6 +47,7 @@ public sealed class DutyCatalogService
         ["hullbreaker isle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["doma castle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["castrum abania"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["brayflox's longstop"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
     };
 
     private readonly List<DutyCatalogEntry> entries = [];

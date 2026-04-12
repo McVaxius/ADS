@@ -283,6 +283,39 @@ public sealed class DungeonFrontierService
     public DungeonFrontierPoint? GetCurrentOrRememberedManualMapXzDestination(Vector3? playerPosition)
         => GetCurrentOrRememberedManualDestination(playerPosition);
 
+    public DungeonFrontierPoint? FindNearbyUnvisitedManualDestination(
+        DutyContextSnapshot context,
+        Vector3 playerPosition,
+        Vector3 anchorPosition,
+        float radius,
+        bool requirePlayerNear = false)
+    {
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
+            return null;
+
+        if (!TryResolveActiveMap(context, out var activeMap, out _))
+            return null;
+
+        var manualMapXzDestinations = BuildMapXzDestinationPoints(context, activeMap, playerPosition);
+        var manualXyzDestinations = BuildXyzDestinationPoints(context, activeMap);
+        return manualMapXzDestinations
+            .Concat(manualXyzDestinations)
+            .Where(point => !visitedFrontierKeys.Contains(point.Key))
+            .Select(point => new
+            {
+                Point = point,
+                AnchorDistance = GetManualDestinationDistance(anchorPosition, point),
+                PlayerDistance = GetManualDestinationDistance(playerPosition, point),
+            })
+            .Where(x => x.AnchorDistance <= radius && (!requirePlayerNear || x.PlayerDistance <= radius))
+            .OrderBy(x => x.Point.Priority)
+            .ThenBy(x => x.AnchorDistance)
+            .ThenBy(x => x.PlayerDistance)
+            .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.Point)
+            .FirstOrDefault();
+    }
+
     private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId, uint mapId)
     {
         var cacheKey = BuildCacheKey(territoryTypeId, mapId);

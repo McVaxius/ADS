@@ -66,6 +66,8 @@ public sealed class ExecutionService
     private Vector3? recoveryTargetPosition;
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
+    private DungeonFrontierPoint? pendingSatisfiedManualDestination;
+    private string? pendingSatisfiedManualInteractableKey;
     private DateTime pendingProgressionInteractResultUntilUtc;
     private DateTime pendingProgressionInteractAfterWaitUntilUtc;
     private int pendingRequiredInteractionAttemptsSent;
@@ -304,6 +306,7 @@ public sealed class ExecutionService
             if (pendingProgressionInteractable is not null)
             {
                 observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
+                TryRetirePendingSatisfiedManualDestination(pendingProgressionInteractable, objectTable.LocalPlayer?.Position);
                 ClearInteractableCommitment();
             }
 
@@ -828,7 +831,7 @@ public sealed class ExecutionService
             return;
         }
 
-        TryRetireSatisfiedManualDestinationForLiveProgression(observedInteractable, playerPosition.Value);
+        StageSatisfiedManualDestinationForLiveProgression(context, observedInteractable, playerPosition.Value);
 
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(
             context,
@@ -946,32 +949,53 @@ public sealed class ExecutionService
         SetPhase(ExecutionPhase.ReadyForInteractableObjective, $"{prefix} Direct interact attempt failed for {observedInteractable.Name}; waiting to retry.");
     }
 
-    private void TryRetireSatisfiedManualDestinationForLiveProgression(ObservedInteractable observedInteractable, Vector3 playerPosition)
+    private void StageSatisfiedManualDestinationForLiveProgression(
+        DutyContextSnapshot context,
+        ObservedInteractable observedInteractable,
+        Vector3 playerPosition)
     {
+        pendingSatisfiedManualDestination = null;
+        pendingSatisfiedManualInteractableKey = null;
+
         if (observedInteractable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable))
             return;
 
-        var frontierPoint = dungeonFrontierService.GetCurrentOrRememberedManualDestination(playerPosition);
+        var frontierPoint = dungeonFrontierService.FindNearbyUnvisitedManualDestination(
+            context,
+            playerPosition,
+            observedInteractable.Position,
+            ManualDestinationSatisfiedByProgressionRadius,
+            requirePlayerNear: true);
         if (frontierPoint is null)
             return;
 
-        var playerDistanceFromManual = frontierPoint.IsManualXyzDestination
-            ? Vector3.Distance(frontierPoint.Position, playerPosition)
-            : GetHorizontalDistance(frontierPoint.Position, playerPosition);
-        if (playerDistanceFromManual > ManualDestinationSatisfiedByProgressionRadius)
+        pendingSatisfiedManualDestination = frontierPoint;
+        pendingSatisfiedManualInteractableKey = observedInteractable.Key;
+    }
+
+    private void TryRetirePendingSatisfiedManualDestination(ObservedInteractable observedInteractable, Vector3? playerPosition)
+    {
+        var frontierPoint = pendingSatisfiedManualDestination;
+        var interactableKey = pendingSatisfiedManualInteractableKey;
+        pendingSatisfiedManualDestination = null;
+        pendingSatisfiedManualInteractableKey = null;
+
+        if (frontierPoint is null
+            || !string.Equals(interactableKey, observedInteractable.Key, StringComparison.Ordinal))
+        {
             return;
+        }
 
         var interactableDistanceFromManual = frontierPoint.IsManualXyzDestination
             ? Vector3.Distance(frontierPoint.Position, observedInteractable.Position)
             : GetHorizontalDistance(frontierPoint.Position, observedInteractable.Position);
-        if (interactableDistanceFromManual > ManualDestinationSatisfiedByProgressionRadius)
-            return;
-
         var distanceLabel = frontierPoint.IsManualXyzDestination ? "3D" : "XZ";
-        dungeonFrontierService.RetireManualDestination(
-            frontierPoint,
-            "SatisfiedByLiveProgression",
-            $"after staging into nearby live progression interactable {observedInteractable.Name} ({distanceLabel} player {playerDistanceFromManual:0.0}y, {distanceLabel} interactable {interactableDistanceFromManual:0.0}y)");
+        var detail = playerPosition.HasValue
+            ? frontierPoint.IsManualXyzDestination
+                ? $"after staging into nearby live progression interactable {observedInteractable.Name} ({distanceLabel} player {Vector3.Distance(frontierPoint.Position, playerPosition.Value):0.0}y, {distanceLabel} interactable {interactableDistanceFromManual:0.0}y)"
+                : $"after staging into nearby live progression interactable {observedInteractable.Name} ({distanceLabel} player {GetHorizontalDistance(frontierPoint.Position, playerPosition.Value):0.0}y, {distanceLabel} interactable {interactableDistanceFromManual:0.0}y)"
+            : $"after staging into nearby live progression interactable {observedInteractable.Name} ({distanceLabel} interactable {interactableDistanceFromManual:0.0}y)";
+        dungeonFrontierService.RetireManualDestination(frontierPoint, "SatisfiedByLiveProgression", detail);
     }
 
     private void CommitInteractable(ObservedInteractable interactable, PlannerObjectiveKind objectiveKind)
@@ -1185,6 +1209,7 @@ public sealed class ExecutionService
         if (context.Mounted)
         {
             observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+            TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
             ClearInteractableCommitment();
             StopMovementAssists();
             SetPhase(
@@ -1202,6 +1227,7 @@ public sealed class ExecutionService
             if (pendingHorizontalDistance >= RequiredInteractionConsumedRelocationRange)
             {
                 observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
                 ClearInteractableCommitment();
                 StopMovementAssists();
                 SetPhase(
@@ -1257,6 +1283,7 @@ public sealed class ExecutionService
         }
 
         observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+        TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
         ClearInteractableCommitment();
         StopMovementAssists();
         var completionReason = isRequiredFollowThrough
@@ -1273,6 +1300,8 @@ public sealed class ExecutionService
     private void ClearPendingProgressionInteractResult()
     {
         pendingProgressionInteractable = null;
+        pendingSatisfiedManualDestination = null;
+        pendingSatisfiedManualInteractableKey = null;
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
