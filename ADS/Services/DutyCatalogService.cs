@@ -45,6 +45,8 @@ public sealed class DutyCatalogService
         ["cutter's cry"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["pharos sirius"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["hullbreaker isle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["doma castle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["castrum abania"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
     };
 
     private readonly List<DutyCatalogEntry> entries = [];
