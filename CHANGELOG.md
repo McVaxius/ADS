@@ -2,6 +2,9 @@
 
 ## 2026-04-11
 
+- Fixed layer-scoped BattleNpc truth leakage. If a visible BattleNpc only has authored layer-scoped rules and none of those layers match the current live sub-area, ADS now suppresses that mob from live monster truth instead of falling back to generic monster targeting. This covers Copperbell-style `Blasting Cap` / `Errant Soul` leakage from `B2` into `First Drop`.
+- Fixed Copperbell-style planner dead states where a live BattleNpc was still visible in observations but a stale wildcard `Ignored` row with failing distance/Y gates caused planner to act like no monster existed. `Ignored` / `Follow` BattleNpc rows no longer suppress a live monster when their own gates fail, and the stale `Copper` row was narrowed to `EventObj`.
+- Activated rule wait timing. `WaitAtDestinationSeconds` now holds after arrival and before the first direct interact send, and new `WaitAfterInteractSeconds` extends post-interact follow-through before ADS retries or moves on.
 - Fixed monster-versus-progression arbitration so if both the live monster and the live progression interactable have active rules, ADS now spends that decision on rule priority first. Distance/Y only break ties or no-rule cases, which fixes Copperbell-style `Firesand` beating a better-priority `Blasting Cap`.
 - Collapsed the rules-editor coordinate authoring surface back down to one `Coords` field plus one radius field. `a,b` now means map `X,Z`, `a,b,c` means world `X,Y,Z`, manual destination rows use that same single field, and the runtime storage remains backward-compatible underneath.
 - Added positional matching for ordinary same-name rules. `ObjectMapCoordinates` / `ObjectWorldCoordinates` plus `ObjectMatchRadius` now let one row bind to one physical object instance without overloading manual `MapXzDestination` / `XYZ` fields.

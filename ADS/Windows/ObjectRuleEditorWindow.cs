@@ -81,6 +81,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
         ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination versus XYZ. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
+        ImGui.TextWrapped("Wait-before holds after ADS arrives in interact range and before the first interact send. Wait-after holds after a successful interact send before ADS retries or moves on.");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
         ImGui.TextWrapped(editorStatus);
         if (dirty)
@@ -168,7 +169,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.SizingFixedFit;
 
-        if (!ImGui.BeginTable("ADSRulesEditorTable", 20, tableFlags, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSRulesEditorTable", 21, tableFlags, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 40f);
@@ -186,7 +187,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Pri", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 88f);
-        ImGui.TableSetupColumn("Wait", ImGuiTableColumnFlags.WidthFixed, 76f);
+        ImGui.TableSetupColumn("Wait-before", ImGuiTableColumnFlags.WidthFixed, 92f);
+        ImGui.TableSetupColumn("Wait-after", ImGuiTableColumnFlags.WidthFixed, 92f);
         ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch, 420f);
         ImGui.TableSetupColumn("Copy", ImGuiTableColumnFlags.WidthFixed, 52f);
         ImGui.TableSetupColumn("Paste", ImGuiTableColumnFlags.WidthFixed, 56f);
@@ -315,21 +317,28 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(16);
+            if (EditFloatCell("##WaitAfterInteractSeconds", rule.WaitAfterInteractSeconds, out var waitAfterInteractSeconds))
+            {
+                rule.WaitAfterInteractSeconds = waitAfterInteractSeconds;
+                dirty = true;
+            }
+
+            ImGui.TableSetColumnIndex(17);
             if (EditTextCell("##Notes", rule.Notes, 512, out var notes))
             {
                 rule.Notes = notes;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(17);
+            ImGui.TableSetColumnIndex(18);
             if (ImGui.SmallButton("B64"))
                 ExportRuleAsBase64(rule);
 
-            ImGui.TableSetColumnIndex(18);
+            ImGui.TableSetColumnIndex(19);
             if (ImGui.SmallButton("Paste") && ImportRuleFromClipboard(ruleIndex))
                 dirty = true;
 
-            ImGui.TableSetColumnIndex(19);
+            ImGui.TableSetColumnIndex(20);
             if (ImGui.SmallButton("-"))
                 rowToRemove = ruleIndex;
 
@@ -365,11 +374,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(12, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
         DrawHeaderCell(13, "Y", "Priority vertical radius gate. Zero means no Y gate.");
         DrawHeaderCell(14, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
-        DrawHeaderCell(15, "Wait", "Reserved wait-at-destination seconds seam for future execution timing.");
-        DrawHeaderCell(16, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
-        DrawHeaderCell(17, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
-        DrawHeaderCell(18, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
-        DrawHeaderCell(19, "-", "Delete this row.");
+        DrawHeaderCell(15, "Wait-before", "Seconds to hold after ADS arrives in interact range and before it sends the first direct interact for this commitment.");
+        DrawHeaderCell(16, "Wait-after", "Seconds to hold after a successful direct interact send before ADS retries the same target or moves on to new planner truth.");
+        DrawHeaderCell(17, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
+        DrawHeaderCell(18, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
+        DrawHeaderCell(19, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
+        DrawHeaderCell(20, "-", "Delete this row.");
     }
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)

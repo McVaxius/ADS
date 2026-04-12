@@ -30,6 +30,7 @@ public sealed class ObjectPriorityRuleService
     private readonly string configPath;
     private readonly string bundledPath;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
@@ -151,15 +152,7 @@ public sealed class ObjectPriorityRuleService
         string objectName,
         Vector3? objectPosition = null,
         uint objectMapId = 0)
-    {
-        return Current.Rules
-            .Where(x => x.Enabled)
-            .Where(x => !IsManualDestinationRule(x))
-            .Where(x => Matches(x, context, objectKind, baseId, objectName, objectPosition, objectMapId))
-            .OrderByDescending(x => GetSpecificityScore(x))
-            .ThenBy(x => x.Priority)
-            .FirstOrDefault();
-    }
+        => GetMatchingObjectRules(context, objectKind, baseId, objectName, objectPosition, objectMapId).FirstOrDefault();
 
     public IReadOnlyList<ObjectPriorityRule> GetMapXzDestinationRules(DutyContextSnapshot context)
         => Current.Rules
@@ -183,6 +176,48 @@ public sealed class ObjectPriorityRuleService
 
     public ObjectPriorityRule? MatchInteractableRule(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string objectName)
         => MatchObjectRule(context, objectKind, baseId, objectName);
+
+    public bool ShouldSuppressOffLayerBattleNpcTruth(
+        DutyContextSnapshot context,
+        uint baseId,
+        string objectName,
+        Vector3 objectPosition)
+    {
+        var candidates = GetMatchingObjectRules(
+                context,
+                ObjectKind.BattleNpc,
+                baseId,
+                objectName,
+                objectPosition,
+                objectMapId: 0,
+                includeLayerScope: false)
+            .ToList();
+        if (candidates.Count == 0)
+            return false;
+
+        if (candidates.Any(x => string.IsNullOrWhiteSpace(GetLayerSelector(x))))
+            return false;
+
+        if (candidates.Any(x => MatchesLayerScope(x, context)))
+            return false;
+
+        var activeLayer = TryGetActiveLayerName(context) ?? $"Map {context.MapId}";
+        var configuredLayers = string.Join(
+            ", ",
+            candidates
+                .Select(GetLayerSelector)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+        var logKey = $"{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{baseId}:{objectName}:{activeLayer}:{configuredLayers}";
+        if (loggedOffLayerBattleNpcSuppressions.Add(logKey))
+        {
+            log.Information(
+                $"[ADS] Suppressing visible BattleNpc {objectName} because only layer-scoped rules [{configuredLayers}] match it while the active layer is {activeLayer}.");
+        }
+
+        return true;
+    }
 
     public bool TryGetClassificationOverride(
         DutyContextSnapshot context,
@@ -264,7 +299,16 @@ public sealed class ObjectPriorityRuleService
         float? verticalDelta)
     {
         var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name, monster.Position, monster.MapId);
-        return rule is not null && !RulePassesDistanceGates(rule, distance, verticalDelta);
+        if (rule is null || RulePassesDistanceGates(rule, distance, verticalDelta))
+            return false;
+
+        if (TryParseClassification(rule.Classification, out var classification)
+            && classification is InteractableClass.Ignored or InteractableClass.Follow)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public bool IsSuppressedByRuleGates(
@@ -418,9 +462,10 @@ public sealed class ObjectPriorityRuleService
         uint baseId,
         string objectName,
         Vector3? objectPosition,
-        uint objectMapId)
+        uint objectMapId,
+        bool includeLayerScope = true)
     {
-        if (!MatchesDutyScope(rule, context, includeLayerScope: true))
+        if (!MatchesDutyScope(rule, context, includeLayerScope))
             return false;
 
         if (!string.IsNullOrWhiteSpace(rule.ObjectKind)
@@ -441,6 +486,23 @@ public sealed class ObjectPriorityRuleService
         return rule.NameMatchMode.Equals("Contains", StringComparison.OrdinalIgnoreCase)
             ? objectName.Contains(rule.ObjectName, StringComparison.OrdinalIgnoreCase)
             : string.Equals(objectName, rule.ObjectName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<ObjectPriorityRule> GetMatchingObjectRules(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3? objectPosition,
+        uint objectMapId,
+        bool includeLayerScope = true)
+    {
+        return Current.Rules
+            .Where(x => x.Enabled)
+            .Where(x => !IsManualDestinationRule(x))
+            .Where(x => Matches(x, context, objectKind, baseId, objectName, objectPosition, objectMapId, includeLayerScope))
+            .OrderByDescending(GetSpecificityScore)
+            .ThenBy(x => x.Priority);
     }
 
     private bool MatchesDutyScope(ObjectPriorityRule rule, DutyContextSnapshot context, bool includeLayerScope)
@@ -489,6 +551,18 @@ public sealed class ObjectPriorityRuleService
 
         var placeNameSub = NormalizeName(map.PlaceNameSub.ValueNullable?.Name.ToString() ?? string.Empty);
         return string.Equals(selector, placeNameSub, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? TryGetActiveLayerName(DutyContextSnapshot context)
+    {
+        if (context.MapId == 0)
+            return null;
+
+        var mapSheet = dataManager.GetExcelSheet<Map>();
+        if (mapSheet is null || !mapSheet.TryGetRow(context.MapId, out var map))
+            return null;
+
+        return BuildMapName(map);
     }
 
     private static int GetSpecificityScore(ObjectPriorityRule rule)
@@ -657,6 +731,7 @@ public sealed class ObjectPriorityRuleService
             PriorityVerticalRadius = rule.PriorityVerticalRadius,
             MaxDistance = rule.MaxDistance,
             WaitAtDestinationSeconds = rule.WaitAtDestinationSeconds,
+            WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
             Notes = rule.Notes,
         };
 
@@ -668,6 +743,18 @@ public sealed class ObjectPriorityRuleService
             if (rule.ObjectMatchRadius.HasValue && rule.ObjectMatchRadius.Value <= 0f)
             {
                 rule.ObjectMatchRadius = null;
+                changed = true;
+            }
+
+            if (rule.WaitAtDestinationSeconds < 0f)
+            {
+                rule.WaitAtDestinationSeconds = 0f;
+                changed = true;
+            }
+
+            if (rule.WaitAfterInteractSeconds < 0f)
+            {
+                rule.WaitAfterInteractSeconds = 0f;
                 changed = true;
             }
 
@@ -733,6 +820,41 @@ public sealed class ObjectPriorityRuleService
                     rule.Classification = InteractableClass.CombatFriendly.ToString();
 
                 var migrationNote = "Goblin Pathfinder is a BattleNpc talk target; migrated from EventNpc into the CombatFriendly BattleNpc direct-interact path.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
+            if (string.Equals(rule.DutyEnglishName, "Copperbell Mines", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectName, "Copper", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.NameMatchMode, "Contains", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Classification, InteractableClass.Ignored.ToString(), StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(rule.ObjectKind))
+            {
+                rule.ObjectKind = ObjectKind.EventObj.ToString();
+                var migrationNote = "Copper ignore row was narrowed to EventObj so it no longer matches Copperbell Coblyn BattleNpc rows on First Drop.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
+            if (string.Equals(rule.DutyEnglishName, "Copperbell Mines", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectName, "Lift Lever", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.NameMatchMode, "Exact", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Classification, InteractableClass.Required.ToString(), StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(rule.Layer)
+                && rule.WaitAtDestinationSeconds > 0f
+                && (!rule.WaitAfterInteractSeconds.Equals(0f) ? rule.WaitAfterInteractSeconds == rule.WaitAtDestinationSeconds : true))
+            {
+                rule.WaitAfterInteractSeconds = MathF.Max(rule.WaitAfterInteractSeconds, rule.WaitAtDestinationSeconds);
+                rule.WaitAtDestinationSeconds = 0f;
+                var migrationNote = "Copperbell generic Lift Lever stale wait row was migrated so the old dead wait field becomes post-interact hold instead of a new pre-interact stall.";
                 rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
                     ? migrationNote
                     : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
@@ -905,7 +1027,7 @@ public sealed class ObjectPriorityRuleService
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. objectMapCoordinates or objectWorldCoordinates can pin an ordinary same-name row to one physical object instance, and objectMatchRadius defaults to 6y when left blank on a positional row. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds is included now for future execution timing.",
+  "description": "Human-edited ADS duty object rules. Lower priority wins. Zero numeric ids mean global. Use dutyEnglishName while scouting, then tighten to contentFinderConditionId or territoryTypeId later if needed. classification supports Ignored for sticky non-progression objects, Required for BattleNpc kill priority, BattleNpc-only Follow for live movement anchors such as Cid, BattleNpc-only BossFight for live boss targets that should beat nearby trash/objectives once the rule gates pass, BattleNpc CombatFriendly for direct-interact talk targets such as Goblin Pathfinder, MapXzDestination with mapCoordinates like 11.3,10.4 for manual sub-area waypoints, and XYZ with worldCoordinates like 154.1,101.9,-34.2 for precise world-space manual staging. objectMapCoordinates or objectWorldCoordinates can pin an ordinary same-name row to one physical object instance, and objectMatchRadius defaults to 6y when left blank on a positional row. layer now means the optional live-map/sub-area selector for any rule: leave it blank for any active layer, or set it to a live map name / map row id to restrict that row to one layer. Legacy destinationType layer rows auto-migrate on load; MapXzDestination rows no longer need destinationType set to MapXZ, and XYZ rows no longer need destinationType set to XYZ. Manual destination rows can also intentionally beat worse live progression interactables when their authored priority is better and no live monsters/follow anchors remain. Non-BattleNpc Follow and BossFight rules are ignored. waitAtDestinationSeconds now means the pre-interact arrival hold, and waitAfterInteractSeconds is the post-interact follow-through hold.",
   "rules": [
     {
       "enabled": true,
@@ -921,6 +1043,7 @@ public sealed class ObjectPriorityRuleService
       "priorityVerticalRadius": 100.0,
       "maxDistance": 100.0,
       "waitAtDestinationSeconds": 0.0,
+      "waitAfterInteractSeconds": 0.0,
       "notes": "Key object should beat the nearby Sealed Barrier."
     },
     {
@@ -937,6 +1060,7 @@ public sealed class ObjectPriorityRuleService
       "priorityVerticalRadius": 1.0,
       "maxDistance": 20.0,
       "waitAtDestinationSeconds": 0.0,
+      "waitAfterInteractSeconds": 0.0,
       "notes": "Barrier stays below the rosary until the key is handled."
     },
     {
@@ -953,6 +1077,7 @@ public sealed class ObjectPriorityRuleService
       "priorityVerticalRadius": 0.0,
       "maxDistance": null,
       "waitAtDestinationSeconds": 0.0,
+      "waitAfterInteractSeconds": 0.0,
       "notes": "Sticky optional note remains targetable after use and should not hold planner truth."
     }
   ]

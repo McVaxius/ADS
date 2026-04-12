@@ -499,7 +499,14 @@ public sealed class ObjectivePlannerService
             Mode = ownershipMode == OwnershipMode.Observing ? PlannerMode.IdleObserve : PlannerMode.Progression,
             ObjectiveKind = PlannerObjectiveKind.None,
             Objective = "Await new duty state",
-            Explanation = observation.LiveInteractables.Any(IsProgressionInteractable)
+            Explanation = observation.LiveMonsters.Any(x =>
+                objectPriorityRuleService.IsBattleNpcSuppressedByRuleGates(
+                    context,
+                    x,
+                    GetDistance(playerPosition, x.Position),
+                    GetVerticalDelta(playerPosition, x.Position)))
+                ? "Live monsters are visible, but all currently fail the active BattleNpc distance/Y rule gates, so ADS is holding until one becomes eligible again."
+                : observation.LiveInteractables.Any(IsProgressionInteractable)
                 ? "Live progression interactables are visible, but all currently fail the active distance/Y rule gates, so ADS is holding until a manual destination, live monster, or eligible interactable becomes available."
                 : "No live monsters or interactables are currently visible. ADS is holding until the duty state changes again.",
             CapturedAtUtc = now,

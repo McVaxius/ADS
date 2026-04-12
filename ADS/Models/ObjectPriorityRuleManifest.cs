@@ -29,5 +29,6 @@ public sealed class ObjectPriorityRule
     public float PriorityVerticalRadius { get; set; }
     public float? MaxDistance { get; set; }
     public float WaitAtDestinationSeconds { get; set; }
+    public float WaitAfterInteractSeconds { get; set; }
     public string Notes { get; set; } = string.Empty;
 }

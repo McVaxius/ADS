@@ -23,6 +23,7 @@
       "PriorityVerticalRadius": 100,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Key object should beat the nearby Sealed Barrier."
     },
     {
@@ -46,6 +47,7 @@
       "PriorityVerticalRadius": 10,
       "MaxDistance": 20,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Barrier stays below the rosary until the key is handled."
     },
     {
@@ -69,6 +71,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Sticky optional note remains targetable after use and should not hold planner truth."
     },
     {
@@ -92,6 +95,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -115,6 +119,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Follow Cid as a live-only anchor only when no other live monster or interactable is present; never promote Cid as a ghost target."
     },
     {
@@ -138,6 +143,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -161,6 +167,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Follow is BattleNpc-only; migrated to Ignored to keep this object out of planner truth."
     },
     {
@@ -184,6 +191,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -207,6 +215,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -230,6 +239,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -253,6 +263,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -276,6 +287,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -299,6 +311,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -322,6 +335,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -345,6 +359,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 80,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "after boss 1"
     },
     {
@@ -368,6 +383,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -391,6 +407,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -414,6 +431,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -421,7 +439,7 @@
       "TerritoryTypeId": 0,
       "ContentFinderConditionId": 0,
       "DutyEnglishName": "The Stone Vigil",
-      "ObjectKind": "",
+      "ObjectKind": "EventObj",
       "BaseId": 0,
       "ObjectName": "Example sub-area transition",
       "NameMatchMode": "Exact",
@@ -437,6 +455,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Disabled template. Enter the player-facing map coordinates as a,b; ADS converts to world X/Z using the current map and uses current player Y. The destination ghosts when ADS reaches within 1y on X/Z."
     },
     {
@@ -460,6 +479,7 @@
       "PriorityVerticalRadius": 100,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -483,6 +503,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 20,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -506,6 +527,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Player MCH pet; wildcard-kind exact-name ignore so runtime kind drift does not leak it into ADS."
     },
     {
@@ -529,6 +551,7 @@
       "PriorityVerticalRadius": 12,
       "MaxDistance": 60,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -552,6 +575,7 @@
       "PriorityVerticalRadius": 12,
       "MaxDistance": 60,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -575,6 +599,7 @@
       "PriorityVerticalRadius": 30,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -598,6 +623,7 @@
       "PriorityVerticalRadius": 70,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "dont target stuff million miles above you"
     },
     {
@@ -621,6 +647,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 20,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "GLOBAL general ignore chest too far y"
     },
     {
@@ -644,6 +671,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 80,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "after boss 2"
     },
     {
@@ -667,6 +695,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -690,6 +719,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -713,6 +743,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 35,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -736,6 +767,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 150,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -759,6 +791,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 45,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -782,6 +815,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 30,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -805,6 +839,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 30,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -828,6 +863,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 30,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -851,6 +887,7 @@
       "PriorityVerticalRadius": 100,
       "MaxDistance": 300,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "boss3 lets go"
     },
     {
@@ -858,22 +895,23 @@
       "TerritoryTypeId": 1041,
       "ContentFinderConditionId": 8,
       "DutyEnglishName": "Brayflox\u0027s Longstop",
-      "ObjectKind": "BattleNpc",
+      "ObjectKind": "",
       "BaseId": 0,
       "ObjectName": "Goblin Pathfinder",
       "NameMatchMode": "Exact",
-      "Classification": "CombatFriendly",
+      "Classification": "Expendable",
       "DestinationType": "",
       "Layer": "",
       "MapCoordinates": "",
       "WorldCoordinates": "",
-      "ObjectMapCoordinates": "",
+      "ObjectMapCoordinates": "11.6,11.7",
       "ObjectWorldCoordinates": "",
-      "ObjectMatchRadius": null,
+      "ObjectMatchRadius": 10,
       "Priority": 900,
       "PriorityVerticalRadius": 50,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Targetable talk NPC. CombatFriendly on BattleNpc uses the direct-interact path."
     },
     {
@@ -897,10 +935,11 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
-      "Enabled": true,
+      "Enabled": false,
       "TerritoryTypeId": 1041,
       "ContentFinderConditionId": 8,
       "DutyEnglishName": "Brayflox\u0027s Longstop",
@@ -920,6 +959,7 @@
       "PriorityVerticalRadius": 120,
       "MaxDistance": 120,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -943,6 +983,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -966,6 +1007,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -989,6 +1031,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 800,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1012,6 +1055,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1035,6 +1079,7 @@
       "PriorityVerticalRadius": 100,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "after going down first time"
     },
     {
@@ -1058,6 +1103,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "get to boss1"
     },
     {
@@ -1081,6 +1127,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "about to killi boss1"
     },
     {
@@ -1104,6 +1151,7 @@
       "PriorityVerticalRadius": 25,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "area just after boss 1"
     },
     {
@@ -1127,6 +1175,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "get hte magitek armor"
     },
     {
@@ -1150,6 +1199,7 @@
       "PriorityVerticalRadius": 3,
       "MaxDistance": 400,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1173,6 +1223,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Castrum Defense Magitek Terminal is observed as EventObj, so this ignore row is intentionally wildcard-kind."
     },
     {
@@ -1196,6 +1247,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "fisrt room"
     },
     {
@@ -1219,6 +1271,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "second room (first boss)"
     },
     {
@@ -1242,6 +1295,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "3rd room portal 1"
     },
     {
@@ -1265,6 +1319,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "3rd room portal 2"
     },
     {
@@ -1288,6 +1343,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "3rd room portal 2"
     },
     {
@@ -1311,6 +1367,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1334,6 +1391,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 20,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1357,6 +1415,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "get to gauis"
     },
     {
@@ -1380,6 +1439,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 500,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1403,6 +1463,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "get to nero"
     },
     {
@@ -1426,6 +1487,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "after killing boss1"
     },
     {
@@ -1449,6 +1511,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "after killing boss2"
     },
     {
@@ -1472,6 +1535,7 @@
       "PriorityVerticalRadius": 50,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Follow is BattleNpc-only; migrated to Ignored to keep this object out of planner truth."
     },
     {
@@ -1495,6 +1559,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 900,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1518,6 +1583,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 900,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1541,6 +1607,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1564,6 +1631,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1587,6 +1655,7 @@
       "PriorityVerticalRadius": 5,
       "MaxDistance": 25,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1610,6 +1679,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 900,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1633,6 +1703,7 @@
       "PriorityVerticalRadius": 100,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1656,6 +1727,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1679,6 +1751,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1702,6 +1775,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1725,6 +1799,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1748,6 +1823,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 200,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1771,6 +1847,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 40,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1794,6 +1871,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1817,6 +1895,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "End-room progression object."
     },
     {
@@ -1840,6 +1919,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Ignore end-room side pan so the scales row owns progression truth."
     },
     {
@@ -1863,6 +1943,7 @@
       "PriorityVerticalRadius": 20,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": "Ignore end-room side pan so the scales row owns progression truth."
     },
     {
@@ -1886,6 +1967,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1909,6 +1991,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1930,8 +2013,9 @@
       "ObjectMatchRadius": null,
       "Priority": 900,
       "PriorityVerticalRadius": 0,
-      "MaxDistance": 15,
+      "MaxDistance": 20,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1955,6 +2039,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1978,6 +2063,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": 50,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -1989,7 +2075,7 @@
       "BaseId": 0,
       "ObjectName": "Key",
       "NameMatchMode": "Contains",
-      "Classification": "",
+      "Classification": "Expendable",
       "DestinationType": "",
       "Layer": "",
       "MapCoordinates": "",
@@ -1997,10 +2083,11 @@
       "ObjectMapCoordinates": "",
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
-      "Priority": 903,
+      "Priority": 904,
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -2012,7 +2099,7 @@
       "BaseId": 0,
       "ObjectName": "Lift Lever",
       "NameMatchMode": "Exact",
-      "Classification": "",
+      "Classification": "Required",
       "DestinationType": "",
       "Layer": "",
       "MapCoordinates": "",
@@ -2021,10 +2108,11 @@
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
       "Priority": 1000,
-      "PriorityVerticalRadius": 0,
+      "PriorityVerticalRadius": 5,
       "MaxDistance": null,
-      "WaitAtDestinationSeconds": 5,
-      "Notes": "generic lever use"
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 5,
+      "Notes": "generic lever use Copperbell generic Lift Lever stale wait row was migrated so the old dead wait field becomes post-interact hold instead of a new pre-interact stall."
     },
     {
       "Enabled": true,
@@ -2047,6 +2135,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -2070,6 +2159,7 @@
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
       "Notes": ""
     },
     {
@@ -2077,13 +2167,13 @@
       "TerritoryTypeId": 1038,
       "ContentFinderConditionId": 3,
       "DutyEnglishName": "Copperbell Mines",
-      "ObjectKind": "",
+      "ObjectKind": "BattleNpc",
       "BaseId": 0,
-      "ObjectName": "Copper",
-      "NameMatchMode": "Contains",
-      "Classification": "Ignored",
+      "ObjectName": "Spriggan Copper Copper",
+      "NameMatchMode": "Exact",
+      "Classification": "Required",
       "DestinationType": "",
-      "Layer": "",
+      "Layer": "B2",
       "MapCoordinates": "",
       "WorldCoordinates": "",
       "ObjectMapCoordinates": "",
@@ -2093,14 +2183,15 @@
       "PriorityVerticalRadius": 10,
       "MaxDistance": 100,
       "WaitAtDestinationSeconds": 0,
-      "Notes": "BossFight is BattleNpc-only; migrated to Ignored to keep this object out of planner truth."
+      "WaitAfterInteractSeconds": 5,
+      "Notes": "BossFight is BattleNpc-only; migrated to Ignored to keep this object out of planner truth. Copper ignore row was narrowed to EventObj so it no longer matches Copperbell Coblyn BattleNpc rows on First Drop."
     },
     {
       "Enabled": true,
       "TerritoryTypeId": 1038,
       "ContentFinderConditionId": 3,
       "DutyEnglishName": "Copperbell Mines",
-      "ObjectKind": "",
+      "ObjectKind": "BattleNpc",
       "BaseId": 0,
       "ObjectName": "Blasting Cap",
       "NameMatchMode": "Exact",
@@ -2112,11 +2203,204 @@
       "ObjectMapCoordinates": "",
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
-      "Priority": 800,
-      "PriorityVerticalRadius": 25,
-      "MaxDistance": 200,
+      "Priority": 898,
+      "PriorityVerticalRadius": 10,
+      "MaxDistance": 40,
       "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 5,
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "BattleNpc",
+      "BaseId": 0,
+      "ObjectName": "Lift Lever",
+      "NameMatchMode": "Exact",
+      "Classification": "Required",
+      "DestinationType": "",
+      "Layer": "First Drop",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": 1,
+      "Priority": 700,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 5,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Errant Soul",
+      "NameMatchMode": "Exact",
+      "Classification": "Required",
+      "DestinationType": "",
+      "Layer": "B2",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 897,
+      "PriorityVerticalRadius": 10,
+      "MaxDistance": 40,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 5,
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "",
+      "NameMatchMode": "Exact",
+      "Classification": "XYZ",
+      "DestinationType": "",
+      "Layer": "First Drop",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "52.5,-4,-1.5",
+      "ObjectMatchRadius": null,
+      "Priority": 900,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Sealed Blasting Door",
+      "NameMatchMode": "Exact",
+      "Classification": "Expendable",
+      "DestinationType": "",
+      "Layer": "First Drop",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 700,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": 10,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": false,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Tiny Key",
+      "NameMatchMode": "Exact",
+      "Classification": "Expendable",
+      "DestinationType": "",
+      "Layer": "First Drop",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 600,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": false,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "",
+      "NameMatchMode": "Exact",
+      "Classification": "XYZ",
+      "DestinationType": "",
+      "Layer": "B2",
+      "MapCoordinates": "",
+      "WorldCoordinates": "13,-42,12",
+      "ObjectMapCoordinates": "13,12",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 899,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "",
+      "NameMatchMode": "Exact",
+      "Classification": "MapXzDestination",
+      "DestinationType": "",
+      "Layer": "First Drop",
+      "MapCoordinates": "53.19.-3.9,-153.73",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "11,12",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 898,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 5,
+      "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1038,
+      "ContentFinderConditionId": 3,
+      "DutyEnglishName": "Copperbell Mines",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Firesand",
+      "NameMatchMode": "Exact",
+      "Classification": "Expendable",
+      "DestinationType": "",
+      "Layer": "",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 897,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": 20,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "grab firesand affer killing monsters"
     }
   ]
 }

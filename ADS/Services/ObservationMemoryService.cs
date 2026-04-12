@@ -141,6 +141,16 @@ public sealed class ObservationMemoryService
                 case ObjectKind.BattleNpc:
                     {
                         var monsterKey = BuildKey(gameObject);
+                        if (objectPriorityRuleService.ShouldSuppressOffLayerBattleNpcTruth(
+                                context,
+                                gameObject.BaseId,
+                                name,
+                                gameObject.Position))
+                        {
+                            knownMonsters.Remove(monsterKey);
+                            break;
+                        }
+
                         if (objectPriorityRuleService.ShouldIgnoreObject(
                                 context,
                                 gameObject.ObjectKind,

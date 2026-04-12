@@ -66,7 +66,10 @@ public sealed class ExecutionService
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
     private DateTime pendingProgressionInteractResultUntilUtc;
+    private DateTime pendingProgressionInteractAfterWaitUntilUtc;
     private int pendingRequiredInteractionAttemptsSent;
+    private string? interactArrivalWaitKey;
+    private DateTime interactArrivalWaitUntilUtc;
     private string? treasureCofferRouteKey;
     private DateTime treasureCofferRouteStartedUtc;
     private DateTime treasureCofferLastProgressUtc;
@@ -824,6 +827,14 @@ public sealed class ExecutionService
             return;
         }
 
+        var effectiveRule = objectPriorityRuleService.GetEffectiveRule(
+            context,
+            observedInteractable,
+            targetDistance,
+            targetVerticalDelta);
+        var waitBeforeInteractSeconds = effectiveRule?.WaitAtDestinationSeconds ?? 0f;
+        var waitAfterInteractSeconds = effectiveRule?.WaitAfterInteractSeconds ?? 0f;
+
         var preferredApproachPoint = BuildPreferredInteractApproachPoint(playerPosition.Value, gameObject.Position);
         if (TrySkipStuckTreasureCoffer(observedInteractable, targetHorizontalDistance, prefix))
             return;
@@ -848,6 +859,18 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         var now = DateTime.UtcNow;
+        if (TryHoldConfiguredArrivalWait(
+                observedInteractable,
+                waitBeforeInteractSeconds,
+                targetHorizontalDistance,
+                targetDistance,
+                targetVerticalDelta,
+                prefix,
+                now))
+        {
+            return;
+        }
+
         if (now < nextInteractAttemptUtc && lastInteractGameObjectId == observedInteractable.GameObjectId)
         {
             var cooldownReason = usingCloseRangeInteractFallback
@@ -872,6 +895,11 @@ public sealed class ExecutionService
                 pendingProgressionInteractResultUntilUtc = observedInteractable.Classification == InteractableClass.Required
                     ? now + RequiredInteractionRetryDelay
                     : now + ProgressionInteractResultSettleDelay;
+                pendingProgressionInteractAfterWaitUntilUtc = waitAfterInteractSeconds > 0f
+                    ? now + TimeSpan.FromSeconds(waitAfterInteractSeconds)
+                    : DateTime.MinValue;
+                if (pendingProgressionInteractAfterWaitUntilUtc > pendingProgressionInteractResultUntilUtc)
+                    pendingProgressionInteractResultUntilUtc = pendingProgressionInteractAfterWaitUntilUtc;
                 pendingRequiredInteractionAttemptsSent = observedInteractable.Classification == InteractableClass.Required
                     ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
                     : 0;
@@ -1001,6 +1029,7 @@ public sealed class ExecutionService
         ResetTreasureCofferRouteTracking();
         ResetCloseRangeInteractFallbackTracking();
         ClearPendingProgressionInteractResult();
+        ResetInteractArrivalWait();
     }
 
     private bool TrySkipStuckTreasureCoffer(ObservedInteractable observedInteractable, float targetHorizontalDistance, string prefix)
@@ -1155,11 +1184,13 @@ public sealed class ExecutionService
         if (now < pendingProgressionInteractResultUntilUtc)
         {
             StopMovementAssists();
-            var holdReason = isRequiredFollowThrough
-                ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
-                : isExpendableFollowThrough
-                    ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
-                    : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
+            var holdReason = pendingProgressionInteractAfterWaitUntilUtc > now
+                ? $"Holding configured post-interact wait on {pendingInteractable.Name} for another {(pendingProgressionInteractAfterWaitUntilUtc - now).TotalSeconds:0.0}s before ADS retries or replans."
+                : isRequiredFollowThrough
+                    ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
+                    : isExpendableFollowThrough
+                        ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
+                        : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {holdReason}");
@@ -1212,7 +1243,42 @@ public sealed class ExecutionService
     {
         pendingProgressionInteractable = null;
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
+        pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
+    }
+
+    private bool TryHoldConfiguredArrivalWait(
+        ObservedInteractable observedInteractable,
+        float waitBeforeInteractSeconds,
+        float targetHorizontalDistance,
+        float targetDistance,
+        float targetVerticalDelta,
+        string prefix,
+        DateTime now)
+    {
+        if (waitBeforeInteractSeconds <= 0f)
+            return false;
+
+        if (!string.Equals(interactArrivalWaitKey, observedInteractable.Key, StringComparison.Ordinal))
+        {
+            interactArrivalWaitKey = observedInteractable.Key;
+            interactArrivalWaitUntilUtc = now + TimeSpan.FromSeconds(waitBeforeInteractSeconds);
+        }
+
+        if (now >= interactArrivalWaitUntilUtc)
+            return false;
+
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"{prefix} Holding configured pre-interact wait on {observedInteractable.Name} for another {(interactArrivalWaitUntilUtc - now).TotalSeconds:0.0}s after arriving in range (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).");
+        return true;
+    }
+
+    private void ResetInteractArrivalWait()
+    {
+        interactArrivalWaitKey = null;
+        interactArrivalWaitUntilUtc = DateTime.MinValue;
     }
 
     private static ObservedInteractable? ResolvePendingProgressionInteractable(

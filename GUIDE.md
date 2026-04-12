@@ -9,12 +9,16 @@
 - `PriorityVerticalRadius` and `MaxDistance` act as rule gates for normal monster and interactable rules.
 - `ObjectMapCoordinates` / `ObjectWorldCoordinates` are positional selectors for ordinary same-name rows. They are not manual destinations.
 - `ObjectMatchRadius` defaults to `6y` when a positional selector is authored and the radius is left blank.
+- `WaitAtDestinationSeconds` is the pre-interact arrival hold after ADS reaches interact range and before the first direct interact send for that commitment.
+- `WaitAfterInteractSeconds` is the post-interact hold after a successful direct interact send. It extends the existing interact follow-through window before ADS retries or moves on.
+- If an `Ignored` or `Follow` BattleNpc row has distance/Y gates and those gates fail, ADS now falls back to treating that BattleNpc as a normal live monster instead of suppressing it into planner limbo.
 - The rules editor now collapses those coordinate choices into one `Coords` field:
   - `a,b` means map `X,Z`
   - `a,b,c` means world `X,Y,Z`
   - manual destination rows use that same field too
 - `BossFight` and `Follow` are BattleNpc-only classifications.
 - `Layer` now scopes any rule to the current live map/sub-area only, not just `MapXzDestination` rows.
+- For `BattleNpc`, an authored layer-only rule is now also a truth gate: if a visible mob only matches layer-scoped rows and none of those layers are active, ADS suppresses that mob from live monster truth instead of treating it as a generic unruled monster.
 - Legacy rows that stored layer scope in `DestinationType` auto-migrate on load into the real `Layer` field.
 
 ## Boss-Fight BattleNpc Rules
@@ -78,6 +82,7 @@
 ## Required Interactables
 
 - Once ADS sends an interact to a `Required` interactable, it now holds still and retries up to `3` sent attempts before releasing that retry window.
+- If the matched row sets `WaitAfterInteractSeconds`, ADS extends that retry hold before the next required-attempt send.
 - If `Svc.Condition[BetweenAreas]` starts during that required-interaction follow-through, ADS ends the retry window immediately.
 - If the duty changes to another live `MapId`/layer or the current rules now ignore that target, ADS drops the old interact follow-through and replans from fresh post-transition truth instead of dragging the stale interactable into the new sub-area.
 - If `Svc.Condition[Mounted]` becomes true during that follow-through, ADS treats the interact as successful, marks the interactable position used, clears the old commitment, and waits for refreshed live duty truth instead of retrying the same mount object.
