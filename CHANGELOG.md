@@ -2,6 +2,7 @@
 
 ## 2026-04-11
 
+- Marked `Copperbell Mines` as `[1P Unsync Cleared]` after successful validation.
 - Fixed layer-scoped BattleNpc truth leakage. If a visible BattleNpc only has authored layer-scoped rules and none of those layers match the current live sub-area, ADS now suppresses that mob from live monster truth instead of falling back to generic monster targeting. This covers Copperbell-style `Blasting Cap` / `Errant Soul` leakage from `B2` into `First Drop`.
 - Fixed Copperbell-style planner dead states where a live BattleNpc was still visible in observations but a stale wildcard `Ignored` row with failing distance/Y gates caused planner to act like no monster existed. `Ignored` / `Follow` BattleNpc rows no longer suppress a live monster when their own gates fail, and the stale `Copper` row was narrowed to `EventObj`.
 - Activated rule wait timing. `WaitAtDestinationSeconds` now holds after arrival and before the first direct interact send, and new `WaitAfterInteractSeconds` extends post-interact follow-through before ADS retries or moves on.

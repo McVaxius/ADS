@@ -29,13 +29,14 @@ public sealed class DutyCatalogService
     private static readonly Dictionary<string, DutyClearanceStatus> ClearanceStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["copperbell mines"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the keeper of the lake"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-		["the sunken temple of qarn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the sunken temple of qarn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["castrum meridianum"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the praetorium"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["dzemael darkhold"] = DutyClearanceStatus.OnePlayerUnsyncCleared,

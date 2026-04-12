@@ -35,7 +35,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 - Halatali and The Tam-Tara Deepcroft are marked `[1P Unsync Cleared]`.
 - The Keeper of the Lake is now also marked `[1P Unsync Cleared]`.
-- Sastasha is now also marked `[1P Unsync Cleared]`.
+- Sastasha and Copperbell Mines are now also marked `[1P Unsync Cleared]`.
 - The Thousand Maws of Toto-Rak, Aurum Vale, and Castrum Meridianum are marked `[1P Unsync Cleared]`.
 - The Praetorium is now also marked `[1P Unsync Cleared]`.
 - ADS stops owned execution and clears recovery memory when Dalamud reports `DutyCompleted`.
