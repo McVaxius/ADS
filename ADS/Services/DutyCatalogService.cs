@@ -36,6 +36,7 @@ public sealed class DutyCatalogService
         ["the keeper of the lake"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["hells' lid"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the sunken temple of qarn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["castrum meridianum"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the praetorium"] = DutyClearanceStatus.OnePlayerUnsyncCleared,

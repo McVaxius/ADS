@@ -1190,6 +1190,23 @@ public sealed class ObjectPriorityRuleService
                 changed = true;
             }
 
+            if (string.Equals(rule.DutyEnglishName, "Castrum Meridianum", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectKind, ObjectKind.EventNpc.ToString(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Classification, InteractableClass.Ignored.ToString(), StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(rule.ObjectName, "Cid", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(rule.ObjectName, "Livia sas Junius", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(rule.ObjectName, "The Black Eft", StringComparison.OrdinalIgnoreCase)))
+            {
+                rule.ObjectKind = string.Empty;
+                var migrationNote = "Castrum Meridianum companion ignore rows were widened from stale EventNpc-only matching so they still suppress live BattleNpc truth.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
             if (!string.Equals(rule.ObjectKind, ObjectKind.BattleNpc.ToString(), StringComparison.OrdinalIgnoreCase)
                 && TryParseClassification(rule.Classification, out var classification)
                 && classification is InteractableClass.Follow or InteractableClass.BossFight)
