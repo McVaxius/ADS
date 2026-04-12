@@ -2,6 +2,10 @@
 
 ## 2026-04-11
 
+- Added parked full-manifest rules-editor `PRESET`s alongside the live `DEFAULT` file, including full-manifest clipboard export/import, disk import/export for large manifests, non-deletable `DEFAULT`, and bundled-rule reset into the `DEFAULT` draft via `@`.
+- Added `CREATE RULE` to Object Explorer so a new rules-editor row can be seeded directly from the current duty scope, live layer, object kind, base id, and exact object name.
+- Added unsaved new-row highlighting/auto-scroll in the rules editor, plus a territory-aware `Layer` dropdown with a blank top option when live sub-area labels are known.
+- Added main-window rule-atlas stats and explicit per-duty rule counts in the duty catalog so rule coverage volume is visible without opening the editor.
 - Marked `Copperbell Mines` as `[1P Unsync Cleared]` after successful validation.
 - Fixed layer-scoped BattleNpc truth leakage. If a visible BattleNpc only has authored layer-scoped rules and none of those layers match the current live sub-area, ADS now suppresses that mob from live monster truth instead of falling back to generic monster targeting. This covers Copperbell-style `Blasting Cap` / `Errant Soul` leakage from `B2` into `First Drop`.
 - Fixed Copperbell-style planner dead states where a live BattleNpc was still visible in observations but a stale wildcard `Ignored` row with failing distance/Y gates caused planner to act like no monster existed. `Ignored` / `Follow` BattleNpc rows no longer suppress a live monster when their own gates fail, and the stale `Copper` row was narrowed to `EventObj`.

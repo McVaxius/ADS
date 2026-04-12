@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.ClientState.Objects.Enums;
@@ -11,7 +12,9 @@ namespace ADS.Services;
 public sealed class ObjectPriorityRuleService
 {
     internal const int DefaultPriority = 1000;
+    public const string DefaultPresetName = "DEFAULT";
     private const string FileName = "duty-object-rules.json";
+    private const string PresetDirectoryName = "rule-presets";
     private const string MapXzDestinationType = "MapXZ";
     private const string XyzDestinationType = "XYZ";
     private const float DefaultObjectMatchRadius = 6f;
@@ -28,6 +31,7 @@ public sealed class ObjectPriorityRuleService
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
     private readonly string configPath;
+    private readonly string presetDirectoryPath;
     private readonly string bundledPath;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
@@ -40,6 +44,8 @@ public sealed class ObjectPriorityRuleService
         this.dataManager = dataManager;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
+        presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
+        Directory.CreateDirectory(presetDirectoryPath);
         bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
             ? string.Empty
             : Path.Combine(assemblyDirectory, FileName);
@@ -50,6 +56,12 @@ public sealed class ObjectPriorityRuleService
 
     public string ConfigPath
         => configPath;
+
+    public string PresetDirectoryPath
+        => presetDirectoryPath;
+
+    public string BundledPath
+        => bundledPath;
 
     public string LastLoadStatus { get; private set; } = "Rules not loaded yet.";
 
@@ -69,23 +81,60 @@ public sealed class ObjectPriorityRuleService
     public ObjectPriorityRule CreateBlankRule()
         => new();
 
+    public bool IsDefaultPreset(string presetName)
+        => string.Equals(presetName, DefaultPresetName, StringComparison.OrdinalIgnoreCase);
+
+    public IReadOnlyList<string> GetPresetNames()
+    {
+        var names = new List<string> { DefaultPresetName };
+        if (!Directory.Exists(presetDirectoryPath))
+            return names;
+
+        names.AddRange(
+            Directory.EnumerateFiles(presetDirectoryPath, "*.json", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Where(x => !string.Equals(x, DefaultPresetName, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)!);
+        return names;
+    }
+
+    public string GetPresetPath(string presetName)
+        => IsDefaultPreset(presetName)
+            ? configPath
+            : Path.Combine(presetDirectoryPath, $"{SanitizePresetName(presetName)}.json");
+
+    public string SanitizePresetName(string presetName)
+    {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var cleaned = new string((presetName ?? string.Empty).Where(ch => !invalidCharacters.Contains(ch)).ToArray());
+        cleaned = NormalizeName(cleaned).Trim('.', ' ');
+        if (string.IsNullOrWhiteSpace(cleaned))
+            cleaned = "Preset";
+
+        if (IsDefaultPreset(cleaned))
+            cleaned = $"{DefaultPresetName}-copy";
+
+        return cleaned;
+    }
+
     public bool Reload()
     {
         try
         {
             EnsureSeeded();
-            var json = File.ReadAllText(configPath);
-            var manifest = JsonSerializer.Deserialize<ObjectPriorityRuleManifest>(json, JsonOptions) ?? new ObjectPriorityRuleManifest();
-            manifest.Rules ??= [];
-            var migrated = ApplyBuiltInRuleMigrations(manifest);
-            if (migrated)
-                File.WriteAllText(configPath, JsonSerializer.Serialize(manifest, JsonOptions));
+            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
+            {
+                Current = new ObjectPriorityRuleManifest();
+                LastLoadStatus = status;
+                log.Warning($"[ADS] {LastLoadStatus}");
+                return false;
+            }
 
             Current = manifest;
             lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
-            LastLoadStatus = migrated
-                ? $"Loaded {ActiveRuleCount} active rule(s) from {configPath}; applied built-in rule migration(s)."
-                : $"Loaded {ActiveRuleCount} active rule(s) from {configPath}.";
+            LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
             return true;
         }
@@ -126,21 +175,199 @@ public sealed class ObjectPriorityRuleService
     }
 
     public bool SaveManifest(ObjectPriorityRuleManifest manifest)
+        => SaveManifest(DefaultPresetName, manifest);
+
+    public bool SaveManifest(string presetName, ObjectPriorityRuleManifest manifest)
     {
         try
         {
             manifest.Rules ??= [];
-            var json = JsonSerializer.Serialize(manifest, JsonOptions);
-            File.WriteAllText(configPath, json);
+            var path = EnsurePresetSeeded(presetName);
+            WriteManifestToPath(path, manifest);
+            if (!IsDefaultPreset(presetName))
+            {
+                LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active rule(s) to preset {presetName} at {path}.";
+                log.Information($"[ADS] {LastLoadStatus}");
+                return true;
+            }
+
             return Reload();
         }
         catch (Exception ex)
         {
-            LastLoadStatus = $"Failed to save {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to save preset {presetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
         }
     }
+
+    public bool TryLoadManifest(string presetName, out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = "Preset was not loaded.";
+
+        try
+        {
+            var path = EnsurePresetSeeded(presetName);
+            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: true);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load preset {presetName}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryLoadBundledManifest(out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = "Bundled preset was not loaded.";
+
+        try
+        {
+            var sourcePath = !string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath)
+                ? bundledPath
+                : string.Empty;
+            if (!string.IsNullOrWhiteSpace(sourcePath))
+                return TryLoadManifestFromPath(sourcePath, out manifest, out status, persistMigrations: false);
+
+            var json = GetDefaultJson();
+            return TryDeserializeManifest(json, "<packaged default>", out manifest, out status);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load packaged preset: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryDeletePreset(string presetName, out string status)
+    {
+        status = "Preset was not deleted.";
+        if (IsDefaultPreset(presetName))
+        {
+            status = "DEFAULT cannot be deleted.";
+            return false;
+        }
+
+        try
+        {
+            var path = GetPresetPath(presetName);
+            if (!File.Exists(path))
+            {
+                status = $"Preset {presetName} did not exist on disk.";
+                return false;
+            }
+
+            File.Delete(path);
+            status = $"Deleted preset {presetName}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to delete preset {presetName}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryImportManifestText(string text, out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = "Clipboard manifest import failed.";
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            status = "Clipboard was empty; no full-manifest import performed.";
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        if (!trimmed.StartsWith('{'))
+        {
+            try
+            {
+                trimmed = Encoding.UTF8.GetString(Convert.FromBase64String(trimmed));
+            }
+            catch
+            {
+                // Treat clipboard as raw JSON if it is not valid base64.
+            }
+        }
+
+        return TryDeserializeManifest(trimmed, "<clipboard>", out manifest, out status);
+    }
+
+    public bool TryImportManifestFromPath(string path, out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = "Disk manifest import failed.";
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                status = "Disk path was blank; no import performed.";
+                return false;
+            }
+
+            if (!File.Exists(path))
+            {
+                status = $"Disk import path did not exist: {path}";
+                return false;
+            }
+
+            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: false);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to import manifest from {path}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryExportManifestToPath(string path, ObjectPriorityRuleManifest manifest, out string status)
+    {
+        status = "Disk manifest export failed.";
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                status = "Disk path was blank; no export performed.";
+                return false;
+            }
+
+            WriteManifestToPath(path, manifest);
+            status = $"Exported manifest to {path}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to export manifest to {path}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public IReadOnlyList<string> GetKnownLayerSelectors(uint territoryTypeId)
+    {
+        if (territoryTypeId == 0)
+            return [];
+
+        var mapSheet = dataManager.GetExcelSheet<Map>();
+        if (mapSheet is null)
+            return [];
+
+        return mapSheet
+            .Where(x => x.TerritoryType.RowId == territoryTypeId)
+            .Select(BuildMapName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public string? GetActiveLayerName(DutyContextSnapshot context)
+        => TryGetActiveLayerName(context);
 
     public bool MatchesCurrentDutyScopeForEditor(ObjectPriorityRule rule, DutyContextSnapshot context)
         => MatchesDutyScope(rule, context, includeLayerScope: false);
@@ -442,6 +669,34 @@ public sealed class ObjectPriorityRuleService
         File.WriteAllText(configPath, GetDefaultJson());
     }
 
+    private string EnsurePresetSeeded(string presetName)
+    {
+        if (IsDefaultPreset(presetName))
+        {
+            EnsureSeeded();
+            return configPath;
+        }
+
+        var path = GetPresetPath(presetName);
+        if (File.Exists(path))
+            return path;
+
+        if (File.Exists(configPath))
+        {
+            File.Copy(configPath, path, overwrite: false);
+            return path;
+        }
+
+        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
+        {
+            File.Copy(bundledPath, path, overwrite: false);
+            return path;
+        }
+
+        File.WriteAllText(path, GetDefaultJson());
+        return path;
+    }
+
     private void RememberCurrentRulesWriteTime()
     {
         try
@@ -734,6 +989,61 @@ public sealed class ObjectPriorityRuleService
             WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
             Notes = rule.Notes,
         };
+
+    private bool TryLoadManifestFromPath(string path, out ObjectPriorityRuleManifest manifest, out string status, bool persistMigrations)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = $"Failed to load manifest from {path}.";
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            if (!TryDeserializeManifest(json, path, out manifest, out status))
+                return false;
+
+            var migrated = ApplyBuiltInRuleMigrations(manifest);
+            if (migrated && persistMigrations)
+                WriteManifestToPath(path, manifest);
+
+            status = migrated
+                ? $"Loaded {manifest.Rules.Count(x => x.Enabled)} active rule(s) from {path}; applied built-in rule migration(s)."
+                : $"Loaded {manifest.Rules.Count(x => x.Enabled)} active rule(s) from {path}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load manifest from {path}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryDeserializeManifest(string json, string sourcePath, out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        manifest = new ObjectPriorityRuleManifest();
+        status = $"Failed to parse manifest from {sourcePath}.";
+
+        try
+        {
+            manifest = JsonSerializer.Deserialize<ObjectPriorityRuleManifest>(json, JsonOptions) ?? new ObjectPriorityRuleManifest();
+            manifest.Rules ??= [];
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to parse manifest from {sourcePath}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static void WriteManifestToPath(string path, ObjectPriorityRuleManifest manifest)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var json = JsonSerializer.Serialize(manifest, JsonOptions);
+        File.WriteAllText(path, json);
+    }
 
     private static bool ApplyBuiltInRuleMigrations(ObjectPriorityRuleManifest manifest)
     {

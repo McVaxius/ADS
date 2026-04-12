@@ -79,6 +79,10 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - ADS now has a standalone Ghost Inspector window and `/ads ghosts` command so you can see the current monster/interactable ghost cache, including ghost reason, live map id, age, and coordinates. It also exposes the current, remembered, and last-ghosted manual `MapXzDestination` state so Keeper-style waypoint failures are visible in the UI instead of only in `dalamud.log`.
 - The global `Automaton Queen` ignore row is now authored as an exact-name wildcard-kind ignore so player pet suppression is not coupled to one object-kind guess.
 - Fallback map-label frontier selection now prefers labels ahead of the current route heading instead of raw sheet order.
+- The rules editor now supports parked full-manifest `PRESET`s in addition to the live `DEFAULT` file. You can switch presets, full-manifest export/import through the clipboard, disk import/export for giant manifests, create/delete presets, and load the packaged rules back into the `DEFAULT` draft with `@` before saving them live.
+- The rules editor now highlights brand-new rows from `+ Row` or Object Explorer `CREATE RULE` until you save, scrolls them into view, and gives the `Layer` column a live sub-area dropdown with a blank top option whenever the duty territory exposes known map/sub-area labels.
+- Object Explorer now has `CREATE RULE`, which seeds a new rules-editor row with the current duty scope, current live layer, object kind, base id, and exact object name.
+- The main window duty catalog now shows explicit per-duty rule counts and a top rule-atlas summary with global/grand-total counts, per-class breakdown, and maturity coverage signals.
 
 ## Rule Guide
 

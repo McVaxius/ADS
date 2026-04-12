@@ -36,6 +36,16 @@
 - If `Layer` is non-empty, the rule only matches on that live sub-area. Use `frontier.activeMapName` / `Using live map row ... (...)` to capture the correct layer string.
 - The rules editor's `Current Area + Global` filter is intentionally broader than runtime matching: it shows rules for the current duty/territory/CFC scope plus global rows, and does not hide them just because the current live `Layer` is different.
 
+## Rules Editor Workflow
+
+- `DEFAULT` is the live runtime rules file. Other `PRESET`s are parked full-manifest datasets stored beside the live config.
+- `Export` / `Import` on the preset bar copy or replace the entire manifest through the clipboard.
+- `Disk+` opens full-manifest disk import/export for large presets without going through the clipboard.
+- `+` creates a new preset from the current draft, `-` deletes the selected parked preset, and `@` loads the packaged bundled rules into the `DEFAULT` draft so you can inspect/reset them before saving live.
+- `+ Row` and Object Explorer `CREATE RULE` additions stay visually highlighted until you save, so new rows are easy to find inside a dense ruleset.
+- The `Layer` column now uses a territory-aware dropdown when ADS knows the duty's sub-area labels. The blank top option still means “any layer”.
+- Object Explorer `CREATE RULE` seeds duty scope, live layer, object kind, base id, and exact object name; fill in classification/priority from there instead of typing the boilerplate every time.
+
 ## Positional Same-Name Rules
 
 - Use `ObjectMapCoordinates` when you want one ordinary row to match a specific object instance by player-facing map X/Z, for example one `Lift Lever` but not another same-name lever on the same layer.

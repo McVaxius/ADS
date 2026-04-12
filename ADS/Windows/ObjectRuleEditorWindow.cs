@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using ADS.Models;
+using ADS.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface.Windowing;
@@ -49,13 +50,18 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private static readonly string[] ObjectKindLabels = BuildObjectKindLabels();
 
     private readonly Plugin plugin;
+    private readonly HashSet<ObjectPriorityRule> unsavedNewRules = [];
     private ObjectPriorityRuleManifest draft = new();
     private bool draftLoaded;
     private bool dirty;
     private bool filterCurrentAreaAndGlobal;
     private bool sortByDutyName = true;
+    private string selectedPresetName = ObjectPriorityRuleService.DefaultPresetName;
+    private string pendingPresetName = string.Empty;
+    private string diskTransferPath = string.Empty;
     private string dutySearch = string.Empty;
     private int dutySearchRow = -1;
+    private ObjectPriorityRule? pendingScrollRule;
     private string editorStatus = "Rules not loaded.";
 
     public ObjectRuleEditorWindow(Plugin plugin)
@@ -82,7 +88,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
         ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination versus XYZ. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
         ImGui.TextWrapped("Wait-before holds after ADS arrives in interact range and before the first interact send. Wait-after holds after a successful interact send before ADS retries or moves on.");
-        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
+        ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
+        if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
+            ImGui.TextWrapped("Runtime ADS still reads DEFAULT/live rules. Non-default presets are parked datasets until you import or copy them back into DEFAULT.");
         ImGui.TextWrapped(editorStatus);
         if (dirty)
         {
@@ -98,10 +106,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawToolbar()
     {
+        DrawPresetToolbar();
+
+        ImGui.SameLine();
         if (ImGui.Button("+ Row"))
         {
-            draft.Rules.Add(plugin.ObjectPriorityRuleService.CreateBlankRule());
-            dirty = true;
+            AddDraftRule(plugin.ObjectPriorityRuleService.CreateBlankRule(), "Added a new blank rule row.");
         }
 
         ImGui.SameLine();
@@ -109,9 +119,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         {
             if (ImGui.Button("Save"))
             {
-                if (plugin.ObjectPriorityRuleService.SaveManifest(draft))
+                if (plugin.ObjectPriorityRuleService.SaveManifest(selectedPresetName, draft))
                 {
-                    RefreshDraft("Rules saved and reloaded.");
+                    RefreshDraft($"Saved preset {selectedPresetName}.");
                 }
                 else
                 {
@@ -123,13 +133,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("Reload From Disk"))
         {
-            plugin.ObjectPriorityRuleService.Reload();
-            RefreshDraft("Draft reloaded from disk.");
+            RefreshDraft($"Reloaded preset {selectedPresetName} from disk.");
         }
 
         ImGui.SameLine();
         if (ImGui.Button("Open JSON"))
-            plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath);
+            plugin.OpenPath(plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName));
 
         ImGui.SameLine();
         ImGui.Checkbox("Current Area + Global", ref filterCurrentAreaAndGlobal);
@@ -141,22 +150,105 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Rows shown: {rowsShown} / {draft.Rules.Count}");
     }
 
+    private void DrawPresetToolbar()
+    {
+        ImGui.TextUnformatted("Preset");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(220f);
+        if (ImGui.BeginCombo("##RulePreset", selectedPresetName))
+        {
+            foreach (var presetName in plugin.ObjectPriorityRuleService.GetPresetNames())
+            {
+                var isSelected = string.Equals(presetName, selectedPresetName, StringComparison.OrdinalIgnoreCase);
+                if (!ImGui.Selectable(presetName, isSelected))
+                    continue;
+
+                SwitchPreset(presetName);
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Export"))
+            ExportManifestToClipboard();
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Import"))
+            ImportManifestFromClipboard();
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Disk+"))
+        {
+            SyncDiskTransferPath();
+            ImGui.OpenPopup("ADSPresetDiskTransfer");
+        }
+
+        DrawDiskTransferPopup();
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("+"))
+        {
+            pendingPresetName = plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
+                ? "Preset"
+                : plugin.ObjectPriorityRuleService.SanitizePresetName(selectedPresetName);
+            ImGui.OpenPopup("ADSCreatePreset");
+        }
+
+        DrawCreatePresetPopup();
+
+        ImGui.SameLine();
+        using (new ImGuiDisabledBlock(plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
+        {
+            if (ImGui.SmallButton("-"))
+                DeleteCurrentPreset();
+        }
+
+        if (plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("@"))
+                ResetDefaultDraftFromBundled();
+        }
+    }
+
     private void EnsureDraftLoaded()
     {
         if (draftLoaded)
             return;
 
-        RefreshDraft("Rules loaded from disk.");
+        RefreshDraft($"Loaded preset {selectedPresetName}.");
     }
 
     private void RefreshDraft(string status)
     {
-        draft = plugin.ObjectPriorityRuleService.CreateEditableCopy();
+        if (!plugin.ObjectPriorityRuleService.TryLoadManifest(selectedPresetName, out draft, out var loadStatus))
+        {
+            draft = new ObjectPriorityRuleManifest();
+            editorStatus = loadStatus;
+            draftLoaded = true;
+            dirty = false;
+            unsavedNewRules.Clear();
+            pendingScrollRule = null;
+            SyncDiskTransferPath();
+            return;
+        }
+
         draftLoaded = true;
         dirty = false;
         dutySearch = string.Empty;
         dutySearchRow = -1;
-        editorStatus = status;
+        unsavedNewRules.Clear();
+        pendingScrollRule = null;
+        editorStatus = $"{status} {loadStatus}";
+        SyncDiskTransferPath();
+    }
+
+    public void CreateRuleFromExplorer(ObjectPriorityRule seededRule)
+    {
+        EnsureDraftLoaded();
+        AddDraftRule(seededRule, $"Seeded a new rule from Object Explorer into preset {selectedPresetName}.");
+        IsOpen = true;
     }
 
     private void DrawRulesTable()
@@ -202,6 +294,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             var rule = draft.Rules[ruleIndex];
             ImGui.PushID(ruleIndex);
             ImGui.TableNextRow();
+            if (unsavedNewRules.Contains(rule))
+            {
+                var rowHighlight = ImGui.ColorConvertFloat4ToU32(new Vector4(0.20f, 0.34f, 0.18f, 0.65f));
+                ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, rowHighlight);
+            }
 
             ImGui.TableSetColumnIndex(0);
             var enabled = rule.Enabled;
@@ -209,6 +306,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             {
                 rule.Enabled = enabled;
                 dirty = true;
+            }
+            if (ReferenceEquals(rule, pendingScrollRule))
+            {
+                ImGui.SetScrollHereY(0.25f);
+                pendingScrollRule = null;
             }
 
             ImGui.TableSetColumnIndex(1);
@@ -264,9 +366,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(9);
-            if (EditTextCell("##Layer", rule.Layer, 48, out var layer))
+            if (DrawLayerCell(rule, ruleIndex))
             {
-                rule.Layer = layer;
                 dirty = true;
             }
 
@@ -347,6 +448,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         if (rowToRemove >= 0)
         {
+            unsavedNewRules.Remove(draft.Rules[rowToRemove]);
             draft.Rules.RemoveAt(rowToRemove);
             dutySearch = string.Empty;
             dutySearchRow = -1;
@@ -519,6 +621,56 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         => string.IsNullOrWhiteSpace(dutySearch)
            || label.Contains(dutySearch, StringComparison.OrdinalIgnoreCase);
 
+    private bool DrawLayerCell(ObjectPriorityRule rule, int ruleIndex)
+    {
+        var territoryTypeId = rule.TerritoryTypeId != 0
+            ? rule.TerritoryTypeId
+            : plugin.DutyContextService.Current.TerritoryTypeId;
+        var knownLayers = plugin.ObjectPriorityRuleService.GetKnownLayerSelectors(territoryTypeId);
+        if (knownLayers.Count == 0)
+        {
+            if (!EditTextCell("##Layer", rule.Layer, 48, out var layer))
+                return false;
+
+            rule.Layer = layer;
+            return true;
+        }
+
+        var currentLabel = string.IsNullOrWhiteSpace(rule.Layer) ? "(blank)" : rule.Layer;
+        ImGui.SetNextItemWidth(-1f);
+        if (!ImGui.BeginCombo($"##Layer{ruleIndex}", currentLabel))
+            return false;
+
+        var changed = false;
+        if (ImGui.Selectable("(blank)", string.IsNullOrWhiteSpace(rule.Layer)))
+        {
+            rule.Layer = string.Empty;
+            changed = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rule.Layer)
+            && knownLayers.All(x => !x.Equals(rule.Layer, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ImGui.Selectable($"[Custom] {rule.Layer}", true))
+                changed = false;
+
+            ImGui.Separator();
+        }
+
+        foreach (var layer in knownLayers)
+        {
+            var isSelected = string.Equals(rule.Layer, layer, StringComparison.OrdinalIgnoreCase);
+            if (!ImGui.Selectable(layer, isSelected))
+                continue;
+
+            rule.Layer = layer;
+            changed = true;
+        }
+
+        ImGui.EndCombo();
+        return changed;
+    }
+
     private bool DrawObjectKindCell(ObjectPriorityRule rule, int ruleIndex)
     {
         var currentLabel = string.IsNullOrWhiteSpace(rule.ObjectKind) ? "(any)" : rule.ObjectKind;
@@ -561,6 +713,207 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         => string.IsNullOrWhiteSpace(rule.DutyEnglishName)
             ? "0000 GLOBAL"
             : rule.DutyEnglishName;
+
+    private void SwitchPreset(string presetName)
+    {
+        if (string.Equals(presetName, selectedPresetName, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var previousPreset = selectedPresetName;
+        var discardedDirtyDraft = dirty;
+        selectedPresetName = presetName;
+        RefreshDraft(
+            discardedDirtyDraft
+                ? $"Switched from {previousPreset} to {selectedPresetName}; unsaved edits in the previous draft were discarded."
+                : $"Switched from {previousPreset} to {selectedPresetName}.");
+    }
+
+    private void DrawCreatePresetPopup()
+    {
+        if (!ImGui.BeginPopup("ADSCreatePreset"))
+            return;
+
+        ImGui.TextUnformatted("Create preset from the current draft");
+        ImGui.SetNextItemWidth(260f);
+        ImGui.InputTextWithHint("##NewPresetName", "preset name", ref pendingPresetName, 64);
+
+        if (ImGui.Button("Create"))
+        {
+            var sanitizedName = plugin.ObjectPriorityRuleService.SanitizePresetName(pendingPresetName);
+            if (plugin.ObjectPriorityRuleService.IsDefaultPreset(sanitizedName))
+            {
+                editorStatus = "DEFAULT is reserved; choose a different preset name.";
+            }
+            else if (plugin.ObjectPriorityRuleService.SaveManifest(sanitizedName, draft))
+            {
+                selectedPresetName = sanitizedName;
+                draft = CloneManifest(draft);
+                dirty = false;
+                unsavedNewRules.Clear();
+                pendingScrollRule = null;
+                editorStatus = $"Created preset {sanitizedName} from the current draft.";
+                SyncDiskTransferPath();
+                ImGui.CloseCurrentPopup();
+            }
+            else
+            {
+                editorStatus = plugin.ObjectPriorityRuleService.LastLoadStatus;
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel"))
+            ImGui.CloseCurrentPopup();
+
+        ImGui.EndPopup();
+    }
+
+    private void DrawDiskTransferPopup()
+    {
+        if (!ImGui.BeginPopup("ADSPresetDiskTransfer"))
+            return;
+
+        ImGui.TextUnformatted("Full-manifest disk import/export");
+        ImGui.SetNextItemWidth(540f);
+        ImGui.InputTextWithHint("##PresetDiskPath", "path to .json file", ref diskTransferPath, 512);
+
+        if (ImGui.Button("Import file"))
+        {
+            if (plugin.ObjectPriorityRuleService.TryImportManifestFromPath(diskTransferPath, out var manifest, out var status))
+            {
+                draft = manifest;
+                dirty = true;
+                unsavedNewRules.Clear();
+                pendingScrollRule = null;
+                editorStatus = $"Imported full manifest from disk into preset {selectedPresetName} draft. {status}";
+            }
+            else
+            {
+                editorStatus = status;
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Export file"))
+        {
+            if (plugin.ObjectPriorityRuleService.TryExportManifestToPath(diskTransferPath, draft, out var status))
+                editorStatus = status;
+            else
+                editorStatus = status;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Use preset path"))
+            SyncDiskTransferPath();
+
+        ImGui.SameLine();
+        if (ImGui.Button("Open preset dir"))
+            plugin.OpenPath(plugin.ObjectPriorityRuleService.PresetDirectoryPath);
+
+        ImGui.EndPopup();
+    }
+
+    private void DeleteCurrentPreset()
+    {
+        if (plugin.ObjectPriorityRuleService.TryDeletePreset(selectedPresetName, out var status))
+        {
+            selectedPresetName = ObjectPriorityRuleService.DefaultPresetName;
+            RefreshDraft($"{status} Switched back to DEFAULT.");
+            return;
+        }
+
+        editorStatus = status;
+    }
+
+    private void ResetDefaultDraftFromBundled()
+    {
+        if (plugin.ObjectPriorityRuleService.TryLoadBundledManifest(out var bundledManifest, out var status))
+        {
+            draft = bundledManifest;
+            dirty = true;
+            unsavedNewRules.Clear();
+            pendingScrollRule = null;
+            editorStatus = $"Loaded the packaged DEFAULT rules into the current draft. {status} Press Save to write them live.";
+            return;
+        }
+
+        editorStatus = status;
+    }
+
+    private void ExportManifestToClipboard()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(draft, new JsonSerializerOptions { WriteIndented = true });
+            ImGui.SetClipboardText(json);
+            editorStatus = $"Copied full preset {selectedPresetName} manifest JSON to the clipboard.";
+        }
+        catch (Exception ex)
+        {
+            editorStatus = $"Failed to export preset {selectedPresetName}: {ex.Message}";
+        }
+    }
+
+    private void ImportManifestFromClipboard()
+    {
+        if (plugin.ObjectPriorityRuleService.TryImportManifestText(ImGui.GetClipboardText() ?? string.Empty, out var manifest, out var status))
+        {
+            draft = manifest;
+            dirty = true;
+            unsavedNewRules.Clear();
+            pendingScrollRule = null;
+            editorStatus = $"Imported full manifest from clipboard into preset {selectedPresetName} draft. {status}";
+            return;
+        }
+
+        editorStatus = status;
+    }
+
+    private void AddDraftRule(ObjectPriorityRule rule, string status)
+    {
+        draft.Rules.Add(rule);
+        unsavedNewRules.Add(rule);
+        pendingScrollRule = rule;
+        dirty = true;
+        editorStatus = status;
+    }
+
+    private void SyncDiskTransferPath()
+        => diskTransferPath = plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName);
+
+    private static ObjectPriorityRuleManifest CloneManifest(ObjectPriorityRuleManifest manifest)
+        => new()
+        {
+            SchemaVersion = manifest.SchemaVersion,
+            Description = manifest.Description,
+            Rules = manifest.Rules.Select(
+                    rule => new ObjectPriorityRule
+                    {
+                        Enabled = rule.Enabled,
+                        TerritoryTypeId = rule.TerritoryTypeId,
+                        ContentFinderConditionId = rule.ContentFinderConditionId,
+                        DutyEnglishName = rule.DutyEnglishName,
+                        ObjectKind = rule.ObjectKind,
+                        BaseId = rule.BaseId,
+                        ObjectName = rule.ObjectName,
+                        NameMatchMode = rule.NameMatchMode,
+                        Classification = rule.Classification,
+                        DestinationType = rule.DestinationType,
+                        Layer = rule.Layer,
+                        MapCoordinates = rule.MapCoordinates,
+                        WorldCoordinates = rule.WorldCoordinates,
+                        ObjectMapCoordinates = rule.ObjectMapCoordinates,
+                        ObjectWorldCoordinates = rule.ObjectWorldCoordinates,
+                        ObjectMatchRadius = rule.ObjectMatchRadius,
+                        Priority = rule.Priority,
+                        PriorityVerticalRadius = rule.PriorityVerticalRadius,
+                        MaxDistance = rule.MaxDistance,
+                        WaitAtDestinationSeconds = rule.WaitAtDestinationSeconds,
+                        WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
+                        Notes = rule.Notes,
+                    })
+                .ToList(),
+        };
 
     private void ExportRuleAsBase64(ObjectPriorityRule rule)
     {

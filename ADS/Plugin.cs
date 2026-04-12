@@ -216,6 +216,28 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    public void CreateRuleFromExplorer(string objectName, string objectKind, uint baseId, System.Numerics.Vector3 worldPosition)
+    {
+        var context = DutyContextService.Current;
+        var seededRule = ObjectPriorityRuleService.CreateBlankRule();
+        seededRule.DutyEnglishName = context.CurrentDuty?.EnglishName ?? string.Empty;
+        seededRule.TerritoryTypeId = context.TerritoryTypeId;
+        seededRule.ContentFinderConditionId = context.ContentFinderConditionId;
+        seededRule.ObjectKind = objectKind;
+        seededRule.BaseId = baseId;
+        seededRule.ObjectName = objectName;
+        seededRule.NameMatchMode = "Exact";
+        seededRule.Layer = context.InDuty
+            ? ObjectPriorityRuleService.GetActiveLayerName(context) ?? string.Empty
+            : string.Empty;
+        seededRule.Notes = context.InDuty
+            ? $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0} on layer {seededRule.Layer}."
+            : $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0}.";
+
+        objectRuleEditorWindow.CreateRuleFromExplorer(seededRule);
+        objectRuleEditorWindow.IsOpen = true;
+    }
+
     public bool StartDutyFromOutside()
     {
         var result = ExecutionService.StartDutyFromOutside();

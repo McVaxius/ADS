@@ -38,7 +38,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.TextUnformatted("Live Loaded Objects");
-        ImGui.TextWrapped("Distances are 3D world distances from your current position. Y dist is the absolute world-space vertical difference. Hover a row for base id, object id, coordinates, and targetable state.");
+        ImGui.TextWrapped("Distances are 3D world distances from your current position. Y dist is the absolute world-space vertical difference. Hover a row for base id, object id, coordinates, and targetable state. CREATE RULE seeds a new rules-editor row with the current duty scope, current live layer, object kind, base id, and exact name.");
         ImGui.TextUnformatted($"Player: {localPlayer.Position.X:0.00}, {localPlayer.Position.Y:0.00}, {localPlayer.Position.Z:0.00}");
         ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerStatus}");
 
@@ -54,7 +54,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             .ToList();
 
         ImGui.TextUnformatted($"Objects shown: {rows.Count}");
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
@@ -62,6 +62,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableSetupColumn("Y dist", ImGuiTableColumnFlags.WidthFixed, 80f);
         ImGui.TableSetupColumn("Flag", ImGuiTableColumnFlags.WidthFixed, 80f);
+        ImGui.TableSetupColumn("Rule", ImGuiTableColumnFlags.WidthFixed, 110f);
         ImGui.TableHeadersRow();
 
         for (var i = 0; i < rows.Count; i++)
@@ -87,6 +88,10 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(4);
             if (ImGui.SmallButton($"[FLAG]##ADSObjectFlag{i}"))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
+
+            ImGui.TableSetColumnIndex(5);
+            if (ImGui.SmallButton($"CREATE RULE##ADSObjectCreateRule{i}"))
+                plugin.CreateRuleFromExplorer(row.Name, row.ObjectKind, row.BaseId, row.Position);
         }
 
         ImGui.EndTable();
