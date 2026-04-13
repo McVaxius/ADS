@@ -4,8 +4,8 @@
   "Rules": [
     {
       "Enabled": true,
-      "TerritoryTypeId": 0,
-      "ContentFinderConditionId": 0,
+      "TerritoryTypeId": 1037,
+      "ContentFinderConditionId": 2,
       "DutyEnglishName": "The Tam-Tara Deepcroft",
       "ObjectKind": "EventObj",
       "BaseId": 0,
@@ -28,8 +28,8 @@
     },
     {
       "Enabled": true,
-      "TerritoryTypeId": 0,
-      "ContentFinderConditionId": 0,
+      "TerritoryTypeId": 1037,
+      "ContentFinderConditionId": 2,
       "DutyEnglishName": "The Tam-Tara Deepcroft",
       "ObjectKind": "EventObj",
       "BaseId": 0,
@@ -2640,7 +2640,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 150.5,187.0,-1.3 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2664,7 +2664,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 148.5,187.0,2.2 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2688,7 +2688,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 151.5,187.0,0.4 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2712,7 +2712,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 96.4,13.8,-10.5."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2736,7 +2736,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 150.5,187.0,-1.3 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2760,7 +2760,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 148.5,187.0,2.2 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2784,7 +2784,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 151.5,187.0,0.4 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2808,8 +2808,8 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 96.4,13.8,-10.5."
-     },
+      "Notes": "ARR Duty Support"
+    },
     {
       "Enabled": true,
       "TerritoryTypeId": 0,
@@ -2832,7 +2832,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 150.5,187.0,-1.3 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2856,7 +2856,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 148.5,187.0,2.2 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2880,7 +2880,7 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 151.5,187.0,0.4 on layer Sky Level."
+      "Notes": "ARR Duty Support"
     },
     {
       "Enabled": true,
@@ -2904,7 +2904,55 @@
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": "Seeded from Object Explorer at 96.4,13.8,-10.5."
+      "Notes": "ARR Duty Support"
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1037,
+      "ContentFinderConditionId": 2,
+      "DutyEnglishName": "the Tam-Tara Deepcroft",
+      "ObjectKind": "BattleNpc",
+      "BaseId": 1345,
+      "ObjectName": "Gravedigger",
+      "NameMatchMode": "Exact",
+      "Classification": "Ignored",
+      "DestinationType": "",
+      "Layer": "The Tam-Tara Deepcroft",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 1000,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "Seeded from Object Explorer at -92.2,13.9,15.2 on layer The Tam-Tara Deepcroft."
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1037,
+      "ContentFinderConditionId": 2,
+      "DutyEnglishName": "the Tam-Tara Deepcroft",
+      "ObjectKind": "BattleNpc",
+      "BaseId": 137,
+      "ObjectName": "Octavel the Unforgiving",
+      "NameMatchMode": "Exact",
+      "Classification": "Ignored",
+      "DestinationType": "",
+      "Layer": "The Tam-Tara Deepcroft",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 1000,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "Seeded from Object Explorer at -95.2,15.0,3.9 on layer The Tam-Tara Deepcroft."
     }
   ]
 }
