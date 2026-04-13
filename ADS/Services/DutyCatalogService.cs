@@ -31,7 +31,7 @@ public sealed class DutyCatalogService
         ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["copperbell mines"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerDutySupport,
         ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the keeper of the lake"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
