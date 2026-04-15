@@ -3049,6 +3049,30 @@
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": "Seeded from Object Explorer at -410.1,-33.1,-116.4 on layer Aurum Vale."
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1044,
+      "ContentFinderConditionId": 16,
+      "DutyEnglishName": "the Praetorium",
+      "ObjectKind": "BattleNpc",
+      "BaseId": 0,
+      "ObjectName": "Magitek Reaper",
+      "NameMatchMode": "Exact",
+      "Classification": "",
+      "DestinationType": "",
+      "Layer": "Castrum Control",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 1000,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "Seeded from Object Explorer at 159.2,154.2,-64.5 on layer Castrum Control."
     }
   ]
 }
