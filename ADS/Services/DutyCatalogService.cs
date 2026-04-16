@@ -30,6 +30,7 @@ public sealed class DutyCatalogService
     {
         ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["copperbell mines"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["haukke manor"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerDutySupport,
         ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
