@@ -155,8 +155,8 @@ public sealed class DungeonFrontierService
         var manualMapXzDestinations = hasActiveMap && playerPosition.HasValue
             ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
-        var manualXyzDestinations = hasActiveMap
-            ? BuildXyzDestinationPoints(context, activeMap)
+        var manualXyzDestinations = hasActiveMap && playerPosition.HasValue
+            ? BuildXyzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
         ManualMapXzDestinationCount = manualMapXzDestinations.Count;
         VisitedManualMapXzDestinations = manualMapXzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
@@ -180,6 +180,23 @@ public sealed class DungeonFrontierService
                     : FrontierMode.MapXzDestination;
                 RememberManualDestination(CurrentTarget);
                 return;
+            }
+        }
+
+        if (hasActiveMap && noFrontierBlockingLiveObjects)
+        {
+            var treasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, manualDestinations);
+            if (treasureRoutePoints.Count > 0)
+            {
+                if (playerPosition.HasValue)
+                    MarkVisitedPoints(treasureRoutePoints, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
+
+                CurrentTarget = SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
+                if (CurrentTarget is not null)
+                {
+                    CurrentMode = FrontierMode.TreasureDungeon;
+                    return;
+                }
             }
         }
 
@@ -297,7 +314,7 @@ public sealed class DungeonFrontierService
             return null;
 
         var manualMapXzDestinations = BuildMapXzDestinationPoints(context, activeMap, playerPosition);
-        var manualXyzDestinations = BuildXyzDestinationPoints(context, activeMap);
+        var manualXyzDestinations = BuildXyzDestinationPoints(context, activeMap, playerPosition);
         return manualMapXzDestinations
             .Concat(manualXyzDestinations)
             .Where(point => !visitedFrontierKeys.Contains(point.Key))
@@ -363,6 +380,9 @@ public sealed class DungeonFrontierService
                 ? $"Map XZ {mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}"
                 : rule.ObjectName;
             var worldPosition = ConvertMapCoordinatesToWorld(mapCoordinates, map, playerPosition.Y);
+            if (!objectPriorityRuleService.DestinationRulePassesDistanceGates(rule, playerPosition, worldPosition))
+                continue;
+
             if (loggedResolvedMapXzDestinationRules.Add(ruleKey))
             {
                 log.Information(
@@ -380,6 +400,7 @@ public sealed class DungeonFrontierService
                 MapCoordinates = mapCoordinates,
                 UsePlayerYForNavigation = true,
                 ManualDestinationKind = ManualDestinationKind.MapXz,
+                AllowCombatBypass = AllowsCombatBypass(rule),
                 ArrivalRadiusXz = ManualMapXzDestinationVisitRadius,
             });
         }
@@ -387,7 +408,7 @@ public sealed class DungeonFrontierService
         return points;
     }
 
-    private IReadOnlyList<DungeonFrontierPoint> BuildXyzDestinationPoints(DutyContextSnapshot context, Map map)
+    private IReadOnlyList<DungeonFrontierPoint> BuildXyzDestinationPoints(DutyContextSnapshot context, Map map, Vector3 playerPosition)
     {
         var destinationRules = objectPriorityRuleService.GetXyzDestinationRules(context);
         if (destinationRules.Count == 0)
@@ -411,6 +432,9 @@ public sealed class DungeonFrontierService
             var name = string.IsNullOrWhiteSpace(rule.ObjectName)
                 ? $"XYZ {worldCoordinates.X:0.0}, {worldCoordinates.Y:0.0}, {worldCoordinates.Z:0.0}"
                 : rule.ObjectName;
+            if (!objectPriorityRuleService.DestinationRulePassesDistanceGates(rule, playerPosition, worldCoordinates))
+                continue;
+
             if (loggedResolvedXyzDestinationRules.Add(ruleKey))
             {
                 log.Information(
@@ -426,11 +450,26 @@ public sealed class DungeonFrontierService
                 MapId = map.RowId,
                 Priority = rule.Priority,
                 ManualDestinationKind = ManualDestinationKind.Xyz,
+                AllowCombatBypass = AllowsCombatBypass(rule),
                 ArrivalRadius3d = ManualMapXzDestinationVisitRadius,
             });
         }
 
         return points;
+    }
+
+    private IReadOnlyList<DungeonFrontierPoint> BuildTreasureRoutePoints(
+        DutyContextSnapshot context,
+        Map map,
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+    {
+        if (!TreasureDungeonData.HasRoute(context.TerritoryTypeId))
+            return [];
+
+        if (manualDestinations.Any(point => !visitedFrontierKeys.Contains(point.Key)))
+            return [];
+
+        return TreasureDungeonData.BuildRoutePoints(context.TerritoryTypeId, map.RowId);
     }
 
     private IReadOnlyList<DungeonFrontierPoint> BuildFrontierPoints(uint territoryTypeId, uint mapId)
@@ -1017,6 +1056,7 @@ public sealed class DungeonFrontierService
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = true,
             ManualDestinationKind = point.ManualDestinationKind,
+            AllowCombatBypass = point.AllowCombatBypass,
             ArrivalRadiusXz = point.ArrivalRadiusXz,
             ArrivalRadius3d = point.ArrivalRadius3d,
         };
@@ -1215,7 +1255,7 @@ public sealed class DungeonFrontierService
 
     private bool IsEligibleFrontierBlockingInteractable(DutyContextSnapshot context, ObservedInteractable interactable, Vector3? playerPosition)
     {
-        if (interactable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable))
+        if (interactable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable or InteractableClass.TreasureDoor))
             return false;
 
         var distance = playerPosition.HasValue
@@ -1231,6 +1271,10 @@ public sealed class DungeonFrontierService
         => point.IsManualXyzDestination
             ? Vector3.Distance(playerPosition, point.Position)
             : GetHorizontalDistance(playerPosition, point.Position);
+
+    private static bool AllowsCombatBypass(ObjectPriorityRule rule)
+        => Enum.TryParse<InteractableClass>(rule.Classification, ignoreCase: true, out var classification)
+           && classification is InteractableClass.MapXzForceMarch or InteractableClass.XYZForceMarch;
 
     private static string GetManualDestinationLabel(DungeonFrontierPoint point)
         => point.IsManualXyzDestination ? "XYZ destination" : "map XZ destination";

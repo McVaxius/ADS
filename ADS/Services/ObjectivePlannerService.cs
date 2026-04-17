@@ -219,15 +219,49 @@ public sealed class ObjectivePlannerService
             var nearestMonsterDistance = nearestMonster is not null
                 ? GetHorizontalDistance(playerPosition, nearestMonster.Position)
                 : (float?)null;
+            var nearestMonsterRuleDistance = nearestMonster is not null
+                ? GetDistance(playerPosition, nearestMonster.Position)
+                : (float?)null;
+            var nearestMonsterVerticalDelta = nearestMonster is not null
+                ? GetVerticalDelta(playerPosition, nearestMonster.Position)
+                : (float?)null;
+            var nearestMonsterPriority = nearestMonster is not null
+                ? objectPriorityRuleService.GetEffectiveBattleNpcPriority(
+                    context,
+                    nearestMonster,
+                    nearestMonsterRuleDistance,
+                    nearestMonsterVerticalDelta)
+                : (int?)null;
             var nearestRequiredDistance = nearestRequiredInteractable is not null
                 ? GetHorizontalDistance(playerPosition, nearestRequiredInteractable.Position)
                 : (float?)null;
+            var nearestRequiredRuleDistance = nearestRequiredInteractable is not null
+                ? GetDistance(playerPosition, nearestRequiredInteractable.Position)
+                : (float?)null;
+            var nearestRequiredVerticalDelta = nearestRequiredInteractable is not null
+                ? GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position)
+                : (float?)null;
+            var nearestRequiredPriority = nearestRequiredInteractable is not null
+                ? objectPriorityRuleService.GetEffectivePriority(
+                    context,
+                    nearestRequiredInteractable,
+                    nearestRequiredRuleDistance,
+                    nearestRequiredVerticalDelta)
+                : (int?)null;
+            var treasurePriority = objectPriorityRuleService.GetEffectivePriority(
+                context,
+                nearestTreasureCoffer,
+                treasureDistance,
+                treasureVerticalDelta);
 
             if (ShouldSelectTreasureCoffer(
                     treasureHorizontalDistance,
                     treasureVerticalDelta,
+                    treasurePriority,
                     nearestMonsterDistance,
-                    nearestRequiredDistance))
+                    nearestMonsterPriority,
+                    nearestRequiredDistance,
+                    nearestRequiredPriority))
             {
                 Current = new PlannerSnapshot
                 {
@@ -238,8 +272,11 @@ public sealed class ObjectivePlannerService
                         treasureDistance,
                         treasureHorizontalDistance,
                         treasureVerticalDelta,
+                        treasurePriority,
                         nearestMonsterDistance,
-                        nearestRequiredDistance),
+                        nearestMonsterPriority,
+                        nearestRequiredDistance,
+                        nearestRequiredPriority),
                     TargetName = nearestTreasureCoffer.Name,
                     TargetDistance = treasureDistance,
                     TargetVerticalDelta = treasureVerticalDelta,
@@ -320,12 +357,14 @@ public sealed class ObjectivePlannerService
             Current = new PlannerSnapshot
             {
                 Mode = PlannerMode.Progression,
-                ObjectiveKind = isXyzDestination
-                    ? PlannerObjectiveKind.XyzDestination
-                    : PlannerObjectiveKind.MapXzDestination,
-                Objective = isXyzDestination
-                    ? $"Advance toward XYZ destination: {manualDestinationTarget.Name}"
-                    : $"Advance toward map XZ destination: {manualDestinationTarget.Name}",
+                ObjectiveKind = GetManualDestinationObjectiveKind(manualDestinationTarget),
+                Objective = manualDestinationTarget.AllowCombatBypass
+                    ? isXyzDestination
+                        ? $"Force-march toward XYZ destination: {manualDestinationTarget.Name}"
+                        : $"Force-march toward map XZ destination: {manualDestinationTarget.Name}"
+                    : isXyzDestination
+                        ? $"Advance toward XYZ destination: {manualDestinationTarget.Name}"
+                        : $"Advance toward map XZ destination: {manualDestinationTarget.Name}",
                 Explanation = BuildManualDestinationPriorityExplanation(context, manualDestinationTarget, nearestRequiredInteractable, playerPosition),
                 TargetName = manualDestinationTarget.Name,
                 TargetDistance = distance,
@@ -390,14 +429,18 @@ public sealed class ObjectivePlannerService
             {
                 Mode = PlannerMode.Progression,
                 ObjectiveKind = isXyzDestination
-                    ? PlannerObjectiveKind.XyzDestination
+                    ? GetManualDestinationObjectiveKind(frontierPoint)
                     : isMapXzDestination
-                    ? PlannerObjectiveKind.MapXzDestination
+                    ? GetManualDestinationObjectiveKind(frontierPoint)
                     : PlannerObjectiveKind.Frontier,
                 Objective = isXyzDestination
-                    ? $"Advance toward XYZ destination: {frontierPoint.Name}"
+                    ? frontierPoint.AllowCombatBypass
+                        ? $"Force-march toward XYZ destination: {frontierPoint.Name}"
+                        : $"Advance toward XYZ destination: {frontierPoint.Name}"
                     : isMapXzDestination
-                    ? $"Advance toward map XZ destination: {frontierPoint.Name}"
+                    ? frontierPoint.AllowCombatBypass
+                        ? $"Force-march toward map XZ destination: {frontierPoint.Name}"
+                        : $"Advance toward map XZ destination: {frontierPoint.Name}"
                     : $"Advance toward map frontier: {frontierPoint.Name}",
                 Explanation = BuildFrontierExplanation(context, frontierPoint, observation),
                 TargetName = frontierPoint.Name,
@@ -694,13 +737,15 @@ public sealed class ObjectivePlannerService
     private static bool IsProgressionInteractable(ObservedInteractable interactable)
         => interactable.Classification is InteractableClass.Required
             or InteractableClass.CombatFriendly
-            or InteractableClass.Expendable;
+            or InteractableClass.Expendable
+            or InteractableClass.TreasureDoor;
 
     private static PlannerObjectiveKind GetProgressionInteractableObjectiveKind(ObservedInteractable interactable)
         => interactable.Classification switch
         {
             InteractableClass.CombatFriendly => PlannerObjectiveKind.CombatFriendlyInteractable,
             InteractableClass.Expendable => PlannerObjectiveKind.ExpendableInteractable,
+            InteractableClass.TreasureDoor => PlannerObjectiveKind.TreasureDoor,
             _ => PlannerObjectiveKind.RequiredInteractable,
         };
 
@@ -880,7 +925,7 @@ public sealed class ObjectivePlannerService
             deferredInteractable,
             distance,
             verticalDelta);
-        var manualLabel = frontierPoint.IsManualXyzDestination ? "XYZ destination" : "Map XZ destination";
+        var manualLabel = GetManualDestinationLabel(frontierPoint);
         if (frontierPoint.Priority == deferredPriority
             && deferredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
         {
@@ -907,8 +952,11 @@ public sealed class ObjectivePlannerService
     private static bool ShouldSelectTreasureCoffer(
         float treasureHorizontalDistance,
         float treasureVerticalDelta,
+        int treasurePriority,
         float? monsterDistance,
-        float? requiredDistance)
+        int? monsterPriority,
+        float? requiredDistance,
+        int? requiredPriority)
     {
         if (treasureVerticalDelta > TreasureCofferVerticalCap)
             return false;
@@ -916,8 +964,27 @@ public sealed class ObjectivePlannerService
         if (treasureHorizontalDistance > TreasureCofferMaxHorizontalDistance)
             return false;
 
-        if (monsterDistance is not null && treasureHorizontalDistance + TreasureCofferMaterialLead >= monsterDistance.Value)
-            return false;
+        if (monsterPriority.HasValue)
+        {
+            if (treasurePriority > monsterPriority.Value)
+                return false;
+
+            if (treasurePriority == monsterPriority.Value
+                && monsterDistance is not null
+                && treasureHorizontalDistance + TreasureCofferMaterialLead >= monsterDistance.Value)
+            {
+                return false;
+            }
+        }
+
+        if (requiredPriority.HasValue)
+        {
+            if (treasurePriority < requiredPriority.Value)
+                return true;
+
+            if (treasurePriority > requiredPriority.Value)
+                return false;
+        }
 
         return requiredDistance is null || treasureHorizontalDistance + TreasureCofferMaterialLead < requiredDistance.Value;
     }
@@ -926,13 +993,27 @@ public sealed class ObjectivePlannerService
         float treasureDistance,
         float treasureHorizontalDistance,
         float treasureVerticalDelta,
+        int treasurePriority,
         float? monsterDistance,
-        float? requiredDistance)
+        int? monsterPriority,
+        float? requiredDistance,
+        int? requiredPriority)
     {
-        var monsterText = monsterDistance.HasValue ? $"{monsterDistance.Value:0.0} XZ" : "none";
-        var requiredText = requiredDistance.HasValue ? $"{requiredDistance.Value:0.0} XZ" : "none";
+        var monsterText = monsterDistance.HasValue
+            ? $"{monsterDistance.Value:0.0} XZ @ priority {monsterPriority ?? ObjectPriorityRuleService.DefaultPriority}"
+            : "none";
+        var requiredText = requiredDistance.HasValue
+            ? $"{requiredDistance.Value:0.0} XZ @ priority {requiredPriority ?? ObjectPriorityRuleService.DefaultPriority}"
+            : "none";
+        var beatMonsterByPriority = monsterPriority.HasValue && treasurePriority < monsterPriority.Value;
+        var beatRequiredByPriority = requiredPriority.HasValue && treasurePriority < requiredPriority.Value;
 
-        return $"Treasure-coffer scan is enabled, and the nearest coffer stayed inside the optional-coffer gate at XZ {treasureHorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {treasureDistance:0.0}, Y {treasureVerticalDelta:0.0}. It beat the nearest live monster ({monsterText}) and required interactable ({requiredText}) by the coffer lead margin.";
+        if (beatMonsterByPriority || beatRequiredByPriority)
+        {
+            return $"Treasure-coffer scan is enabled, and the nearest coffer stayed inside the optional-coffer gate at XZ {treasureHorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {treasureDistance:0.0}, Y {treasureVerticalDelta:0.0}. Its effective priority ({treasurePriority}) beat the nearest live monster ({monsterText}) and progression interactable ({requiredText}), so ADS selected the coffer before spending any distance tie-breaks.";
+        }
+
+        return $"Treasure-coffer scan is enabled, and the nearest coffer stayed inside the optional-coffer gate at XZ {treasureHorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {treasureDistance:0.0}, Y {treasureVerticalDelta:0.0}. Its effective priority ({treasurePriority}) tied the nearest live monster ({monsterText}) and progression interactable ({requiredText}), so ADS spent the tie on the coffer lead margin.";
     }
 
     private string BuildFrontierExplanation(
@@ -943,9 +1024,13 @@ public sealed class ObjectivePlannerService
         return dungeonFrontierService.CurrentMode switch
         {
             FrontierMode.MapXzDestination
-                => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z.",
+                => frontierPoint.AllowCombatBypass
+                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored fight-while-force-marching Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It keeps advancing this waypoint even while local combat is active and ghosts the destination once the player is within 1y on X/Z."
+                    : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z.",
             FrontierMode.XyzDestination
-                => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
+                => frontierPoint.AllowCombatBypass
+                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored fight-while-force-marching XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It keeps advancing this waypoint even while local combat is active and ghosts the destination once execution reaches the 1y 3D arrival rule."
+                    : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
             FrontierMode.HeadingScout
                 => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
             _ => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited map label ({frontierPoint.Name}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable. Frontier progress: {dungeonFrontierService.VisitedPoints}/{dungeonFrontierService.TotalPoints}.",
@@ -964,6 +1049,20 @@ public sealed class ObjectivePlannerService
         => frontierPoint.IsManualXyzDestination
             ? Vector3.Distance(playerPosition, frontierPoint.Position)
             : GetHorizontalDistance(playerPosition, frontierPoint.Position) ?? 0f;
+
+    private static PlannerObjectiveKind GetManualDestinationObjectiveKind(DungeonFrontierPoint frontierPoint)
+        => frontierPoint.IsManualXyzDestination
+            ? frontierPoint.AllowCombatBypass
+                ? PlannerObjectiveKind.XyzForceMarchDestination
+                : PlannerObjectiveKind.XyzDestination
+            : frontierPoint.AllowCombatBypass
+                ? PlannerObjectiveKind.MapXzForceMarchDestination
+                : PlannerObjectiveKind.MapXzDestination;
+
+    private static string GetManualDestinationLabel(DungeonFrontierPoint frontierPoint)
+        => frontierPoint.IsManualXyzDestination
+            ? frontierPoint.AllowCombatBypass ? "fight-while-force-marching XYZ destination" : "XYZ destination"
+            : frontierPoint.AllowCombatBypass ? "fight-while-force-marching Map XZ destination" : "Map XZ destination";
 
     private static float GetManualOrFrontierDistance(Vector3 playerPosition, DungeonFrontierPoint frontierPoint)
         => frontierPoint.IsManualDestination

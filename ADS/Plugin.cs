@@ -27,7 +27,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
@@ -53,6 +55,8 @@ public sealed class Plugin : IDalamudPlugin
     public DialogAutomationService DialogAutomationService { get; }
     public AdsIpcService AdsIpcService { get; }
     public MapFlagService MapFlagService { get; }
+    public InnEntryService InnEntryService { get; }
+    public UtilityAutomationService UtilityAutomationService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -73,12 +77,14 @@ public sealed class Plugin : IDalamudPlugin
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
         ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
-        ObservationMemoryService = new ObservationMemoryService(ObjectTable, Log, ObjectPriorityRuleService);
+        ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
+        InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
+        UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
             StartDutyFromOutside,
@@ -128,6 +134,8 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         DutyState.DutyCompleted -= OnDutyCompleted;
 
+        InnEntryService.Cancel("plugin dispose");
+        UtilityAutomationService.Cancel("plugin dispose");
         UnregisterCommands();
         AdsIpcService.Dispose();
         WindowSystem.RemoveAllWindows();
@@ -270,11 +278,58 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    public bool StartInnEntry()
+    {
+        var result = InnEntryService.StartManualEntry();
+        PrintStatus(result ? InnEntryService.StatusMessage : $"Inn entry not started: {InnEntryService.StatusMessage}");
+        return result;
+    }
+
     public void StopOwnership()
     {
         ExecutionService.Stop(DutyContextService.Current);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
+    }
+
+    public bool StartSelfRepair()
+    {
+        if (!CanStartManualUtility("self-repair"))
+            return false;
+
+        var result = UtilityAutomationService.StartSelfRepair();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Self-repair not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
+    public bool StartNpcRepair()
+    {
+        if (!CanStartManualUtility("NPC repair"))
+            return false;
+
+        var result = UtilityAutomationService.StartNpcRepair();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
+    public bool StartExtractMateria()
+    {
+        if (!CanStartManualUtility("materia extraction"))
+            return false;
+
+        var result = UtilityAutomationService.StartExtractMateria();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Materia extraction not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
+    public bool StartDesynthFromInventory()
+    {
+        if (!CanStartManualUtility("inventory desynthesis"))
+            return false;
+
+        var result = UtilityAutomationService.StartDesynthFromInventory();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Inventory desynthesis not started: {UtilityAutomationService.StatusMessage}");
+        return result;
     }
 
     public string GetStatusJson()
@@ -408,6 +463,8 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.ConsiderTreasureCoffers);
         ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled);
         DialogAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+        InnEntryService.Update();
+        UtilityAutomationService.Update();
         UpdateDtrBar();
     }
 
@@ -446,6 +503,11 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads inside - claim ownership inside duty\n" +
                 "/ads resume - resume inside duty\n" +
                 "/ads leave - request leave state\n" +
+                "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
+                "/ads selfrepair - open self-repair and repair equipped gear\n" +
+                "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
+                "/ads extractmateria - extract ready materia from gear\n" +
+                "/ads desynthfrominventory - desynth inventory-only items\n" +
                 "/ads stop - drop ownership",
             ShowInHelp = true,
         };
@@ -543,6 +605,36 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (trimmed.Equals("enterinn", StringComparison.OrdinalIgnoreCase))
+        {
+            StartInnEntry();
+            return;
+        }
+
+        if (trimmed.Equals("selfrepair", StringComparison.OrdinalIgnoreCase))
+        {
+            StartSelfRepair();
+            return;
+        }
+
+        if (trimmed.Equals("npcrepair", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepair();
+            return;
+        }
+
+        if (trimmed.Equals("extractmateria", StringComparison.OrdinalIgnoreCase))
+        {
+            StartExtractMateria();
+            return;
+        }
+
+        if (trimmed.Equals("desynthfrominventory", StringComparison.OrdinalIgnoreCase))
+        {
+            StartDesynthFromInventory();
+            return;
+        }
+
         if (trimmed.Equals("stop", StringComparison.OrdinalIgnoreCase))
         {
             StopOwnership();
@@ -556,6 +648,23 @@ public sealed class Plugin : IDalamudPlugin
     {
         dtrEntry = DtrBar.Get(PluginInfo.ShortDisplayName);
         dtrEntry.OnClick = _ => OpenMainUi();
+    }
+
+    private bool CanStartManualUtility(string actionLabel)
+    {
+        if (ExecutionService.IsOwned)
+        {
+            PrintStatus($"Cannot start {actionLabel} while ADS owns active duty execution.");
+            return false;
+        }
+
+        if (InnEntryService.IsRunning)
+        {
+            PrintStatus($"Cannot start {actionLabel} while /ads enterinn is running.");
+            return false;
+        }
+
+        return true;
     }
 
     public void UpdateDtrBar()

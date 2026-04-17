@@ -19,6 +19,7 @@ public sealed class DungeonFrontierPoint
         => ManualDestinationKind == ManualDestinationKind.MapXz;
     public bool IsManualXyzDestination
         => ManualDestinationKind == ManualDestinationKind.Xyz;
+    public bool AllowCombatBypass { get; init; }
     public float ArrivalRadiusXz { get; init; } = 8f;
     public float ArrivalRadius3d { get; init; }
 }

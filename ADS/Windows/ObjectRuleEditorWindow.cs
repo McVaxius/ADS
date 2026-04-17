@@ -28,8 +28,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         "Expendable",
         "CombatFriendly",
         "TreasureCoffer",
+        "TreasureDoor",
         "MapXzDestination",
         "XYZ",
+        "MapXzForceMarch",
+        "XYZForceMarch",
     ];
 
     private static readonly string[] ClassificationValues =
@@ -43,8 +46,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         "Expendable",
         "CombatFriendly",
         "TreasureCoffer",
+        "TreasureDoor",
         "MapXzDestination",
         "XYZ",
+        "MapXzForceMarch",
+        "XYZForceMarch",
     ];
 
     private static readonly string[] ObjectKindLabels = BuildObjectKindLabels();
@@ -86,7 +92,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         EnsureDraftLoaded();
 
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
-        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination versus XYZ. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
+        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination / MapXzForceMarch versus XYZ / XYZForceMarch. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
         ImGui.TextWrapped("Wait-before holds after ADS arrives in interact range and before the first interact send. Wait-after holds after a successful interact send before ADS retries or moves on.");
         ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
         if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
@@ -469,7 +475,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(5, "BaseId", "Stable base sheet/object id. Useful when names collide, but not unique per live spawn. This is not GameObjectId.");
         DrawHeaderCell(6, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
         DrawHeaderCell(7, "Match", "Exact or substring name matching.");
-        DrawHeaderCell(8, "Class", "Planner/execution behavior override such as Required, CombatFriendly, BossFight, MapXzDestination, or XYZ.");
+        DrawHeaderCell(8, "Class", "Planner/execution behavior override such as Required, CombatFriendly, TreasureDoor, BossFight, MapXzDestination, MapXzForceMarch, XYZ, or XYZForceMarch.");
         DrawHeaderCell(9, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
         DrawHeaderCell(10, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
         DrawHeaderCell(11, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
@@ -486,9 +492,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
         => string.Equals(rule.Classification, "MapXzDestination", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.Classification, "MapXzForceMarch", StringComparison.OrdinalIgnoreCase)
            || string.Equals(rule.Classification, "XYZ", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.Classification, "XYZForceMarch", StringComparison.OrdinalIgnoreCase)
            || string.Equals(rule.DestinationType, "MapXZ", StringComparison.OrdinalIgnoreCase)
            || string.Equals(rule.DestinationType, "XYZ", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsForceMarchManualDestinationRule(ObjectPriorityRule rule)
+        => string.Equals(rule.Classification, "MapXzForceMarch", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(rule.Classification, "XYZForceMarch", StringComparison.OrdinalIgnoreCase);
 
     private static string GetUnifiedCoordinatesValue(ObjectPriorityRule rule)
     {
@@ -509,18 +521,19 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             rule.MapCoordinates = string.Empty;
             rule.WorldCoordinates = string.Empty;
             rule.DestinationType = string.Empty;
+            var useForceMarchClassification = IsForceMarchManualDestinationRule(rule);
 
             if (!string.IsNullOrWhiteSpace(normalized))
             {
                 if (isWorldCoordinates)
                 {
                     rule.WorldCoordinates = normalized;
-                    rule.Classification = "XYZ";
+                    rule.Classification = useForceMarchClassification ? "XYZForceMarch" : "XYZ";
                 }
                 else
                 {
                     rule.MapCoordinates = normalized;
-                    rule.Classification = "MapXzDestination";
+                    rule.Classification = useForceMarchClassification ? "MapXzForceMarch" : "MapXzDestination";
                 }
             }
 

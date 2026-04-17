@@ -7,7 +7,8 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using MountSheet = Lumina.Excel.Sheets.Mount;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+ using MountSheet = Lumina.Excel.Sheets.Mount;
 
 namespace ADS.Services;
 
@@ -22,6 +23,8 @@ public sealed class ExecutionService
     private const float PreferredRecoveryArrivalRange = 2.0f;
     private const float PreferredFrontierArrivalRange = 4.0f;
     private const float RequiredInteractionConsumedRelocationRange = 20.0f;
+    private const float TreasureDoorFollowThroughDistance = 10.0f;
+    private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const float MountedCombatClusterRadius = 6.0f;
     private const float RecoveryGhostRetireRadius = 8.0f;
@@ -31,6 +34,8 @@ public sealed class ExecutionService
     private const float CloseRangeInteractFallbackVerticalCap = 4.0f;
     private const float CloseRangeInteractFallbackProgressMargin = 0.2f;
     private const float TreasureCofferProgressMargin = 2.0f;
+    private const float LeaveTreasureSweepHorizontalRange = 20.0f;
+    private const float LeaveTreasureSweepVerticalCap = 6.0f;
     private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
@@ -42,6 +47,10 @@ public sealed class ExecutionService
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
+    private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
+    private const float LivePartyDamageProgressRange = 35.0f;
 
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
@@ -66,6 +75,7 @@ public sealed class ExecutionService
     private Vector3? recoveryTargetPosition;
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
+    private DungeonFrontierPoint? pendingTreasureDoorTransitionPoint;
     private DungeonFrontierPoint? pendingSatisfiedManualDestination;
     private string? pendingSatisfiedManualInteractableKey;
     private DateTime pendingProgressionInteractResultUntilUtc;
@@ -81,6 +91,12 @@ public sealed class ExecutionService
     private DateTime closeRangeInteractFallbackLastProgressUtc;
     private float closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
     private DateTime nextMountedCombatAttemptUtc;
+    private DateTime nextLeaveUiAttemptUtc;
+    private DateTime leaveLootDistributionWaitUntilUtc;
+    private bool leaveTreasureInteractionSent;
+    private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
+    private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
+    private DateTime livePartyDamageProgressUntilUtc;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -163,14 +179,17 @@ public sealed class ExecutionService
 
     public bool LeaveDuty(DutyContextSnapshot context)
     {
-        if (!IsOwned || !context.InDuty)
+        if (!context.InDuty)
         {
-            SetPhase(CurrentPhase, "Leave requires active ADS ownership inside duty.");
+            SetPhase(CurrentPhase, "Leave requires being inside duty.");
             return false;
         }
 
+        StopMovementAssists();
+        ClearInteractableCommitment();
+        ResetLeaveState();
         CurrentMode = OwnershipMode.Leaving;
-        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. ADS is waiting for duty exit before releasing ownership.");
+        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. ADS will clear nearby treasure, wait for loot settlement if needed, and then leave duty.");
         return true;
     }
 
@@ -179,6 +198,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ResetRecoveryHold();
+        ResetLeaveState();
         CurrentMode = context.InDuty && context.IsSupportedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
         SetPhase(
             CurrentMode == OwnershipMode.Observing ? ExecutionPhase.ObservingOnly : ExecutionPhase.Idle,
@@ -192,6 +212,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ResetRecoveryHold();
+        ResetLeaveState();
         CurrentMode = OwnershipMode.Observing;
         SetPhase(
             ExecutionPhase.ObservingOnly,
@@ -207,6 +228,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             ClearInteractableCommitment();
+            ResetLeaveState();
             CurrentMode = OwnershipMode.Idle;
             SetPhase(ExecutionPhase.Idle, "ADS disabled.");
             return;
@@ -240,6 +262,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty ended; ADS ownership released.");
                     return;
@@ -262,12 +285,13 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty exit detected; ADS ownership released.");
                     return;
                 }
 
-                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for duty exit.");
+                UpdateLeaveDuty(context, observation);
                 return;
 
             case OwnershipMode.Failed:
@@ -275,6 +299,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Failure state cleared outside duty.");
                     return;
@@ -288,6 +313,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             ClearInteractableCommitment();
+            ResetLeaveState();
             CurrentMode = OwnershipMode.Observing;
             SetPhase(ExecutionPhase.ObservingOnly, "Observing only; ADS does not currently own this duty.");
             return;
@@ -295,6 +321,7 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         ClearInteractableCommitment();
+        ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
     }
@@ -355,6 +382,7 @@ public sealed class ExecutionService
                     or PlannerObjectiveKind.CombatFriendlyInteractable
                     or PlannerObjectiveKind.ExpendableInteractable
                     or PlannerObjectiveKind.OptionalInteractable
+                    or PlannerObjectiveKind.TreasureDoor
                     or PlannerObjectiveKind.TreasureCoffer)
                 {
                     var replannedInteractable = ResolveObservedInteractable(planner, observation);
@@ -410,7 +438,11 @@ public sealed class ExecutionService
                 return;
             }
 
-            if (planner.ObjectiveKind is PlannerObjectiveKind.Frontier or PlannerObjectiveKind.MapXzDestination or PlannerObjectiveKind.XyzDestination)
+            if (planner.ObjectiveKind is PlannerObjectiveKind.Frontier
+                or PlannerObjectiveKind.MapXzDestination
+                or PlannerObjectiveKind.XyzDestination
+                or PlannerObjectiveKind.MapXzForceMarchDestination
+                or PlannerObjectiveKind.XyzForceMarchDestination)
             {
                 TryAdvanceFrontierObjective(context, planner, $"{prefix}");
                 return;
@@ -420,6 +452,7 @@ public sealed class ExecutionService
                 or PlannerObjectiveKind.CombatFriendlyInteractable
                 or PlannerObjectiveKind.ExpendableInteractable
                 or PlannerObjectiveKind.OptionalInteractable
+                or PlannerObjectiveKind.TreasureDoor
                 or PlannerObjectiveKind.TreasureCoffer)
             {
                 var selectedInteractable = ResolveObservedInteractable(planner, observation);
@@ -691,8 +724,8 @@ public sealed class ExecutionService
 
     private void TryAdvanceFrontierObjective(DutyContextSnapshot context, PlannerSnapshot planner, string prefix)
     {
-        var wantsMapXzDestination = planner.ObjectiveKind == PlannerObjectiveKind.MapXzDestination;
-        var wantsXyzDestination = planner.ObjectiveKind == PlannerObjectiveKind.XyzDestination;
+        var wantsMapXzDestination = planner.ObjectiveKind is PlannerObjectiveKind.MapXzDestination or PlannerObjectiveKind.MapXzForceMarchDestination;
+        var wantsXyzDestination = planner.ObjectiveKind is PlannerObjectiveKind.XyzDestination or PlannerObjectiveKind.XyzForceMarchDestination;
         var frontierPoint = dungeonFrontierService.CurrentTarget;
         if (frontierPoint is null
             || !string.Equals(frontierPoint.Name, planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase))
@@ -735,6 +768,8 @@ public sealed class ExecutionService
         var playerPosition = objectTable.LocalPlayer?.Position;
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
+            : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+                ? "treasure-dungeon route point"
             : isMapXzDestination
                 ? "map XZ destination"
                 : isXyzDestination
@@ -744,6 +779,8 @@ public sealed class ExecutionService
             ? "because a human-authored Map XZ destination is configured for this no-live-object gap."
             : isXyzDestination
                 ? "because a human-authored XYZ destination is configured for this no-live-object gap."
+            : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+                ? "because LootGoblin-derived treasure-dungeon routing data is available for this territory and no live duty objects are currently visible."
             : dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
                 ? "because Lumina frontier labels were unavailable and no live duty objects are currently visible."
                 : "because no live duty objects are currently visible.";
@@ -894,11 +931,12 @@ public sealed class ExecutionService
             }
             else
             {
-                var continuingRequiredFollowThrough = observedInteractable.Classification == InteractableClass.Required
+                var isRequiredLikeInteractable = observedInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
+                var continuingRequiredFollowThrough = isRequiredLikeInteractable
                     && pendingProgressionInteractable is not null
                     && string.Equals(pendingProgressionInteractable.Key, observedInteractable.Key, StringComparison.Ordinal);
                 pendingProgressionInteractable = observedInteractable;
-                pendingProgressionInteractResultUntilUtc = observedInteractable.Classification == InteractableClass.Required
+                pendingProgressionInteractResultUntilUtc = isRequiredLikeInteractable
                     ? now + RequiredInteractionRetryDelay
                     : now + ProgressionInteractResultSettleDelay;
                 pendingProgressionInteractAfterWaitUntilUtc = waitAfterInteractSeconds > 0f
@@ -906,9 +944,12 @@ public sealed class ExecutionService
                     : DateTime.MinValue;
                 if (pendingProgressionInteractAfterWaitUntilUtc > pendingProgressionInteractResultUntilUtc)
                     pendingProgressionInteractResultUntilUtc = pendingProgressionInteractAfterWaitUntilUtc;
-                pendingRequiredInteractionAttemptsSent = observedInteractable.Classification == InteractableClass.Required
+                pendingRequiredInteractionAttemptsSent = isRequiredLikeInteractable
                     ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
                     : 0;
+                pendingTreasureDoorTransitionPoint = observedInteractable.Classification == InteractableClass.TreasureDoor
+                    ? BuildTreasureDoorFollowThroughPoint(context, observedInteractable, playerPosition.Value)
+                    : null;
             }
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
@@ -916,6 +957,7 @@ public sealed class ExecutionService
             var interactResult = observedInteractable.Classification switch
             {
                 InteractableClass.Required => $"Direct interact sent to {observedInteractable.Name} (required attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
+                InteractableClass.TreasureDoor => $"Direct interact sent to treasure door {observedInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
                 InteractableClass.Expendable => $"Direct interact sent to {observedInteractable.Name}; ADS will keep retrying this expendable until it disappears.",
                 _ => $"Direct interact sent to {observedInteractable.Name}.",
             };
@@ -1025,15 +1067,24 @@ public sealed class ExecutionService
             return true;
 
         if (!context.InCombat)
+        {
+            ResetLivePartyDamageProgress();
             return false;
+        }
 
         if (planner.Mode == PlannerMode.Progression
-            && planner.ObjectiveKind is PlannerObjectiveKind.CombatFriendlyInteractable or PlannerObjectiveKind.BossFightMonster)
+            && planner.ObjectiveKind is PlannerObjectiveKind.CombatFriendlyInteractable
+                or PlannerObjectiveKind.BossFightMonster
+                or PlannerObjectiveKind.MapXzForceMarchDestination
+                or PlannerObjectiveKind.XyzForceMarchDestination)
         {
             return true;
         }
 
-        return pendingProgressionInteractable?.Classification == InteractableClass.CombatFriendly;
+        if (pendingProgressionInteractable?.Classification == InteractableClass.CombatFriendly)
+            return true;
+
+        return HasRecentLivePartyDamageProgression();
     }
 
     private static bool ShouldContinueCommittedManualDestination(PlannerSnapshot planner)
@@ -1042,10 +1093,13 @@ public sealed class ExecutionService
             or PlannerObjectiveKind.CombatFriendlyInteractable
             or PlannerObjectiveKind.ExpendableInteractable
             or PlannerObjectiveKind.OptionalInteractable
+            or PlannerObjectiveKind.TreasureDoor
             or PlannerObjectiveKind.TreasureCoffer
             or PlannerObjectiveKind.BossFightMonster
             or PlannerObjectiveKind.MapXzDestination
-            or PlannerObjectiveKind.XyzDestination);
+            or PlannerObjectiveKind.XyzDestination
+            or PlannerObjectiveKind.MapXzForceMarchDestination
+            or PlannerObjectiveKind.XyzForceMarchDestination);
 
     private ObservedInteractable? ResolveCommittedInteractable(DutyContextSnapshot context, ObservationSnapshot observation)
     {
@@ -1195,7 +1249,8 @@ public sealed class ExecutionService
             return false;
         }
         var isExpendableFollowThrough = pendingInteractable.Classification == InteractableClass.Expendable;
-        var isRequiredFollowThrough = pendingInteractable.Classification == InteractableClass.Required;
+        var isTreasureDoorFollowThrough = pendingInteractable.Classification == InteractableClass.TreasureDoor;
+        var isRequiredFollowThrough = pendingInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
         if (isRequiredFollowThrough && context.IsUnsafeTransition)
         {
             ClearInteractableCommitment();
@@ -1238,13 +1293,29 @@ public sealed class ExecutionService
         }
 
         var now = DateTime.UtcNow;
+        var treasureDoorReadyForFollowThrough = isTreasureDoorFollowThrough
+            && pendingLiveInteractable is null
+            && pendingProgressionInteractAfterWaitUntilUtc <= now;
         if (now < pendingProgressionInteractResultUntilUtc)
         {
+            if (treasureDoorReadyForFollowThrough
+                && TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPoint))
+            {
+                if (reachedTreasureDoorTransitionPoint)
+                {
+                    observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                    TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                    ClearInteractableCommitment();
+                }
+
+                return true;
+            }
+
             StopMovementAssists();
             var holdReason = pendingProgressionInteractAfterWaitUntilUtc > now
                 ? $"Holding configured post-interact wait on {pendingInteractable.Name} for another {(pendingProgressionInteractAfterWaitUntilUtc - now).TotalSeconds:0.0}s before ADS retries or replans."
-                : isRequiredFollowThrough
-                    ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
+                    : isRequiredFollowThrough
+                        ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
                     : isExpendableFollowThrough
                         ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
                         : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
@@ -1282,6 +1353,19 @@ public sealed class ExecutionService
             return true;
         }
 
+        if (treasureDoorReadyForFollowThrough
+            && TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPointAfterWindow))
+        {
+            if (reachedTreasureDoorTransitionPointAfterWindow)
+            {
+                observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                ClearInteractableCommitment();
+            }
+
+            return true;
+        }
+
         observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
         TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
         ClearInteractableCommitment();
@@ -1300,11 +1384,73 @@ public sealed class ExecutionService
     private void ClearPendingProgressionInteractResult()
     {
         pendingProgressionInteractable = null;
+        pendingTreasureDoorTransitionPoint = null;
         pendingSatisfiedManualDestination = null;
         pendingSatisfiedManualInteractableKey = null;
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
+    }
+
+    private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint)
+    {
+        reachedTransitionPoint = false;
+        var frontierPoint = pendingTreasureDoorTransitionPoint;
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        if (frontierPoint is null || !playerPosition.HasValue)
+            return false;
+
+        var targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition.Value);
+        var targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition.Value);
+        var targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y);
+        var arrivalRange = frontierPoint.ArrivalRadiusXz > 0f
+            ? frontierPoint.ArrivalRadiusXz
+            : PreferredFrontierArrivalRange;
+        if (targetHorizontalDistance > arrivalRange)
+        {
+            TryBeginNavigation(BuildFrontierTargetId(frontierPoint), frontierPoint.Position);
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Treasure door follow-through is advancing through {frontierPoint.Name} after the interact (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).");
+            return true;
+        }
+
+        reachedTransitionPoint = true;
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"{prefix} Treasure door follow-through reached {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y) and is waiting for refreshed duty truth.");
+        return true;
+    }
+
+    private static DungeonFrontierPoint BuildTreasureDoorFollowThroughPoint(
+        DutyContextSnapshot context,
+        ObservedInteractable observedInteractable,
+        Vector3 playerPosition)
+        => new()
+        {
+            Key = $"treasure-door-follow-through:{context.TerritoryTypeId}:{observedInteractable.Key}",
+            Name = $"{observedInteractable.Name} follow-through",
+            Position = BuildTreasureDoorFollowThroughPosition(playerPosition, observedInteractable.Position),
+            LevelRowId = 0,
+            MapId = context.MapId,
+            Priority = 0,
+            ManualDestinationKind = ManualDestinationKind.None,
+            ArrivalRadiusXz = TreasureDoorFollowThroughArrivalRange,
+        };
+
+    private static Vector3 BuildTreasureDoorFollowThroughPosition(Vector3 playerPosition, Vector3 doorPosition)
+    {
+        var flatDelta = new Vector3(doorPosition.X - playerPosition.X, 0f, doorPosition.Z - playerPosition.Z);
+        var flatDistance = flatDelta.Length();
+        if (flatDistance <= float.Epsilon)
+            return doorPosition;
+
+        var flatDirection = Vector3.Normalize(flatDelta);
+        return new Vector3(
+            doorPosition.X + (flatDirection.X * TreasureDoorFollowThroughDistance),
+            doorPosition.Y,
+            doorPosition.Z + (flatDirection.Z * TreasureDoorFollowThroughDistance));
     }
 
     private bool TryHoldConfiguredArrivalWait(
@@ -1388,11 +1534,183 @@ public sealed class ExecutionService
             && Vector3.Distance(recoveryTargetPosition.Value, position) <= RecoveryTargetSimilarityRadius;
     }
 
+    private void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation)
+    {
+        if (context.InCombat)
+        {
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for combat to clear before duty exit.");
+            return;
+        }
+
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        if (playerPosition.HasValue)
+        {
+            var nearbyTreasure = observation.LiveInteractables
+                .Where(x => x.Classification == InteractableClass.TreasureCoffer)
+                .Select(x => new
+                {
+                    Interactable = x,
+                    HorizontalDistance = GetHorizontalDistance(x.Position, playerPosition.Value),
+                    VerticalDelta = MathF.Abs(x.Position.Y - playerPosition.Value.Y),
+                })
+                .Where(x => x.HorizontalDistance <= LeaveTreasureSweepHorizontalRange && x.VerticalDelta <= LeaveTreasureSweepVerticalCap)
+                .OrderBy(x => x.HorizontalDistance)
+                .FirstOrDefault();
+            if (nearbyTreasure is not null)
+            {
+                TryAdvanceInteractableObjective(
+                    context,
+                    nearbyTreasure.Interactable,
+                    "Leave requested. Clearing nearby treasure before duty exit.");
+                if (lastInteractGameObjectId == nearbyTreasure.Interactable.GameObjectId)
+                    leaveTreasureInteractionSent = true;
+                return;
+            }
+        }
+
+        if (leaveTreasureInteractionSent)
+        {
+            var now = DateTime.UtcNow;
+            if (leaveLootDistributionWaitUntilUtc == DateTime.MinValue)
+                leaveLootDistributionWaitUntilUtc = now + LeaveLootDistributionDelay;
+
+            if (now < leaveLootDistributionWaitUntilUtc)
+            {
+                StopMovementAssists();
+                SetPhase(
+                    ExecutionPhase.LeavingDuty,
+                    $"Leave requested. Nearby treasure was opened, so ADS is waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
+                return;
+            }
+        }
+
+        StopMovementAssists();
+        TrySendLeaveDutyUi();
+    }
+
     private void ResetRecoveryHold()
     {
         recoveryTargetObjectiveKind = PlannerObjectiveKind.None;
         recoveryTargetPosition = null;
         recoveryTargetReachedUtc = DateTime.MinValue;
+    }
+
+    private void ResetLeaveState()
+    {
+        nextLeaveUiAttemptUtc = DateTime.MinValue;
+        leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+        leaveTreasureInteractionSent = false;
+    }
+
+    private bool HasRecentLivePartyDamageProgression()
+    {
+        var now = DateTime.UtcNow;
+        var localPlayer = objectTable.LocalPlayer;
+        if (localPlayer == null)
+        {
+            ResetLivePartyDamageProgress();
+            return false;
+        }
+
+        var partyMemberNames = BuildOtherPartyMemberNames(localPlayer.Name.TextValue);
+        if (partyMemberNames.Count == 0)
+        {
+            ResetLivePartyDamageProgress();
+            return false;
+        }
+
+        var visiblePartyMemberIds = new HashSet<ulong>();
+        var visibleMonsterIds = new HashSet<ulong>();
+        var hasVisiblePartyMember = false;
+        foreach (var obj in objectTable)
+        {
+            if (obj.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player
+                || obj is not ICharacter playerCharacter)
+                continue;
+
+            if (!partyMemberNames.Contains(playerCharacter.Name.TextValue))
+                continue;
+
+            if (Vector3.Distance(localPlayer.Position, playerCharacter.Position) > LivePartyDamageProgressRange)
+                continue;
+
+            hasVisiblePartyMember = true;
+            visiblePartyMemberIds.Add(playerCharacter.GameObjectId);
+            if (recentVisiblePartyMemberHp.TryGetValue(playerCharacter.GameObjectId, out var previousHp)
+                && playerCharacter.CurrentHp < previousHp)
+            {
+                livePartyDamageProgressUntilUtc = now + LivePartyDamageProgressWindow;
+            }
+
+            recentVisiblePartyMemberHp[playerCharacter.GameObjectId] = playerCharacter.CurrentHp;
+        }
+
+        PruneHitPointCache(recentVisiblePartyMemberHp, visiblePartyMemberIds);
+        if (!hasVisiblePartyMember)
+        {
+            recentNearbyMonsterHp.Clear();
+            return livePartyDamageProgressUntilUtc > now;
+        }
+
+        foreach (var obj in objectTable)
+        {
+            if (obj is not IBattleNpc battleNpc || battleNpc.CurrentHp <= 1)
+                continue;
+
+            if (Vector3.Distance(localPlayer.Position, obj.Position) > LivePartyDamageProgressRange)
+                continue;
+
+            visibleMonsterIds.Add(obj.GameObjectId);
+            if (recentNearbyMonsterHp.TryGetValue(obj.GameObjectId, out var previousHp)
+                && battleNpc.CurrentHp < previousHp)
+            {
+                livePartyDamageProgressUntilUtc = now + LivePartyDamageProgressWindow;
+            }
+
+            recentNearbyMonsterHp[obj.GameObjectId] = battleNpc.CurrentHp;
+        }
+
+        PruneHitPointCache(recentNearbyMonsterHp, visibleMonsterIds);
+        return livePartyDamageProgressUntilUtc > now;
+    }
+
+    private void ResetLivePartyDamageProgress()
+    {
+        recentVisiblePartyMemberHp.Clear();
+        recentNearbyMonsterHp.Clear();
+        livePartyDamageProgressUntilUtc = DateTime.MinValue;
+    }
+
+    private static void PruneHitPointCache(Dictionary<ulong, uint> cache, HashSet<ulong> visibleIds)
+    {
+        if (cache.Count == 0)
+            return;
+
+        foreach (var key in cache.Keys.Where(key => !visibleIds.Contains(key)).ToArray())
+            cache.Remove(key);
+    }
+
+    private static HashSet<string> BuildOtherPartyMemberNames(string localPlayerName)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < Plugin.PartyList.Length; i++)
+        {
+            var member = Plugin.PartyList[i];
+            if (member is null)
+                continue;
+
+            var name = member.Name.TextValue.Trim();
+            if (string.IsNullOrWhiteSpace(name)
+                || string.Equals(name, localPlayerName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            names.Add(name);
+        }
+
+        return names;
     }
 
     private void TryBeginNavigation(ulong gameObjectId, Vector3 destination)
@@ -1679,6 +1997,7 @@ public sealed class ExecutionService
             PlannerObjectiveKind.CombatFriendlyInteractable => InteractableClass.CombatFriendly,
             PlannerObjectiveKind.ExpendableInteractable => InteractableClass.Expendable,
             PlannerObjectiveKind.OptionalInteractable => InteractableClass.Optional,
+            PlannerObjectiveKind.TreasureDoor => InteractableClass.TreasureDoor,
             PlannerObjectiveKind.TreasureCoffer => InteractableClass.TreasureCoffer,
             _ => (InteractableClass?)null,
         };
@@ -1788,6 +2107,49 @@ public sealed class ExecutionService
             log?.Warning(ex, $"[ADS] Direct interact failed for {gameObject.Name.TextValue}.");
             return false;
         }
+    }
+
+    private unsafe void TrySendLeaveDutyUi()
+    {
+        var now = DateTime.UtcNow;
+        if (GameInteractionHelper.ClickYesIfVisible(log))
+        {
+            nextLeaveUiAttemptUtc = now + LeaveUiRetryCooldown;
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Confirmed the duty-exit prompt; waiting for the zone-out.");
+            return;
+        }
+
+        if (now < nextLeaveUiAttemptUtc)
+        {
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for the next leave-duty UI retry window.");
+            return;
+        }
+
+        nextLeaveUiAttemptUtc = now + LeaveUiRetryCooldown;
+
+        var agentModule = AgentModule.Instance();
+        if (agentModule != null)
+        {
+            var contentsFinderMenuAgent = agentModule->GetAgentByInternalId(AgentId.ContentsFinderMenu);
+            if (contentsFinderMenuAgent != null)
+                contentsFinderMenuAgent->Show();
+        }
+
+        if (GameInteractionHelper.IsAddonVisible("ContentsFinderMenu"))
+        {
+            GameInteractionHelper.FireAddonCallback("ContentsFinderMenu", true, 0);
+            GameInteractionHelper.FireAddonCallback("ContentsFinderMenu", false, -2);
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Opened Contents Finder and sent the Leave Duty callback.");
+            return;
+        }
+
+        if (GameInteractionHelper.TrySendChatCommand(commandManager, "/dutyfinder", log))
+        {
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Opening Duty Finder so ADS can send the Leave Duty callback.");
+            return;
+        }
+
+        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested, but ADS could not open the leave-duty UI yet.");
     }
 
     private void StopMovementAssists()

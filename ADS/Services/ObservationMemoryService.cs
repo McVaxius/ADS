@@ -52,6 +52,7 @@ public sealed class ObservationMemoryService
     };
 
     private readonly IObjectTable objectTable;
+    private readonly IPartyList partyList;
     private readonly IPluginLog log;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
     private readonly Dictionary<string, ObservedMonster> knownMonsters = [];
@@ -64,9 +65,10 @@ public sealed class ObservationMemoryService
     private bool loggedReset;
     private Vector3? lastPlayerPosition;
 
-    public ObservationMemoryService(IObjectTable objectTable, IPluginLog log, ObjectPriorityRuleService objectPriorityRuleService)
+    public ObservationMemoryService(IObjectTable objectTable, IPartyList partyList, IPluginLog log, ObjectPriorityRuleService objectPriorityRuleService)
     {
         this.objectTable = objectTable;
+        this.partyList = partyList;
         this.log = log;
         this.objectPriorityRuleService = objectPriorityRuleService;
         Current = ObservationSnapshot.Empty;
@@ -137,6 +139,7 @@ public sealed class ObservationMemoryService
         var liveInteractables = new Dictionary<string, ObservedInteractable>(StringComparer.Ordinal);
         var now = DateTime.UtcNow;
         var playerPosition = objectTable.LocalPlayer?.Position;
+        var exactPartyMemberNames = BuildExactPartyMemberNames();
         CleanupExpiredTreasureSuppressions(now);
 
         foreach (var gameObject in objectTable)
@@ -153,6 +156,12 @@ public sealed class ObservationMemoryService
                 case ObjectKind.BattleNpc:
                     {
                         var monsterKey = BuildKey(gameObject);
+                        if (exactPartyMemberNames.Contains(name))
+                        {
+                            knownMonsters.Remove(monsterKey);
+                            break;
+                        }
+
                         if (objectPriorityRuleService.ShouldSuppressOffLayerBattleNpcTruth(
                                 context,
                                 gameObject.BaseId,
@@ -202,7 +211,7 @@ public sealed class ObservationMemoryService
                             if (!gameObject.IsTargetable)
                                 break;
 
-                            if (IsDurablySuppressedInteractableClass(battleNpcInteractClassification)
+                            if (ShouldDurablySuppressInteractable(context, name, battleNpcInteractClassification)
                                 && TryCreateUsedProgressionInteractable(context, gameObject, name, battleNpcInteractClassification, now, out var usedBattleNpcInteractable))
                             {
                                 knownInteractables[usedBattleNpcInteractable!.Key] = usedBattleNpcInteractable;
@@ -237,6 +246,12 @@ public sealed class ObservationMemoryService
                             break;
 
                         var interactableKey = BuildKey(gameObject);
+                        if (exactPartyMemberNames.Contains(name))
+                        {
+                            knownInteractables.Remove(interactableKey);
+                            break;
+                        }
+
                         var classification = ClassifyInteractable(gameObject, name, context);
                         if (classification == InteractableClass.Ignored)
                         {
@@ -244,7 +259,7 @@ public sealed class ObservationMemoryService
                             break;
                         }
 
-                        if (IsDurablySuppressedInteractableClass(classification)
+                        if (ShouldDurablySuppressInteractable(context, name, classification)
                             && TryCreateUsedProgressionInteractable(context, gameObject, name, classification, now, out var usedInteractable))
                         {
                             knownInteractables[usedInteractable!.Key] = usedInteractable;
@@ -353,6 +368,14 @@ public sealed class ObservationMemoryService
         if (!IsDurablySuppressedInteractableClass(interactable.Classification))
             return;
 
+        if (!ShouldDurablySuppressInteractable(context, interactable.Name, interactable.Classification))
+        {
+            var consumedInteractable = CreateConsumedInteractable(interactable);
+            knownInteractables[consumedInteractable.Key] = consumedInteractable;
+            log.Information($"[ADS] Marked repeatable progression interactable {interactable.Name} at {Quantize(interactable.Position)} as consumed without durable spatial suppression.");
+            return;
+        }
+
         var spatialKey = BuildProgressionUseKey(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position);
         if (usedProgressionInteractables.ContainsKey(spatialKey))
             return;
@@ -431,6 +454,21 @@ public sealed class ObservationMemoryService
             GhostReason = GhostReason.TransitionUsed,
         };
 
+    private static ObservedInteractable CreateConsumedInteractable(ObservedInteractable interactable)
+        => new()
+        {
+            Key = interactable.Key,
+            GameObjectId = interactable.GameObjectId,
+            DataId = interactable.DataId,
+            MapId = interactable.MapId,
+            ObjectKind = interactable.ObjectKind,
+            Name = interactable.Name,
+            Position = interactable.Position,
+            LastSeenUtc = DateTime.UtcNow,
+            Classification = interactable.Classification,
+            GhostReason = GhostReason.Consumed,
+        };
+
     private static ObservedInteractable CreateTransitionUsedInteractable(string spatialKey, IGameObject gameObject, uint mapId, string name, InteractableClass classification, DateTime now)
         => new()
         {
@@ -483,13 +521,21 @@ public sealed class ObservationMemoryService
     {
         if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification, gameObject.Position, context.MapId))
         {
-            if (overrideClassification is InteractableClass.Follow or InteractableClass.MapXzDestination or InteractableClass.BossFight)
+            if (overrideClassification is InteractableClass.Follow
+                or InteractableClass.MapXzDestination
+                or InteractableClass.MapXzForceMarch
+                or InteractableClass.XYZ
+                or InteractableClass.XYZForceMarch
+                or InteractableClass.BossFight)
                 return InteractableClass.Ignored;
 
             return overrideClassification;
         }
 
         var loweredName = name.ToLowerInvariant();
+        if (TreasureDungeonData.TryGetInteractableClassification(context.TerritoryTypeId, name, out var treasureClassification))
+            return treasureClassification;
+
         if (ExpendableTokens.Any(loweredName.Contains))
             return InteractableClass.Expendable;
 
@@ -522,7 +568,11 @@ public sealed class ObservationMemoryService
     }
 
     private static bool IsDurablySuppressedInteractableClass(InteractableClass classification)
-        => classification is InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable;
+        => classification is InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable or InteractableClass.TreasureDoor;
+
+    private static bool ShouldDurablySuppressInteractable(DutyContextSnapshot context, string name, InteractableClass classification)
+        => IsDurablySuppressedInteractableClass(classification)
+            && !TreasureDungeonData.IsRepeatableProgressionInteractable(context.TerritoryTypeId, name);
 
     private static bool IsSuppressedInteractionGhost(ObservedInteractable interactable)
         => interactable.GhostReason is GhostReason.Consumed or GhostReason.TransitionUsed;
@@ -532,6 +582,19 @@ public sealed class ObservationMemoryService
 
     private static float? GetVerticalDelta(Vector3? playerPosition, Vector3 targetPosition)
         => playerPosition.HasValue ? MathF.Abs(targetPosition.Y - playerPosition.Value.Y) : null;
+
+    private HashSet<string> BuildExactPartyMemberNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in partyList)
+        {
+            var name = member.Name.TextValue.Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+                names.Add(name);
+        }
+
+        return names;
+    }
 
     private void CleanupExpiredTreasureSuppressions(DateTime now)
     {

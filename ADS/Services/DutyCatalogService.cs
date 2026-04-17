@@ -126,6 +126,8 @@ public sealed class DutyCatalogService
             entriesByTerritory[entry.TerritoryTypeId] = entry;
         }
 
+        AddSyntheticTreasureDutyEntries(dataManager);
+
         entries.Sort(static (left, right) =>
         {
             var byExpansion = left.ExVersion.CompareTo(right.ExVersion);
@@ -158,6 +160,49 @@ public sealed class DutyCatalogService
             return byTerritory;
 
         return null;
+    }
+
+    private void AddSyntheticTreasureDutyEntries(IDataManager dataManager)
+    {
+        var territorySheet = dataManager.GetExcelSheet<TerritoryType>();
+        if (territorySheet is null)
+            return;
+
+        foreach (var territoryId in TreasureDungeonData.GetSupportedDutyTerritories())
+        {
+            if (entriesByTerritory.ContainsKey(territoryId))
+                continue;
+
+            if (!territorySheet.TryGetRow(territoryId, out var territory))
+                continue;
+
+            var territoryName = NormalizeName(territory.PlaceName.Value.Name.ToString());
+            if (string.IsNullOrWhiteSpace(territoryName))
+                territoryName = $"Treasure Duty {territoryId}";
+
+            var entry = new DutyCatalogEntry
+            {
+                ContentFinderConditionId = 0,
+                TerritoryTypeId = territoryId,
+                Name = territoryName,
+                EnglishName = territoryName,
+                ContentTypeName = "Treasure Dungeon",
+                ExpansionName = GetExpansionName(territory.ExVersion.ValueNullable?.RowId ?? 0),
+                SupportNote = "Synthetic treasure-duty catalog row from built-in treasure routing/classification data.",
+                LevelRequired = 0,
+                SortKey = ushort.MaxValue,
+                ExVersion = territory.ExVersion.ValueNullable?.RowId ?? 0,
+                ContentTypeRowId = 0,
+                ContentMemberTypeRowId = 0,
+                PartySize = 4,
+                SupportLevel = DutySupportLevel.ActiveSupported,
+                ClearanceStatus = DutyClearanceStatus.FourPlayerSyncCleared,
+                IsPlannedTest = false,
+            };
+
+            entries.Add(entry);
+            entriesByTerritory[territoryId] = entry;
+        }
     }
 
     private static string NormalizeName(string name)

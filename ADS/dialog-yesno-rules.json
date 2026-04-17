@@ -36,6 +36,13 @@
       "MatchMode": "Contains",
       "Response": "Yes",
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Commence the",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
     }
   ]
 }

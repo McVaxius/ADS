@@ -16,4 +16,7 @@ public enum PlannerObjectiveKind
     ExpendableInteractable = 11,
     BossFightMonster = 12,
     XyzDestination = 13,
+    MapXzForceMarchDestination = 14,
+    XyzForceMarchDestination = 15,
+    TreasureDoor = 16,
 }

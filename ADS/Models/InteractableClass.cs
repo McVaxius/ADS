@@ -12,4 +12,7 @@ public enum InteractableClass
     MapXzDestination = 7,
     BossFight = 8,
     XYZ = 9,
+    MapXzForceMarch = 10,
+    XYZForceMarch = 11,
+    TreasureDoor = 12,
 }

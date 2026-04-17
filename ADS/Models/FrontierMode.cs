@@ -7,4 +7,5 @@ public enum FrontierMode
     HeadingScout = 2,
     MapXzDestination = 3,
     XyzDestination = 4,
+    TreasureDungeon = 5,
 }

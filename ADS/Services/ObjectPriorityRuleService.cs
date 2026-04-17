@@ -401,6 +401,13 @@ public sealed class ObjectPriorityRuleService
             .ThenBy(x => x.Priority)
             .ToList();
 
+    public bool DestinationRulePassesDistanceGates(ObjectPriorityRule rule, Vector3 playerPosition, Vector3 destinationPosition)
+    {
+        var distance = Vector3.Distance(destinationPosition, playerPosition);
+        var verticalDelta = MathF.Abs(destinationPosition.Y - playerPosition.Y);
+        return RulePassesDistanceGates(rule, distance, verticalDelta);
+    }
+
     public ObjectPriorityRule? MatchInteractableRule(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string objectName)
         => MatchObjectRule(context, objectKind, baseId, objectName);
 
@@ -723,8 +730,7 @@ public sealed class ObjectPriorityRuleService
         if (!MatchesDutyScope(rule, context, includeLayerScope))
             return false;
 
-        if (!string.IsNullOrWhiteSpace(rule.ObjectKind)
-            && !string.Equals(rule.ObjectKind, objectKind.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (!MatchesConfiguredObjectKind(rule, objectKind, objectName))
         {
             return false;
         }
@@ -742,6 +748,39 @@ public sealed class ObjectPriorityRuleService
             ? objectName.Contains(rule.ObjectName, StringComparison.OrdinalIgnoreCase)
             : string.Equals(objectName, rule.ObjectName, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool MatchesConfiguredObjectKind(ObjectPriorityRule rule, ObjectKind objectKind, string objectName)
+    {
+        if (string.IsNullOrWhiteSpace(rule.ObjectKind))
+            return true;
+
+        if (string.Equals(rule.ObjectKind, objectKind.ToString(), StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return IsTreasureCofferKindAlias(rule, objectKind, objectName);
+    }
+
+    private static bool IsTreasureCofferKindAlias(ObjectPriorityRule rule, ObjectKind objectKind, string objectName)
+    {
+        if (!LooksLikeTreasureCofferRule(rule) || !LooksLikeTreasureCofferName(objectName))
+            return false;
+
+        var configuredKindIsTreasure = string.Equals(rule.ObjectKind, ObjectKind.Treasure.ToString(), StringComparison.OrdinalIgnoreCase);
+        var configuredKindIsEvent = string.Equals(rule.ObjectKind, ObjectKind.EventObj.ToString(), StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(rule.ObjectKind, ObjectKind.EventNpc.ToString(), StringComparison.OrdinalIgnoreCase);
+        var observedKindIsTreasure = objectKind == ObjectKind.Treasure;
+        var observedKindIsEvent = objectKind is ObjectKind.EventObj or ObjectKind.EventNpc;
+        return (configuredKindIsTreasure && observedKindIsEvent)
+               || (configuredKindIsEvent && observedKindIsTreasure);
+    }
+
+    private static bool LooksLikeTreasureCofferRule(ObjectPriorityRule rule)
+        => (TryParseClassification(rule.Classification, out var classification)
+            && classification == InteractableClass.TreasureCoffer)
+           || string.Equals(NormalizeName(rule.ObjectName), "Treasure Coffer", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeTreasureCofferName(string objectName)
+        => string.Equals(NormalizeName(objectName), "Treasure Coffer", StringComparison.OrdinalIgnoreCase);
 
     private IEnumerable<ObjectPriorityRule> GetMatchingObjectRules(
         DutyContextSnapshot context,
@@ -908,12 +947,12 @@ public sealed class ObjectPriorityRuleService
     private static bool IsMapXzDestinationRule(ObjectPriorityRule rule)
         => string.Equals(rule.DestinationType, MapXzDestinationType, StringComparison.OrdinalIgnoreCase)
            || (TryParseClassification(rule.Classification, out var classification)
-               && classification == InteractableClass.MapXzDestination);
+               && classification is InteractableClass.MapXzDestination or InteractableClass.MapXzForceMarch);
 
     private static bool IsXyzDestinationRule(ObjectPriorityRule rule)
         => string.Equals(rule.DestinationType, XyzDestinationType, StringComparison.OrdinalIgnoreCase)
            || (TryParseClassification(rule.Classification, out var classification)
-               && classification == InteractableClass.XYZ);
+               && classification is InteractableClass.XYZ or InteractableClass.XYZForceMarch);
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
         => IsMapXzDestinationRule(rule) || IsXyzDestinationRule(rule);
