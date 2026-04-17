@@ -502,7 +502,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads outside - queue outside ownership\n" +
                 "/ads inside - claim ownership inside duty\n" +
                 "/ads resume - resume inside duty\n" +
-                "/ads leave - request leave state\n" +
+                "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +

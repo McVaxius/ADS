@@ -34,7 +34,8 @@ public sealed class ExecutionService
     private const float CloseRangeInteractFallbackVerticalCap = 4.0f;
     private const float CloseRangeInteractFallbackProgressMargin = 0.2f;
     private const float TreasureCofferProgressMargin = 2.0f;
-    private const float LeaveTreasureSweepHorizontalRange = 20.0f;
+    //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
+    private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
     private const float LeaveTreasureSweepVerticalCap = 6.0f;
     private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);

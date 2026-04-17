@@ -43,7 +43,7 @@ public sealed class DutyCatalogService
         ["the praetorium"] = DutyClearanceStatus.FourPlayerSyncCleared,
         ["dzemael darkhold"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the burn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["cutter's cry"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["cutter's cry"] = DutyClearanceStatus.FourPlayerSyncCleared,
         ["pharos sirius"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["hullbreaker isle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["doma castle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
