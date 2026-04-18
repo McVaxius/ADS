@@ -82,7 +82,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
         ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds for pre-interact arrival hold, waitAfterInteractSeconds for post-interact follow-through hold, BossFight for BattleNpc bosses that should beat nearby trash/objectives once in range, CombatFriendly on BattleNpc or EventNpc for direct-interact talk targets such as Goblin Pathfinder, TreasureDoor for explicit treasure-dungeon gate overrides, and for manual waypoints classification MapXzDestination / MapXzForceMarch + mapCoordinates like 11.3,10.4 or XYZ / XYZForceMarch + worldCoordinates like 154.1,101.9,-34.2. Layer now scopes any rule to the current live sub-area only: leave it blank for any layer, or set it to a live subarea name / map row id. Legacy DestinationType layer rows are auto-migrated on load.");
-        ImGui.TextWrapped("On first run, ADS seeds this file from the packaged rules JSON. When the packaged JSON changes on plugin update, ADS backs up the existing config copy and overwrites it with the new packaged version. Between packaged updates, manual edits here remain authoritative and are auto-reloaded while ADS is running.");
+        ImGui.TextWrapped("When ADS detects a newer plugin version than the last synced version stored in PluginConfigDirectory\\ADS.json, it overwrites this default JSON from the packaged file in the installed plugin directory before loading rules. Durable custom object-rule edits should live in named presets, not the DEFAULT config copy.");
 
         ImGui.Separator();
         ImGui.TextWrapped($"Dialog yes/no rules: {plugin.DialogYesNoRuleService.ActiveRuleCount} active rule(s).");
@@ -97,7 +97,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             plugin.DialogYesNoRuleService.Reload();
         ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastLoadStatus);
-        ImGui.TextWrapped("Dialog yes/no rules are still loaded from the plugin config directory. ADS only reseeds or overwrites this file when the packaged dialog rules change; otherwise your local edits stay in place and reload live.");
+        ImGui.TextWrapped("Dialog yes/no rules are still loaded from the plugin config directory, but ADS refreshes this default JSON from the packaged file when it detects a newer plugin version than the last synced version stored in PluginConfigDirectory\\ADS.json. No separate dialog preset system is added in this pass.");
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
         var dtrMode = plugin.Configuration.DtrBarMode;

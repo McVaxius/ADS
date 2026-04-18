@@ -30,7 +30,6 @@ public sealed class ObjectPriorityRuleService
 
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
-    private readonly Configuration configuration;
     private readonly string configPath;
     private readonly string presetDirectoryPath;
     private readonly string bundledPath;
@@ -38,13 +37,11 @@ public sealed class ObjectPriorityRuleService
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
-    private string lastLoggedSyncStatus = string.Empty;
 
-    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, Configuration configuration, string configDirectory, string? assemblyDirectory)
+    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory, string? assemblyDirectory, string initialSyncStatus)
     {
         this.log = log;
         this.dataManager = dataManager;
-        this.configuration = configuration;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
@@ -52,8 +49,9 @@ public sealed class ObjectPriorityRuleService
         bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
             ? string.Empty
             : Path.Combine(assemblyDirectory, FileName);
+        LastSyncStatus = initialSyncStatus;
 
-        EnsureConfigSynchronized();
+        EnsureSeeded();
         Reload();
     }
 
@@ -128,7 +126,7 @@ public sealed class ObjectPriorityRuleService
     {
         try
         {
-            EnsureConfigSynchronized();
+            EnsureSeeded();
             if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
             {
                 Current = new ObjectPriorityRuleManifest();
@@ -163,7 +161,7 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            EnsureConfigSynchronized();
+            EnsureSeeded();
             var currentWriteUtc = File.GetLastWriteTimeUtc(configPath);
             if (currentWriteUtc == lastObservedRulesWriteUtc)
                 return false;
@@ -667,31 +665,29 @@ public sealed class ObjectPriorityRuleService
         return true;
     }
 
-    private void EnsureConfigSynchronized()
+    private void EnsureSeeded()
     {
-        var result = BundledConfigSyncHelper.EnsureCurrent(
-            FileName,
-            configPath,
-            bundledPath,
-            configuration.AppliedBundledObjectRulesStamp,
-            stamp => configuration.AppliedBundledObjectRulesStamp = stamp,
-            GetDefaultJson);
-        LastSyncStatus = result.StatusMessage;
-        if (result.ConfigurationChanged)
-            configuration.Save();
+        if (File.Exists(configPath))
+            return;
 
-        if (!string.Equals(lastLoggedSyncStatus, LastSyncStatus, StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
         {
+            File.Copy(bundledPath, configPath, overwrite: false);
+            LastSyncStatus = $"Default object rules config was missing, so ADS re-seeded it from {bundledPath}.";
             log.Information($"[ADS] {LastSyncStatus}");
-            lastLoggedSyncStatus = LastSyncStatus;
+            return;
         }
+
+        File.WriteAllText(configPath, GetDefaultJson());
+        LastSyncStatus = $"Default object rules config was missing, so ADS re-seeded it from built-in defaults.";
+        log.Warning($"[ADS] {LastSyncStatus}");
     }
 
     private string EnsurePresetSeeded(string presetName)
     {
         if (IsDefaultPreset(presetName))
         {
-            EnsureConfigSynchronized();
+            EnsureSeeded();
             return configPath;
         }
 

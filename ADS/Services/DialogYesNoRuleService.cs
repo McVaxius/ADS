@@ -18,24 +18,22 @@ public sealed class DialogYesNoRuleService
     };
 
     private readonly IPluginLog log;
-    private readonly Configuration configuration;
     private readonly string configPath;
     private readonly string bundledPath;
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
-    private string lastLoggedSyncStatus = string.Empty;
 
-    public DialogYesNoRuleService(IPluginLog log, Configuration configuration, string configDirectory, string? assemblyDirectory)
+    public DialogYesNoRuleService(IPluginLog log, string configDirectory, string? assemblyDirectory, string initialSyncStatus)
     {
         this.log = log;
-        this.configuration = configuration;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
             ? string.Empty
             : Path.Combine(assemblyDirectory, FileName);
+        LastSyncStatus = initialSyncStatus;
 
-        EnsureConfigSynchronized();
+        EnsureSeeded();
         Reload();
     }
 
@@ -66,7 +64,7 @@ public sealed class DialogYesNoRuleService
     {
         try
         {
-            EnsureConfigSynchronized();
+            EnsureSeeded();
             var json = File.ReadAllText(configPath);
             var manifest = JsonSerializer.Deserialize<DialogYesNoRuleManifest>(json, JsonOptions) ?? new DialogYesNoRuleManifest();
             manifest.Rules ??= [];
@@ -97,7 +95,7 @@ public sealed class DialogYesNoRuleService
 
         try
         {
-            EnsureConfigSynchronized();
+            EnsureSeeded();
             var currentWriteUtc = File.GetLastWriteTimeUtc(configPath);
             if (currentWriteUtc == lastObservedRulesWriteUtc)
                 return false;
@@ -136,24 +134,22 @@ public sealed class DialogYesNoRuleService
             .Where(x => Matches(x, promptText))
             .FirstOrDefault();
 
-    private void EnsureConfigSynchronized()
+    private void EnsureSeeded()
     {
-        var result = BundledConfigSyncHelper.EnsureCurrent(
-            FileName,
-            configPath,
-            bundledPath,
-            configuration.AppliedBundledDialogRulesStamp,
-            stamp => configuration.AppliedBundledDialogRulesStamp = stamp,
-            GetDefaultJson);
-        LastSyncStatus = result.StatusMessage;
-        if (result.ConfigurationChanged)
-            configuration.Save();
+        if (File.Exists(configPath))
+            return;
 
-        if (!string.Equals(lastLoggedSyncStatus, LastSyncStatus, StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
         {
+            File.Copy(bundledPath, configPath, overwrite: false);
+            LastSyncStatus = $"Default dialog rules config was missing, so ADS re-seeded it from {bundledPath}.";
             log.Information($"[ADS] {LastSyncStatus}");
-            lastLoggedSyncStatus = LastSyncStatus;
+            return;
         }
+
+        File.WriteAllText(configPath, GetDefaultJson());
+        LastSyncStatus = $"Default dialog rules config was missing, so ADS re-seeded it from built-in defaults.";
+        log.Warning($"[ADS] {LastSyncStatus}");
     }
 
     private void RememberCurrentRulesWriteTime()

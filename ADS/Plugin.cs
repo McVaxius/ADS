@@ -57,6 +57,8 @@ public sealed class Plugin : IDalamudPlugin
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
+    public string ObjectRulesSyncStatus { get; }
+    public string DialogRulesSyncStatus { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -72,13 +74,21 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
-        if (configurationChanged)
+        var bundledRuleSync = BundledConfigSyncHelper.SyncBundledRulesIfPluginVersionAdvanced(
+            PluginInfo.GetVersion(),
+            Configuration.InstalledRuleSyncVersion,
+            PluginInterface.GetPluginConfigDirectory(),
+            PluginInterface.AssemblyLocation.DirectoryName,
+            version => Configuration.InstalledRuleSyncVersion = version);
+        ObjectRulesSyncStatus = bundledRuleSync.ObjectRulesStatus;
+        DialogRulesSyncStatus = bundledRuleSync.DialogRulesStatus;
+        if (configurationChanged || bundledRuleSync.ConfigurationChanged)
             Configuration.Save();
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, Configuration, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
-        DialogYesNoRuleService = new DialogYesNoRuleService(Log, Configuration, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName, ObjectRulesSyncStatus);
+        DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName, DialogRulesSyncStatus);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
@@ -121,6 +131,9 @@ public sealed class Plugin : IDalamudPlugin
 
         SetupDtrBar();
         UpdateDtrBar();
+
+        Log.Information($"[ADS] {ObjectRulesSyncStatus}");
+        Log.Information($"[ADS] {DialogRulesSyncStatus}");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -743,9 +756,14 @@ public sealed class Plugin : IDalamudPlugin
 
         if (configuration.Version < 3)
         {
-            configuration.AppliedBundledObjectRulesStamp ??= string.Empty;
-            configuration.AppliedBundledDialogRulesStamp ??= string.Empty;
             configuration.Version = 3;
+            changed = true;
+        }
+
+        if (configuration.Version < 4)
+        {
+            configuration.InstalledRuleSyncVersion ??= string.Empty;
+            configuration.Version = 4;
             changed = true;
         }
 
@@ -768,17 +786,10 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
-        var normalizedObjectRulesStamp = configuration.AppliedBundledObjectRulesStamp?.Trim() ?? string.Empty;
-        if (!string.Equals(configuration.AppliedBundledObjectRulesStamp, normalizedObjectRulesStamp, StringComparison.Ordinal))
+        var normalizedInstalledRuleSyncVersion = configuration.InstalledRuleSyncVersion?.Trim() ?? string.Empty;
+        if (!string.Equals(configuration.InstalledRuleSyncVersion, normalizedInstalledRuleSyncVersion, StringComparison.Ordinal))
         {
-            configuration.AppliedBundledObjectRulesStamp = normalizedObjectRulesStamp;
-            changed = true;
-        }
-
-        var normalizedDialogRulesStamp = configuration.AppliedBundledDialogRulesStamp?.Trim() ?? string.Empty;
-        if (!string.Equals(configuration.AppliedBundledDialogRulesStamp, normalizedDialogRulesStamp, StringComparison.Ordinal))
-        {
-            configuration.AppliedBundledDialogRulesStamp = normalizedDialogRulesStamp;
+            configuration.InstalledRuleSyncVersion = normalizedInstalledRuleSyncVersion;
             changed = true;
         }
 
