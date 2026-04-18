@@ -71,12 +71,14 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-        ApplyConfigurationMigrations(Configuration);
+        var configurationChanged = ApplyConfigurationMigrations(Configuration);
+        if (configurationChanged)
+            Configuration.Save();
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
-        DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, Configuration, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
+        DialogYesNoRuleService = new DialogYesNoRuleService(Log, Configuration, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
@@ -723,20 +725,63 @@ public sealed class Plugin : IDalamudPlugin
         dtrEntry.Tooltip = new SeString(new TextPayload($"{PluginInfo.DisplayName} {state}/{phase}. {tooltipDuty}. Click to open the main window."));
     }
 
-    private static void ApplyConfigurationMigrations(Configuration configuration)
+    private static bool ApplyConfigurationMigrations(Configuration configuration)
     {
+        var changed = false;
         if (configuration.Version < 1)
+        {
             configuration.Version = 1;
+            changed = true;
+        }
+
         if (configuration.Version < 2)
         {
             configuration.ConsiderTreasureCoffers = true;
             configuration.Version = 2;
+            changed = true;
         }
 
-        configuration.DtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
+        if (configuration.Version < 3)
+        {
+            configuration.AppliedBundledObjectRulesStamp ??= string.Empty;
+            configuration.AppliedBundledDialogRulesStamp ??= string.Empty;
+            configuration.Version = 3;
+            changed = true;
+        }
+
+        var clampedDtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
+        if (configuration.DtrBarMode != clampedDtrBarMode)
+        {
+            configuration.DtrBarMode = clampedDtrBarMode;
+            changed = true;
+        }
+
         if (string.IsNullOrWhiteSpace(configuration.DtrIconEnabled))
+        {
             configuration.DtrIconEnabled = Configuration.DefaultDtrIconEnabled;
+            changed = true;
+        }
+
         if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
+        {
             configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
+            changed = true;
+        }
+
+        var normalizedObjectRulesStamp = configuration.AppliedBundledObjectRulesStamp?.Trim() ?? string.Empty;
+        if (!string.Equals(configuration.AppliedBundledObjectRulesStamp, normalizedObjectRulesStamp, StringComparison.Ordinal))
+        {
+            configuration.AppliedBundledObjectRulesStamp = normalizedObjectRulesStamp;
+            changed = true;
+        }
+
+        var normalizedDialogRulesStamp = configuration.AppliedBundledDialogRulesStamp?.Trim() ?? string.Empty;
+        if (!string.Equals(configuration.AppliedBundledDialogRulesStamp, normalizedDialogRulesStamp, StringComparison.Ordinal))
+        {
+            configuration.AppliedBundledDialogRulesStamp = normalizedDialogRulesStamp;
+            changed = true;
+        }
+
+        return changed;
     }
 }

@@ -30,6 +30,7 @@ public sealed class ObjectPriorityRuleService
 
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
+    private readonly Configuration configuration;
     private readonly string configPath;
     private readonly string presetDirectoryPath;
     private readonly string bundledPath;
@@ -37,11 +38,13 @@ public sealed class ObjectPriorityRuleService
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
+    private string lastLoggedSyncStatus = string.Empty;
 
-    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory, string? assemblyDirectory)
+    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, Configuration configuration, string configDirectory, string? assemblyDirectory)
     {
         this.log = log;
         this.dataManager = dataManager;
+        this.configuration = configuration;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
@@ -50,7 +53,7 @@ public sealed class ObjectPriorityRuleService
             ? string.Empty
             : Path.Combine(assemblyDirectory, FileName);
 
-        EnsureSeeded();
+        EnsureConfigSynchronized();
         Reload();
     }
 
@@ -64,6 +67,8 @@ public sealed class ObjectPriorityRuleService
         => bundledPath;
 
     public string LastLoadStatus { get; private set; } = "Rules not loaded yet.";
+
+    public string LastSyncStatus { get; private set; } = "Packaged rules sync not checked yet.";
 
     public ObjectPriorityRuleManifest Current { get; private set; } = new();
 
@@ -123,7 +128,7 @@ public sealed class ObjectPriorityRuleService
     {
         try
         {
-            EnsureSeeded();
+            EnsureConfigSynchronized();
             if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
             {
                 Current = new ObjectPriorityRuleManifest();
@@ -158,7 +163,7 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            EnsureSeeded();
+            EnsureConfigSynchronized();
             var currentWriteUtc = File.GetLastWriteTimeUtc(configPath);
             if (currentWriteUtc == lastObservedRulesWriteUtc)
                 return false;
@@ -662,25 +667,31 @@ public sealed class ObjectPriorityRuleService
         return true;
     }
 
-    private void EnsureSeeded()
+    private void EnsureConfigSynchronized()
     {
-        if (File.Exists(configPath))
-            return;
+        var result = BundledConfigSyncHelper.EnsureCurrent(
+            FileName,
+            configPath,
+            bundledPath,
+            configuration.AppliedBundledObjectRulesStamp,
+            stamp => configuration.AppliedBundledObjectRulesStamp = stamp,
+            GetDefaultJson);
+        LastSyncStatus = result.StatusMessage;
+        if (result.ConfigurationChanged)
+            configuration.Save();
 
-        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
+        if (!string.Equals(lastLoggedSyncStatus, LastSyncStatus, StringComparison.Ordinal))
         {
-            File.Copy(bundledPath, configPath, overwrite: false);
-            return;
+            log.Information($"[ADS] {LastSyncStatus}");
+            lastLoggedSyncStatus = LastSyncStatus;
         }
-
-        File.WriteAllText(configPath, GetDefaultJson());
     }
 
     private string EnsurePresetSeeded(string presetName)
     {
         if (IsDefaultPreset(presetName))
         {
-            EnsureSeeded();
+            EnsureConfigSynchronized();
             return configPath;
         }
 
