@@ -344,7 +344,7 @@ public sealed class ExecutionService
             return;
         }
 
-        if (TryHoldPendingProgressionInteractResult(context, observation, prefix))
+        if (TryHoldPendingProgressionInteractResult(context, planner, observation, prefix))
             return;
 
         if ((context.InCombat || planner.Mode == PlannerMode.Combat)
@@ -369,9 +369,27 @@ public sealed class ExecutionService
 
         if (planner.Mode == PlannerMode.Progression)
         {
+            var plannerInteractable = IsInteractablePlannerObjective(planner.ObjectiveKind)
+                ? ResolveObservedInteractable(planner, observation)
+                : null;
             var committedInteractable = ResolveCommittedInteractable(context, observation);
             if (committedInteractable is not null)
             {
+                if (plannerInteractable is not null
+                    && plannerInteractable.Key != committedInteractable.Key
+                    && ShouldSwitchToPlannerInteractable(
+                        context,
+                        committedInteractable,
+                        committedInteractableObjectiveKind,
+                        plannerInteractable,
+                        planner.ObjectiveKind,
+                        out var switchReason))
+                {
+                    CommitInteractable(plannerInteractable, planner.ObjectiveKind);
+                    TryAdvanceInteractableObjective(context, plannerInteractable, $"{prefix} {switchReason}");
+                    return;
+                }
+
                 if (IsStickyInteractableCommitment(committedInteractableObjectiveKind)
                     && planner.ObjectiveKind == committedInteractableObjectiveKind)
                 {
@@ -386,7 +404,7 @@ public sealed class ExecutionService
                     or PlannerObjectiveKind.TreasureDoor
                     or PlannerObjectiveKind.TreasureCoffer)
                 {
-                    var replannedInteractable = ResolveObservedInteractable(planner, observation);
+                    var replannedInteractable = plannerInteractable;
                     if (replannedInteractable is not null && replannedInteractable.Key != committedInteractable.Key)
                     {
                         CommitInteractable(replannedInteractable, planner.ObjectiveKind);
@@ -456,7 +474,7 @@ public sealed class ExecutionService
                 or PlannerObjectiveKind.TreasureDoor
                 or PlannerObjectiveKind.TreasureCoffer)
             {
-                var selectedInteractable = ResolveObservedInteractable(planner, observation);
+                var selectedInteractable = plannerInteractable;
                 if (selectedInteractable is null)
                 {
                     StopMovementAssists();
@@ -1062,6 +1080,67 @@ public sealed class ExecutionService
     private static bool IsStickyInteractableCommitment(PlannerObjectiveKind objectiveKind)
         => objectiveKind == PlannerObjectiveKind.TreasureCoffer;
 
+    private static bool IsInteractablePlannerObjective(PlannerObjectiveKind objectiveKind)
+        => objectiveKind is PlannerObjectiveKind.RequiredInteractable
+            or PlannerObjectiveKind.CombatFriendlyInteractable
+            or PlannerObjectiveKind.ExpendableInteractable
+            or PlannerObjectiveKind.OptionalInteractable
+            or PlannerObjectiveKind.TreasureDoor
+            or PlannerObjectiveKind.TreasureCoffer;
+
+    private bool ShouldSwitchToPlannerInteractable(
+        DutyContextSnapshot context,
+        ObservedInteractable currentInteractable,
+        PlannerObjectiveKind currentObjectiveKind,
+        ObservedInteractable plannerInteractable,
+        PlannerObjectiveKind plannerObjectiveKind,
+        out string reason)
+    {
+        reason = string.Empty;
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        var currentDistance = playerPosition.HasValue
+            ? Vector3.Distance(playerPosition.Value, currentInteractable.Position)
+            : (float?)null;
+        var currentVerticalDelta = playerPosition.HasValue
+            ? MathF.Abs(currentInteractable.Position.Y - playerPosition.Value.Y)
+            : (float?)null;
+        var plannerDistance = playerPosition.HasValue
+            ? Vector3.Distance(playerPosition.Value, plannerInteractable.Position)
+            : (float?)null;
+        var plannerVerticalDelta = playerPosition.HasValue
+            ? MathF.Abs(plannerInteractable.Position.Y - playerPosition.Value.Y)
+            : (float?)null;
+        var currentPriority = objectPriorityRuleService.GetEffectivePriority(context, currentInteractable, currentDistance, currentVerticalDelta);
+        var plannerPriority = objectPriorityRuleService.GetEffectivePriority(context, plannerInteractable, plannerDistance, plannerVerticalDelta);
+
+        if (plannerPriority < currentPriority)
+        {
+            reason = $"Switching from stale {currentInteractable.Classification} target {currentInteractable.Name} to higher-priority planner target {plannerInteractable.Name} ({plannerPriority} < {currentPriority}).";
+            return true;
+        }
+
+        if (currentObjectiveKind == PlannerObjectiveKind.ExpendableInteractable
+            && plannerObjectiveKind != PlannerObjectiveKind.ExpendableInteractable
+            && plannerPriority <= currentPriority)
+        {
+            reason = $"Breaking stale expendable follow-through on {currentInteractable.Name} so ADS can switch to planner target {plannerInteractable.Name} ({plannerPriority} <= {currentPriority}).";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static PlannerObjectiveKind GetObjectiveKindForInteractable(InteractableClass classification)
+        => classification switch
+        {
+            InteractableClass.CombatFriendly => PlannerObjectiveKind.CombatFriendlyInteractable,
+            InteractableClass.Expendable => PlannerObjectiveKind.ExpendableInteractable,
+            InteractableClass.Optional => PlannerObjectiveKind.OptionalInteractable,
+            InteractableClass.TreasureDoor => PlannerObjectiveKind.TreasureDoor,
+            InteractableClass.TreasureCoffer => PlannerObjectiveKind.TreasureCoffer,
+            _ => PlannerObjectiveKind.RequiredInteractable,
+        };
+
     private bool ShouldBypassCombatHold(DutyContextSnapshot context, PlannerSnapshot planner)
     {
         if (IsPraetoriumMountedCombatContext(context))
@@ -1229,7 +1308,7 @@ public sealed class ExecutionService
         closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
     }
 
-    private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, ObservationSnapshot observation, string prefix)
+    private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
     {
         if (pendingProgressionInteractable is null)
             return false;
@@ -1249,6 +1328,26 @@ public sealed class ExecutionService
             ClearInteractableCommitment();
             return false;
         }
+
+        if (planner.Mode == PlannerMode.Progression && IsInteractablePlannerObjective(planner.ObjectiveKind))
+        {
+            var plannerInteractable = ResolveObservedInteractable(planner, observation);
+            if (plannerInteractable is not null
+                && plannerInteractable.Key != pendingInteractable.Key
+                && ShouldSwitchToPlannerInteractable(
+                    context,
+                    pendingInteractable,
+                    GetObjectiveKindForInteractable(pendingInteractable.Classification),
+                    plannerInteractable,
+                    planner.ObjectiveKind,
+                    out var switchReason))
+            {
+                log?.Information($"[ADS] Clearing stale interact follow-through on {pendingInteractable.Name}. {switchReason}");
+                ClearInteractableCommitment();
+                return false;
+            }
+        }
+
         var isExpendableFollowThrough = pendingInteractable.Classification == InteractableClass.Expendable;
         var isTreasureDoorFollowThrough = pendingInteractable.Classification == InteractableClass.TreasureDoor;
         var isRequiredFollowThrough = pendingInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
