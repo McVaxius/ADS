@@ -3961,6 +3961,30 @@
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": "Treasure Map Roulette"
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 0,
+      "ContentFinderConditionId": 0,
+      "DutyEnglishName": "",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Leather Sack",
+      "NameMatchMode": "Exact",
+      "Classification": "Required",
+      "DestinationType": "",
+      "Layer": "",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 500,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": 100,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "Seeded from Object Explorer at 105.3,0.0,89.6 on layer The Shifting Altars of Uznair."
     }
   ]
 }
