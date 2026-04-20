@@ -46,6 +46,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan MountedCombatAttemptCooldown = TimeSpan.FromMilliseconds(800);
     private static readonly TimeSpan RecoveryTruthSettleDelay = TimeSpan.FromSeconds(1.0);
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
+    private static readonly TimeSpan TreasureCofferInteractResultSettleDelay = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
@@ -98,6 +99,7 @@ public sealed class ExecutionService
     private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
     private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
     private DateTime livePartyDamageProgressUntilUtc;
+    private string lastTreasureCofferFollowThroughMessage = string.Empty;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -333,7 +335,7 @@ public sealed class ExecutionService
         {
             if (pendingProgressionInteractable is not null)
             {
-                observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
+                MarkResolvedInteractable(context, pendingProgressionInteractable);
                 TryRetirePendingSatisfiedManualDestination(pendingProgressionInteractable, objectTable.LocalPlayer?.Position);
                 ClearInteractableCommitment();
             }
@@ -944,32 +946,28 @@ public sealed class ExecutionService
 
         if (TryInteractWithObject(gameObject))
         {
-            if (observedInteractable.Classification == InteractableClass.TreasureCoffer)
-            {
-                observationMemoryService.MarkTreasureInteractionSent(observedInteractable);
-            }
-            else
-            {
-                var isRequiredLikeInteractable = observedInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
-                var continuingRequiredFollowThrough = isRequiredLikeInteractable
-                    && pendingProgressionInteractable is not null
-                    && string.Equals(pendingProgressionInteractable.Key, observedInteractable.Key, StringComparison.Ordinal);
-                pendingProgressionInteractable = observedInteractable;
-                pendingProgressionInteractResultUntilUtc = isRequiredLikeInteractable
-                    ? now + RequiredInteractionRetryDelay
+            var isRequiredLikeInteractable = observedInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
+            var isTreasureCofferFollowThrough = observedInteractable.Classification == InteractableClass.TreasureCoffer;
+            var continuingRequiredFollowThrough = isRequiredLikeInteractable
+                && pendingProgressionInteractable is not null
+                && string.Equals(pendingProgressionInteractable.Key, observedInteractable.Key, StringComparison.Ordinal);
+            pendingProgressionInteractable = observedInteractable;
+            pendingProgressionInteractResultUntilUtc = isRequiredLikeInteractable
+                ? now + RequiredInteractionRetryDelay
+                : isTreasureCofferFollowThrough
+                    ? now + TreasureCofferInteractResultSettleDelay
                     : now + ProgressionInteractResultSettleDelay;
-                pendingProgressionInteractAfterWaitUntilUtc = waitAfterInteractSeconds > 0f
-                    ? now + TimeSpan.FromSeconds(waitAfterInteractSeconds)
-                    : DateTime.MinValue;
-                if (pendingProgressionInteractAfterWaitUntilUtc > pendingProgressionInteractResultUntilUtc)
-                    pendingProgressionInteractResultUntilUtc = pendingProgressionInteractAfterWaitUntilUtc;
-                pendingRequiredInteractionAttemptsSent = isRequiredLikeInteractable
-                    ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
-                    : 0;
-                pendingTreasureDoorTransitionPoint = observedInteractable.Classification == InteractableClass.TreasureDoor
-                    ? BuildTreasureDoorFollowThroughPoint(context, observedInteractable, playerPosition.Value)
-                    : null;
-            }
+            pendingProgressionInteractAfterWaitUntilUtc = waitAfterInteractSeconds > 0f
+                ? now + TimeSpan.FromSeconds(waitAfterInteractSeconds)
+                : DateTime.MinValue;
+            if (pendingProgressionInteractAfterWaitUntilUtc > pendingProgressionInteractResultUntilUtc)
+                pendingProgressionInteractResultUntilUtc = pendingProgressionInteractAfterWaitUntilUtc;
+            pendingRequiredInteractionAttemptsSent = isRequiredLikeInteractable
+                ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
+                : 0;
+            pendingTreasureDoorTransitionPoint = observedInteractable.Classification == InteractableClass.TreasureDoor
+                ? BuildTreasureDoorFollowThroughPoint(context, observedInteractable, playerPosition.Value)
+                : null;
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
             nextInteractAttemptUtc = now + InteractAttemptCooldown;
@@ -1314,6 +1312,7 @@ public sealed class ExecutionService
             return false;
 
         var pendingInteractable = pendingProgressionInteractable;
+        var now = DateTime.UtcNow;
         if (!IsInteractableStillAllowedInContext(context, pendingInteractable))
         {
             log?.Information($"[ADS] Cleared interact follow-through for {pendingInteractable.Name} after the live map/rule context changed.");
@@ -1322,6 +1321,11 @@ public sealed class ExecutionService
         }
 
         var pendingLiveInteractable = ResolvePendingProgressionInteractable(context, observation, pendingInteractable);
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        var isTreasureCofferFollowThrough = pendingInteractable.Classification == InteractableClass.TreasureCoffer;
+        string treasureCofferDialogText = string.Empty;
+        var hasVisibleTreasureCofferDialog = isTreasureCofferFollowThrough
+            && TryGetVisibleTreasureCofferDialog(out treasureCofferDialogText);
         if (pendingLiveInteractable is not null && !IsInteractableStillAllowedInContext(context, pendingLiveInteractable))
         {
             log?.Information($"[ADS] Cleared interact follow-through for {pendingLiveInteractable.Name} after the live map/rule context changed.");
@@ -1342,6 +1346,24 @@ public sealed class ExecutionService
                     planner.ObjectiveKind,
                     out var switchReason))
             {
+                var unresolvedTreasureCoffer = hasVisibleTreasureCofferDialog
+                    || pendingLiveInteractable is not null
+                    || now < pendingProgressionInteractResultUntilUtc;
+                if (isTreasureCofferFollowThrough && unresolvedTreasureCoffer)
+                {
+                    var holdReason = hasVisibleTreasureCofferDialog
+                        ? $"Holding treasure coffer follow-through on {pendingInteractable.Name}; blocked retarget to {plannerInteractable.Name} while the coffer dialog is still visible: {treasureCofferDialogText}"
+                        : pendingLiveInteractable is not null
+                            ? $"Holding treasure coffer follow-through on {pendingInteractable.Name}; blocked retarget to {plannerInteractable.Name} while the coffer is still live."
+                            : $"Holding treasure coffer follow-through on {pendingInteractable.Name}; blocked retarget to {plannerInteractable.Name} until the coffer result window settles.";
+                    LogTreasureCofferFollowThroughOnce(holdReason);
+                    StopMovementAssists();
+                    SetPhase(
+                        ExecutionPhase.AttemptingInteractableObjective,
+                        $"{prefix} {holdReason}");
+                    return true;
+                }
+
                 log?.Information($"[ADS] Clearing stale interact follow-through on {pendingInteractable.Name}. {switchReason}");
                 ClearInteractableCommitment();
                 return false;
@@ -1363,7 +1385,7 @@ public sealed class ExecutionService
 
         if (context.Mounted)
         {
-            observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+            MarkResolvedInteractable(context, pendingInteractable);
             TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
             ClearInteractableCommitment();
             StopMovementAssists();
@@ -1373,7 +1395,6 @@ public sealed class ExecutionService
             return true;
         }
 
-        var playerPosition = objectTable.LocalPlayer?.Position;
         if (isRequiredFollowThrough
             && pendingLiveInteractable is not null
             && playerPosition.HasValue)
@@ -1381,7 +1402,7 @@ public sealed class ExecutionService
             var pendingHorizontalDistance = GetHorizontalDistance(pendingLiveInteractable.Position, playerPosition.Value);
             if (pendingHorizontalDistance >= RequiredInteractionConsumedRelocationRange)
             {
-                observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                MarkResolvedInteractable(context, pendingInteractable);
                 TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
                 ClearInteractableCommitment();
                 StopMovementAssists();
@@ -1392,7 +1413,28 @@ public sealed class ExecutionService
             }
         }
 
-        var now = DateTime.UtcNow;
+        if (isTreasureCofferFollowThrough && hasVisibleTreasureCofferDialog)
+        {
+            var holdReason = $"Holding treasure coffer follow-through on {pendingInteractable.Name} while the coffer dialog is still visible: {treasureCofferDialogText}";
+            LogTreasureCofferFollowThroughOnce(holdReason);
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} {holdReason}");
+            return true;
+        }
+
+        if (isTreasureCofferFollowThrough && context.InCombat)
+        {
+            var holdReason = $"Holding treasure coffer follow-through on {pendingInteractable.Name} because combat started after the coffer interact.";
+            LogTreasureCofferFollowThroughOnce(holdReason);
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} {holdReason}");
+            return true;
+        }
+
         var treasureDoorReadyForFollowThrough = isTreasureDoorFollowThrough
             && pendingLiveInteractable is null
             && pendingProgressionInteractAfterWaitUntilUtc <= now;
@@ -1416,6 +1458,8 @@ public sealed class ExecutionService
                 ? $"Holding configured post-interact wait on {pendingInteractable.Name} for another {(pendingProgressionInteractAfterWaitUntilUtc - now).TotalSeconds:0.0}s before ADS retries or replans."
                     : isRequiredFollowThrough
                         ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
+                    : isTreasureCofferFollowThrough
+                        ? $"Waiting for treasure coffer result on {pendingInteractable.Name}; ADS is holding the coffer target steady until it resolves."
                     : isExpendableFollowThrough
                         ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
                         : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
@@ -1453,12 +1497,21 @@ public sealed class ExecutionService
             return true;
         }
 
+        if (isTreasureCofferFollowThrough && pendingLiveInteractable is not null)
+        {
+            TryAdvanceInteractableObjective(
+                context,
+                pendingLiveInteractable,
+                $"{prefix} Treasure coffer follow-through is still live, so ADS is retrying the coffer while holding the target steady.");
+            return true;
+        }
+
         if (treasureDoorReadyForFollowThrough
             && TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPointAfterWindow))
         {
             if (reachedTreasureDoorTransitionPointAfterWindow)
             {
-                observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                MarkResolvedInteractable(context, pendingInteractable);
                 TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
                 ClearInteractableCommitment();
             }
@@ -1466,15 +1519,19 @@ public sealed class ExecutionService
             return true;
         }
 
-        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+        MarkResolvedInteractable(context, pendingInteractable);
         TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
         ClearInteractableCommitment();
         StopMovementAssists();
         var completionReason = isRequiredFollowThrough
             ? $"Required interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
+            : isTreasureCofferFollowThrough
+                ? $"Treasure coffer follow-through finished for {pendingInteractable.Name}; the coffer result settled, so ADS is waiting for refreshed duty truth before selecting another objective."
             : isExpendableFollowThrough
                 ? $"Expendable interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
                 : $"Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.";
+        if (isTreasureCofferFollowThrough)
+            LogTreasureCofferFollowThroughOnce(completionReason);
         SetPhase(
             ExecutionPhase.AttemptingInteractableObjective,
             $"{prefix} {completionReason}");
@@ -1490,6 +1547,35 @@ public sealed class ExecutionService
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
+        lastTreasureCofferFollowThroughMessage = string.Empty;
+    }
+
+    private void MarkResolvedInteractable(DutyContextSnapshot context, ObservedInteractable interactable)
+    {
+        if (interactable.Classification == InteractableClass.TreasureCoffer)
+        {
+            observationMemoryService.MarkTreasureInteractionSent(interactable);
+            return;
+        }
+
+        observationMemoryService.MarkProgressionInteractionSent(context, interactable);
+    }
+
+    private static bool TryGetVisibleTreasureCofferDialog(out string dialogText)
+    {
+        if (!GameInteractionHelper.TryGetVisibleSelectYesnoText(out dialogText))
+            return false;
+
+        return dialogText.Contains("treasure coffer", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void LogTreasureCofferFollowThroughOnce(string message)
+    {
+        if (string.Equals(lastTreasureCofferFollowThroughMessage, message, StringComparison.Ordinal))
+            return;
+
+        lastTreasureCofferFollowThroughMessage = message;
+        log?.Information($"[ADS] {message}");
     }
 
     private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint)
@@ -1643,6 +1729,9 @@ public sealed class ExecutionService
             return;
         }
 
+        if (TryHoldPendingLeaveTreasureResolution(context, observation))
+            return;
+
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (playerPosition.HasValue)
         {
@@ -1687,6 +1776,52 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         TrySendLeaveDutyUi();
+    }
+
+    private bool TryHoldPendingLeaveTreasureResolution(DutyContextSnapshot context, ObservationSnapshot observation)
+    {
+        if (pendingProgressionInteractable?.Classification != InteractableClass.TreasureCoffer)
+            return false;
+
+        var pendingInteractable = pendingProgressionInteractable;
+        var pendingLiveInteractable = ResolvePendingProgressionInteractable(context, observation, pendingInteractable);
+        if (TryGetVisibleTreasureCofferDialog(out var treasureCofferDialogText))
+        {
+            var holdReason = $"Leave requested. Waiting for treasure coffer dialog to resolve before duty exit: {treasureCofferDialogText}";
+            LogTreasureCofferFollowThroughOnce(holdReason);
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.LeavingDuty, holdReason);
+            return true;
+        }
+
+        var now = DateTime.UtcNow;
+        if (now < pendingProgressionInteractResultUntilUtc)
+        {
+            var holdReason = pendingLiveInteractable is not null
+                ? $"Leave requested. Waiting for treasure coffer result on {pendingInteractable.Name} before duty exit while the coffer remains live."
+                : $"Leave requested. Waiting {(pendingProgressionInteractResultUntilUtc - now).TotalSeconds:0.0}s for treasure coffer result on {pendingInteractable.Name} before duty exit.";
+            LogTreasureCofferFollowThroughOnce(holdReason);
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.LeavingDuty, holdReason);
+            return true;
+        }
+
+        if (pendingLiveInteractable is not null)
+        {
+            TryAdvanceInteractableObjective(
+                context,
+                pendingLiveInteractable,
+                "Leave requested. Treasure coffer is still unresolved, retrying before duty exit.");
+            if (lastInteractGameObjectId == pendingLiveInteractable.GameObjectId)
+                leaveTreasureInteractionSent = true;
+            return true;
+        }
+
+        var completionReason = $"Treasure coffer follow-through finished for {pendingInteractable.Name}; duty exit can resume.";
+        LogTreasureCofferFollowThroughOnce(completionReason);
+        MarkResolvedInteractable(context, pendingInteractable);
+        ClearInteractableCommitment();
+        return false;
     }
 
     private void ResetRecoveryHold()

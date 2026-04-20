@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Dalamud.Memory;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
@@ -100,6 +101,35 @@ public static class GameInteractionHelper
         catch (Exception ex)
         {
             log?.Warning(ex, "[ADS] ClickYesIfVisible failed.");
+            return false;
+        }
+    }
+
+    public static unsafe bool TryGetVisibleSelectYesnoText(out string dialogText)
+    {
+        dialogText = string.Empty;
+
+        try
+        {
+            nint addonPtr = Plugin.GameGui.GetAddonByName("SelectYesno", 1);
+            if (addonPtr == nint.Zero)
+                return false;
+
+            var addon = (AddonSelectYesno*)addonPtr;
+            if (addon == null || !addon->AtkUnitBase.IsVisible)
+                return false;
+
+            var promptNode = addon->PromptText;
+            if (promptNode == null || promptNode->NodeText.StringPtr == null)
+                return false;
+
+            var promptSeString = MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr));
+            dialogText = promptSeString.TextValue?.Trim() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(dialogText);
+        }
+        catch
+        {
+            dialogText = string.Empty;
             return false;
         }
     }
