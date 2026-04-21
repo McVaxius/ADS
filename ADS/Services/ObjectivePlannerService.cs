@@ -15,6 +15,7 @@ public sealed class ObjectivePlannerService
     private const float TreasureCofferMaxHorizontalDistance = 30f;
     private const float TreasureCofferVerticalCap = 5f;
     private const float BattleNpcVerticalSanityCap = 100f;
+    private const uint PraetoriumTerritoryTypeId = 1044;
 
     private readonly IObjectTable objectTable;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
@@ -140,6 +141,10 @@ public sealed class ObjectivePlannerService
                 .Where(IsProgressionInteractable),
             playerPosition,
             context);
+        var currentForceMarchManualDestination = dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
+            && dungeonFrontierService.CurrentTarget is { IsManualDestination: true, AllowCombatBypass: true } forceMarchManualDestination
+                ? forceMarchManualDestination
+                : null;
 
         if (context.InCombat)
         {
@@ -179,6 +184,20 @@ public sealed class ObjectivePlannerService
                     TargetVerticalDelta = verticalDelta,
                     CapturedAtUtc = now,
                 };
+                return;
+            }
+
+            if (currentForceMarchManualDestination is not null
+                && ShouldForceMarchManualDestinationBypassProgression(context, currentForceMarchManualDestination, nearestRequiredInteractable, playerPosition))
+            {
+                Current = BuildForceMarchMonsterBypassSnapshot(
+                    context,
+                    currentForceMarchManualDestination,
+                    nearestMonster,
+                    nearestRequiredInteractable,
+                    playerPosition,
+                    now,
+                    inCombat: true);
                 return;
             }
 
@@ -284,6 +303,20 @@ public sealed class ObjectivePlannerService
                 };
                 return;
             }
+        }
+
+        if (currentForceMarchManualDestination is not null
+            && ShouldForceMarchManualDestinationBypassProgression(context, currentForceMarchManualDestination, nearestRequiredInteractable, playerPosition))
+        {
+            Current = BuildForceMarchMonsterBypassSnapshot(
+                context,
+                currentForceMarchManualDestination,
+                nearestMonster,
+                nearestRequiredInteractable,
+                playerPosition,
+                now,
+                inCombat: false);
+            return;
         }
 
         if (nearestMonster is not null && nearestRequiredInteractable is not null && playerPosition.HasValue)
@@ -799,6 +832,36 @@ public sealed class ObjectivePlannerService
             nearestRequiredPriority);
     }
 
+    private bool ShouldForceMarchManualDestinationBypassProgression(
+        DutyContextSnapshot context,
+        DungeonFrontierPoint manualDestinationTarget,
+        ObservedInteractable? nearestRequiredInteractable,
+        Vector3? playerPosition)
+    {
+        if (nearestRequiredInteractable is null)
+            return true;
+
+        var distance = GetDistance(playerPosition, nearestRequiredInteractable.Position);
+        var verticalDelta = GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position);
+        var nearestRequiredPriority = objectPriorityRuleService.GetEffectivePriority(
+            context,
+            nearestRequiredInteractable,
+            distance,
+            verticalDelta);
+        if (manualDestinationTarget.Priority < nearestRequiredPriority)
+            return true;
+
+        if (manualDestinationTarget.Priority > nearestRequiredPriority)
+            return false;
+
+        if (nearestRequiredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
+            return true;
+
+        return context.Mounted
+               && context.TerritoryTypeId == PraetoriumTerritoryTypeId
+               && manualDestinationTarget.AllowCombatBypass;
+    }
+
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)
         => playerPosition.HasValue && targetPosition.HasValue
             ? Vector3.Distance(playerPosition.Value, targetPosition.Value)
@@ -1034,6 +1097,65 @@ public sealed class ObjectivePlannerService
             FrontierMode.HeadingScout
                 => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
             _ => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited map label ({frontierPoint.Name}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable. Frontier progress: {dungeonFrontierService.VisitedPoints}/{dungeonFrontierService.TotalPoints}.",
+        };
+    }
+
+    private PlannerSnapshot BuildForceMarchMonsterBypassSnapshot(
+        DutyContextSnapshot context,
+        DungeonFrontierPoint frontierPoint,
+        ObservedMonster? nearestMonster,
+        ObservedInteractable? nearestRequiredInteractable,
+        Vector3? playerPosition,
+        DateTime capturedAtUtc,
+        bool inCombat)
+    {
+        var distance = playerPosition.HasValue
+            ? GetManualDestinationDistance(playerPosition.Value, frontierPoint)
+            : (float?)null;
+        var verticalDelta = playerPosition.HasValue ? MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y) : (float?)null;
+        var manualLabel = GetManualDestinationLabel(frontierPoint);
+        var monsterDistance = nearestMonster is not null && playerPosition.HasValue
+            ? Vector3.Distance(nearestMonster.Position, playerPosition.Value)
+            : (float?)null;
+        var monsterVerticalDelta = nearestMonster is not null
+            ? GetVerticalDelta(playerPosition, nearestMonster.Position)
+            : null;
+        var monsterPriority = nearestMonster is not null
+            ? objectPriorityRuleService.GetEffectiveBattleNpcPriority(context, nearestMonster, monsterDistance, monsterVerticalDelta)
+            : (int?)null;
+        var requiredDistance = nearestRequiredInteractable is not null
+            ? GetDistance(playerPosition, nearestRequiredInteractable.Position)
+            : null;
+        var requiredVerticalDelta = nearestRequiredInteractable is not null
+            ? GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position)
+            : null;
+        var requiredPriority = nearestRequiredInteractable is not null
+            ? objectPriorityRuleService.GetEffectivePriority(context, nearestRequiredInteractable, requiredDistance, requiredVerticalDelta)
+            : (int?)null;
+        var combatContext = inCombat
+            ? "Combat is already active"
+            : nearestMonster is not null
+                ? "Live monster pressure is still visible"
+                : "No stronger live objective displaced this authored force-march step";
+        var monsterSummary = nearestMonster is null
+            ? "no live monster priority was resolved on this tick."
+            : $"nearest live monster {nearestMonster.Name} currently resolves at priority {monsterPriority ?? ObjectPriorityRuleService.DefaultPriority} and distance {monsterDistance ?? 0f:0.0}.";
+        var requiredSummary = nearestRequiredInteractable is null
+            ? "No live progression interactable priority was resolved on this tick."
+            : $"Nearest live progression interactable {nearestRequiredInteractable.Name} ({nearestRequiredInteractable.Classification}) currently resolves at priority {requiredPriority ?? ObjectPriorityRuleService.DefaultPriority} and distance {requiredDistance ?? 0f:0.0}.";
+
+        return new PlannerSnapshot
+        {
+            Mode = PlannerMode.Progression,
+            ObjectiveKind = GetManualDestinationObjectiveKind(frontierPoint),
+            Objective = frontierPoint.IsManualXyzDestination
+                ? $"Force-march toward XYZ destination: {frontierPoint.Name}"
+                : $"Force-march toward map XZ destination: {frontierPoint.Name}",
+            Explanation = $"{combatContext}, but human-authored {manualLabel} {frontierPoint.Name} is explicitly allowed to keep marching through incidental trash and priority-allowed live progression truth during this bypass segment. {monsterSummary} {requiredSummary}",
+            TargetName = frontierPoint.Name,
+            TargetDistance = distance,
+            TargetVerticalDelta = verticalDelta,
+            CapturedAtUtc = capturedAtUtc,
         };
     }
 

@@ -38,9 +38,11 @@ public sealed class ExecutionService
     private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
     private const float LeaveTreasureSweepVerticalCap = 6.0f;
     private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
+    private const float InteractableRetryIdentityPositionBucketSize = 5.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
-    private static readonly TimeSpan RequiredInteractionRetryDelay = InteractAttemptCooldown;
+    private static readonly TimeSpan RequiredInteractionRetryDelay = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan ForceMarchFollowThroughDuration = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan NavigationRetryCooldown = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan MapFlagNavigationRetryCooldown = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan MountedCombatAttemptCooldown = TimeSpan.FromMilliseconds(800);
@@ -82,6 +84,9 @@ public sealed class ExecutionService
     private DateTime pendingProgressionInteractResultUntilUtc;
     private DateTime pendingProgressionInteractAfterWaitUntilUtc;
     private int pendingRequiredInteractionAttemptsSent;
+    private DungeonFrontierPoint? committedForceMarchManualDestination;
+    private DateTime committedForceMarchManualDestinationUntilUtc;
+    private bool committedForceMarchManualDestinationReachedArrival;
     private string? interactArrivalWaitKey;
     private DateTime interactArrivalWaitUntilUtc;
     private string? treasureCofferRouteKey;
@@ -98,6 +103,9 @@ public sealed class ExecutionService
     private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
     private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
     private DateTime livePartyDamageProgressUntilUtc;
+    private string lastMountedCombatYieldObjective = string.Empty;
+    private string lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = string.Empty;
+    private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
 
     public ExecutionService(
         IDataManager dataManager,
@@ -135,6 +143,7 @@ public sealed class ExecutionService
     public bool StartDutyFromOutside()
     {
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         CurrentMode = OwnershipMode.OwnedStartOutside;
         SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter a supported ADS duty.");
         return true;
@@ -143,6 +152,7 @@ public sealed class ExecutionService
     public bool StartDutyFromInside(DutyContextSnapshot context)
     {
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         if (!context.InDuty || !context.IsSupportedDuty)
         {
             CurrentMode = context.InDuty ? OwnershipMode.Failed : OwnershipMode.Idle;
@@ -162,6 +172,7 @@ public sealed class ExecutionService
     public bool ResumeDutyFromInside(DutyContextSnapshot context)
     {
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         if (!context.InDuty || !context.IsSupportedDuty)
         {
             CurrentMode = context.InDuty ? OwnershipMode.Failed : OwnershipMode.Idle;
@@ -188,6 +199,7 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. ADS will clear nearby treasure, wait for loot settlement if needed, and then leave duty.");
@@ -198,6 +210,7 @@ public sealed class ExecutionService
     {
         StopMovementAssists();
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = context.InDuty && context.IsSupportedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
@@ -212,6 +225,7 @@ public sealed class ExecutionService
     {
         StopMovementAssists();
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Observing;
@@ -229,6 +243,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             ClearInteractableCommitment();
+            ClearCommittedForceMarchManualDestination();
             ResetLeaveState();
             CurrentMode = OwnershipMode.Idle;
             SetPhase(ExecutionPhase.Idle, "ADS disabled.");
@@ -242,6 +257,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     SetPhase(ExecutionPhase.OutsideQueue, "Waiting to enter a supported duty from outside.");
                     return;
                 }
@@ -250,6 +266,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     SetPhase(ExecutionPhase.AwaitingSupportedPilotDuty, "Outside-start ownership is pending a supported ADS duty.");
                     return;
                 }
@@ -263,6 +280,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty ended; ADS ownership released.");
@@ -273,6 +291,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     CurrentMode = OwnershipMode.Failed;
                     SetPhase(ExecutionPhase.Failure, "Current duty is not an ADS-supported 4-man duty.");
                     return;
@@ -286,6 +305,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty exit detected; ADS ownership released.");
@@ -300,6 +320,7 @@ public sealed class ExecutionService
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
+                    ClearCommittedForceMarchManualDestination();
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Failure state cleared outside duty.");
@@ -314,6 +335,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             ClearInteractableCommitment();
+            ClearCommittedForceMarchManualDestination();
             ResetLeaveState();
             CurrentMode = OwnershipMode.Observing;
             SetPhase(ExecutionPhase.ObservingOnly, "Observing only; ADS does not currently own this duty.");
@@ -322,6 +344,7 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
@@ -347,6 +370,15 @@ public sealed class ExecutionService
         if (TryHoldPendingProgressionInteractResult(context, planner, observation, prefix))
             return;
 
+        if (IsForceMarchPlannerObjective(planner.ObjectiveKind)
+            || committedForceMarchManualDestination is not null)
+        {
+            TryFirePraetoriumMountedCombatAction(context, observation, prefix, preserveMovement: true);
+        }
+
+        if (TryAdvanceCommittedForceMarchManualDestination(context, planner, prefix))
+            return;
+
         if ((context.InCombat || planner.Mode == PlannerMode.Combat)
             && !ShouldBypassCombatHold(context, planner))
         {
@@ -356,7 +388,7 @@ public sealed class ExecutionService
             return;
         }
 
-        if (TryAdvancePraetoriumMountedCombat(context, observation, prefix))
+        if (TryAdvancePraetoriumMountedCombat(context, planner, observation, prefix))
             return;
 
         if (planner.Mode == PlannerMode.Recovery)
@@ -376,7 +408,7 @@ public sealed class ExecutionService
             if (committedInteractable is not null)
             {
                 if (plannerInteractable is not null
-                    && plannerInteractable.Key != committedInteractable.Key
+                    && !IsEquivalentProgressionInteractable(plannerInteractable, committedInteractable)
                     && ShouldSwitchToPlannerInteractable(
                         context,
                         committedInteractable,
@@ -405,7 +437,7 @@ public sealed class ExecutionService
                     or PlannerObjectiveKind.TreasureCoffer)
                 {
                     var replannedInteractable = plannerInteractable;
-                    if (replannedInteractable is not null && replannedInteractable.Key != committedInteractable.Key)
+                    if (replannedInteractable is not null && !IsEquivalentProgressionInteractable(replannedInteractable, committedInteractable))
                     {
                         CommitInteractable(replannedInteractable, planner.ObjectiveKind);
                         TryAdvanceInteractableObjective(context, replannedInteractable, $"{prefix} Switching follow-through to the planner's newer interactable selection.");
@@ -591,11 +623,11 @@ public sealed class ExecutionService
         targetManager.Target = gameObject;
         if (targetDistance > PreferredMonsterArrivalRange)
         {
-            var preferredApproachPoint = BuildPreferredApproachPoint(playerPosition.Value, gameObject.Position, PreferredMonsterArrivalRange);
-            TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint);
+            LogLiveTargetNavigation("monster", gameObject.GameObjectId, observedMonster.Name, playerPosition.Value, gameObject.Position, targetDistance, mountedCombat: false);
+            TryBeginNavigation(gameObject.GameObjectId, gameObject.Position);
             SetPhase(
                 ExecutionPhase.NavigatingToMonsterObjective,
-                $"{prefix} Navigating toward {objectiveLabel} {observedMonster.Name} ({targetDistance:0.0}y) with a close combat arrival target.");
+                $"{prefix} Navigating toward {objectiveLabel} {observedMonster.Name} ({targetDistance:0.0}y) using the live target position as the navmesh destination with a close combat arrival target.");
             return;
         }
 
@@ -605,8 +637,76 @@ public sealed class ExecutionService
             $"{prefix} Positioned near {objectiveLabel} {observedMonster.Name} ({targetDistance:0.0}y). Waiting for combat tooling / aggro to take over.");
     }
 
-    private bool TryAdvancePraetoriumMountedCombat(DutyContextSnapshot context, ObservationSnapshot observation, string prefix)
+    private bool TryAdvancePraetoriumMountedCombat(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
     {
+        if (!IsPraetoriumMountedCombatContext(context))
+        {
+            lastMountedCombatYieldObjective = string.Empty;
+            return false;
+        }
+
+        if (!TryBuildPraetoriumMountedCombatState(context, observation, out var localPlayerPosition, out var mountedActions, out var targets))
+            return false;
+
+        if (IsForceMarchPlannerObjective(planner.ObjectiveKind))
+        {
+            var objectiveKey = planner.TargetName ?? planner.Objective;
+            if (!string.Equals(lastMountedCombatYieldObjective, objectiveKey, StringComparison.Ordinal))
+            {
+                lastMountedCombatYieldObjective = objectiveKey;
+                log?.Information(
+                    $"[ADS] Praetorium mounted combat is yielding to planner force-march objective {objectiveKey} so ADS keeps advancing instead of stopping to clear incidental mounted trash.");
+            }
+
+            return false;
+        }
+
+        lastMountedCombatYieldObjective = string.Empty;
+
+        if (TryFireReadyMountedCombatAction(localPlayerPosition, mountedActions, targets, prefix, preserveMovement: false))
+            return true;
+
+        if (AnyTargetsInMountedCombatRange(localPlayerPosition, mountedActions, targets))
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.MountedDutyCombat,
+                $"{prefix} Mounted Praetorium combat is holding near {targets.Count} live enemy target(s) while the current mount weapons cool down.");
+            return true;
+        }
+
+        var approachTarget = targets
+            .OrderBy(x => x.Distance)
+            .FirstOrDefault();
+        LogLiveTargetNavigation("mounted-combat", approachTarget.GameObject.GameObjectId, approachTarget.Observed.Name, localPlayerPosition, approachTarget.GameObject.Position, approachTarget.Distance, mountedCombat: true);
+        TryBeginNavigation(approachTarget.GameObject.GameObjectId, approachTarget.GameObject.Position);
+        SetPhase(
+            ExecutionPhase.MountedDutyCombat,
+            $"{prefix} Mounted Praetorium combat is moving toward {approachTarget.Observed.Name} ({approachTarget.Distance:0.0}y) using the live target position as the navmesh destination to enter mount weapon range while no force-march objective is active.");
+        return true;
+    }
+
+    private bool TryFirePraetoriumMountedCombatAction(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        string prefix,
+        bool preserveMovement)
+    {
+        return TryBuildPraetoriumMountedCombatState(context, observation, out var localPlayerPosition, out var mountedActions, out var targets)
+               && TryFireReadyMountedCombatAction(localPlayerPosition, mountedActions, targets, prefix, preserveMovement);
+    }
+
+    private bool TryBuildPraetoriumMountedCombatState(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        out Vector3 localPlayerPosition,
+        out MountedCombatAction[] mountedActions,
+        out List<MountedCombatTarget> targets)
+    {
+        localPlayerPosition = default;
+        mountedActions = [];
+        targets = [];
+
         if (!IsPraetoriumMountedCombatContext(context))
             return false;
 
@@ -615,41 +715,42 @@ public sealed class ExecutionService
             return false;
 
         var mountId = localPlayer.CurrentMount?.RowId ?? 0;
-        if (!TryGetCurrentMountCombatActions(mountId, out var mountedActions))
+        if (!TryGetCurrentMountCombatActions(mountId, out mountedActions))
             return false;
 
-        var targets = observation.LiveMonsters
+        var playerPosition = localPlayer.Position;
+        localPlayerPosition = playerPosition;
+        targets = observation.LiveMonsters
             .Where(x => MatchesCurrentMap(context, x.MapId))
             .Select(x => (Observed: x, GameObject: ResolveGameObject(x)))
             .Where(x => x.GameObject is not null && x.GameObject.IsTargetable)
-            .Select(x => new MountedCombatTarget(x.Observed, x.GameObject!, Vector3.Distance(localPlayer.Position, x.GameObject!.Position)))
+            .Select(x => new MountedCombatTarget(x.Observed, x.GameObject!, Vector3.Distance(playerPosition, x.GameObject!.Position)))
             .ToList();
-        if (targets.Count == 0)
-            return false;
+        return targets.Count > 0;
+    }
 
+    private bool TryFireReadyMountedCombatAction(
+        Vector3 localPlayerPosition,
+        IReadOnlyCollection<MountedCombatAction> mountedActions,
+        IReadOnlyCollection<MountedCombatTarget> targets,
+        string prefix,
+        bool preserveMovement)
+    {
         var readyGroundActions = mountedActions
             .Where(x => x.TargetArea && IsMountedCombatActionReady(x.ActionId))
             .ToArray();
         foreach (var action in readyGroundActions)
         {
-            if (!TryGetBestMountedGroundTarget(localPlayer.Position, targets, action, out var target))
+            if (!TryGetBestMountedGroundTarget(localPlayerPosition, targets, action, out var target))
                 continue;
 
-            StopMovementAssists();
-            if (DateTime.UtcNow < nextMountedCombatAttemptUtc)
-            {
-                SetPhase(
-                    ExecutionPhase.MountedDutyCombat,
-                    $"{prefix} Mounted Praetorium combat is active near {target.Observed.Name}; waiting for the next {action.Name} send window.");
-                return true;
-            }
+            if (!TryObserveMountedCombatSendWindow(action, target.Observed.Name, prefix, preserveMovement))
+                return false;
 
             if (TryUseGroundTargetAction(action.ActionId, target.GameObject.Position))
             {
                 nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
-                SetPhase(
-                    ExecutionPhase.MountedDutyCombat,
-                    $"{prefix} Mounted Praetorium combat fired {action.Name} at {target.Observed.Name}, covering about {target.ClusterCount} nearby enemy target(s).");
+                ReportMountedCombatAction(prefix, action.Name, target.Observed.Name, preserveMovement, $"covering about {target.ClusterCount} nearby enemy target(s)");
                 return true;
             }
         }
@@ -661,40 +762,98 @@ public sealed class ExecutionService
         {
             if (!TryGetBestMountedTargetForAction(action.ActionId, targets, out var target)
                 && !TryGetNearestMountedCombatTargetInRange(targets, action, out target))
-                continue;
-
-            StopMovementAssists();
-            if (DateTime.UtcNow < nextMountedCombatAttemptUtc)
             {
-                SetPhase(
-                    ExecutionPhase.MountedDutyCombat,
-                    $"{prefix} Mounted Praetorium combat is active near {target.Observed.Name}; waiting for the next {action.Name} send window.");
-                return true;
+                continue;
             }
+
+            if (!TryObserveMountedCombatSendWindow(action, target.Observed.Name, prefix, preserveMovement))
+                return false;
 
             if (TryUseTargetedAction(action.ActionId, target.GameObject))
             {
                 nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
-                SetPhase(
-                    ExecutionPhase.MountedDutyCombat,
-                    $"{prefix} Mounted Praetorium combat fired {action.Name} at {target.Observed.Name} ({target.Distance:0.0}y).");
+                ReportMountedCombatAction(prefix, action.Name, target.Observed.Name, preserveMovement, $"{target.Distance:0.0}y");
                 return true;
             }
         }
 
-        var anyTargetsInMountedCombatRange = mountedActions.Any(action =>
-            action.TargetArea
-                ? TryGetBestMountedGroundTarget(localPlayer.Position, targets, action, out _)
-                : TryGetBestMountedTargetForAction(action.ActionId, targets, out _)
-                    || TryGetNearestMountedCombatTargetInRange(targets, action, out _));
-        if (!anyTargetsInMountedCombatRange)
+        return false;
+    }
+
+    private bool TryObserveMountedCombatSendWindow(
+        MountedCombatAction action,
+        string targetName,
+        string prefix,
+        bool preserveMovement)
+    {
+        if (DateTime.UtcNow >= nextMountedCombatAttemptUtc)
+            return true;
+
+        if (preserveMovement)
             return false;
 
         StopMovementAssists();
         SetPhase(
             ExecutionPhase.MountedDutyCombat,
-            $"{prefix} Mounted Praetorium combat is holding near {targets.Count} live enemy target(s) while the current mount weapons cool down.");
-        return true;
+            $"{prefix} Mounted Praetorium combat is active near {targetName}; waiting for the next {action.Name} send window.");
+        return false;
+    }
+
+    private void LogLiveTargetNavigation(
+        string navigationMode,
+        ulong gameObjectId,
+        string targetName,
+        Vector3 playerPosition,
+        Vector3 targetPosition,
+        float targetDistance,
+        bool mountedCombat)
+    {
+        var logKey = $"{navigationMode}:{gameObjectId}";
+        if (!loggedLiveTargetNavigationModes.Add(logKey))
+            return;
+
+        log?.Information(
+            $"[ADS] Live-target navigation mode {navigationMode} is using {targetName} at {FormatVector(targetPosition)} as the /vnav destination instead of a generated stand-off point; player {FormatVector(playerPosition)}, distance {targetDistance:0.0}y, mountedCombat={mountedCombat}.");
+    }
+
+    private void ReportMountedCombatAction(
+        string prefix,
+        string actionName,
+        string targetName,
+        bool preserveMovement,
+        string targetSummary)
+    {
+        if (preserveMovement)
+        {
+            log?.Information(
+                $"[ADS] Mounted Praetorium combat opportunistically fired {actionName} at {targetName} ({targetSummary}) while force-march navigation remains active.");
+            return;
+        }
+
+        SetPhase(
+            ExecutionPhase.MountedDutyCombat,
+            $"{prefix} Mounted Praetorium combat fired {actionName} at {targetName}, {targetSummary}.");
+    }
+
+    private bool AnyTargetsInMountedCombatRange(
+        Vector3 localPlayerPosition,
+        IEnumerable<MountedCombatAction> mountedActions,
+        IReadOnlyCollection<MountedCombatTarget> targets)
+    {
+        return mountedActions.Any(action =>
+            action.TargetArea
+                ? TryGetBestMountedGroundTarget(localPlayerPosition, targets, action, out _)
+                : TryGetBestMountedTargetForAction(action.ActionId, targets, out _)
+                    || TryGetNearestMountedCombatTargetInRange(targets, action, out _));
+    }
+
+    private static float GetMountedCombatApproachRange(IEnumerable<MountedCombatAction> mountedActions)
+    {
+        var maxRange = mountedActions
+            .Select(x => x.Range > 0f ? x.Range : 30f)
+            .DefaultIfEmpty(30f)
+            .Max();
+        return MathF.Max(PreferredMonsterArrivalRange, maxRange * 0.85f);
     }
 
     private void TryAdvanceFollowObjective(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -760,6 +919,12 @@ public sealed class ExecutionService
             || frontierPoint.IsManualMapXzDestination;
         var isManualXyzDestination = wantsXyzDestination
             || frontierPoint.IsManualXyzDestination;
+        if (frontierPoint.AllowCombatBypass
+            && planner.ObjectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination)
+        {
+            RefreshCommittedForceMarchManualDestination(frontierPoint, reachedArrival: false, "planner selected the authored force-march handoff");
+        }
+
         TryAdvanceFrontierPoint(context, frontierPoint, isManualMapXzDestination, isManualXyzDestination, prefix);
     }
 
@@ -780,6 +945,150 @@ public sealed class ExecutionService
             frontierPoint.IsManualXyzDestination,
             $"{prefix} Following through on the committed {destinationLabel} until ADS reaches the {destinationCompletion} or hits BetweenAreas.");
         return true;
+    }
+
+    private bool TryAdvanceCommittedForceMarchManualDestination(DutyContextSnapshot context, PlannerSnapshot planner, string prefix)
+    {
+        var committedDestination = committedForceMarchManualDestination;
+        if (committedDestination is null)
+            return false;
+
+        if (planner.Mode == PlannerMode.Progression && IsLiveProgressionPlannerObjective(planner.ObjectiveKind))
+        {
+            RetireCommittedForceMarchManualDestination(
+                "LiveProgressionAppeared",
+                $"because planner promoted live progression objective {planner.ObjectiveKind} ({planner.TargetName ?? planner.Objective}).");
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        if (now >= committedForceMarchManualDestinationUntilUtc)
+        {
+            if (PlannerStillSelectsForceMarchDestination(planner, committedDestination))
+            {
+                committedForceMarchManualDestinationUntilUtc = now + ForceMarchFollowThroughDuration;
+            }
+            else
+            {
+                RetireCommittedForceMarchManualDestination("TimedOut", "because no live progression handoff appeared before the bounded follow-through window expired.");
+                return false;
+            }
+        }
+
+        var navigationPoint = RebuildCommittedForceMarchManualDestination(committedDestination, objectTable.LocalPlayer?.Position);
+        if (!committedForceMarchManualDestinationReachedArrival)
+        {
+            TryAdvanceFrontierPoint(
+                context,
+                navigationPoint,
+                navigationPoint.IsManualMapXzDestination,
+                navigationPoint.IsManualXyzDestination,
+                $"{prefix} Continuing committed fight-while-force-marching manual destination follow-through.");
+            return true;
+        }
+
+        StopMovementAssists();
+        var remainingFollowThroughSeconds = Math.Max(0d, (committedForceMarchManualDestinationUntilUtc - now).TotalSeconds);
+        var destinationLabel = navigationPoint.IsManualXyzDestination ? "fight-while-force-marching XYZ destination" : "fight-while-force-marching map XZ destination";
+        SetPhase(
+            GetFrontierHintPhase(navigationPoint.IsManualMapXzDestination, navigationPoint.IsManualXyzDestination),
+            $"{prefix} Holding committed {destinationLabel} {navigationPoint.Name} for another {remainingFollowThroughSeconds:0.0}s while ADS waits for live progression handoff.");
+        return true;
+    }
+
+    private void RefreshCommittedForceMarchManualDestination(DungeonFrontierPoint point, bool reachedArrival, string detail)
+    {
+        var now = DateTime.UtcNow;
+        var wasNewCommit = committedForceMarchManualDestination is null
+            || !string.Equals(committedForceMarchManualDestination.Key, point.Key, StringComparison.Ordinal);
+        var reachedArrivalNow = reachedArrival && !committedForceMarchManualDestinationReachedArrival;
+
+        committedForceMarchManualDestination = point;
+        committedForceMarchManualDestinationUntilUtc = now + ForceMarchFollowThroughDuration;
+        committedForceMarchManualDestinationReachedArrival |= reachedArrival;
+
+        if (wasNewCommit)
+        {
+            log?.Information(
+                $"[ADS] Committed fight-while-force-marching {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} for bounded handoff follow-through because {detail}.");
+            return;
+        }
+
+        if (reachedArrivalNow)
+        {
+            log?.Information(
+                $"[ADS] Fight-while-force-marching {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} reached arrival at {FormatVector(point.Position)} and remains committed for the next {ForceMarchFollowThroughDuration.TotalSeconds:0.0}s while ADS waits for live progression truth.");
+        }
+    }
+
+    private void RetireCommittedForceMarchManualDestination(string reason, string detail)
+    {
+        var committedDestination = committedForceMarchManualDestination;
+        if (committedDestination is null)
+            return;
+
+        log?.Information(
+            $"[ADS] Retired committed fight-while-force-marching {(committedDestination.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {committedDestination.Name} ({reason}) {detail}");
+        ClearCommittedForceMarchManualDestination();
+    }
+
+    private void ClearCommittedForceMarchManualDestination()
+    {
+        committedForceMarchManualDestination = null;
+        committedForceMarchManualDestinationUntilUtc = DateTime.MinValue;
+        committedForceMarchManualDestinationReachedArrival = false;
+        lastMountedCombatYieldObjective = string.Empty;
+    }
+
+    private bool PlannerStillSelectsForceMarchDestination(PlannerSnapshot planner, DungeonFrontierPoint point)
+    {
+        if (!IsForceMarchPlannerObjective(planner.ObjectiveKind))
+            return false;
+
+        if (string.Equals(planner.TargetName, point.Name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(planner.Objective, point.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return dungeonFrontierService.CurrentTarget is { AllowCombatBypass: true } currentTarget
+               && string.Equals(currentTarget.Key, point.Key, StringComparison.Ordinal);
+    }
+
+    private static bool IsForceMarchPlannerObjective(PlannerObjectiveKind objectiveKind)
+        => objectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination;
+
+    private static bool IsLiveProgressionPlannerObjective(PlannerObjectiveKind objectiveKind)
+        => objectiveKind is PlannerObjectiveKind.Monster
+            or PlannerObjectiveKind.BossFightMonster
+            or PlannerObjectiveKind.FollowTarget
+            or PlannerObjectiveKind.RequiredInteractable
+            or PlannerObjectiveKind.CombatFriendlyInteractable
+            or PlannerObjectiveKind.ExpendableInteractable
+            or PlannerObjectiveKind.OptionalInteractable
+            or PlannerObjectiveKind.TreasureDoor
+            or PlannerObjectiveKind.TreasureCoffer;
+
+    private static DungeonFrontierPoint RebuildCommittedForceMarchManualDestination(DungeonFrontierPoint point, Vector3? playerPosition)
+    {
+        if (!point.UsePlayerYForNavigation || !playerPosition.HasValue)
+            return point;
+
+        return new DungeonFrontierPoint
+        {
+            Key = point.Key,
+            Name = point.Name,
+            Position = new Vector3(point.Position.X, playerPosition.Value.Y, point.Position.Z),
+            LevelRowId = point.LevelRowId,
+            MapId = point.MapId,
+            Priority = point.Priority,
+            MapCoordinates = point.MapCoordinates,
+            UsePlayerYForNavigation = point.UsePlayerYForNavigation,
+            ManualDestinationKind = point.ManualDestinationKind,
+            AllowCombatBypass = point.AllowCombatBypass,
+            ArrivalRadiusXz = point.ArrivalRadiusXz,
+            ArrivalRadius3d = point.ArrivalRadius3d,
+        };
     }
 
     private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, bool isXyzDestination, string prefix)
@@ -827,7 +1136,9 @@ public sealed class ExecutionService
         if (!destinationReached)
         {
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
-            var usedMapFlagNavigation = (isMapXzDestination || dungeonFrontierService.CurrentMode == FrontierMode.Label)
+            var canUseMapFlagNavigation = dungeonFrontierService.CurrentMode == FrontierMode.Label
+                                          || (isMapXzDestination && !frontierPoint.UsePlayerYForNavigation);
+            var usedMapFlagNavigation = canUseMapFlagNavigation
                 && TryBeginMapFlagNavigation(context, frontierTargetId, frontierPoint.Name, frontierPoint.Position);
             if (!usedMapFlagNavigation)
             {
@@ -851,6 +1162,18 @@ public sealed class ExecutionService
         StopMovementAssists();
         if (isMapXzDestination || isXyzDestination)
             dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
+
+        if (frontierPoint.AllowCombatBypass && (isMapXzDestination || isXyzDestination))
+        {
+            RefreshCommittedForceMarchManualDestination(frontierPoint, reachedArrival: true, "arrival radius was reached");
+            var remainingFollowThroughSeconds = Math.Max(0d, (committedForceMarchManualDestinationUntilUtc - DateTime.UtcNow).TotalSeconds);
+            SetPhase(
+                GetFrontierHintPhase(isMapXzDestination, isXyzDestination),
+                isXyzDestination
+                    ? $"{prefix} Reached fight-while-force-marching {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth."
+                    : $"{prefix} Reached fight-while-force-marching {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth.");
+            return;
+        }
 
         SetPhase(
             GetFrontierHintPhase(isMapXzDestination, isXyzDestination),
@@ -942,7 +1265,11 @@ public sealed class ExecutionService
             return;
         }
 
-        if (TryInteractWithObject(gameObject))
+        var useCameraIndependentInteract = ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(context, observedInteractable);
+        if (useCameraIndependentInteract)
+            LogPraetoriumMagitekArmorCameraIndependentInteract(observedInteractable);
+
+        if (TryInteractWithObject(gameObject, cameraBasedInteract: !useCameraIndependentInteract))
         {
             if (observedInteractable.Classification == InteractableClass.TreasureCoffer)
             {
@@ -951,9 +1278,10 @@ public sealed class ExecutionService
             else
             {
                 var isRequiredLikeInteractable = observedInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
+                var previousPendingProgressionInteractable = pendingProgressionInteractable;
                 var continuingRequiredFollowThrough = isRequiredLikeInteractable
-                    && pendingProgressionInteractable is not null
-                    && string.Equals(pendingProgressionInteractable.Key, observedInteractable.Key, StringComparison.Ordinal);
+                    && previousPendingProgressionInteractable is not null
+                    && IsEquivalentProgressionInteractable(previousPendingProgressionInteractable, observedInteractable);
                 pendingProgressionInteractable = observedInteractable;
                 pendingProgressionInteractResultUntilUtc = isRequiredLikeInteractable
                     ? now + RequiredInteractionRetryDelay
@@ -969,6 +1297,14 @@ public sealed class ExecutionService
                 pendingTreasureDoorTransitionPoint = observedInteractable.Classification == InteractableClass.TreasureDoor
                     ? BuildTreasureDoorFollowThroughPoint(context, observedInteractable, playerPosition.Value)
                     : null;
+                if (isRequiredLikeInteractable)
+                {
+                    var retryIdentity = continuingRequiredFollowThrough && previousPendingProgressionInteractable is not null
+                        ? DescribeProgressionInteractableReuse(previousPendingProgressionInteractable, observedInteractable)
+                        : "new required follow-through window";
+                    log?.Information(
+                        $"[ADS] Required interact follow-through on {observedInteractable.Name} sent attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit} using {retryIdentity}.");
+                }
             }
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
@@ -983,6 +1319,10 @@ public sealed class ExecutionService
             if (usingCloseRangeInteractFallback)
             {
                 interactResult = $"{interactResult} Close-XZ fallback engaged after {CloseRangeInteractFallbackNoProgressTimeout.TotalSeconds:0}s with no XZ progress (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}).";
+            }
+            if (useCameraIndependentInteract)
+            {
+                interactResult = $"{interactResult} Praetorium Magitek Armor camera-independent interact mode used to avoid zoom/camera obstruction.";
             }
 
             SetPhase(ExecutionPhase.AttemptingInteractableObjective, $"{prefix} {interactResult}");
@@ -1146,6 +1486,12 @@ public sealed class ExecutionService
         if (IsPraetoriumMountedCombatContext(context))
             return true;
 
+        if (committedForceMarchManualDestination is not null
+            && DateTime.UtcNow < committedForceMarchManualDestinationUntilUtc)
+        {
+            return true;
+        }
+
         if (!context.InCombat)
         {
             ResetLivePartyDamageProgress();
@@ -1275,9 +1621,10 @@ public sealed class ExecutionService
     private bool ShouldUseCloseRangeInteractFallback(ObservedInteractable observedInteractable, float targetHorizontalDistance, float targetVerticalDelta)
     {
         var now = DateTime.UtcNow;
-        if (!string.Equals(closeRangeInteractFallbackKey, observedInteractable.Key, StringComparison.Ordinal))
+        var retryIdentity = BuildInteractableRetryIdentity(observedInteractable);
+        if (!string.Equals(closeRangeInteractFallbackKey, retryIdentity, StringComparison.Ordinal))
         {
-            closeRangeInteractFallbackKey = observedInteractable.Key;
+            closeRangeInteractFallbackKey = retryIdentity;
             closeRangeInteractFallbackLastProgressUtc = now;
             closeRangeInteractFallbackBestHorizontalDistance = targetHorizontalDistance;
             return false;
@@ -1308,6 +1655,62 @@ public sealed class ExecutionService
         closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
     }
 
+    private bool IsEquivalentProgressionInteractable(ObservedInteractable left, ObservedInteractable right)
+    {
+        if (string.Equals(left.Key, right.Key, StringComparison.Ordinal))
+            return true;
+
+        if (left.GameObjectId != 0 && right.GameObjectId != 0 && left.GameObjectId == right.GameObjectId)
+            return true;
+
+        return (left.MapId == 0 || right.MapId == 0 || left.MapId == right.MapId)
+               && left.ObjectKind == right.ObjectKind
+               && left.DataId == right.DataId
+               && left.Classification == right.Classification
+               && string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
+               && GetHorizontalDistance(left.Position, right.Position) <= DirectInteractAttemptRange;
+    }
+
+    private string DescribeProgressionInteractableReuse(ObservedInteractable previous, ObservedInteractable current)
+    {
+        if (string.Equals(previous.Key, current.Key, StringComparison.Ordinal))
+            return "the same live interactable key";
+
+        if (previous.GameObjectId != 0 && current.GameObjectId != 0 && previous.GameObjectId == current.GameObjectId)
+            return "the same live object id";
+
+        if (GetHorizontalDistance(previous.Position, current.Position) <= CloseRangeInteractFallbackHorizontalDistance)
+            return "the same close-XZ retry pocket after live re-resolution";
+
+        return "a newly resolved live interactable match";
+    }
+
+    private static string BuildInteractableRetryIdentity(ObservedInteractable interactable)
+    {
+        var positionBucket = BuildRetryIdentityPositionBucket(interactable.Position);
+        return $"{interactable.MapId}:{interactable.ObjectKind}:{interactable.DataId}:{interactable.Classification}:{interactable.Name}:{positionBucket}";
+    }
+
+    private static string BuildRetryIdentityPositionBucket(Vector3 position)
+        => $"{MathF.Round(position.X / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Y / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Z / InteractableRetryIdentityPositionBucketSize, 0):0}";
+
+    private static bool ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(DutyContextSnapshot context, ObservedInteractable interactable)
+    {
+        return context.TerritoryTypeId == PraetoriumTerritoryTypeId
+               && string.Equals(interactable.Name, "Magitek Armor", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void LogPraetoriumMagitekArmorCameraIndependentInteract(ObservedInteractable interactable)
+    {
+        var logKey = BuildInteractableRetryIdentity(interactable);
+        if (string.Equals(lastPraetoriumMagitekArmorCameraIndependentInteractLogKey, logKey, StringComparison.Ordinal))
+            return;
+
+        lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = logKey;
+        log?.Information(
+            "[ADS] Praetorium Magitek Armor is using camera-independent interact mode (InteractWithObject cameraBasedInteract=false) because standard interact can be blocked by zoom/camera obstruction.");
+    }
+
     private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
     {
         if (pendingProgressionInteractable is null)
@@ -1333,7 +1736,7 @@ public sealed class ExecutionService
         {
             var plannerInteractable = ResolveObservedInteractable(planner, observation);
             if (plannerInteractable is not null
-                && plannerInteractable.Key != pendingInteractable.Key
+                && !IsEquivalentProgressionInteractable(plannerInteractable, pendingInteractable)
                 && ShouldSwitchToPlannerInteractable(
                     context,
                     pendingInteractable,
@@ -1363,6 +1766,7 @@ public sealed class ExecutionService
 
         if (context.Mounted)
         {
+            log?.Information($"[ADS] Required interact follow-through on {pendingInteractable.Name} is closing because Mounted became true after the interact.");
             observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
             TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
             ClearInteractableCommitment();
@@ -1381,6 +1785,7 @@ public sealed class ExecutionService
             var pendingHorizontalDistance = GetHorizontalDistance(pendingLiveInteractable.Position, playerPosition.Value);
             if (pendingHorizontalDistance >= RequiredInteractionConsumedRelocationRange)
             {
+                log?.Information($"[ADS] Required interact follow-through on {pendingInteractable.Name} is closing because the player relocated to XZ {pendingHorizontalDistance:0.0}y from the live interactable after the interact.");
                 observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
                 TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
                 ClearInteractableCommitment();
@@ -1429,6 +1834,7 @@ public sealed class ExecutionService
         {
             if (pendingRequiredInteractionAttemptsSent >= RequiredInteractionAttemptLimit)
             {
+                log?.Information($"[ADS] Required interact follow-through on {pendingInteractable.Name} hit the {RequiredInteractionAttemptLimit}-attempt limit and is releasing the attempt window.");
                 ClearInteractableCommitment();
                 StopMovementAssists();
                 SetPhase(
@@ -2185,7 +2591,7 @@ public sealed class ExecutionService
         }
     }
 
-    private unsafe bool TryInteractWithObject(IGameObject gameObject)
+    private unsafe bool TryInteractWithObject(IGameObject gameObject, bool cameraBasedInteract = true)
     {
         try
         {
@@ -2199,12 +2605,12 @@ public sealed class ExecutionService
             if (nativeObject == null)
                 return false;
 
-            targetSystem->InteractWithObject(nativeObject, true);
+            targetSystem->InteractWithObject(nativeObject, cameraBasedInteract);
             return true;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, $"[ADS] Direct interact failed for {gameObject.Name.TextValue}.");
+            log?.Warning(ex, $"[ADS] Direct interact failed for {gameObject.Name.TextValue} using cameraBasedInteract={cameraBasedInteract}.");
             return false;
         }
     }
@@ -2280,6 +2686,9 @@ public sealed class ExecutionService
             return false;
         }
     }
+
+    private static string FormatVector(Vector3 value)
+        => string.Create(CultureInfo.InvariantCulture, $"{value.X:0.00},{value.Y:0.00},{value.Z:0.00}");
 
     private void SetPhase(ExecutionPhase phase, string status)
     {

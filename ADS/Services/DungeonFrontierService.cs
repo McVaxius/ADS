@@ -9,6 +9,7 @@ namespace ADS.Services;
 
 public sealed class DungeonFrontierService
 {
+    private const uint PraetoriumTerritoryTypeId = 1044;
     private const float FrontierVisitRadius = 8f;
     private const float FrontierVisitVerticalCap = 12f;
     private const float FrontierBlockingVerticalSanityCap = 100f;
@@ -33,6 +34,7 @@ public sealed class DungeonFrontierService
     private readonly HashSet<string> loggedResolvedMapXzDestinationRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedInvalidXyzDestinationRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedResolvedXyzDestinationRules = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedCombatBypassManualSelections = new(StringComparer.Ordinal);
     private uint activeDutyKey;
     private Vector3? lastProgressSamplePosition;
     private Vector3? currentHeading;
@@ -170,9 +172,22 @@ public sealed class DungeonFrontierService
             observation,
             playerPosition,
             manualDestinations);
-        if (noFrontierBlockingLiveObjects || manualDestinationCanBeatLiveProgression)
+        var selectedCombatBypassManualDestination = SelectPraetoriumMountedCombatBypassManualDestination(
+            context,
+            observation,
+            playerPosition,
+            manualDestinations)
+            ?? SelectCombatBypassManualDestinationAgainstLiveBlockers(
+                context,
+                observation,
+                playerPosition,
+                manualDestinations);
+        if (noFrontierBlockingLiveObjects
+            || manualDestinationCanBeatLiveProgression
+            || selectedCombatBypassManualDestination is not null)
         {
-            CurrentTarget = SelectCurrentManualDestination(manualDestinations, playerPosition);
+            CurrentTarget = selectedCombatBypassManualDestination
+                ?? SelectCurrentManualDestination(manualDestinations, playerPosition);
             if (CurrentTarget is not null)
             {
                 CurrentMode = CurrentTarget.IsManualXyzDestination
@@ -254,6 +269,7 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestination = null;
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
+        loggedCombatBypassManualSelections.Clear();
     }
 
     public void MarkVisited(DungeonFrontierPoint point, Vector3 playerPosition)
@@ -982,12 +998,20 @@ public sealed class DungeonFrontierService
             return false;
         }
 
-        var bestUnvisitedManualPriority = manualDestinations
+        var bestUnvisitedManualDestination = manualDestinations
             .Where(point => !visitedFrontierKeys.Contains(point.Key))
-            .Select(point => (int?)point.Priority)
-            .OrderBy(x => x)
+            .Select(point => new
+            {
+                Point = point,
+                Distance = playerPosition.HasValue ? GetManualDestinationDistance(playerPosition.Value, point) : float.MaxValue,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(point.Position.Y - playerPosition.Value.Y) : float.MaxValue,
+            })
+            .OrderBy(x => x.Point.Priority)
+            .ThenBy(x => x.Distance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
-        if (!bestUnvisitedManualPriority.HasValue)
+        if (bestUnvisitedManualDestination is null)
             return false;
 
         var bestLiveProgressionInteractable = observation.LiveInteractables
@@ -1011,24 +1035,190 @@ public sealed class DungeonFrontierService
             .FirstOrDefault();
         return bestLiveProgressionInteractable is not null
                && ShouldManualDestinationBeatProgressionInteractable(
-                   bestUnvisitedManualPriority.Value,
+                   bestUnvisitedManualDestination.Point,
                    bestLiveProgressionInteractable.Interactable,
                    bestLiveProgressionInteractable.Priority);
     }
 
+    private DungeonFrontierPoint? SelectCombatBypassManualDestinationAgainstLiveBlockers(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+    {
+        var bestManualDestination = manualDestinations
+            .Where(point => point.AllowCombatBypass && !visitedFrontierKeys.Contains(point.Key))
+            .Select(point => new
+            {
+                Point = point,
+                Distance = playerPosition.HasValue ? GetManualDestinationDistance(playerPosition.Value, point) : float.MaxValue,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(point.Position.Y - playerPosition.Value.Y) : float.MaxValue,
+            })
+            .OrderBy(x => x.Point.Priority)
+            .ThenBy(x => x.Distance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (bestManualDestination is null)
+            return null;
+
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+            return null;
+
+        var bestMonster = observation.LiveMonsters
+            .Where(x => IsSaneVerticalBlocker(playerPosition, x.Position))
+            .Select(x => new
+            {
+                Monster = x,
+                Distance = playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : (float?)null,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : (float?)null,
+            })
+            .Select(x => new
+            {
+                x.Monster,
+                x.Distance,
+                x.VerticalDelta,
+                Priority = objectPriorityRuleService.GetEffectiveBattleNpcPriority(context, x.Monster, x.Distance, x.VerticalDelta),
+            })
+            .OrderBy(x => x.Priority)
+            .ThenBy(x => x.Distance ?? float.MaxValue)
+            .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
+            .FirstOrDefault();
+        if (bestMonster is null)
+            return null;
+
+        if (bestManualDestination.Point.Priority > bestMonster.Priority)
+            return null;
+
+        var bestLiveProgressionInteractable = observation.LiveInteractables
+            .Where(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition))
+            .Select(x => new
+            {
+                Interactable = x,
+                Distance = playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : (float?)null,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : (float?)null,
+            })
+            .Select(x => new
+            {
+                x.Interactable,
+                x.Distance,
+                x.VerticalDelta,
+                Priority = objectPriorityRuleService.GetEffectivePriority(context, x.Interactable, x.Distance, x.VerticalDelta),
+            })
+            .OrderBy(x => x.Priority)
+            .ThenBy(x => x.Distance ?? float.MaxValue)
+            .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
+            .FirstOrDefault();
+        if (bestLiveProgressionInteractable is not null
+            && !ShouldManualDestinationBeatProgressionInteractable(
+                bestManualDestination.Point,
+                bestLiveProgressionInteractable.Interactable,
+                bestLiveProgressionInteractable.Priority))
+        {
+            return null;
+        }
+
+        var selectionLogKey = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{bestManualDestination.Point.Key}:{bestMonster.Monster.Name}:{bestMonster.Priority}:{bestLiveProgressionInteractable?.Interactable.Name}:{bestLiveProgressionInteractable?.Priority}:{bestLiveProgressionInteractable?.Interactable.Classification}");
+        if (loggedCombatBypassManualSelections.Add(selectionLogKey))
+        {
+            var manualLabel = bestManualDestination.Point.IsManualXyzDestination ? "XYZ" : "map XZ";
+            var progressSummary = bestLiveProgressionInteractable is null
+                ? "no stronger live progression blocker was visible"
+                : $"live progression interactable {bestLiveProgressionInteractable.Interactable.Name} ({bestLiveProgressionInteractable.Interactable.Classification}) at {FormatVector(bestLiveProgressionInteractable.Interactable.Position)} on map {bestLiveProgressionInteractable.Interactable.MapId} resolved at priority {bestLiveProgressionInteractable.Priority} and was intentionally ignored because {DescribeManualDestinationProgressionOverride(bestManualDestination.Point, bestLiveProgressionInteractable.Interactable, bestLiveProgressionInteractable.Priority)}";
+            log.Information(
+                $"[ADS] Selected fight-while-force-marching {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} while live monster pressure remains because manual priority {bestManualDestination.Point.Priority} beat/tied live monster {bestMonster.Monster.Name} ({bestMonster.Priority}) and {progressSummary}.");
+        }
+
+        return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
+    }
+
+    private DungeonFrontierPoint? SelectPraetoriumMountedCombatBypassManualDestination(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+    {
+        if (!context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
+            return null;
+
+        if (!context.InCombat
+            && !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        {
+            return null;
+        }
+
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+            return null;
+
+        var bestManualDestination = manualDestinations
+            .Where(point => point.AllowCombatBypass && !visitedFrontierKeys.Contains(point.Key))
+            .Select(point => new
+            {
+                Point = point,
+                Distance = playerPosition.HasValue ? GetManualDestinationDistance(playerPosition.Value, point) : float.MaxValue,
+                VerticalDelta = playerPosition.HasValue ? MathF.Abs(point.Position.Y - playerPosition.Value.Y) : float.MaxValue,
+            })
+            .OrderBy(x => x.Point.Priority)
+            .ThenBy(x => x.Distance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (bestManualDestination is null)
+            return null;
+
+        var selectionLogKey = $"mounted:{bestManualDestination.Point.Key}";
+        if (loggedCombatBypassManualSelections.Add(selectionLogKey))
+        {
+            var manualLabel = bestManualDestination.Point.IsManualXyzDestination ? "XYZ" : "map XZ";
+            var liveMonsterSummary = observation.LiveMonsters.Count == 0
+                ? "no live monsters were present, but local mounted combat was active"
+                : $"{observation.LiveMonsters.Count} live monster(s) were visible";
+            var liveInteractableSummary = observation.LiveInteractables.Count == 0
+                ? "no live interactables"
+                : $"{observation.LiveInteractables.Count} live interactable(s)";
+            log.Information(
+                $"[ADS] Praetorium mounted combat override selected fight-while-force-marching {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} with manual priority {bestManualDestination.Point.Priority}; {liveMonsterSummary} and {liveInteractableSummary}. ADS is bypassing mounted combat handoff so the authored force-march objective reaches planner/execution.");
+        }
+
+        return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
+    }
+
     private static bool ShouldManualDestinationBeatProgressionInteractable(
-        int manualPriority,
+        DungeonFrontierPoint manualDestination,
         ObservedInteractable interactable,
         int interactablePriority)
     {
-        if (manualPriority < interactablePriority)
+        if (manualDestination.Priority < interactablePriority)
             return true;
 
-        if (manualPriority > interactablePriority)
+        if (manualDestination.Priority > interactablePriority)
             return false;
 
-        return interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
+        return IsLowerValueProgressionInteractable(interactable);
     }
+
+    private static string DescribeManualDestinationProgressionOverride(
+        DungeonFrontierPoint manualDestination,
+        ObservedInteractable interactable,
+        int interactablePriority)
+    {
+        if (manualDestination.Priority < interactablePriority)
+        {
+            return $"manual priority {manualDestination.Priority} beat the live interactable priority {interactablePriority}";
+        }
+
+        if (interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
+        {
+            return $"the tie at priority {interactablePriority} was spent on the authored manual waypoint instead of the lower-value {interactable.Classification} interactable";
+        }
+
+        return $"manual priority {manualDestination.Priority} beat the live {interactable.Classification} interactable priority {interactablePriority}";
+    }
+
+    private static bool IsLowerValueProgressionInteractable(ObservedInteractable interactable)
+        => interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
 
     private static bool IsSaneVerticalBlocker(Vector3? playerPosition, Vector3 targetPosition)
         => !playerPosition.HasValue
