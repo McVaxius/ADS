@@ -3749,7 +3749,7 @@
     {
       "Enabled": true,
       "TerritoryTypeId": 879,
-      "ContentFinderConditionId": 698,
+      "ContentFinderConditionId": 688,
       "DutyEnglishName": "The Dungeons of Lyhe Ghiah",
       "ObjectKind": "Treasure",
       "BaseId": 0,
