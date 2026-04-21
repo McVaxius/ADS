@@ -78,11 +78,11 @@ public sealed class ObservationMemoryService
 
     public void Update(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
-        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty)
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty)
         {
             if (!loggedReset && (knownMonsters.Count > 0 || knownInteractables.Count > 0))
             {
-                log.Debug("[ADS] Observation memory parked because ADS is outside a supported observation context.");
+                log.Debug("[ADS] Observation memory parked because ADS is outside instanced duty.");
             }
 
             if (activeDutyKey != 0

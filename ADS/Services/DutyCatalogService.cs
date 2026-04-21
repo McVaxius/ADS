@@ -67,7 +67,7 @@ public sealed class DutyCatalogService
 
         foreach (var row in contentFinderSheet)
         {
-            if (row.ContentType.ValueNullable is null || row.ContentType.Value.RowId != 2)
+            if (row.ContentType.ValueNullable is null)
                 continue;
 
             if (row.TerritoryType.ValueNullable is null || row.ContentMemberType.ValueNullable is null)
@@ -77,9 +77,6 @@ public sealed class DutyCatalogService
                 + row.ContentMemberType.Value.HealersPerParty
                 + row.ContentMemberType.Value.MeleesPerParty
                 + row.ContentMemberType.Value.RangedPerParty;
-            if (partySize != 4)
-                continue;
-
             var localizedName = NormalizeName(row.Name.ToString());
             if (string.IsNullOrWhiteSpace(localizedName))
                 continue;
@@ -89,16 +86,23 @@ public sealed class DutyCatalogService
             if (string.IsNullOrWhiteSpace(englishName))
                 englishName = localizedName;
 
+            var contentTypeName = NormalizeName(row.ContentType.Value.Name.ToString());
+            var category = ClassifyDutyCategory(
+                territoryTypeId: row.TerritoryType.Value.RowId,
+                contentTypeRowId: row.ContentType.Value.RowId,
+                contentMemberTypeRowId: row.ContentMemberType.Value.RowId,
+                partySize: partySize,
+                contentTypeName: contentTypeName);
             var supportLevel = DutySupportLevel.PassiveOnly;
-            var supportNote = "Passive observation and owned FSM testing are allowed; pilot execution still needs validation.";
+            var supportNote = "Runtime ownership now keys off instanced-duty truth. This catalog row is maturity metadata only; pilot execution validation still needs work.";
             if (PilotDutyNames.Contains(englishName.ToLowerInvariant()))
             {
                 supportLevel = DutySupportLevel.ActiveSupported;
-                supportNote = "Pilot active wave: simple ARR first.";
+                supportNote = "Pilot active wave: operator-validated starter route.";
             }
             else if (LaterWaveDutyNames.Contains(englishName.ToLowerInvariant()))
             {
-                supportNote = "Planned test list; passive observation and owned FSM testing are allowed before pilot promotion.";
+                supportNote = "Planned test list; runtime is allowed, but this row still needs pilot promotion.";
             }
 
             var entry = new DutyCatalogEntry
@@ -107,7 +111,7 @@ public sealed class DutyCatalogService
                 TerritoryTypeId = row.TerritoryType.Value.RowId,
                 Name = localizedName,
                 EnglishName = englishName,
-                ContentTypeName = NormalizeName(row.ContentType.Value.Name.ToString()),
+                ContentTypeName = contentTypeName,
                 ExpansionName = GetExpansionName(row.TerritoryType.Value.ExVersion.ValueNullable?.RowId ?? 0),
                 SupportNote = supportNote,
                 LevelRequired = row.ClassJobLevelRequired,
@@ -116,6 +120,7 @@ public sealed class DutyCatalogService
                 ContentTypeRowId = row.ContentType.Value.RowId,
                 ContentMemberTypeRowId = row.ContentMemberType.Value.RowId,
                 PartySize = partySize,
+                Category = category,
                 SupportLevel = supportLevel,
                 ClearanceStatus = ClearanceStatuses.GetValueOrDefault(englishName, DutyClearanceStatus.NotCleared),
                 IsPlannedTest = LaterWaveDutyNames.Contains(englishName.ToLowerInvariant()),
@@ -145,7 +150,13 @@ public sealed class DutyCatalogService
             return string.Compare(left.EnglishName, right.EnglishName, StringComparison.OrdinalIgnoreCase);
         });
 
-        log.Information($"[ADS] Built 4-man duty catalog with {entries.Count} rows, {entries.Count(x => x.SupportsPassiveObservation)} supported observation duties, and {entries.Count(x => x.SupportsActiveExecution)} active pilot duties.");
+        var categorySummary = string.Join(
+            ", ",
+            entries
+                .GroupBy(x => x.Category)
+                .OrderBy(x => x.Key)
+                .Select(x => $"{x.Key}={x.Count()}"));
+        log.Information($"[ADS] Built instanced duty catalog with {entries.Count} rows. Categories: {categorySummary}. Pilot-active rows: {entries.Count(x => x.SupportLevel == DutySupportLevel.ActiveSupported)}.");
     }
 
     public IReadOnlyList<DutyCatalogEntry> Entries
@@ -195,6 +206,7 @@ public sealed class DutyCatalogService
                 ContentTypeRowId = 0,
                 ContentMemberTypeRowId = 0,
                 PartySize = 4,
+                Category = DutyCategory.TreasureDungeon,
                 SupportLevel = DutySupportLevel.ActiveSupported,
                 ClearanceStatus = DutyClearanceStatus.FourPlayerSyncCleared,
                 IsPlannedTest = false,
@@ -207,6 +219,56 @@ public sealed class DutyCatalogService
 
     private static string NormalizeName(string name)
         => string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static DutyCategory ClassifyDutyCategory(
+        uint territoryTypeId,
+        uint contentTypeRowId,
+        uint contentMemberTypeRowId,
+        int partySize,
+        string contentTypeName)
+    {
+        if (TreasureDungeonData.IsSupportedDutyTerritory(territoryTypeId))
+            return DutyCategory.TreasureDungeon;
+
+        var normalizedType = NormalizeName(contentTypeName).ToLowerInvariant();
+        if (normalizedType.Contains("guild hest", StringComparison.Ordinal)
+            || normalizedType.Contains("guildhest", StringComparison.Ordinal))
+        {
+            return DutyCategory.GuildHest;
+        }
+
+        if (normalizedType.Contains("deep dungeon", StringComparison.Ordinal))
+            return DutyCategory.DeepDungeon;
+
+        if (normalizedType.Contains("treasure", StringComparison.Ordinal))
+            return DutyCategory.TreasureDungeon;
+
+        if (normalizedType.Contains("alliance", StringComparison.Ordinal) || partySize >= 24)
+            return DutyCategory.AllianceRaid;
+
+        if (partySize <= 1)
+            return DutyCategory.Solo;
+
+        if (partySize == 4)
+            return DutyCategory.FourMan;
+
+        if (partySize == 8)
+            return DutyCategory.EightMan;
+
+        return contentTypeRowId switch
+        {
+            5 => DutyCategory.GuildHest,
+            21 => DutyCategory.DeepDungeon,
+            _ => contentMemberTypeRowId switch
+            {
+                3 => DutyCategory.Solo,
+                4 => DutyCategory.FourMan,
+                5 => DutyCategory.EightMan,
+                6 => DutyCategory.AllianceRaid,
+                _ => DutyCategory.Other,
+            },
+        };
+    }
 
     private static string GetExpansionName(uint exVersion)
         => exVersion switch

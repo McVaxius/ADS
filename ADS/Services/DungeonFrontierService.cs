@@ -93,7 +93,7 @@ public sealed class DungeonFrontierService
 
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
     {
-        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
         {
             if (activeDutyKey != 0)
             {
@@ -323,7 +323,7 @@ public sealed class DungeonFrontierService
         float radius,
         bool requirePlayerNear = false)
     {
-        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InDuty || !context.IsSupportedDuty || context.TerritoryTypeId == 0)
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
             return null;
 
         if (!TryResolveActiveMap(context, out var activeMap, out _))

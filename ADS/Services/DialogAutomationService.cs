@@ -27,7 +27,7 @@ public sealed class DialogAutomationService
 
     public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode, bool pluginEnabled)
     {
-        if (!pluginEnabled || !context.InDuty || !context.IsSupportedDuty)
+        if (!pluginEnabled || !context.InInstancedDuty || context.IsUnsafeTransition)
             return;
 
         if (ownershipMode is not OwnershipMode.OwnedStartOutside

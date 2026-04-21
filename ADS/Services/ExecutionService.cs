@@ -145,7 +145,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         CurrentMode = OwnershipMode.OwnedStartOutside;
-        SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter a supported ADS duty.");
+        SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter instanced duty.");
         return true;
     }
 
@@ -153,12 +153,12 @@ public sealed class ExecutionService
     {
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
-        if (!context.InDuty || !context.IsSupportedDuty)
+        if (!context.InInstancedDuty)
         {
-            CurrentMode = context.InDuty ? OwnershipMode.Failed : OwnershipMode.Idle;
+            CurrentMode = OwnershipMode.Idle;
             SetPhase(
-                CurrentMode == OwnershipMode.Failed ? ExecutionPhase.Failure : ExecutionPhase.Idle,
-                "Start inside requires being inside a supported ADS duty.");
+                ExecutionPhase.Idle,
+                "Start inside requires being inside instanced duty.");
             return false;
         }
 
@@ -173,12 +173,12 @@ public sealed class ExecutionService
     {
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
-        if (!context.InDuty || !context.IsSupportedDuty)
+        if (!context.InInstancedDuty)
         {
-            CurrentMode = context.InDuty ? OwnershipMode.Failed : OwnershipMode.Idle;
+            CurrentMode = OwnershipMode.Idle;
             SetPhase(
-                CurrentMode == OwnershipMode.Failed ? ExecutionPhase.Failure : ExecutionPhase.Idle,
-                "Resume requires being inside a supported ADS duty.");
+                ExecutionPhase.Idle,
+                "Resume requires being inside instanced duty.");
             return false;
         }
 
@@ -191,7 +191,7 @@ public sealed class ExecutionService
 
     public bool LeaveDuty(DutyContextSnapshot context)
     {
-        if (!context.InDuty)
+        if (!context.InInstancedDuty)
         {
             SetPhase(CurrentPhase, "Leave requires being inside duty.");
             return false;
@@ -213,7 +213,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ResetRecoveryHold();
         ResetLeaveState();
-        CurrentMode = context.InDuty && context.IsSupportedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
+        CurrentMode = context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
         SetPhase(
             CurrentMode == OwnershipMode.Observing ? ExecutionPhase.ObservingOnly : ExecutionPhase.Idle,
             CurrentMode == OwnershipMode.Observing
@@ -253,21 +253,12 @@ public sealed class ExecutionService
         switch (CurrentMode)
         {
             case OwnershipMode.OwnedStartOutside:
-                if (!context.InDuty)
+                if (!context.InInstancedDuty)
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
-                    SetPhase(ExecutionPhase.OutsideQueue, "Waiting to enter a supported duty from outside.");
-                    return;
-                }
-
-                if (!context.IsSupportedDuty)
-                {
-                    StopMovementAssists();
-                    ClearInteractableCommitment();
-                    ClearCommittedForceMarchManualDestination();
-                    SetPhase(ExecutionPhase.AwaitingSupportedPilotDuty, "Outside-start ownership is pending a supported ADS duty.");
+                    SetPhase(ExecutionPhase.OutsideQueue, "Waiting to enter instanced duty from outside.");
                     return;
                 }
 
@@ -276,7 +267,7 @@ public sealed class ExecutionService
 
             case OwnershipMode.OwnedStartInside:
             case OwnershipMode.OwnedResumeInside:
-                if (!context.InDuty)
+                if (!context.InInstancedDuty)
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
@@ -287,21 +278,11 @@ public sealed class ExecutionService
                     return;
                 }
 
-                if (!context.IsSupportedDuty)
-                {
-                    StopMovementAssists();
-                    ClearInteractableCommitment();
-                    ClearCommittedForceMarchManualDestination();
-                    CurrentMode = OwnershipMode.Failed;
-                    SetPhase(ExecutionPhase.Failure, "Current duty is not an ADS-supported 4-man duty.");
-                    return;
-                }
-
                 UpdateOwnedPhase(context, planner, observation, $"Owned in {context.CurrentDuty?.EnglishName}.");
                 return;
 
             case OwnershipMode.Leaving:
-                if (!context.InDuty)
+                if (!context.InInstancedDuty)
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
@@ -316,7 +297,7 @@ public sealed class ExecutionService
                 return;
 
             case OwnershipMode.Failed:
-                if (!context.InDuty)
+                if (!context.InInstancedDuty)
                 {
                     StopMovementAssists();
                     ClearInteractableCommitment();
@@ -331,7 +312,7 @@ public sealed class ExecutionService
                 return;
         }
 
-        if (context.InDuty && context.IsSupportedDuty)
+        if (context.InInstancedDuty)
         {
             StopMovementAssists();
             ClearInteractableCommitment();
@@ -2285,7 +2266,7 @@ public sealed class ExecutionService
     }
 
     private static bool IsPraetoriumMountedCombatContext(DutyContextSnapshot context)
-        => context.InDuty
+        => context.InInstancedDuty
             && context.Mounted
             && context.TerritoryTypeId == PraetoriumTerritoryTypeId;
 

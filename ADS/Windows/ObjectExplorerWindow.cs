@@ -1,5 +1,7 @@
 using System.Numerics;
+using ADS.Models;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface.Windowing;
 
@@ -8,7 +10,12 @@ namespace ADS.Windows;
 public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 {
     private readonly Plugin plugin;
-    private string filter = string.Empty;
+    private readonly string[] objectKindFilters = ["All", .. Enum.GetNames<ObjectKind>().OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
+    private readonly string[] ruleClassificationOptions = ["Auto", .. Enum.GetNames<InteractableClass>()];
+    private string textFilter = string.Empty;
+    private int objectKindFilterIndex;
+    private bool targetableOnly;
+    private bool sameMapOnly;
 
     public ObjectExplorerWindow(Plugin plugin)
         : base("ADS Object Explorer###ADSObjectExplorer")
@@ -16,10 +23,10 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(640f, 420f),
+            MinimumSize = new Vector2(720f, 420f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1040f, 900f);
+        Size = new Vector2(1320f, 920f);
     }
 
     public void Dispose()
@@ -37,37 +44,68 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return;
         }
 
-        ImGui.TextUnformatted("Live Loaded Objects");
-        ImGui.TextWrapped("Distances are 3D world distances from your current position. Y dist is the absolute world-space vertical difference. Hover a row for base id, object id, coordinates, and targetable state. CREATE RULE seeds a new rules-editor row with the current duty scope, current live layer, object kind, base id, and exact name.");
-        ImGui.TextUnformatted($"Player: {localPlayer.Position.X:0.00}, {localPlayer.Position.Y:0.00}, {localPlayer.Position.Z:0.00}");
-        ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerStatus}");
+        var context = plugin.DutyContextService.Current;
+        var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown";
+        var nearestFrontierLabel = plugin.DungeonFrontierService.CurrentLabelMarkers
+            .OrderBy(x => Vector3.Distance(localPlayer.Position, x.WorldPosition))
+            .FirstOrDefault();
 
-        ImGui.SetNextItemWidth(320f);
-        ImGui.InputTextWithHint("##ADSObjectFilter", "filter by name or kind", ref filter, 128);
+        ImGui.TextUnformatted("Live Loaded Objects");
+        ImGui.TextWrapped("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence.");
+        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
+        ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
+        ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
+        ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
+        ImGui.TextWrapped($"Status: {plugin.ObjectExplorerStatus}");
+
+        ImGui.SetNextItemWidth(260f);
+        ImGui.InputTextWithHint("##ADSObjectTextFilter", "filter text / base id / object kind", ref textFilter, 128);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(180f);
+        ImGui.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters, objectKindFilters.Length);
+        ImGui.SameLine();
+        ImGui.Checkbox("Targetable only", ref targetableOnly);
+        ImGui.SameLine();
+        ImGui.Checkbox("Same-map-only", ref sameMapOnly);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("Best-effort layer filter. Rows with only off-layer scoped rule hits are hidden; rows with no layer evidence stay visible.");
+        }
+
         ImGui.SameLine();
         if (ImGui.SmallButton("Clear"))
-            filter = string.Empty;
+        {
+            textFilter = string.Empty;
+            objectKindFilterIndex = 0;
+            targetableOnly = false;
+            sameMapOnly = false;
+        }
 
-        var rows = BuildRows(localPlayer)
+        var rows = BuildRows(context, localPlayer)
             .Where(MatchesFilter)
             .OrderBy(x => x.Distance)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         ImGui.TextUnformatted($"Objects shown: {rows.Count}");
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 6, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 10, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
-        ImGui.TableSetupColumn("ObjectKind", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Y dist", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Flag", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Rule", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 60f);
+        ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 60f);
+        ImGui.TableSetupColumn("moveto", ImGuiTableColumnFlags.WidthFixed, 78f);
+        ImGui.TableSetupColumn("flyto", ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn("FLAG", ImGuiTableColumnFlags.WidthFixed, 62f);
+        ImGui.TableSetupColumn("RULE", ImGuiTableColumnFlags.WidthFixed, 62f);
+        ImGui.TableSetupColumn("Copy XYZ", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableHeadersRow();
 
-        for (var i = 0; i < rows.Count; i++)
+        for (var index = 0; index < rows.Count; index++)
         {
-            var row = rows[i];
+            var row = rows[index];
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
             ImGui.TextUnformatted(row.Name);
@@ -86,18 +124,35 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
-            if (ImGui.SmallButton($"[FLAG]##ADSObjectFlag{i}"))
-                plugin.TryPlaceObjectFlag(row.Name, row.Position);
+            ImGui.TextUnformatted(row.MatchingRules.Count.ToString());
+            DrawRuleTooltip(row);
 
             ImGui.TableSetColumnIndex(5);
-            if (ImGui.SmallButton($"CREATE RULE##ADSObjectCreateRule{i}"))
-                plugin.CreateRuleFromExplorer(row.Name, row.ObjectKind, row.BaseId, row.Position);
+            if (ImGui.SmallButton($"moveto##ADSObjectMove{index}"))
+                plugin.TryExplorerNavigation(row.Position, useFly: false);
+
+            ImGui.TableSetColumnIndex(6);
+            if (ImGui.SmallButton($"flyto##ADSObjectFly{index}"))
+                plugin.TryExplorerNavigation(row.Position, useFly: true);
+
+            ImGui.TableSetColumnIndex(7);
+            if (ImGui.SmallButton($"FLAG##ADSObjectFlag{index}"))
+                plugin.TryPlaceObjectFlag(row.Name, row.Position);
+
+            ImGui.TableSetColumnIndex(8);
+            if (ImGui.SmallButton($"RULE##ADSObjectRule{index}"))
+                ImGui.OpenPopup($"ADSObjectRulePopup##{index}");
+            DrawRulePopup(index, row);
+
+            ImGui.TableSetColumnIndex(9);
+            if (ImGui.SmallButton($"XYZ##ADSObjectCopy{index}"))
+                ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
         }
 
         ImGui.EndTable();
     }
 
-    private IEnumerable<ObjectExplorerRow> BuildRows(IGameObject localPlayer)
+    private IEnumerable<ObjectExplorerRow> BuildRows(DutyContextSnapshot context, IGameObject localPlayer)
     {
         foreach (var gameObject in Plugin.ObjectTable)
         {
@@ -111,25 +166,105 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
-            yield return new ObjectExplorerRow(
-                name,
-                gameObject.ObjectKind.ToString(),
-                Vector3.Distance(localPlayer.Position, gameObject.Position),
-                MathF.Abs(gameObject.Position.Y - localPlayer.Position.Y),
+            var matchingRules = plugin.ObjectPriorityRuleService.GetExplorerMatches(
+                context,
+                gameObject.ObjectKind,
                 gameObject.BaseId,
-                gameObject.GameObjectId,
-                gameObject.IsTargetable,
-                gameObject.Position);
+                name,
+                gameObject.Position,
+                context.MapId);
+            var matchesCurrentLayer = plugin.ObjectPriorityRuleService.MatchesCurrentLayerForExplorer(
+                context,
+                gameObject.ObjectKind,
+                gameObject.BaseId,
+                name,
+                gameObject.Position,
+                context.MapId);
+
+            yield return new ObjectExplorerRow(
+                Name: name,
+                ObjectKind: gameObject.ObjectKind.ToString(),
+                Distance: Vector3.Distance(localPlayer.Position, gameObject.Position),
+                VerticalDelta: MathF.Abs(gameObject.Position.Y - localPlayer.Position.Y),
+                BaseId: gameObject.BaseId,
+                GameObjectId: gameObject.GameObjectId,
+                IsTargetable: gameObject.IsTargetable,
+                MatchesCurrentLayer: matchesCurrentLayer,
+                Position: gameObject.Position,
+                MatchingRules: matchingRules);
         }
     }
 
     private bool MatchesFilter(ObjectExplorerRow row)
     {
-        if (string.IsNullOrWhiteSpace(filter))
+        if (targetableOnly && !row.IsTargetable)
+            return false;
+
+        if (sameMapOnly && !row.MatchesCurrentLayer)
+            return false;
+
+        var selectedKind = objectKindFilters[Math.Clamp(objectKindFilterIndex, 0, objectKindFilters.Length - 1)];
+        if (!string.Equals(selectedKind, "All", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(row.ObjectKind, selectedKind, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(textFilter))
             return true;
 
-        return row.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
-            || row.ObjectKind.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        return row.Name.Contains(textFilter, StringComparison.OrdinalIgnoreCase)
+            || row.ObjectKind.Contains(textFilter, StringComparison.OrdinalIgnoreCase)
+            || row.BaseId.ToString().Contains(textFilter, StringComparison.OrdinalIgnoreCase)
+            || row.GameObjectId.ToString().Contains(textFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void DrawRulePopup(int index, ObjectExplorerRow row)
+    {
+        if (!ImGui.BeginPopup($"ADSObjectRulePopup##{index}"))
+            return;
+
+        ImGui.TextUnformatted("Seed rule with");
+        ImGui.Separator();
+        for (var optionIndex = 0; optionIndex < ruleClassificationOptions.Length; optionIndex++)
+        {
+            var option = ruleClassificationOptions[optionIndex];
+            if (ImGui.Selectable(option))
+            {
+                plugin.CreateRuleFromExplorer(
+                    row.Name,
+                    row.ObjectKind,
+                    row.BaseId,
+                    row.Position,
+                    string.Equals(option, "Auto", StringComparison.OrdinalIgnoreCase) ? string.Empty : option);
+                ImGui.CloseCurrentPopup();
+            }
+        }
+
+        ImGui.EndPopup();
+    }
+
+    private void DrawRuleTooltip(ObjectExplorerRow row)
+    {
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.TextUnformatted(row.MatchingRules.Count == 0 ? "No matching rules." : "Matching rules");
+        if (row.MatchingRules.Count > 0)
+        {
+            foreach (var rule in row.MatchingRules.Take(8))
+            {
+                var type = string.IsNullOrWhiteSpace(rule.Classification) ? "(blank)" : rule.Classification;
+                var scope = plugin.ObjectPriorityRuleService.DescribeRuleScope(rule);
+                ImGui.TextUnformatted($"{type} | pri {rule.Priority} | {scope}");
+            }
+
+            if (row.MatchingRules.Count > 8)
+                ImGui.TextUnformatted($"... {row.MatchingRules.Count - 8} more");
+        }
+
+        ImGui.EndTooltip();
     }
 
     private static void DrawRowTooltip(ObjectExplorerRow row)
@@ -145,6 +280,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"BaseId: {row.BaseId}");
         ImGui.TextUnformatted($"GameObjectId: {row.GameObjectId}");
         ImGui.TextUnformatted($"Targetable: {(row.IsTargetable ? "YES" : "NO")}");
+        ImGui.TextUnformatted($"Matches current layer: {(row.MatchesCurrentLayer ? "YES" : "NO")}");
         ImGui.TextUnformatted($"Position: {row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
         ImGui.EndTooltip();
     }
@@ -157,5 +293,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         uint BaseId,
         ulong GameObjectId,
         bool IsTargetable,
-        Vector3 Position);
+        bool MatchesCurrentLayer,
+        Vector3 Position,
+        IReadOnlyList<ObjectPriorityRule> MatchingRules);
 }

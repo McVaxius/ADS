@@ -15,13 +15,8 @@ public sealed class DutyCatalogEntry
     public required uint ContentTypeRowId { get; init; }
     public required uint ContentMemberTypeRowId { get; init; }
     public required int PartySize { get; init; }
+    public required DutyCategory Category { get; init; }
     public required DutySupportLevel SupportLevel { get; init; }
     public required DutyClearanceStatus ClearanceStatus { get; init; }
     public required bool IsPlannedTest { get; init; }
-
-    public bool SupportsPassiveObservation
-        => SupportLevel is DutySupportLevel.PassiveOnly or DutySupportLevel.ActiveSupported;
-
-    public bool SupportsActiveExecution
-        => SupportLevel == DutySupportLevel.ActiveSupported;
 }

@@ -3987,7 +3987,7 @@
       "Notes": "Treasure Dungeon Coffer"
     },
     {
-      "Enabled": false,
+      "Enabled": true,
       "TerritoryTypeId": 1044,
       "ContentFinderConditionId": 16,
       "DutyEnglishName": "the Praetorium",
@@ -3995,11 +3995,11 @@
       "BaseId": 0,
       "ObjectName": "",
       "NameMatchMode": "Exact",
-      "Classification": "MapXzDestination",
+      "Classification": "XYZ",
       "DestinationType": "",
       "Layer": "Research Level",
-      "MapCoordinates": "19.9,21.4",
-      "WorldCoordinates": "",
+      "MapCoordinates": "",
+      "WorldCoordinates": "-65,-103,-.22",
       "ObjectMapCoordinates": "",
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
@@ -4009,6 +4009,30 @@
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": "get to get to nero hehe"
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1044,
+      "ContentFinderConditionId": 16,
+      "DutyEnglishName": "the Praetorium",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "",
+      "NameMatchMode": "Exact",
+      "Classification": "XYZ",
+      "DestinationType": "",
+      "Layer": "Sky Level",
+      "MapCoordinates": "",
+      "WorldCoordinates": "155.9,186.1,-3.7",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 999,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
     }
   ]
 }

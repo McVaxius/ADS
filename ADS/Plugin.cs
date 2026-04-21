@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using ADS.Models;
 using ADS.Services;
@@ -239,7 +240,28 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
-    public void CreateRuleFromExplorer(string objectName, string objectKind, uint baseId, System.Numerics.Vector3 worldPosition)
+    public bool TryExplorerNavigation(System.Numerics.Vector3 worldPosition, bool useFly)
+    {
+        var command = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{(useFly ? "/vnav flyto" : "/vnav moveto")} {worldPosition.X:0.00} {worldPosition.Y:0.00} {worldPosition.Z:0.00}");
+        try
+        {
+            var result = CommandManager.ProcessCommand(command);
+            objectExplorerStatus = result
+                ? $"Sent {(useFly ? "flyto" : "moveto")} to {worldPosition.X:0.00}, {worldPosition.Y:0.00}, {worldPosition.Z:0.00}."
+                : $"Failed to send {command}.";
+            return result;
+        }
+        catch (Exception ex)
+        {
+            objectExplorerStatus = $"Explorer navigation failed: {ex.Message}";
+            Log.Warning(ex, $"[ADS] Explorer navigation command failed: {command}");
+            return false;
+        }
+    }
+
+    public void CreateRuleFromExplorer(string objectName, string objectKind, uint baseId, System.Numerics.Vector3 worldPosition, string classificationOverride = "")
     {
         var context = DutyContextService.Current;
         var seededRule = ObjectPriorityRuleService.CreateBlankRule();
@@ -250,12 +272,16 @@ public sealed class Plugin : IDalamudPlugin
         seededRule.BaseId = baseId;
         seededRule.ObjectName = objectName;
         seededRule.NameMatchMode = "Exact";
-        seededRule.Layer = context.InDuty
+        seededRule.Classification = classificationOverride;
+        seededRule.Layer = context.InInstancedDuty
             ? ObjectPriorityRuleService.GetActiveLayerName(context) ?? string.Empty
             : string.Empty;
-        seededRule.Notes = context.InDuty
-            ? $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0} on layer {seededRule.Layer}."
-            : $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0}.";
+        var classificationNote = string.IsNullOrWhiteSpace(classificationOverride)
+            ? "Auto classification left blank."
+            : $"Classification override: {classificationOverride}.";
+        seededRule.Notes = context.InInstancedDuty
+            ? $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0} on layer {seededRule.Layer}. {classificationNote}"
+            : $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0}. {classificationNote}";
 
         objectRuleEditorWindow.CreateRuleFromExplorer(seededRule);
         objectRuleEditorWindow.IsOpen = true;
@@ -360,9 +386,11 @@ public sealed class Plugin : IDalamudPlugin
                 territoryTypeId = DutyContextService.Current.TerritoryTypeId,
                 mapId = DutyContextService.Current.MapId,
                 contentFinderConditionId = DutyContextService.Current.ContentFinderConditionId,
-                inDuty = DutyContextService.Current.InDuty,
-                supportedDuty = DutyContextService.Current.IsSupportedDuty,
-                allowsActiveExecution = DutyContextService.Current.AllowsActiveExecution,
+                inInstancedDuty = DutyContextService.Current.InInstancedDuty,
+                hasCatalogMetadata = DutyContextService.Current.HasCatalogMetadata,
+                dutyCategory = DutyContextService.Current.CurrentDuty?.Category.ToString(),
+                supportLevel = DutyContextService.Current.CurrentDuty?.SupportLevel.ToString(),
+                clearanceStatus = DutyContextService.Current.CurrentDuty?.ClearanceStatus.ToString(),
                 unsafeTransition = DutyContextService.Current.IsUnsafeTransition,
                 mounted = DutyContextService.Current.Mounted,
             },

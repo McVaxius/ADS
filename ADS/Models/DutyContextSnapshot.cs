@@ -15,15 +15,12 @@ public sealed class DutyContextSnapshot
     public required uint ContentFinderConditionId { get; init; }
     public required DutyCatalogEntry? CurrentDuty { get; init; }
 
-    public bool InDuty
+    public bool InInstancedDuty
         => BoundByDuty || BoundByDuty56;
 
     public bool IsUnsafeTransition
         => BetweenAreas || BetweenAreas51;
 
-    public bool IsSupportedDuty
-        => CurrentDuty?.SupportsPassiveObservation == true;
-
-    public bool AllowsActiveExecution
-        => CurrentDuty?.SupportsActiveExecution == true;
+    public bool HasCatalogMetadata
+        => CurrentDuty is not null;
 }

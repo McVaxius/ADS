@@ -384,6 +384,56 @@ public sealed class ObjectPriorityRuleService
         uint objectMapId = 0)
         => GetMatchingObjectRules(context, objectKind, baseId, objectName, objectPosition, objectMapId).FirstOrDefault();
 
+    public IReadOnlyList<ObjectPriorityRule> GetExplorerMatches(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3? objectPosition = null,
+        uint objectMapId = 0)
+        => GetMatchingObjectRules(context, objectKind, baseId, objectName, objectPosition, objectMapId, includeLayerScope: false).ToList();
+
+    public bool MatchesCurrentLayerForExplorer(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3? objectPosition = null,
+        uint objectMapId = 0)
+    {
+        var candidates = GetMatchingObjectRules(context, objectKind, baseId, objectName, objectPosition, objectMapId, includeLayerScope: false)
+            .ToList();
+        if (candidates.Count == 0)
+            return true;
+
+        var scopedCandidates = candidates
+            .Where(x => !string.IsNullOrWhiteSpace(GetLayerSelector(x)))
+            .ToList();
+        if (scopedCandidates.Count == 0)
+            return true;
+
+        return scopedCandidates.Any(x => MatchesLayerScope(x, context));
+    }
+
+    public string DescribeRuleScope(ObjectPriorityRule rule)
+    {
+        var parts = new List<string>();
+        if (rule.ContentFinderConditionId != 0)
+            parts.Add($"CFC {rule.ContentFinderConditionId}");
+        if (rule.TerritoryTypeId != 0)
+            parts.Add($"Terr {rule.TerritoryTypeId}");
+        if (!string.IsNullOrWhiteSpace(rule.DutyEnglishName))
+            parts.Add(rule.DutyEnglishName);
+
+        var selector = GetLayerSelector(rule);
+        if (!string.IsNullOrWhiteSpace(selector))
+            parts.Add($"Layer {selector}");
+
+        return parts.Count == 0
+            ? "Global"
+            : string.Join(" | ", parts);
+    }
+
     public IReadOnlyList<ObjectPriorityRule> GetMapXzDestinationRules(DutyContextSnapshot context)
         => Current.Rules
             .Where(x => x.Enabled)

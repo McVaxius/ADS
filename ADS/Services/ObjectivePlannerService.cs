@@ -33,8 +33,8 @@ public sealed class ObjectivePlannerService
         {
             Mode = PlannerMode.IdleObserve,
             ObjectiveKind = PlannerObjectiveKind.None,
-            Objective = "Await supported duty",
-            Explanation = "ADS is idle until a supported dungeon context appears.",
+            Objective = "Await instanced duty",
+            Explanation = "ADS is idle until an instanced-duty context appears.",
             CapturedAtUtc = DateTime.UtcNow,
         };
     }
@@ -74,27 +74,14 @@ public sealed class ObjectivePlannerService
             return;
         }
 
-        if (!context.InDuty)
+        if (!context.InInstancedDuty)
         {
             Current = new PlannerSnapshot
             {
                 Mode = PlannerMode.IdleObserve,
                 ObjectiveKind = PlannerObjectiveKind.None,
-                Objective = "Await supported duty",
-                Explanation = "ADS is outside duty. Ownership can be queued from outside, but observation starts only after duty entry.",
-                CapturedAtUtc = now,
-            };
-            return;
-        }
-
-        if (!context.IsSupportedDuty)
-        {
-            Current = new PlannerSnapshot
-            {
-                Mode = PlannerMode.UnsupportedDuty,
-                ObjectiveKind = PlannerObjectiveKind.None,
-                Objective = "Catalog visible, execution unavailable",
-                Explanation = "This 4-man dungeon is visible in the ADS catalog, but it does not have a supported observer/execution profile yet.",
+                Objective = "Await instanced duty",
+                Explanation = "ADS is outside instanced duty. Ownership can be queued from outside, but observation starts only after duty entry.",
                 CapturedAtUtc = now,
             };
             return;
