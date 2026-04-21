@@ -43,6 +43,13 @@
       "MatchMode": "Contains",
       "Response": "Yes",
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Utilize",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
     }
   ]
 }
