@@ -52,6 +52,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
     private const float LivePartyDamageProgressRange = 35.0f;
 
@@ -99,6 +100,7 @@ public sealed class ExecutionService
     private DateTime nextMountedCombatAttemptUtc;
     private DateTime nextLeaveUiAttemptUtc;
     private DateTime leaveLootDistributionWaitUntilUtc;
+    private DateTime leaveTreasureSweepClearSinceUtc;
     private bool leaveTreasureInteractionSent;
     private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
     private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
@@ -202,7 +204,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Leaving;
-        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. ADS will clear nearby treasure, wait for loot settlement if needed, and then leave duty.");
+        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Clearing nearby treasure before duty exit.");
         return true;
     }
 
@@ -2026,39 +2028,55 @@ public sealed class ExecutionService
         if (context.InCombat)
         {
             StopMovementAssists();
+            leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
             SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for combat to clear before duty exit.");
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (leaveTreasureInteractionSent && now < nextInteractAttemptUtc)
+        {
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Clearing nearby treasure before duty exit.");
             return;
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (playerPosition.HasValue)
         {
-            var nearbyTreasure = observation.LiveInteractables
-                .Where(x => x.Classification == InteractableClass.TreasureCoffer)
-                .Select(x => new
-                {
-                    Interactable = x,
-                    HorizontalDistance = GetHorizontalDistance(x.Position, playerPosition.Value),
-                    VerticalDelta = MathF.Abs(x.Position.Y - playerPosition.Value.Y),
-                })
-                .Where(x => x.HorizontalDistance <= LeaveTreasureSweepHorizontalRange && x.VerticalDelta <= LeaveTreasureSweepVerticalCap)
-                .OrderBy(x => x.HorizontalDistance)
-                .FirstOrDefault();
+            var nearbyTreasure = FindNearestLeaveSweepTreasureCoffer(context, observation, playerPosition.Value);
             if (nearbyTreasure is not null)
             {
+                leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
+                leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+                var previousInteractGameObjectId = lastInteractGameObjectId;
+                var previousInteractAttemptUtc = nextInteractAttemptUtc;
                 TryAdvanceInteractableObjective(
                     context,
-                    nearbyTreasure.Interactable,
+                    nearbyTreasure,
                     "Leave requested. Clearing nearby treasure before duty exit.");
-                if (lastInteractGameObjectId == nearbyTreasure.Interactable.GameObjectId)
+                if (lastInteractGameObjectId == nearbyTreasure.GameObjectId
+                    && (previousInteractGameObjectId != lastInteractGameObjectId
+                        || nextInteractAttemptUtc > previousInteractAttemptUtc))
+                {
                     leaveTreasureInteractionSent = true;
+                }
                 return;
             }
         }
 
         if (leaveTreasureInteractionSent)
         {
-            var now = DateTime.UtcNow;
+            if (leaveTreasureSweepClearSinceUtc == DateTime.MinValue)
+                leaveTreasureSweepClearSinceUtc = now;
+
+            if (now - leaveTreasureSweepClearSinceUtc < LeaveTreasureSweepSettleDelay)
+            {
+                StopMovementAssists();
+                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for nearby treasure list to settle before duty exit.");
+                return;
+            }
+
             if (leaveLootDistributionWaitUntilUtc == DateTime.MinValue)
                 leaveLootDistributionWaitUntilUtc = now + LeaveLootDistributionDelay;
 
@@ -2067,7 +2085,7 @@ public sealed class ExecutionService
                 StopMovementAssists();
                 SetPhase(
                     ExecutionPhase.LeavingDuty,
-                    $"Leave requested. Nearby treasure was opened, so ADS is waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
+                    $"Leave requested. Nearby treasure sweep is clear, waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
                 return;
             }
         }
@@ -2075,6 +2093,28 @@ public sealed class ExecutionService
         StopMovementAssists();
         TrySendLeaveDutyUi();
     }
+
+    private ObservedInteractable? FindNearestLeaveSweepTreasureCoffer(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3 playerPosition)
+        => observation.LiveInteractables
+            .Where(x => x.Classification == InteractableClass.TreasureCoffer
+                && MatchesCurrentMap(context, x.MapId)
+                && IsInteractableStillAllowedInContext(context, x))
+            .Select(x => new
+            {
+                Interactable = x,
+                GameObject = ResolveGameObject(x),
+                HorizontalDistance = GetHorizontalDistance(x.Position, playerPosition),
+                VerticalDelta = MathF.Abs(x.Position.Y - playerPosition.Y),
+            })
+            .Where(x => x.GameObject is not null
+                && x.HorizontalDistance <= LeaveTreasureSweepHorizontalRange
+                && x.VerticalDelta <= LeaveTreasureSweepVerticalCap)
+            .OrderBy(x => x.HorizontalDistance)
+            .Select(x => x.Interactable)
+            .FirstOrDefault();
 
     private void ResetRecoveryHold()
     {
@@ -2087,6 +2127,7 @@ public sealed class ExecutionService
     {
         nextLeaveUiAttemptUtc = DateTime.MinValue;
         leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+        leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
         leaveTreasureInteractionSent = false;
     }
 
