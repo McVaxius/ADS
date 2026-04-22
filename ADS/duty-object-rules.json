@@ -4081,6 +4081,30 @@
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 1044,
+      "ContentFinderConditionId": 16,
+      "DutyEnglishName": "the Praetorium",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "",
+      "NameMatchMode": "Exact",
+      "Classification": "XYZForceMarch",
+      "DestinationType": "",
+      "Layer": "Sky Level",
+      "MapCoordinates": "",
+      "WorldCoordinates": "195.75,185.99,-7.76",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 1000,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": "w2terminal ehehehe"
     }
   ]
 }
