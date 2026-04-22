@@ -4059,7 +4059,7 @@
       "Notes": "w2w before boss1"
     },
     {
-      "Enabled": true,
+      "Enabled": false,
       "TerritoryTypeId": 1044,
       "ContentFinderConditionId": 16,
       "DutyEnglishName": "the Praetorium",
@@ -4095,7 +4095,7 @@
       "DestinationType": "",
       "Layer": "Sky Level",
       "MapCoordinates": "",
-      "WorldCoordinates": "195.75,185.99,-7.76",
+      "WorldCoordinates": "195.75,185.999,-7.76",
       "ObjectMapCoordinates": "",
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,

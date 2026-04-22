@@ -15,7 +15,6 @@ public sealed class ObjectivePlannerService
     private const float TreasureCofferMaxHorizontalDistance = 30f;
     private const float TreasureCofferVerticalCap = 5f;
     private const float BattleNpcVerticalSanityCap = 100f;
-    private const uint PraetoriumTerritoryTypeId = 1044;
 
     private readonly IObjectTable objectTable;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
@@ -844,9 +843,7 @@ public sealed class ObjectivePlannerService
         if (nearestRequiredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
             return true;
 
-        return context.Mounted
-               && context.TerritoryTypeId == PraetoriumTerritoryTypeId
-               && manualDestinationTarget.AllowCombatBypass;
+        return manualDestinationTarget.AllowCombatBypass;
     }
 
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)

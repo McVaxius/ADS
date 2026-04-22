@@ -172,7 +172,13 @@ public sealed class DungeonFrontierService
             observation,
             playerPosition,
             manualDestinations);
-        var selectedCombatBypassManualDestination = SelectCombatBypassManualDestinationAgainstLiveBlockers(
+        var selectedCombatBypassManualDestination = SelectPraetoriumOnFootCombatBypassManualDestination(
+                context,
+                observation,
+                playerPosition,
+                manualDestinations,
+                previousTarget)
+            ?? SelectCombatBypassManualDestinationAgainstLiveBlockers(
                 context,
                 observation,
                 playerPosition,
@@ -347,6 +353,38 @@ public sealed class DungeonFrontierService
             .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
             .Select(x => x.Point)
             .FirstOrDefault();
+    }
+
+    public DungeonFrontierPoint? FindNextForceMarchManualDestinationAfter(
+        DutyContextSnapshot context,
+        Vector3 playerPosition,
+        DungeonFrontierPoint completedPoint)
+    {
+        if (!completedPoint.IsManualDestination)
+            return null;
+
+        if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
+            return null;
+
+        if (!TryResolveActiveMap(context, out var activeMap, out _))
+            return null;
+
+        var manualDestinations = BuildMapXzDestinationPoints(context, activeMap, playerPosition)
+            .Concat(BuildXyzDestinationPoints(context, activeMap, playerPosition))
+            .ToList();
+        if (manualDestinations.Count == 0)
+            return null;
+
+        var anchorIndex = manualDestinations.FindIndex(point => string.Equals(point.Key, completedPoint.Key, StringComparison.Ordinal));
+        if (anchorIndex < 0)
+            return null;
+
+        var nextUnvisitedManualDestination = manualDestinations
+            .Skip(anchorIndex + 1)
+            .FirstOrDefault(point => !visitedFrontierKeys.Contains(point.Key));
+        return nextUnvisitedManualDestination is { AllowCombatBypass: true } nextForceMarchDestination
+            ? BuildNavigationPoint(nextForceMarchDestination, playerPosition)
+            : null;
     }
 
     private IReadOnlyList<DungeonFrontierPoint> GetFrontierPoints(uint territoryTypeId, uint mapId)
@@ -1134,13 +1172,87 @@ public sealed class DungeonFrontierService
         return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
     }
 
+    private DungeonFrontierPoint? SelectPraetoriumOnFootCombatBypassManualDestination(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        DungeonFrontierPoint? previousTarget)
+    {
+        //if (context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
+        if (context.Mounted) //because the AI was too stupid to understand
+            return null;
+
+        if (!context.InCombat
+            && !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        {
+            return null;
+        }
+
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+            return null;
+
+        var currentForceMarchAnchor = GetCurrentAuthoredForceMarchAnchor(manualDestinations, previousTarget);
+        if (currentForceMarchAnchor is not null)
+            return BuildNavigationPoint(currentForceMarchAnchor, playerPosition);
+
+        var inferredAnchorFromPlayerPosition = false;
+        if (!TryGetAuthoredManualAnchorIndex(manualDestinations, previousTarget, out var anchorIndex, out var anchorPoint))
+        {
+            if (!TryInferPraetoriumOnFootSpatialAnchor(manualDestinations, playerPosition, out anchorIndex, out anchorPoint))
+                return null;
+
+            inferredAnchorFromPlayerPosition = true;
+            if (anchorPoint.AllowCombatBypass && !visitedFrontierKeys.Contains(anchorPoint.Key))
+            {
+                var spatialSelectionLogKey = $"praetorium-onfoot-spatial:{anchorPoint.Key}";
+                if (loggedCombatBypassManualSelections.Add(spatialSelectionLogKey))
+                {
+                    var manualLabel = anchorPoint.IsManualXyzDestination ? "XYZ" : "map XZ";
+                    var liveMonsterSummary = observation.LiveMonsters.Count == 0
+                        ? "local combat state was active without visible live monsters"
+                        : $"{observation.LiveMonsters.Count} live monster(s) were visible";
+                    log.Information(
+                        $"[ADS] Praetorium on-foot authored force-march fallback selected force-march {manualLabel} destination {anchorPoint.Name} at {FormatVector(anchorPoint.Position)} by inferring the nearest authored anchor from the current player position because no prior Praetorium manual anchor was remembered; {liveMonsterSummary}. ADS is preserving the immediate authored handoff instead of yielding to the generic combat-bypass selector.");
+                }
+
+                return BuildNavigationPoint(anchorPoint, playerPosition);
+            }
+        }
+
+        var nextUnvisitedManualDestination = manualDestinations
+            .Skip(anchorIndex + 1)
+            .FirstOrDefault(point => !visitedFrontierKeys.Contains(point.Key));
+        if (nextUnvisitedManualDestination is not { AllowCombatBypass: true } nextForceMarchDestination)
+            return null;
+
+        var selectionLogKey = inferredAnchorFromPlayerPosition
+            ? $"praetorium-onfoot-spatial:{anchorPoint.Key}:{nextForceMarchDestination.Key}"
+            : $"praetorium-onfoot:{anchorPoint.Key}:{nextForceMarchDestination.Key}";
+        if (loggedCombatBypassManualSelections.Add(selectionLogKey))
+        {
+            var manualLabel = nextForceMarchDestination.IsManualXyzDestination ? "XYZ" : "map XZ";
+            var liveMonsterSummary = observation.LiveMonsters.Count == 0
+                ? "local combat state was active without visible live monsters"
+                : $"{observation.LiveMonsters.Count} live monster(s) were visible";
+            var anchorSummary = inferredAnchorFromPlayerPosition
+                ? $"after inferring {anchorPoint.Name} as the nearest authored Praetorium anchor from the current player position because no prior manual anchor was remembered"
+                : $"immediately after {anchorPoint.Name} completed";
+            log.Information(
+                $"[ADS] Praetorium on-foot authored force-march handoff promoted force-march {manualLabel} destination {nextForceMarchDestination.Name} at {FormatVector(nextForceMarchDestination.Position)} {anchorSummary}; {liveMonsterSummary}. ADS is replicating the mounted force-march behavior for the next authored segment instead of yielding to incidental combat.");
+        }
+
+        return BuildNavigationPoint(nextForceMarchDestination, playerPosition);
+    }
+
     private DungeonFrontierPoint? SelectPraetoriumMountedCombatBypassManualDestination(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
         IReadOnlyList<DungeonFrontierPoint> manualDestinations)
     {
-        if (!context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
+        //if (!context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
+        if (!context.Mounted) //because the AI was too stupid to understand
             return null;
 
         if (!context.InCombat
@@ -1183,6 +1295,104 @@ public sealed class DungeonFrontierService
         }
 
         return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
+    }
+
+    private DungeonFrontierPoint? GetCurrentAuthoredForceMarchAnchor(
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        DungeonFrontierPoint? previousTarget)
+    {
+        foreach (var candidate in EnumerateManualAnchorCandidates(previousTarget, includeGhosted: false))
+        {
+            if (candidate is not { AllowCombatBypass: true })
+                continue;
+
+            if (visitedFrontierKeys.Contains(candidate.Key))
+                continue;
+
+            var currentPoint = manualDestinations.FirstOrDefault(point => string.Equals(point.Key, candidate.Key, StringComparison.Ordinal));
+            if (currentPoint is not null)
+                return currentPoint;
+        }
+
+        return null;
+    }
+
+    private bool TryGetAuthoredManualAnchorIndex(
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        DungeonFrontierPoint? previousTarget,
+        out int anchorIndex,
+        out DungeonFrontierPoint anchorPoint)
+    {
+        foreach (var candidate in EnumerateManualAnchorCandidates(previousTarget, includeGhosted: true))
+        {
+            anchorIndex = manualDestinations
+                .Select((point, index) => new { Point = point, Index = index })
+                .Where(x => string.Equals(x.Point.Key, candidate.Key, StringComparison.Ordinal))
+                .Select(x => x.Index)
+                .FirstOrDefault(-1);
+            if (anchorIndex >= 0)
+            {
+                anchorPoint = manualDestinations[anchorIndex];
+                return true;
+            }
+        }
+
+        anchorIndex = -1;
+        anchorPoint = default!;
+        return false;
+    }
+
+    private bool TryInferPraetoriumOnFootSpatialAnchor(
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        Vector3? playerPosition,
+        out int anchorIndex,
+        out DungeonFrontierPoint anchorPoint)
+    {
+        anchorIndex = -1;
+        anchorPoint = default!;
+        if (!playerPosition.HasValue || manualDestinations.Count == 0)
+            return false;
+
+        var nearestCandidate = manualDestinations
+            .Select((point, index) => new
+            {
+                Point = point,
+                Index = index,
+                IsVisited = visitedFrontierKeys.Contains(point.Key),
+                Distance = GetManualDestinationDistance(playerPosition.Value, point),
+                VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Value.Y),
+            })
+            .OrderBy(x => x.IsVisited)
+            .ThenBy(x => x.Distance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Index)
+            .FirstOrDefault();
+        if (nearestCandidate is null)
+            return false;
+
+        anchorIndex = nearestCandidate.Index;
+        anchorPoint = nearestCandidate.Point;
+        return true;
+    }
+
+    private IEnumerable<DungeonFrontierPoint> EnumerateManualAnchorCandidates(DungeonFrontierPoint? previousTarget, bool includeGhosted)
+    {
+        if (previousTarget is { IsManualDestination: true })
+            yield return previousTarget;
+
+        if (lastValidManualDestination is { IsManualDestination: true } rememberedManualDestination
+            && !string.Equals(previousTarget?.Key, rememberedManualDestination.Key, StringComparison.Ordinal))
+        {
+            yield return rememberedManualDestination;
+        }
+
+        if (includeGhosted
+            && LastGhostedManualDestination is { IsManualDestination: true } ghostedManualDestination
+            && !string.Equals(previousTarget?.Key, ghostedManualDestination.Key, StringComparison.Ordinal)
+            && !string.Equals(lastValidManualDestination?.Key, ghostedManualDestination.Key, StringComparison.Ordinal))
+        {
+            yield return ghostedManualDestination;
+        }
     }
 
     private static bool ShouldManualDestinationBeatProgressionInteractable(
