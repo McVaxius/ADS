@@ -30,6 +30,8 @@ public sealed class ExecutionService
     private const uint PraetoriumPhotonStreamActionId = 1129;
     private const float MountedCombatClusterRadius = 6.0f;
     private const float PhotonStreamFrontDotThreshold = 0.5f;
+    private const float PraetoriumRearTargetMaxHorizontalDistance = 35.0f;
+    private const float PraetoriumRearTargetMaxVerticalDelta = 10.0f;
     private const float RecoveryGhostRetireRadius = 8.0f;
     private const float RecoveryClusterArrivalRange = RecoveryGhostRetireRadius;
     private const float RecoveryTargetSimilarityRadius = RecoveryGhostRetireRadius;
@@ -110,6 +112,7 @@ public sealed class ExecutionService
     private DateTime livePartyDamageProgressUntilUtc;
     private string lastMountedCombatYieldObjective = string.Empty;
     private string lastMountedCombatPhotonFallbackKey = string.Empty;
+    private string lastMountedCombatRearPreferenceKey = string.Empty;
     private string lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = string.Empty;
     private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
 
@@ -138,7 +141,7 @@ public sealed class ExecutionService
     private readonly record struct MountedCombatAction(uint ActionId, string Name, bool TargetArea, float Range);
     private readonly record struct MountedCombatTarget(ObservedMonster Observed, IGameObject GameObject, float Distance);
     private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float Distance, int ClusterCount);
-    private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary);
+    private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
@@ -631,6 +634,7 @@ public sealed class ExecutionService
         {
             lastMountedCombatYieldObjective = string.Empty;
             lastMountedCombatPhotonFallbackKey = string.Empty;
+            lastMountedCombatRearPreferenceKey = string.Empty;
             return false;
         }
 
@@ -794,6 +798,14 @@ public sealed class ExecutionService
         if (!used)
             return false;
 
+        if (resolution.Action.ActionId == PraetoriumMagitekCannonActionId)
+        {
+            if (resolution.UsedRearPreference)
+                LogMountedCombatRearPreference(resolution.Target);
+            else
+                lastMountedCombatRearPreferenceKey = string.Empty;
+        }
+
         nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
         ReportMountedCombatAction(prefix, resolution.Action.Name, resolution.Target.Observed.Name, preserveMovement, resolution.TargetSummary);
         return true;
@@ -806,7 +818,7 @@ public sealed class ExecutionService
         out MountedCombatTargetResolution resolution)
     {
         if (action.ActionId == PraetoriumMagitekCannonActionId)
-            return TryGetPreferredMagitekCannonTarget(action, targets, out resolution);
+            return TryGetPreferredMagitekCannonTarget(localPlayerPosition, action, targets, out resolution);
 
         if (action.ActionId == PraetoriumPhotonStreamActionId)
             return TryGetPreferredPhotonStreamTarget(action, targets, out resolution);
@@ -819,7 +831,8 @@ public sealed class ExecutionService
                     action,
                     new MountedCombatTarget(groundTarget.Observed, groundTarget.GameObject, groundTarget.Distance),
                     UseGroundTarget: true,
-                    $"covering about {groundTarget.ClusterCount} nearby enemy target(s)");
+                    $"covering about {groundTarget.ClusterCount} nearby enemy target(s)",
+                    UsedRearPreference: false);
                 return true;
             }
 
@@ -830,7 +843,7 @@ public sealed class ExecutionService
         if (TryGetBestMountedTargetForAction(action.ActionId, targets, out var targetedTarget)
             || TryGetNearestMountedCombatTargetInRange(targets, action, out targetedTarget))
         {
-            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y");
+            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y", UsedRearPreference: false);
             return true;
         }
 
@@ -839,10 +852,51 @@ public sealed class ExecutionService
     }
 
     private bool TryGetPreferredMagitekCannonTarget(
+        Vector3 localPlayerPosition,
         MountedCombatAction action,
         IReadOnlyCollection<MountedCombatTarget> targets,
         out MountedCombatTargetResolution resolution)
     {
+        var localPlayer = objectTable.LocalPlayer;
+        if (localPlayer is not null)
+        {
+            var rearCandidates = targets
+                .Where(target => IsMountedCombatTargetBehind(localPlayerPosition, localPlayer.Rotation, target)
+                    && IsMountedCombatTargetWithinRearPreferenceEnvelope(localPlayerPosition, action, target))
+                .OrderBy(target => target.Distance)
+                .ToArray();
+
+            if (action.TargetArea)
+            {
+                var preferredRearTarget = rearCandidates.FirstOrDefault();
+                if (preferredRearTarget.GameObject is not null)
+                {
+                    var horizontalDistance = GetHorizontalDistance(localPlayerPosition, preferredRearTarget.GameObject.Position);
+                    var verticalDelta = MathF.Abs(preferredRearTarget.GameObject.Position.Y - localPlayerPosition.Y);
+                    resolution = new MountedCombatTargetResolution(
+                        action,
+                        preferredRearTarget,
+                        UseGroundTarget: true,
+                        $"{preferredRearTarget.Distance:0.0}y rear-target preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)",
+                        UsedRearPreference: true);
+                    return true;
+                }
+            }
+            else if (TryGetBestMountedTargetForAction(action.ActionId, rearCandidates, out var targetedRearTarget)
+                     || TryGetNearestMountedCombatTargetInRange(rearCandidates, action, out targetedRearTarget))
+            {
+                var horizontalDistance = GetHorizontalDistance(localPlayerPosition, targetedRearTarget.GameObject.Position);
+                var verticalDelta = MathF.Abs(targetedRearTarget.GameObject.Position.Y - localPlayerPosition.Y);
+                resolution = new MountedCombatTargetResolution(
+                    action,
+                    targetedRearTarget,
+                    UseGroundTarget: false,
+                    $"{targetedRearTarget.Distance:0.0}y rear-target preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)",
+                    UsedRearPreference: true);
+                return true;
+            }
+        }
+
         if (action.TargetArea)
         {
             if (TryGetNearestMountedGroundTargetInRange(targets, action, out var groundTarget))
@@ -851,14 +905,15 @@ public sealed class ExecutionService
                     action,
                     groundTarget,
                     UseGroundTarget: true,
-                    $"{groundTarget.Distance:0.0}y direct shot; no cluster gate");
+                    $"{groundTarget.Distance:0.0}y direct shot; no cluster gate",
+                    UsedRearPreference: false);
                 return true;
             }
         }
         else if (TryGetBestMountedTargetForAction(action.ActionId, targets, out var targetedTarget)
                  || TryGetNearestMountedCombatTargetInRange(targets, action, out targetedTarget))
         {
-            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y direct shot");
+            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y direct shot", UsedRearPreference: false);
             return true;
         }
 
@@ -895,14 +950,15 @@ public sealed class ExecutionService
                     action,
                     groundTarget,
                     UseGroundTarget: true,
-                    $"{groundTarget.Distance:0.0}y front-facing fallback");
+                    $"{groundTarget.Distance:0.0}y front-facing fallback",
+                    UsedRearPreference: false);
                 return true;
             }
         }
         else if (TryGetBestMountedTargetForAction(action.ActionId, frontTargets, out var targetedTarget)
                  || TryGetNearestMountedCombatTargetInRange(frontTargets, action, out targetedTarget))
         {
-            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y front-facing fallback");
+            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y front-facing fallback", UsedRearPreference: false);
             return true;
         }
 
@@ -919,6 +975,25 @@ public sealed class ExecutionService
         lastMountedCombatPhotonFallbackKey = fallbackKey;
         log?.Information(
             $"[ADS] Mounted Praetorium combat is falling back to 1129 Photon Stream on {target.Observed.Name} because 1128 Magitek Cannon is not currently usable; fallback remains front-facing only.");
+    }
+
+    private void LogMountedCombatRearPreference(MountedCombatTarget target)
+    {
+        var preferenceKey = $"{target.GameObject.GameObjectId}:{target.Observed.Name}";
+        if (string.Equals(lastMountedCombatRearPreferenceKey, preferenceKey, StringComparison.Ordinal))
+            return;
+
+        lastMountedCombatRearPreferenceKey = preferenceKey;
+        var localPlayerPosition = objectTable.LocalPlayer?.Position;
+        if (!localPlayerPosition.HasValue)
+        {
+            log?.Information($"[ADS] Mounted Praetorium combat preferred rear 1128 target {target.Observed.Name}.");
+            return;
+        }
+
+        var horizontalDistance = GetHorizontalDistance(localPlayerPosition.Value, target.GameObject.Position);
+        var verticalDelta = MathF.Abs(target.GameObject.Position.Y - localPlayerPosition.Value.Y);
+        log?.Information($"[ADS] Mounted Praetorium combat preferred rear 1128 target {target.Observed.Name} (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y).");
     }
 
     private static int GetMountedCombatPriority(uint actionId)
@@ -2684,7 +2759,7 @@ public sealed class ExecutionService
                 .ThenBy(action => action.ActionId)
                 .Select(action => $"{action.Name}({action.ActionId})"));
         log?.Information(
-            $"[ADS] Mounted Praetorium combat resolved mount {mountId} actions: {actionSummary}. Priority policy: 1128 Magitek Cannon first without cluster gating; 1129 Photon Stream only when 1128 is unavailable and the target is in front.");
+            $"[ADS] Mounted Praetorium combat resolved mount {mountId} actions: {actionSummary}. Priority policy: 1128 Magitek Cannon first, preferring qualifying rear targets already in range; 1129 Photon Stream only when 1128 is unavailable and the target is in front.");
     }
 
     private static bool IsMountedCombatTargetInFront(Vector3 localPlayerPosition, float localPlayerRotation, MountedCombatTarget target)
@@ -2698,6 +2773,32 @@ public sealed class ExecutionService
         var toTarget = Vector2.Normalize(flatDelta);
         var forward = new Vector2(MathF.Sin(localPlayerRotation), MathF.Cos(localPlayerRotation));
         return Vector2.Dot(forward, toTarget) >= PhotonStreamFrontDotThreshold;
+    }
+
+    private static bool IsMountedCombatTargetBehind(Vector3 localPlayerPosition, float localPlayerRotation, MountedCombatTarget target)
+    {
+        var flatDelta = new Vector2(
+            target.GameObject.Position.X - localPlayerPosition.X,
+            target.GameObject.Position.Z - localPlayerPosition.Z);
+        if (flatDelta.LengthSquared() <= 0.01f)
+            return false;
+
+        var toTarget = Vector2.Normalize(flatDelta);
+        var forward = new Vector2(MathF.Sin(localPlayerRotation), MathF.Cos(localPlayerRotation));
+        return Vector2.Dot(forward, toTarget) < 0f;
+    }
+
+    private static bool IsMountedCombatTargetWithinRearPreferenceEnvelope(
+        Vector3 localPlayerPosition,
+        MountedCombatAction action,
+        MountedCombatTarget target)
+    {
+        var maxRange = action.Range > 0 ? action.Range : 30f;
+        var horizontalDistance = GetHorizontalDistance(localPlayerPosition, target.GameObject.Position);
+        var verticalDelta = MathF.Abs(target.GameObject.Position.Y - localPlayerPosition.Y);
+        return target.Distance <= maxRange
+               && horizontalDistance <= PraetoriumRearTargetMaxHorizontalDistance
+               && verticalDelta <= PraetoriumRearTargetMaxVerticalDelta;
     }
 
     private static bool TryGetNearestMountedCombatTargetInRange(
