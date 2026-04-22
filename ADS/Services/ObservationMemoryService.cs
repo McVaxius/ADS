@@ -151,11 +151,15 @@ public sealed class ObservationMemoryService
 
             var name = gameObject.Name.TextValue.Trim();
             var objectKey = BuildKey(gameObject);
+            if (IsNpcPartyMemberBattleNpc(gameObject))
+            {
+                ForgetObservationKey(objectKey);
+                continue;
+            }
+
             if (IsPartyMemberGameObject(gameObject, name, partyMembers))
             {
-                knownMonsters.Remove(objectKey);
-                knownInteractables.Remove(objectKey);
-                treasureSuppressionUntil.Remove(objectKey);
+                ForgetObservationKey(objectKey);
                 continue;
             }
 
@@ -522,6 +526,17 @@ public sealed class ObservationMemoryService
 
         return $"{gameObject.ObjectKind}:{gameObject.BaseId}:{Quantize(gameObject.Position)}";
     }
+
+    private void ForgetObservationKey(string objectKey)
+    {
+        knownMonsters.Remove(objectKey);
+        knownInteractables.Remove(objectKey);
+        treasureSuppressionUntil.Remove(objectKey);
+    }
+
+    private static bool IsNpcPartyMemberBattleNpc(IGameObject gameObject)
+        => gameObject.ObjectKind == ObjectKind.BattleNpc
+           && gameObject is IBattleNpc { BattleNpcKind: BattleNpcSubKind.NpcPartyMember };
 
     private static string Quantize(Vector3 value)
         => $"{MathF.Round(value.X, 0):0},{MathF.Round(value.Y, 0):0},{MathF.Round(value.Z, 0):0}";
