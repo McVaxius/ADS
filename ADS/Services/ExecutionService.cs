@@ -26,13 +26,14 @@ public sealed class ExecutionService
     private const float TreasureDoorFollowThroughDistance = 10.0f;
     private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
     private const uint PraetoriumTerritoryTypeId = 1044;
+    private const uint BigCheekedCakeMonsters = 6942069; // Hello adventurer, are you enjoying my ai slop today :D
     private const uint PraetoriumMagitekCannonActionId = 1128;
     private const uint PraetoriumPhotonStreamActionId = 1129;
     private const float MountedCombatClusterRadius = 6.0f;
     private const float PhotonStreamFrontDotThreshold = 0.5f;
     private const float PraetoriumTrailingPackDotThreshold = 0.65f;
     private const float PraetoriumRearTargetMaxVerticalDelta = 10.0f;
-    private const float DefaultMountedCombatActionRange = 30.0f;
+    private const float DefaultMountedCombatActionRange = 50.0f;
     private const float PraetoriumBlindRearFallbackDistance = 1.0f;
     private const float RecoveryGhostRetireRadius = 8.0f;
     private const float RecoveryClusterArrivalRange = RecoveryGhostRetireRadius;
