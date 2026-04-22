@@ -31,8 +31,9 @@ public sealed class ExecutionService
     private const float MountedCombatClusterRadius = 6.0f;
     private const float PhotonStreamFrontDotThreshold = 0.5f;
     private const float PraetoriumTrailingPackDotThreshold = 0.65f;
-    private const float PraetoriumRearTargetMaxHorizontalDistance = 35.0f;
     private const float PraetoriumRearTargetMaxVerticalDelta = 10.0f;
+    private const float DefaultMountedCombatActionRange = 30.0f;
+    private const float PraetoriumBlindRearFallbackDistance = 1.0f;
     private const float RecoveryGhostRetireRadius = 8.0f;
     private const float RecoveryClusterArrivalRange = RecoveryGhostRetireRadius;
     private const float RecoveryTargetSimilarityRadius = RecoveryGhostRetireRadius;
@@ -116,6 +117,7 @@ public sealed class ExecutionService
     private string lastMountedCombatRearPreferenceKey = string.Empty;
     private string lastMountedCombatAggressionModeKey = string.Empty;
     private string lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
+    private string lastMountedCombatBlindRearFallbackKey = string.Empty;
     private string lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = string.Empty;
     private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
 
@@ -142,8 +144,8 @@ public sealed class ExecutionService
     }
 
     private readonly record struct MountedCombatAction(uint ActionId, string Name, bool TargetArea, float Range);
-    private readonly record struct MountedCombatTarget(ObservedMonster Observed, IGameObject GameObject, float Distance);
-    private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float Distance, int ClusterCount);
+    private readonly record struct MountedCombatTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta);
+    private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta, int ClusterCount);
     private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
@@ -640,6 +642,7 @@ public sealed class ExecutionService
             lastMountedCombatRearPreferenceKey = string.Empty;
             lastMountedCombatAggressionModeKey = string.Empty;
             lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
+            lastMountedCombatBlindRearFallbackKey = string.Empty;
             return false;
         }
 
@@ -674,13 +677,13 @@ public sealed class ExecutionService
         }
 
         var approachTarget = targets
-            .OrderBy(x => x.Distance)
+            .OrderBy(x => x.HorizontalDistance)
             .FirstOrDefault();
-        LogLiveTargetNavigation("mounted-combat", approachTarget.GameObject.GameObjectId, approachTarget.Observed.Name, localPlayerPosition, approachTarget.GameObject.Position, approachTarget.Distance, mountedCombat: true);
+        LogLiveTargetNavigation("mounted-combat", approachTarget.GameObject.GameObjectId, approachTarget.Observed.Name, localPlayerPosition, approachTarget.GameObject.Position, approachTarget.HorizontalDistance, mountedCombat: true);
         TryBeginNavigation(approachTarget.GameObject.GameObjectId, approachTarget.GameObject.Position);
         SetPhase(
             ExecutionPhase.MountedDutyCombat,
-            $"{prefix} Mounted Praetorium combat is moving toward {approachTarget.Observed.Name} ({approachTarget.Distance:0.0}y) using the live target position as the navmesh destination to enter mount weapon range while no force-march objective is active.");
+            $"{prefix} Mounted Praetorium combat is moving toward {approachTarget.Observed.Name} (XZ {approachTarget.HorizontalDistance:0.0}y, Y {approachTarget.VerticalDelta:0.0}y) using the live target position as the navmesh destination to enter mount weapon range while no force-march objective is active.");
         return true;
     }
 
@@ -690,7 +693,7 @@ public sealed class ExecutionService
         string prefix,
         bool preserveMovement)
     {
-        return TryBuildPraetoriumMountedCombatState(context, observation, out var localPlayerPosition, out var mountedActions, out var targets)
+        return TryBuildPraetoriumMountedCombatState(context, observation, out var localPlayerPosition, out var mountedActions, out var targets, requireTargets: false)
                && TryFireReadyMountedCombatAction(localPlayerPosition, mountedActions, targets, prefix, preserveMovement);
     }
 
@@ -699,7 +702,8 @@ public sealed class ExecutionService
         ObservationSnapshot observation,
         out Vector3 localPlayerPosition,
         out MountedCombatAction[] mountedActions,
-        out List<MountedCombatTarget> targets)
+        out List<MountedCombatTarget> targets,
+        bool requireTargets = true)
     {
         localPlayerPosition = default;
         mountedActions = [];
@@ -722,9 +726,19 @@ public sealed class ExecutionService
             .Where(x => MatchesCurrentMap(context, x.MapId))
             .Select(x => (Observed: x, GameObject: ResolveGameObject(x)))
             .Where(x => x.GameObject is not null && x.GameObject.IsTargetable)
-            .Select(x => new MountedCombatTarget(x.Observed, x.GameObject!, Vector3.Distance(playerPosition, x.GameObject!.Position)))
+            .Select(x =>
+            {
+                var horizontalDistance = GetHorizontalDistance(playerPosition, x.GameObject!.Position);
+                var verticalDelta = MathF.Abs(x.GameObject.Position.Y - playerPosition.Y);
+                return new MountedCombatTarget(
+                    x.Observed,
+                    x.GameObject!,
+                    horizontalDistance,
+                    Vector3.Distance(playerPosition, x.GameObject.Position),
+                    verticalDelta);
+            })
             .ToList();
-        return targets.Count > 0;
+        return !requireTargets || targets.Count > 0;
     }
 
     private bool TryFireReadyMountedCombatAction(
@@ -749,6 +763,13 @@ public sealed class ExecutionService
                 lastMountedCombatPhotonFallbackKey = string.Empty;
                 lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
                 return TryExecuteMountedCombatResolution(magitekResolution, prefix, preserveMovement);
+            }
+
+            if (TryExecuteBlindRearMagitekCannonFallback(localPlayerPosition, magitekCannon, prefix, preserveMovement))
+            {
+                lastMountedCombatPhotonFallbackKey = string.Empty;
+                lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
+                return true;
             }
 
             LogMountedCombatNoMagitekCannonResolution(localPlayerPosition, magitekCannon, targets, preserveMovement);
@@ -817,6 +838,7 @@ public sealed class ExecutionService
                 lastMountedCombatRearPreferenceKey = string.Empty;
 
             lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
+            lastMountedCombatBlindRearFallbackKey = string.Empty;
         }
 
         nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
@@ -838,11 +860,16 @@ public sealed class ExecutionService
 
         if (action.TargetArea)
         {
-            if (TryGetBestMountedGroundTarget(localPlayerPosition, targets, action, out var groundTarget))
+            if (TryGetBestMountedGroundTarget(targets, action, out var groundTarget))
             {
                 resolution = new MountedCombatTargetResolution(
                     action,
-                    new MountedCombatTarget(groundTarget.Observed, groundTarget.GameObject, groundTarget.Distance),
+                    new MountedCombatTarget(
+                        groundTarget.Observed,
+                        groundTarget.GameObject,
+                        groundTarget.HorizontalDistance,
+                        groundTarget.Distance3d,
+                        groundTarget.VerticalDelta),
                     UseGroundTarget: true,
                     $"covering about {groundTarget.ClusterCount} nearby enemy target(s)",
                     UsedRearPreference: false);
@@ -856,7 +883,12 @@ public sealed class ExecutionService
         if (TryGetBestMountedTargetForAction(action.ActionId, targets, out var targetedTarget)
             || TryGetNearestMountedCombatTargetInRange(targets, action, out targetedTarget))
         {
-            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y", UsedRearPreference: false);
+            resolution = new MountedCombatTargetResolution(
+                action,
+                targetedTarget,
+                UseGroundTarget: false,
+                $"XZ {targetedTarget.HorizontalDistance:0.0}y, Y {targetedTarget.VerticalDelta:0.0}y",
+                UsedRearPreference: false);
             return true;
         }
 
@@ -872,8 +904,8 @@ public sealed class ExecutionService
     {
         var inEnvelopeTargets = targets
             .Where(target => IsMountedCombatTargetWithinRearPreferenceEnvelope(localPlayerPosition, action, target))
-            .OrderBy(target => GetHorizontalDistance(localPlayerPosition, target.GameObject.Position))
-            .ThenBy(target => target.Distance)
+            .OrderBy(target => target.HorizontalDistance)
+            .ThenBy(target => target.VerticalDelta)
             .ToArray();
         if (inEnvelopeTargets.Length == 0)
         {
@@ -896,32 +928,33 @@ public sealed class ExecutionService
             {
                 if (TryGetBestMountedClusterTarget(preferredCandidates, out var preferredTrailingTarget))
                 {
-                    var horizontalDistance = GetHorizontalDistance(localPlayerPosition, preferredTrailingTarget.GameObject.Position);
-                    var verticalDelta = MathF.Abs(preferredTrailingTarget.GameObject.Position.Y - localPlayerPosition.Y);
                     resolution = new MountedCombatTargetResolution(
                         action,
-                        new MountedCombatTarget(preferredTrailingTarget.Observed, preferredTrailingTarget.GameObject, preferredTrailingTarget.Distance),
+                        new MountedCombatTarget(
+                            preferredTrailingTarget.Observed,
+                            preferredTrailingTarget.GameObject,
+                            preferredTrailingTarget.HorizontalDistance,
+                            preferredTrailingTarget.Distance3d,
+                            preferredTrailingTarget.VerticalDelta),
                         UseGroundTarget: true,
                         rearCandidates.Length > 0
-                            ? $"{preferredTrailingTarget.Distance:0.0}y strict rear trailing-pack preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y, cluster {preferredTrailingTarget.ClusterCount})"
-                            : $"{preferredTrailingTarget.Distance:0.0}y aggressive trailing-pack preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y, cluster {preferredTrailingTarget.ClusterCount})",
+                            ? $"strict rear trailing-pack preference (XZ {preferredTrailingTarget.HorizontalDistance:0.0}y, Y {preferredTrailingTarget.VerticalDelta:0.0}y, cluster {preferredTrailingTarget.ClusterCount})"
+                            : $"aggressive trailing-pack preference (XZ {preferredTrailingTarget.HorizontalDistance:0.0}y, Y {preferredTrailingTarget.VerticalDelta:0.0}y, cluster {preferredTrailingTarget.ClusterCount})",
                         UsedRearPreference: true);
                     return true;
                 }
             }
             else if (preferredCandidates.Length > 0
                      && (TryGetBestMountedTargetForAction(action.ActionId, preferredCandidates, out var targetedRearTarget)
-                         || TryGetNearestMountedCombatTargetInRange(preferredCandidates, action, out targetedRearTarget)))
+                         || TryGetNearestMountedCombatTarget(preferredCandidates, out targetedRearTarget)))
             {
-                var horizontalDistance = GetHorizontalDistance(localPlayerPosition, targetedRearTarget.GameObject.Position);
-                var verticalDelta = MathF.Abs(targetedRearTarget.GameObject.Position.Y - localPlayerPosition.Y);
                 resolution = new MountedCombatTargetResolution(
                     action,
                     targetedRearTarget,
                     UseGroundTarget: false,
                     rearCandidates.Length > 0
-                        ? $"{targetedRearTarget.Distance:0.0}y strict rear trailing-pack preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)"
-                        : $"{targetedRearTarget.Distance:0.0}y aggressive trailing-pack preference (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)",
+                        ? $"strict rear trailing-pack preference (XZ {targetedRearTarget.HorizontalDistance:0.0}y, Y {targetedRearTarget.VerticalDelta:0.0}y)"
+                        : $"aggressive trailing-pack preference (XZ {targetedRearTarget.HorizontalDistance:0.0}y, Y {targetedRearTarget.VerticalDelta:0.0}y)",
                     UsedRearPreference: true);
                 return true;
             }
@@ -930,26 +963,22 @@ public sealed class ExecutionService
         if (action.TargetArea)
         {
             var directShotTarget = inEnvelopeTargets[0];
-            var horizontalDistance = GetHorizontalDistance(localPlayerPosition, directShotTarget.GameObject.Position);
-            var verticalDelta = MathF.Abs(directShotTarget.GameObject.Position.Y - localPlayerPosition.Y);
             resolution = new MountedCombatTargetResolution(
                 action,
                 directShotTarget,
                 UseGroundTarget: true,
-                $"{directShotTarget.Distance:0.0}y aggressive direct shot on refresh (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)",
+                $"aggressive direct shot on refresh (XZ {directShotTarget.HorizontalDistance:0.0}y, Y {directShotTarget.VerticalDelta:0.0}y)",
                 UsedRearPreference: false);
             return true;
         }
         else if (TryGetBestMountedTargetForAction(action.ActionId, inEnvelopeTargets, out var targetedTarget)
-                 || TryGetNearestMountedCombatTargetInRange(inEnvelopeTargets, action, out targetedTarget))
+                 || TryGetNearestMountedCombatTarget(inEnvelopeTargets, out targetedTarget))
         {
-            var horizontalDistance = GetHorizontalDistance(localPlayerPosition, targetedTarget.GameObject.Position);
-            var verticalDelta = MathF.Abs(targetedTarget.GameObject.Position.Y - localPlayerPosition.Y);
             resolution = new MountedCombatTargetResolution(
                 action,
                 targetedTarget,
                 UseGroundTarget: false,
-                $"{targetedTarget.Distance:0.0}y aggressive direct shot on refresh (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y)",
+                $"aggressive direct shot on refresh (XZ {targetedTarget.HorizontalDistance:0.0}y, Y {targetedTarget.VerticalDelta:0.0}y)",
                 UsedRearPreference: false);
             return true;
         }
@@ -974,10 +1003,10 @@ public sealed class ExecutionService
                     clusterCount++;
             }
 
-            var candidate = new MountedCombatClusterTarget(target.Observed, target.GameObject, target.Distance, clusterCount);
+            var candidate = new MountedCombatClusterTarget(target.Observed, target.GameObject, target.HorizontalDistance, target.Distance3d, target.VerticalDelta, clusterCount);
             if (!found
                 || candidate.ClusterCount > bestTarget.ClusterCount
-                || (candidate.ClusterCount == bestTarget.ClusterCount && candidate.Distance < bestTarget.Distance))
+                || (candidate.ClusterCount == bestTarget.ClusterCount && candidate.HorizontalDistance < bestTarget.HorizontalDistance))
             {
                 bestTarget = candidate;
                 found = true;
@@ -1017,7 +1046,7 @@ public sealed class ExecutionService
                     action,
                     groundTarget,
                     UseGroundTarget: true,
-                    $"{groundTarget.Distance:0.0}y front-facing fallback",
+                    $"front-facing fallback (XZ {groundTarget.HorizontalDistance:0.0}y, Y {groundTarget.VerticalDelta:0.0}y)",
                     UsedRearPreference: false);
                 return true;
             }
@@ -1025,7 +1054,12 @@ public sealed class ExecutionService
         else if (TryGetBestMountedTargetForAction(action.ActionId, frontTargets, out var targetedTarget)
                  || TryGetNearestMountedCombatTargetInRange(frontTargets, action, out targetedTarget))
         {
-            resolution = new MountedCombatTargetResolution(action, targetedTarget, UseGroundTarget: false, $"{targetedTarget.Distance:0.0}y front-facing fallback", UsedRearPreference: false);
+            resolution = new MountedCombatTargetResolution(
+                action,
+                targetedTarget,
+                UseGroundTarget: false,
+                $"front-facing fallback (XZ {targetedTarget.HorizontalDistance:0.0}y, Y {targetedTarget.VerticalDelta:0.0}y)",
+                UsedRearPreference: false);
             return true;
         }
 
@@ -1058,9 +1092,7 @@ public sealed class ExecutionService
             return;
         }
 
-        var horizontalDistance = GetHorizontalDistance(localPlayerPosition.Value, target.GameObject.Position);
-        var verticalDelta = MathF.Abs(target.GameObject.Position.Y - localPlayerPosition.Value.Y);
-        log?.Information($"[ADS] Mounted Praetorium combat preferred aggressive trailing 1128 target {target.Observed.Name} (XZ {horizontalDistance:0.0}y, Y {verticalDelta:0.0}y).");
+        log?.Information($"[ADS] Mounted Praetorium combat preferred aggressive trailing 1128 target {target.Observed.Name} (XZ {target.HorizontalDistance:0.0}y, Y {target.VerticalDelta:0.0}y).");
     }
 
     private void LogMountedCombatAggressionMode(int targetCount, bool preserveMovement)
@@ -1075,6 +1107,50 @@ public sealed class ExecutionService
             preserveMovement
                 ? $"[ADS] Mounted Praetorium combat entered aggressive 1128 force-march mode with {targetCount} live target(s). ADS will keep firing 1128 on refresh while preserving authored movement."
                 : $"[ADS] Mounted Praetorium combat entered aggressive 1128 cleanup mode with {targetCount} live target(s). ADS will keep firing 1128 on refresh before considering 1129.");
+    }
+
+    private bool TryExecuteBlindRearMagitekCannonFallback(
+        Vector3 localPlayerPosition,
+        MountedCombatAction action,
+        string prefix,
+        bool preserveMovement)
+    {
+        if (!preserveMovement || action.ActionId != PraetoriumMagitekCannonActionId || !action.TargetArea)
+            return false;
+
+        var localPlayer = objectTable.LocalPlayer;
+        if (localPlayer is null)
+            return false;
+
+        if (!TryObserveMountedCombatSendWindow(action, "blind rear fallback", prefix, preserveMovement))
+            return false;
+
+        var fallbackPosition = BuildMountedCombatBlindRearFallbackPosition(localPlayerPosition, localPlayer.Rotation);
+        if (!TryUseGroundTargetAction(action.ActionId, fallbackPosition))
+            return false;
+
+        LogMountedCombatBlindRearFallback(fallbackPosition);
+        lastMountedCombatRearPreferenceKey = string.Empty;
+        lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
+        nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
+        ReportMountedCombatAction(
+            prefix,
+            action.Name,
+            "blind rear fallback",
+            preserveMovement,
+            $"1.0y directly behind the player at {FormatVector(fallbackPosition)}");
+        return true;
+    }
+
+    private void LogMountedCombatBlindRearFallback(Vector3 fallbackPosition)
+    {
+        const string fallbackKey = "force-march-blind-rear";
+        if (string.Equals(lastMountedCombatBlindRearFallbackKey, fallbackKey, StringComparison.Ordinal))
+            return;
+
+        lastMountedCombatBlindRearFallbackKey = fallbackKey;
+        log?.Information(
+            $"[ADS] Mounted Praetorium combat used blind rear 1128 fallback during force-march because no valid mounted target resolved; ground target placed 1.0y behind the player at {FormatVector(fallbackPosition)}.");
     }
 
     private void LogMountedCombatNoMagitekCannonResolution(
@@ -1151,15 +1227,6 @@ public sealed class ExecutionService
         IReadOnlyCollection<MountedCombatTarget> targets)
     {
         return mountedActions.Any(action => TryResolveMountedCombatTarget(localPlayerPosition, action, targets, out _));
-    }
-
-    private static float GetMountedCombatApproachRange(IEnumerable<MountedCombatAction> mountedActions)
-    {
-        var maxRange = mountedActions
-            .Select(x => x.Range > 0f ? x.Range : 50f)
-            .DefaultIfEmpty(50f)
-            .Max();
-        return MathF.Max(PreferredMonsterArrivalRange, maxRange * 0.85f);
     }
 
     private void TryAdvanceFollowObjective(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -2770,21 +2837,17 @@ public sealed class ExecutionService
     }
 
     private static bool TryGetBestMountedGroundTarget(
-        Vector3 playerPosition,
         IReadOnlyCollection<MountedCombatTarget> targets,
         MountedCombatAction action,
         out MountedCombatClusterTarget selectedTarget)
     {
-        var maxRange = action.Range > 0 ? action.Range : 50f;
-        var maxRangeSquared = maxRange * maxRange;
         var clusterRadiusSquared = MountedCombatClusterRadius * MountedCombatClusterRadius;
 
         var bestTarget = default(MountedCombatClusterTarget);
         var found = false;
         foreach (var target in targets)
         {
-            var playerDistanceSquared = Vector3.DistanceSquared(playerPosition, target.GameObject.Position);
-            if (playerDistanceSquared > maxRangeSquared)
+            if (!IsMountedCombatTargetWithinActionRange(action, target))
                 continue;
 
             var clusterCount = 0;
@@ -2794,10 +2857,10 @@ public sealed class ExecutionService
                     clusterCount++;
             }
 
-            var candidate = new MountedCombatClusterTarget(target.Observed, target.GameObject, target.Distance, clusterCount);
+            var candidate = new MountedCombatClusterTarget(target.Observed, target.GameObject, target.HorizontalDistance, target.Distance3d, target.VerticalDelta, clusterCount);
             if (!found
                 || candidate.ClusterCount > bestTarget.ClusterCount
-                || (candidate.ClusterCount == bestTarget.ClusterCount && candidate.Distance < bestTarget.Distance))
+                || (candidate.ClusterCount == bestTarget.ClusterCount && candidate.HorizontalDistance < bestTarget.HorizontalDistance))
             {
                 bestTarget = candidate;
                 found = true;
@@ -2813,10 +2876,9 @@ public sealed class ExecutionService
         MountedCombatAction action,
         out MountedCombatTarget selectedTarget)
     {
-        var maxRange = action.Range > 0 ? action.Range : 50f;
-        foreach (var target in targets.OrderBy(x => x.Distance))
+        foreach (var target in targets.OrderBy(x => x.HorizontalDistance))
         {
-            if (target.Distance <= maxRange)
+            if (IsMountedCombatTargetWithinActionRange(action, target))
             {
                 selectedTarget = target;
                 return true;
@@ -2832,7 +2894,7 @@ public sealed class ExecutionService
         IEnumerable<MountedCombatTarget> targets,
         out MountedCombatTarget selectedTarget)
     {
-        foreach (var target in targets.OrderBy(x => x.Distance))
+        foreach (var target in targets.OrderBy(x => x.HorizontalDistance))
         {
             var nativeObject = (GameObject*)target.GameObject.Address;
             if (nativeObject is null)
@@ -2843,6 +2905,20 @@ public sealed class ExecutionService
                 selectedTarget = target;
                 return true;
             }
+        }
+
+        selectedTarget = default;
+        return false;
+    }
+
+    private static bool TryGetNearestMountedCombatTarget(
+        IEnumerable<MountedCombatTarget> targets,
+        out MountedCombatTarget selectedTarget)
+    {
+        foreach (var target in targets.OrderBy(x => x.HorizontalDistance))
+        {
+            selectedTarget = target;
+            return true;
         }
 
         selectedTarget = default;
@@ -2911,12 +2987,7 @@ public sealed class ExecutionService
         MountedCombatAction action,
         MountedCombatTarget target)
     {
-        var maxRange = action.Range > 0 ? action.Range : 50f;
-        var horizontalDistance = GetHorizontalDistance(localPlayerPosition, target.GameObject.Position);
-        var verticalDelta = MathF.Abs(target.GameObject.Position.Y - localPlayerPosition.Y);
-        return target.Distance <= maxRange
-               && horizontalDistance <= PraetoriumRearTargetMaxHorizontalDistance
-               && verticalDelta <= PraetoriumRearTargetMaxVerticalDelta;
+        return IsMountedCombatTargetWithinActionRange(action, target);
     }
 
     private static bool TryGetNearestMountedCombatTargetInRange(
@@ -2924,10 +2995,9 @@ public sealed class ExecutionService
         MountedCombatAction action,
         out MountedCombatTarget selectedTarget)
     {
-        var maxRange = action.Range > 0 ? action.Range : 50f;
-        foreach (var target in targets.OrderBy(x => x.Distance))
+        foreach (var target in targets.OrderBy(x => x.HorizontalDistance))
         {
-            if (target.Distance <= maxRange)
+            if (IsMountedCombatTargetWithinActionRange(action, target))
             {
                 selectedTarget = target;
                 return true;
@@ -2936,6 +3006,20 @@ public sealed class ExecutionService
 
         selectedTarget = default;
         return false;
+    }
+
+    private static float GetMountedCombatActionRange(MountedCombatAction action)
+        => action.Range > 0f ? action.Range : DefaultMountedCombatActionRange;
+
+    private static bool IsMountedCombatTargetWithinActionRange(MountedCombatAction action, MountedCombatTarget target)
+        => target.HorizontalDistance <= GetMountedCombatActionRange(action)
+           && target.VerticalDelta <= PraetoriumRearTargetMaxVerticalDelta;
+
+    private static Vector3 BuildMountedCombatBlindRearFallbackPosition(Vector3 localPlayerPosition, float localPlayerRotation)
+    {
+        var forward = new Vector2(MathF.Sin(localPlayerRotation), MathF.Cos(localPlayerRotation));
+        var fallbackPosition = new Vector2(localPlayerPosition.X, localPlayerPosition.Z) - (forward * PraetoriumBlindRearFallbackDistance);
+        return new Vector3(fallbackPosition.X, localPlayerPosition.Y, fallbackPosition.Y);
     }
 
     private ObservedMonster? ResolveObservedMonster(PlannerSnapshot planner, ObservationSnapshot observation)
