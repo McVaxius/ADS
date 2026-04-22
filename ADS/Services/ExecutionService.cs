@@ -91,7 +91,6 @@ public sealed class ExecutionService
     private int pendingRequiredInteractionAttemptsSent;
     private DungeonFrontierPoint? committedForceMarchManualDestination;
     private DateTime committedForceMarchManualDestinationUntilUtc;
-    private bool committedForceMarchManualDestinationReachedArrival;
     private string? interactArrivalWaitKey;
     private DateTime interactArrivalWaitUntilUtc;
     private string? treasureCofferRouteKey;
@@ -1049,7 +1048,7 @@ public sealed class ExecutionService
         if (frontierPoint.AllowCombatBypass
             && planner.ObjectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination)
         {
-            RefreshCommittedForceMarchManualDestination(frontierPoint, reachedArrival: false, "planner selected the authored force-march handoff");
+            RefreshCommittedForceMarchManualDestination(frontierPoint, "planner selected the authored force-march handoff");
         }
 
         TryAdvanceFrontierPoint(context, frontierPoint, isManualMapXzDestination, isManualXyzDestination, prefix);
@@ -1103,49 +1102,61 @@ public sealed class ExecutionService
             }
         }
 
-        var navigationPoint = RebuildCommittedForceMarchManualDestination(committedDestination, objectTable.LocalPlayer?.Position);
-        if (!committedForceMarchManualDestinationReachedArrival)
-        {
-            TryAdvanceFrontierPoint(
-                context,
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        var navigationPoint = RebuildCommittedForceMarchManualDestination(committedDestination, playerPosition);
+        if (playerPosition.HasValue
+            && IsFrontierDestinationReached(
                 navigationPoint,
+                playerPosition.Value,
                 navigationPoint.IsManualMapXzDestination,
                 navigationPoint.IsManualXyzDestination,
-                $"{prefix} Continuing committed force-march manual destination follow-through.");
+                out _,
+                out _,
+                out _,
+                out _,
+                out _))
+        {
+            if (navigationPoint.IsManualMapXzDestination || navigationPoint.IsManualXyzDestination)
+                dungeonFrontierService.MarkVisited(navigationPoint, playerPosition.Value);
+
+            ClearCommittedForceMarchManualDestinationIfMatches(navigationPoint);
+
+            if (planner.Mode == PlannerMode.Progression
+                && IsLiveProgressionPlannerObjective(planner.ObjectiveKind))
+            {
+                return false;
+            }
+
+            StopMovementAssists();
+            var destinationLabel = navigationPoint.IsManualXyzDestination ? "force-march XYZ destination" : "force-march map XZ destination";
+            SetPhase(
+                GetFrontierHintPhase(navigationPoint.IsManualMapXzDestination, navigationPoint.IsManualXyzDestination),
+                $"{prefix} Reached committed {destinationLabel} {navigationPoint.Name}. ADS ghosted this manual handoff and is waiting for live progression truth.");
             return true;
         }
 
-        StopMovementAssists();
-        var remainingFollowThroughSeconds = Math.Max(0d, (committedForceMarchManualDestinationUntilUtc - now).TotalSeconds);
-        var destinationLabel = navigationPoint.IsManualXyzDestination ? "force-march XYZ destination" : "force-march map XZ destination";
-        SetPhase(
-            GetFrontierHintPhase(navigationPoint.IsManualMapXzDestination, navigationPoint.IsManualXyzDestination),
-            $"{prefix} Holding committed {destinationLabel} {navigationPoint.Name} for another {remainingFollowThroughSeconds:0.0}s while ADS waits for live progression handoff.");
+        TryAdvanceFrontierPoint(
+            context,
+            navigationPoint,
+            navigationPoint.IsManualMapXzDestination,
+            navigationPoint.IsManualXyzDestination,
+            $"{prefix} Continuing committed force-march manual destination follow-through.");
         return true;
     }
 
-    private void RefreshCommittedForceMarchManualDestination(DungeonFrontierPoint point, bool reachedArrival, string detail)
+    private void RefreshCommittedForceMarchManualDestination(DungeonFrontierPoint point, string detail)
     {
         var now = DateTime.UtcNow;
         var wasNewCommit = committedForceMarchManualDestination is null
             || !string.Equals(committedForceMarchManualDestination.Key, point.Key, StringComparison.Ordinal);
-        var reachedArrivalNow = reachedArrival && !committedForceMarchManualDestinationReachedArrival;
 
         committedForceMarchManualDestination = point;
         committedForceMarchManualDestinationUntilUtc = now + ForceMarchFollowThroughDuration;
-        committedForceMarchManualDestinationReachedArrival |= reachedArrival;
 
         if (wasNewCommit)
         {
             log?.Information(
                 $"[ADS] Committed force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} for bounded handoff follow-through because {detail}.");
-            return;
-        }
-
-        if (reachedArrivalNow)
-        {
-            log?.Information(
-                $"[ADS] Force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} reached arrival at {FormatVector(point.Position)} and remains committed for the next {ForceMarchFollowThroughDuration.TotalSeconds:0.0}s while ADS waits for live progression truth.");
         }
     }
 
@@ -1164,8 +1175,17 @@ public sealed class ExecutionService
     {
         committedForceMarchManualDestination = null;
         committedForceMarchManualDestinationUntilUtc = DateTime.MinValue;
-        committedForceMarchManualDestinationReachedArrival = false;
         lastMountedCombatYieldObjective = string.Empty;
+    }
+
+    private void ClearCommittedForceMarchManualDestinationIfMatches(DungeonFrontierPoint point)
+    {
+        var committedDestination = committedForceMarchManualDestination;
+        if (committedDestination is null)
+            return;
+
+        if (string.Equals(committedDestination.Key, point.Key, StringComparison.Ordinal))
+            ClearCommittedForceMarchManualDestination();
     }
 
     private bool PlannerStillSelectsForceMarchDestination(PlannerSnapshot planner, DungeonFrontierPoint point)
@@ -1234,6 +1254,32 @@ public sealed class ExecutionService
         };
     }
 
+    private static bool IsFrontierDestinationReached(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        bool isMapXzDestination,
+        bool isXyzDestination,
+        out float targetHorizontalDistance,
+        out float targetDistance,
+        out float targetVerticalDelta,
+        out float arrivalRange,
+        out float xyzArrivalRange)
+    {
+        targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition);
+        targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition);
+        targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Y);
+        arrivalRange = isMapXzDestination && frontierPoint.ArrivalRadiusXz > 0f
+            ? frontierPoint.ArrivalRadiusXz
+            : PreferredFrontierArrivalRange;
+        xyzArrivalRange = isXyzDestination && frontierPoint.ArrivalRadius3d > 0f
+            ? frontierPoint.ArrivalRadius3d
+            : PreferredFrontierArrivalRange;
+
+        return isXyzDestination
+            ? targetDistance <= xyzArrivalRange
+            : targetHorizontalDistance <= arrivalRange;
+    }
+
     private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, bool isXyzDestination, string prefix)
     {
         var playerPosition = objectTable.LocalPlayer?.Position;
@@ -1264,18 +1310,16 @@ public sealed class ExecutionService
             return;
         }
 
-        var targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition.Value);
-        var targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition.Value);
-        var targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y);
-        var arrivalRange = isMapXzDestination && frontierPoint.ArrivalRadiusXz > 0f
-            ? frontierPoint.ArrivalRadiusXz
-            : PreferredFrontierArrivalRange;
-        var xyzArrivalRange = isXyzDestination && frontierPoint.ArrivalRadius3d > 0f
-            ? frontierPoint.ArrivalRadius3d
-            : PreferredFrontierArrivalRange;
-        var destinationReached = isXyzDestination
-            ? targetDistance <= xyzArrivalRange
-            : targetHorizontalDistance <= arrivalRange;
+        var destinationReached = IsFrontierDestinationReached(
+            frontierPoint,
+            playerPosition.Value,
+            isMapXzDestination,
+            isXyzDestination,
+            out var targetHorizontalDistance,
+            out var targetDistance,
+            out var targetVerticalDelta,
+            out var arrivalRange,
+            out var xyzArrivalRange);
         if (!destinationReached)
         {
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
@@ -1315,13 +1359,12 @@ public sealed class ExecutionService
 
         if (frontierPoint.AllowCombatBypass && (isMapXzDestination || isXyzDestination))
         {
-            RefreshCommittedForceMarchManualDestination(frontierPoint, reachedArrival: true, "arrival radius was reached");
-            var remainingFollowThroughSeconds = Math.Max(0d, (committedForceMarchManualDestinationUntilUtc - DateTime.UtcNow).TotalSeconds);
+            ClearCommittedForceMarchManualDestinationIfMatches(frontierPoint);
             SetPhase(
                 GetFrontierHintPhase(isMapXzDestination, isXyzDestination),
                 isXyzDestination
-                    ? $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth."
-                    : $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth.");
+                    ? $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS ghosted this manual handoff and will not resume it after combat."
+                    : $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS ghosted this manual handoff and will not resume it after combat.");
             return;
         }
 
@@ -1348,7 +1391,6 @@ public sealed class ExecutionService
 
         RefreshCommittedForceMarchManualDestination(
             nextForceMarchDestination,
-            reachedArrival: false,
             $"the prior authored Praetorium waypoint {frontierPoint.Name} completed and the next authored waypoint is a force-march handoff");
         TryAdvanceFrontierPoint(
             context,

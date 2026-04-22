@@ -110,6 +110,7 @@ public sealed class ObservationMemoryService
         }
 
         loggedReset = false;
+        var partyMembers = BuildPartyMemberSnapshot();
         HandleRecoveryClusterReset(context);
         if (context.IsUnsafeTransition)
         {
@@ -118,6 +119,7 @@ public sealed class ObservationMemoryService
                 LiveMonsters = [],
                 LiveFollowTargets = [],
                 MonsterGhosts = knownMonsters.Values
+                    .Where(x => !IsPartyMemberObservation(x, partyMembers))
                     .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
                     .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
                     .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
@@ -125,6 +127,7 @@ public sealed class ObservationMemoryService
                     .ToList(),
                 LiveInteractables = [],
                 InteractableGhosts = knownInteractables.Values
+                    .Where(x => !IsPartyMemberObservation(x, partyMembers))
                     .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
                     .Where(x => !IsSuppressedInteractionGhost(x))
                     .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
@@ -139,7 +142,6 @@ public sealed class ObservationMemoryService
         var liveInteractables = new Dictionary<string, ObservedInteractable>(StringComparer.Ordinal);
         var now = DateTime.UtcNow;
         var playerPosition = objectTable.LocalPlayer?.Position;
-        var exactPartyMemberNames = BuildExactPartyMemberNames();
         CleanupExpiredTreasureSuppressions(now);
 
         foreach (var gameObject in objectTable)
@@ -148,6 +150,15 @@ public sealed class ObservationMemoryService
                 continue;
 
             var name = gameObject.Name.TextValue.Trim();
+            var objectKey = BuildKey(gameObject);
+            if (IsPartyMemberGameObject(gameObject, name, partyMembers))
+            {
+                knownMonsters.Remove(objectKey);
+                knownInteractables.Remove(objectKey);
+                treasureSuppressionUntil.Remove(objectKey);
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
@@ -155,20 +166,13 @@ public sealed class ObservationMemoryService
             {
                 case ObjectKind.BattleNpc:
                     {
-                        var monsterKey = BuildKey(gameObject);
-                        if (exactPartyMemberNames.Contains(name))
-                        {
-                            knownMonsters.Remove(monsterKey);
-                            break;
-                        }
-
                         if (objectPriorityRuleService.ShouldSuppressOffLayerBattleNpcTruth(
                                 context,
                                 gameObject.BaseId,
                                 name,
                                 gameObject.Position))
                         {
-                            knownMonsters.Remove(monsterKey);
+                            knownMonsters.Remove(objectKey);
                             break;
                         }
 
@@ -182,7 +186,7 @@ public sealed class ObservationMemoryService
                                 GetDistance(playerPosition, gameObject.Position),
                                 GetVerticalDelta(playerPosition, gameObject.Position)))
                         {
-                            knownMonsters.Remove(monsterKey);
+                            knownMonsters.Remove(objectKey);
                             break;
                         }
 
@@ -196,7 +200,7 @@ public sealed class ObservationMemoryService
                                 GetDistance(playerPosition, gameObject.Position),
                                 GetVerticalDelta(playerPosition, gameObject.Position)))
                         {
-                            knownMonsters.Remove(monsterKey);
+                            knownMonsters.Remove(objectKey);
                             if (!gameObject.IsTargetable || IsDeadMonster(gameObject))
                                 break;
 
@@ -207,7 +211,7 @@ public sealed class ObservationMemoryService
 
                         if (TryGetBattleNpcDirectInteractClassification(context, gameObject, name, out var battleNpcInteractClassification))
                         {
-                            knownMonsters.Remove(monsterKey);
+                            knownMonsters.Remove(objectKey);
                             if (!gameObject.IsTargetable)
                                 break;
 
@@ -245,17 +249,10 @@ public sealed class ObservationMemoryService
                         if (!gameObject.IsTargetable)
                             break;
 
-                        var interactableKey = BuildKey(gameObject);
-                        if (exactPartyMemberNames.Contains(name))
-                        {
-                            knownInteractables.Remove(interactableKey);
-                            break;
-                        }
-
                         var classification = ClassifyInteractable(gameObject, name, context);
                         if (classification == InteractableClass.Ignored)
                         {
-                            knownInteractables.Remove(interactableKey);
+                            knownInteractables.Remove(objectKey);
                             break;
                         }
 
@@ -273,27 +270,26 @@ public sealed class ObservationMemoryService
                     }
                 case ObjectKind.Treasure when considerTreasureCoffers:
                     {
-                        var treasureKey = BuildKey(gameObject);
                         if (objectPriorityRuleService.ShouldIgnoreInteractable(context, gameObject.ObjectKind, gameObject.BaseId, name, gameObject.Position, context.MapId))
                         {
-                            knownInteractables.Remove(treasureKey);
-                            treasureSuppressionUntil.Remove(treasureKey);
+                            knownInteractables.Remove(objectKey);
+                            treasureSuppressionUntil.Remove(objectKey);
                             break;
                         }
 
                         var classification = ClassifyTreasureInteractable(gameObject, name, context);
                         if (classification == InteractableClass.Ignored)
                         {
-                            knownInteractables.Remove(treasureKey);
-                            treasureSuppressionUntil.Remove(treasureKey);
+                            knownInteractables.Remove(objectKey);
+                            treasureSuppressionUntil.Remove(objectKey);
                             break;
                         }
 
                         if (classification == InteractableClass.TreasureCoffer
-                            && treasureSuppressionUntil.TryGetValue(treasureKey, out var suppressedUntil)
+                            && treasureSuppressionUntil.TryGetValue(objectKey, out var suppressedUntil)
                             && suppressedUntil > now)
                         {
-                            knownInteractables[treasureKey] = CreateInteractable(gameObject, name, context.MapId, classification, now, GhostReason.Consumed);
+                            knownInteractables[objectKey] = CreateInteractable(gameObject, name, context.MapId, classification, now, GhostReason.Consumed);
                             break;
                         }
 
@@ -301,7 +297,7 @@ public sealed class ObservationMemoryService
                             break;
 
                         if (classification != InteractableClass.TreasureCoffer)
-                            treasureSuppressionUntil.Remove(treasureKey);
+                            treasureSuppressionUntil.Remove(objectKey);
 
                         if (ShouldDurablySuppressInteractable(context, name, classification)
                             && TryCreateUsedProgressionInteractable(context, gameObject, name, classification, now, out var usedInteractable))
@@ -320,6 +316,7 @@ public sealed class ObservationMemoryService
 
         var monsterGhosts = knownMonsters.Values
             .Where(x => !liveMonsters.ContainsKey(x.Key))
+            .Where(x => !IsPartyMemberObservation(x, partyMembers))
             .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
             .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
             .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
@@ -327,6 +324,7 @@ public sealed class ObservationMemoryService
             .ToList();
         var interactableGhosts = knownInteractables.Values
             .Where(x => !liveInteractables.ContainsKey(x.Key))
+            .Where(x => !IsPartyMemberObservation(x, partyMembers))
             .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
             .Where(x => !IsSuppressedInteractionGhost(x))
             .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
@@ -620,17 +618,56 @@ public sealed class ObservationMemoryService
     private static float? GetVerticalDelta(Vector3? playerPosition, Vector3 targetPosition)
         => playerPosition.HasValue ? MathF.Abs(targetPosition.Y - playerPosition.Value.Y) : null;
 
-    private HashSet<string> BuildExactPartyMemberNames()
+    private PartyMemberSnapshot BuildPartyMemberSnapshot()
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var snapshot = new PartyMemberSnapshot();
         foreach (var member in partyList)
         {
-            var name = member.Name.TextValue.Trim();
+            var gameObject = member.GameObject;
+            if (gameObject is not null && IsValidGameObjectId(gameObject.GameObjectId))
+                snapshot.GameObjectIds.Add(gameObject.GameObjectId);
+
+            if (IsValidGameObjectId(member.EntityId))
+                snapshot.GameObjectIds.Add(member.EntityId);
+
+            var name = NormalizePartyMemberName(member.Name.TextValue);
             if (!string.IsNullOrWhiteSpace(name))
-                names.Add(name);
+                snapshot.Names.Add(name);
         }
 
-        return names;
+        return snapshot;
+    }
+
+    private static bool IsPartyMemberGameObject(IGameObject gameObject, string name, PartyMemberSnapshot partyMembers)
+        => (IsValidGameObjectId(gameObject.GameObjectId) && partyMembers.GameObjectIds.Contains(gameObject.GameObjectId))
+           || IsPartyMemberName(name, partyMembers);
+
+    private static bool IsPartyMemberObservation(ObservedMonster monster, PartyMemberSnapshot partyMembers)
+        => (IsValidGameObjectId(monster.GameObjectId) && partyMembers.GameObjectIds.Contains(monster.GameObjectId))
+           || IsPartyMemberName(monster.Name, partyMembers);
+
+    private static bool IsPartyMemberObservation(ObservedInteractable interactable, PartyMemberSnapshot partyMembers)
+        => (IsValidGameObjectId(interactable.GameObjectId) && partyMembers.GameObjectIds.Contains(interactable.GameObjectId))
+           || IsPartyMemberName(interactable.Name, partyMembers);
+
+    private static bool IsPartyMemberName(string name, PartyMemberSnapshot partyMembers)
+    {
+        var normalizedName = NormalizePartyMemberName(name);
+        return !string.IsNullOrWhiteSpace(normalizedName)
+               && partyMembers.Names.Contains(normalizedName);
+    }
+
+    private static bool IsValidGameObjectId(ulong gameObjectId)
+        => gameObjectId != 0 && gameObjectId != 0xE0000000UL;
+
+    private static string NormalizePartyMemberName(string value)
+        => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private sealed class PartyMemberSnapshot
+    {
+        public HashSet<ulong> GameObjectIds { get; } = [];
+
+        public HashSet<string> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private void CleanupExpiredTreasureSuppressions(DateTime now)

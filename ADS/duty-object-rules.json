@@ -4059,7 +4059,7 @@
       "Notes": "w2w before boss1"
     },
     {
-      "Enabled": false,
+      "Enabled": true,
       "TerritoryTypeId": 1044,
       "ContentFinderConditionId": 16,
       "DutyEnglishName": "the Praetorium",
@@ -4075,12 +4075,12 @@
       "ObjectMapCoordinates": "",
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
-      "Priority": 1000,
+      "Priority": 999,
       "PriorityVerticalRadius": 0,
       "MaxDistance": null,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
-      "Notes": ""
+      "Notes": "cleaner w2terminal hehehe"
     },
     {
       "Enabled": true,

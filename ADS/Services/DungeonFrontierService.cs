@@ -316,6 +316,12 @@ public sealed class DungeonFrontierService
         if (point is null)
             return null;
 
+        if (visitedFrontierKeys.Contains(point.Key))
+        {
+            ClearRememberedManualDestination(point);
+            return null;
+        }
+
         return BuildNavigationPoint(point, playerPosition);
     }
 
