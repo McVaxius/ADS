@@ -638,7 +638,7 @@ public sealed class ExecutionService
             {
                 lastMountedCombatYieldObjective = objectiveKey;
                 log?.Information(
-                    $"[ADS] Praetorium mounted combat is yielding to planner force-march objective {objectiveKey} so ADS keeps advancing instead of stopping to clear incidental mounted trash.");
+                    $"[ADS] Praetorium mounted combat is yielding to planner force-march objective {objectiveKey} so ADS keeps honoring the authored bypass contract instead of stopping to clear incidental mounted trash.");
             }
 
             return false;
@@ -966,13 +966,13 @@ public sealed class ExecutionService
                 navigationPoint,
                 navigationPoint.IsManualMapXzDestination,
                 navigationPoint.IsManualXyzDestination,
-                $"{prefix} Continuing committed fight-while-force-marching manual destination follow-through.");
+                $"{prefix} Continuing committed force-march manual destination follow-through.");
             return true;
         }
 
         StopMovementAssists();
         var remainingFollowThroughSeconds = Math.Max(0d, (committedForceMarchManualDestinationUntilUtc - now).TotalSeconds);
-        var destinationLabel = navigationPoint.IsManualXyzDestination ? "fight-while-force-marching XYZ destination" : "fight-while-force-marching map XZ destination";
+        var destinationLabel = navigationPoint.IsManualXyzDestination ? "force-march XYZ destination" : "force-march map XZ destination";
         SetPhase(
             GetFrontierHintPhase(navigationPoint.IsManualMapXzDestination, navigationPoint.IsManualXyzDestination),
             $"{prefix} Holding committed {destinationLabel} {navigationPoint.Name} for another {remainingFollowThroughSeconds:0.0}s while ADS waits for live progression handoff.");
@@ -993,14 +993,14 @@ public sealed class ExecutionService
         if (wasNewCommit)
         {
             log?.Information(
-                $"[ADS] Committed fight-while-force-marching {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} for bounded handoff follow-through because {detail}.");
+                $"[ADS] Committed force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} for bounded handoff follow-through because {detail}.");
             return;
         }
 
         if (reachedArrivalNow)
         {
             log?.Information(
-                $"[ADS] Fight-while-force-marching {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} reached arrival at {FormatVector(point.Position)} and remains committed for the next {ForceMarchFollowThroughDuration.TotalSeconds:0.0}s while ADS waits for live progression truth.");
+                $"[ADS] Force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} reached arrival at {FormatVector(point.Position)} and remains committed for the next {ForceMarchFollowThroughDuration.TotalSeconds:0.0}s while ADS waits for live progression truth.");
         }
     }
 
@@ -1011,7 +1011,7 @@ public sealed class ExecutionService
             return;
 
         log?.Information(
-            $"[ADS] Retired committed fight-while-force-marching {(committedDestination.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {committedDestination.Name} ({reason}) {detail}");
+            $"[ADS] Retired committed force-march {(committedDestination.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {committedDestination.Name} ({reason}) {detail}");
         ClearCommittedForceMarchManualDestination();
     }
 
@@ -1153,8 +1153,8 @@ public sealed class ExecutionService
             SetPhase(
                 GetFrontierHintPhase(isMapXzDestination, isXyzDestination),
                 isXyzDestination
-                    ? $"{prefix} Reached fight-while-force-marching {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth."
-                    : $"{prefix} Reached fight-while-force-marching {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth.");
+                    ? $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth."
+                    : $"{prefix} Reached force-march {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). ADS is keeping this manual handoff committed for another {remainingFollowThroughSeconds:0.0}s while it waits for live progression truth.");
             return;
         }
 

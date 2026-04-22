@@ -172,12 +172,12 @@ public sealed class DungeonFrontierService
             observation,
             playerPosition,
             manualDestinations);
-        var selectedCombatBypassManualDestination = SelectPraetoriumMountedCombatBypassManualDestination(
-            context,
-            observation,
-            playerPosition,
-            manualDestinations)
-            ?? SelectCombatBypassManualDestinationAgainstLiveBlockers(
+        var selectedCombatBypassManualDestination = SelectCombatBypassManualDestinationAgainstLiveBlockers(
+                context,
+                observation,
+                playerPosition,
+                manualDestinations)
+            ?? SelectPraetoriumMountedCombatBypassManualDestination(
                 context,
                 observation,
                 playerPosition,
@@ -1128,7 +1128,7 @@ public sealed class DungeonFrontierService
                 ? "no stronger live progression blocker was visible"
                 : $"live progression interactable {bestLiveProgressionInteractable.Interactable.Name} ({bestLiveProgressionInteractable.Interactable.Classification}) at {FormatVector(bestLiveProgressionInteractable.Interactable.Position)} on map {bestLiveProgressionInteractable.Interactable.MapId} resolved at priority {bestLiveProgressionInteractable.Priority} and was intentionally ignored because {DescribeManualDestinationProgressionOverride(bestManualDestination.Point, bestLiveProgressionInteractable.Interactable, bestLiveProgressionInteractable.Priority)}";
             log.Information(
-                $"[ADS] Selected fight-while-force-marching {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} while live monster pressure remains because manual priority {bestManualDestination.Point.Priority} beat/tied live monster {bestMonster.Monster.Name} ({bestMonster.Priority}) and {progressSummary}.");
+                $"[ADS] Selected force-march {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} while live monster pressure remains because manual priority {bestManualDestination.Point.Priority} beat/tied live monster {bestMonster.Monster.Name} ({bestMonster.Priority}) and {progressSummary}.");
         }
 
         return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
@@ -1179,7 +1179,7 @@ public sealed class DungeonFrontierService
                 ? "no live interactables"
                 : $"{observation.LiveInteractables.Count} live interactable(s)";
             log.Information(
-                $"[ADS] Praetorium mounted combat override selected fight-while-force-marching {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} with manual priority {bestManualDestination.Point.Priority}; {liveMonsterSummary} and {liveInteractableSummary}. ADS is bypassing mounted combat handoff so the authored force-march objective reaches planner/execution.");
+                $"[ADS] Praetorium mounted combat fallback selected force-march {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} with manual priority {bestManualDestination.Point.Priority}; {liveMonsterSummary} and {liveInteractableSummary}. ADS is preserving the broader authored force-march handoff while mounted combat is active.");
         }
 
         return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
@@ -1467,7 +1467,9 @@ public sealed class DungeonFrontierService
            && classification is InteractableClass.MapXzForceMarch or InteractableClass.XYZForceMarch;
 
     private static string GetManualDestinationLabel(DungeonFrontierPoint point)
-        => point.IsManualXyzDestination ? "XYZ destination" : "map XZ destination";
+        => point.IsManualXyzDestination
+            ? point.AllowCombatBypass ? "force-march XYZ destination" : "XYZ destination"
+            : point.AllowCombatBypass ? "force-march map XZ destination" : "map XZ destination";
 
     private static float GetHorizontalDistance(Vector3 a, Vector3 b)
     {

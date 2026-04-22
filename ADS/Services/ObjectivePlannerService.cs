@@ -1075,11 +1075,11 @@ public sealed class ObjectivePlannerService
         {
             FrontierMode.MapXzDestination
                 => frontierPoint.AllowCombatBypass
-                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored fight-while-force-marching Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It keeps advancing this waypoint even while local combat is active and ghosts the destination once the player is within 1y on X/Z."
+                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored force-march Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. This authored bypass waypoint keeps advancing even while incidental local combat is active and ghosts once the player is within 1y on X/Z."
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored Map XZ destination {frontierPoint.Name} ({FormatMapCoordinates(frontierPoint)}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z.",
             FrontierMode.XyzDestination
                 => frontierPoint.AllowCombatBypass
-                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored fight-while-force-marching XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It keeps advancing this waypoint even while local combat is active and ghosts the destination once execution reaches the 1y 3D arrival rule."
+                    ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored force-march XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. This authored bypass waypoint keeps advancing even while incidental local combat is active and ghosts once execution reaches the 1y 3D arrival rule."
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
             FrontierMode.HeadingScout
                 => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
@@ -1170,8 +1170,8 @@ public sealed class ObjectivePlannerService
 
     private static string GetManualDestinationLabel(DungeonFrontierPoint frontierPoint)
         => frontierPoint.IsManualXyzDestination
-            ? frontierPoint.AllowCombatBypass ? "fight-while-force-marching XYZ destination" : "XYZ destination"
-            : frontierPoint.AllowCombatBypass ? "fight-while-force-marching Map XZ destination" : "Map XZ destination";
+            ? frontierPoint.AllowCombatBypass ? "force-march XYZ destination" : "XYZ destination"
+            : frontierPoint.AllowCombatBypass ? "force-march Map XZ destination" : "Map XZ destination";
 
     private static float GetManualOrFrontierDistance(Vector3 playerPosition, DungeonFrontierPoint frontierPoint)
         => frontierPoint.IsManualDestination
