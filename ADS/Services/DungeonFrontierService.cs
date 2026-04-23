@@ -91,6 +91,38 @@ public sealed class DungeonFrontierService
 
     public string LastGhostedManualDestinationReason { get; private set; } = string.Empty;
 
+    public void HoldUnsafeTransition(DutyContextSnapshot context)
+    {
+        if (!context.PluginEnabled || !context.IsLoggedIn)
+        {
+            if (activeDutyKey != 0)
+            {
+                Reset();
+                activeDutyKey = 0;
+            }
+
+            return;
+        }
+
+        var previousTarget = CurrentTarget;
+        RememberManualDestination(previousTarget);
+        CurrentTarget = null;
+        CurrentMode = FrontierMode.None;
+        CurrentLabelMarkers = [];
+        CurrentLabelStatus = "Holding frontier updates during unsafe transition.";
+        ActiveMapId = 0;
+        ActiveMapName = "Unsafe transition in progress.";
+        TotalPoints = 0;
+        VisitedPoints = 0;
+        ManualMapXzDestinationCount = 0;
+        VisitedManualMapXzDestinations = 0;
+        ManualXyzDestinationCount = 0;
+        VisitedManualXyzDestinations = 0;
+
+        if (context.BetweenAreas || context.BetweenAreas51)
+            GhostCurrentOrLastManualDestination(previousTarget, FormatUnsafeTransitionFlags(context));
+    }
+
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
     {
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
@@ -129,8 +161,8 @@ public sealed class DungeonFrontierService
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (context.IsUnsafeTransition)
         {
-            if (context.BetweenAreas)
-                GhostCurrentOrLastManualDestination(previousTarget);
+            if (context.BetweenAreas || context.BetweenAreas51)
+                GhostCurrentOrLastManualDestination(previousTarget, FormatUnsafeTransitionFlags(context));
 
             return;
         }
@@ -981,7 +1013,7 @@ public sealed class DungeonFrontierService
     private static string NormalizeName(string value)
         => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
-    private void GhostCurrentOrLastManualDestination(DungeonFrontierPoint? previousTarget)
+    private void GhostCurrentOrLastManualDestination(DungeonFrontierPoint? previousTarget, string reason)
     {
         var pointToGhost = previousTarget is { IsManualDestination: true }
             ? previousTarget
@@ -996,8 +1028,19 @@ public sealed class DungeonFrontierService
         }
 
         ClearRememberedManualDestination(pointToGhost);
-        RememberGhostedManualDestination(pointToGhost, "BetweenAreas");
-        log.Information($"[ADS] Ghosted {GetManualDestinationLabel(pointToGhost)} {pointToGhost.Name} at {FormatVector(pointToGhost.Position)} after BetweenAreas transition.");
+        RememberGhostedManualDestination(pointToGhost, reason);
+        log.Information($"[ADS] Ghosted {GetManualDestinationLabel(pointToGhost)} {pointToGhost.Name} at {FormatVector(pointToGhost.Position)} after {reason} transition.");
+    }
+
+    private static string FormatUnsafeTransitionFlags(DutyContextSnapshot context)
+    {
+        if (context.BetweenAreas && context.BetweenAreas51)
+            return "BetweenAreas/BetweenAreas51";
+
+        if (context.BetweenAreas51)
+            return "BetweenAreas51";
+
+        return "BetweenAreas";
     }
 
     private void RememberGhostedManualDestination(DungeonFrontierPoint point, string reason)

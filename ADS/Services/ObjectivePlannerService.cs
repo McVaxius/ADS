@@ -73,19 +73,6 @@ public sealed class ObjectivePlannerService
             return;
         }
 
-        if (!context.InInstancedDuty)
-        {
-            Current = new PlannerSnapshot
-            {
-                Mode = PlannerMode.IdleObserve,
-                ObjectiveKind = PlannerObjectiveKind.None,
-                Objective = "Await instanced duty",
-                Explanation = "ADS is outside instanced duty. Ownership can be queued from outside, but observation starts only after duty entry.",
-                CapturedAtUtc = now,
-            };
-            return;
-        }
-
         if (context.IsUnsafeTransition)
         {
             Current = new PlannerSnapshot
@@ -94,6 +81,19 @@ public sealed class ObjectivePlannerService
                 ObjectiveKind = PlannerObjectiveKind.None,
                 Objective = "Hold during transition",
                 Explanation = "BetweenAreas is active, so ADS suppresses object truth and action attempts until the duty state settles again.",
+                CapturedAtUtc = now,
+            };
+            return;
+        }
+
+        if (!context.InInstancedDuty)
+        {
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.IdleObserve,
+                ObjectiveKind = PlannerObjectiveKind.None,
+                Objective = "Await instanced duty",
+                Explanation = "ADS is outside instanced duty. Ownership can be queued from outside, but observation starts only after duty entry.",
                 CapturedAtUtc = now,
             };
             return;

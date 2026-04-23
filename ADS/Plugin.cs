@@ -497,6 +497,21 @@ public sealed class Plugin : IDalamudPlugin
         DutyContextService.Update(Configuration.PluginEnabled);
         ObjectPriorityRuleService.ReloadIfChanged();
         DialogYesNoRuleService.ReloadIfChanged();
+
+        if (DutyContextService.Current.IsUnsafeTransition)
+        {
+            ObservationMemoryService.HoldUnsafeTransition();
+            DungeonFrontierService.HoldUnsafeTransition(DutyContextService.Current);
+            ObjectivePlannerService.Update(
+                DutyContextService.Current,
+                ObservationSnapshot.Empty,
+                ExecutionService.CurrentMode,
+                Configuration.ConsiderTreasureCoffers);
+            ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationSnapshot.Empty, Configuration.PluginEnabled);
+            UpdateDtrBar();
+            return;
+        }
+
         ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
         DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current);
         ObjectivePlannerService.Update(

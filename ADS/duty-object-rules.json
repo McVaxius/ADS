@@ -3889,6 +3889,30 @@
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": "Seeded from Object Explorer at -95.0,20.5,172.0 on layer Sastasha. Classification override: XYZ."
+    },
+    {
+      "Enabled": true,
+      "TerritoryTypeId": 0,
+      "ContentFinderConditionId": 0,
+      "DutyEnglishName": "",
+      "ObjectKind": "",
+      "BaseId": 0,
+      "ObjectName": "Rook Autoturret",
+      "NameMatchMode": "Contains",
+      "Classification": "Ignored",
+      "DestinationType": "",
+      "Layer": "",
+      "MapCoordinates": "",
+      "WorldCoordinates": "",
+      "ObjectMapCoordinates": "",
+      "ObjectWorldCoordinates": "",
+      "ObjectMatchRadius": null,
+      "Priority": 1000,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": null,
+      "WaitAtDestinationSeconds": 0,
+      "WaitAfterInteractSeconds": 0,
+      "Notes": ""
     }
   ]
 }

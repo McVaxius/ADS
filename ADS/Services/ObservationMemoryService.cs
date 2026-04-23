@@ -76,6 +76,11 @@ public sealed class ObservationMemoryService
 
     public ObservationSnapshot Current { get; private set; }
 
+    public void HoldUnsafeTransition()
+    {
+        Current = ObservationSnapshot.Empty;
+    }
+
     public void Update(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty)
@@ -110,32 +115,14 @@ public sealed class ObservationMemoryService
         }
 
         loggedReset = false;
-        var partyMembers = BuildPartyMemberSnapshot();
-        HandleRecoveryClusterReset(context);
         if (context.IsUnsafeTransition)
         {
-            Current = new ObservationSnapshot
-            {
-                LiveMonsters = [],
-                LiveFollowTargets = [],
-                MonsterGhosts = knownMonsters.Values
-                    .Where(x => !IsPartyMemberObservation(x, partyMembers))
-                    .Where(x => !objectPriorityRuleService.ShouldIgnoreObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
-                    .Where(x => !objectPriorityRuleService.ShouldFollowObject(context, ObjectKind.BattleNpc, x.DataId, x.Name, x.Position, x.MapId))
-                    .Where(x => !IsSuppressedByRetiredMonsterCluster(x.Position))
-                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
-                LiveInteractables = [],
-                InteractableGhosts = knownInteractables.Values
-                    .Where(x => !IsPartyMemberObservation(x, partyMembers))
-                    .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
-                    .Where(x => !IsSuppressedInteractionGhost(x))
-                    .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
-                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
-            };
+            HoldUnsafeTransition();
             return;
         }
+
+        var partyMembers = BuildPartyMemberSnapshot();
+        HandleRecoveryClusterReset(context);
 
         var liveMonsters = new Dictionary<string, ObservedMonster>(StringComparer.Ordinal);
         var liveFollowTargets = new Dictionary<string, ObservedMonster>(StringComparer.Ordinal);

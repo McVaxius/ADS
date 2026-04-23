@@ -266,6 +266,12 @@ public sealed class ExecutionService
             return;
         }
 
+        if (context.IsUnsafeTransition)
+        {
+            UpdateUnsafeTransitionHold(context);
+            return;
+        }
+
         switch (CurrentMode)
         {
             case OwnershipMode.OwnedStartOutside:
@@ -355,9 +361,10 @@ public sealed class ExecutionService
             {
                 observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
                 TryRetirePendingSatisfiedManualDestination(pendingProgressionInteractable, objectTable.LocalPlayer?.Position);
-                ClearInteractableCommitment();
             }
 
+            ClearInteractableCommitment();
+            ClearCommittedForceMarchManualDestination();
             ResetRecoveryHold();
             StopMovementAssists();
             SetPhase(ExecutionPhase.TransitionHold, $"{prefix} Waiting for safe post-transition duty truth before advancing.");
@@ -519,6 +526,23 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         SetPhase(ExecutionPhase.WaitingForTruth, $"{prefix} Waiting for a stronger live objective signal.");
+    }
+
+    private void UpdateUnsafeTransitionHold(DutyContextSnapshot context)
+    {
+        if (pendingProgressionInteractable is not null)
+        {
+            observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
+            TryRetirePendingSatisfiedManualDestination(pendingProgressionInteractable, objectTable.LocalPlayer?.Position);
+        }
+
+        ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
+        ResetRecoveryHold();
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.TransitionHold,
+            $"Unsafe transition active ({FormatUnsafeTransitionFlags(context)}); ADS stopped navigation and is waiting for stable post-transition duty truth.");
     }
 
     private void TryAdvanceRecoveryObjective(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -3277,6 +3301,7 @@ public sealed class ExecutionService
         StopNavigationIfNeeded();
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
+        nextNavigationCommandUtc = DateTime.MinValue;
     }
 
     private void UpdateUnsafeTransitionNavigationStop(DutyContextSnapshot context)
@@ -3303,6 +3328,10 @@ public sealed class ExecutionService
         navigationActive = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
+        nextNavigationCommandUtc = DateTime.MinValue;
+        nextInteractAttemptUtc = DateTime.MinValue;
+        nextMountedCombatAttemptUtc = DateTime.MinValue;
+        lastInteractGameObjectId = 0;
         unsafeTransitionNavigationStopLatched = true;
 
         log?.Information(
