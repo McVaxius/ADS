@@ -84,6 +84,7 @@ public sealed class ExecutionService
     private ulong movementTargetGameObjectId;
     private bool navigationActive;
     private bool mapFlagNavigationActive;
+    private bool unsafeTransitionNavigationStopLatched;
     private PlannerObjectiveKind recoveryTargetObjectiveKind = PlannerObjectiveKind.None;
     private Vector3? recoveryTargetPosition;
     private DateTime recoveryTargetReachedUtc;
@@ -252,8 +253,7 @@ public sealed class ExecutionService
 
     public void Update(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, bool pluginEnabled)
     {
-        if (context.BetweenAreas)
-            StopMovementAssists();
+        UpdateUnsafeTransitionNavigationStop(context);
 
         if (!pluginEnabled)
         {
@@ -3279,6 +3279,37 @@ public sealed class ExecutionService
         mapFlagNavigationActive = false;
     }
 
+    private void UpdateUnsafeTransitionNavigationStop(DutyContextSnapshot context)
+    {
+        if (context.IsUnsafeTransition)
+        {
+            StopNavigationForUnsafeTransition(context);
+            return;
+        }
+
+        if (!unsafeTransitionNavigationStopLatched)
+            return;
+
+        unsafeTransitionNavigationStopLatched = false;
+        log?.Information("[ADS] Unsafe transition cleared; objective handling can resume.");
+    }
+
+    private void StopNavigationForUnsafeTransition(DutyContextSnapshot context)
+    {
+        if (unsafeTransitionNavigationStopLatched)
+            return;
+
+        TrySendCommand("/vnav stop");
+        navigationActive = false;
+        movementTargetGameObjectId = 0;
+        mapFlagNavigationActive = false;
+        unsafeTransitionNavigationStopLatched = true;
+
+        log?.Information(
+            "[ADS] Unsafe transition observed ({Flags}); forced /vnav stop before waiting for stable duty truth.",
+            FormatUnsafeTransitionFlags(context));
+    }
+
     private void StopNavigationIfNeeded()
     {
         if (!navigationActive)
@@ -3299,6 +3330,17 @@ public sealed class ExecutionService
             log?.Warning(ex, $"[ADS] Command failed: {command}");
             return false;
         }
+    }
+
+    private static string FormatUnsafeTransitionFlags(DutyContextSnapshot context)
+    {
+        var flags = new List<string>();
+        if (context.BetweenAreas)
+            flags.Add("BetweenAreas");
+        if (context.BetweenAreas51)
+            flags.Add("BetweenAreas51");
+
+        return flags.Count == 0 ? "none" : string.Join(", ", flags);
     }
 
     private static string FormatVector(Vector3 value)
