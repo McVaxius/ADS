@@ -206,7 +206,7 @@ public sealed class ExecutionService
         return true;
     }
 
-    public bool LeaveDuty(DutyContextSnapshot context)
+    public bool LeaveDuty(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
         if (!context.InInstancedDuty)
         {
@@ -219,7 +219,11 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Leaving;
-        SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Clearing nearby treasure before duty exit.");
+        SetPhase(
+            ExecutionPhase.LeavingDuty,
+            considerTreasureCoffers
+                ? "Leave requested. Clearing nearby treasure before duty exit."
+                : "Leave requested. Treasure-coffer scan is off; preparing duty exit.");
         return true;
     }
 
@@ -251,7 +255,7 @@ public sealed class ExecutionService
             $"Duty completed: {dutyName}. ADS stopped automation and cleared recovery follow-through; use Start/Resume for another run.");
     }
 
-    public void Update(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, bool pluginEnabled)
+    public void Update(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, bool pluginEnabled, bool considerTreasureCoffers)
     {
         UpdateUnsafeTransitionNavigationStop(context);
 
@@ -315,7 +319,7 @@ public sealed class ExecutionService
                     return;
                 }
 
-                UpdateLeaveDuty(context, observation);
+                UpdateLeaveDuty(context, observation, considerTreasureCoffers);
                 return;
 
             case OwnershipMode.Failed:
@@ -2531,7 +2535,7 @@ public sealed class ExecutionService
             && Vector3.Distance(recoveryTargetPosition.Value, position) <= RecoveryTargetSimilarityRadius;
     }
 
-    private void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation)
+    private void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers)
     {
         if (context.InCombat)
         {
@@ -2542,7 +2546,7 @@ public sealed class ExecutionService
         }
 
         var now = DateTime.UtcNow;
-        if (leaveTreasureInteractionSent && now < nextInteractAttemptUtc)
+        if (considerTreasureCoffers && leaveTreasureInteractionSent && now < nextInteractAttemptUtc)
         {
             StopMovementAssists();
             SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Clearing nearby treasure before duty exit.");
@@ -2550,7 +2554,7 @@ public sealed class ExecutionService
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
-        if (playerPosition.HasValue)
+        if (considerTreasureCoffers && playerPosition.HasValue)
         {
             var nearbyTreasure = FindNearestLeaveSweepTreasureCoffer(context, observation, playerPosition.Value);
             if (nearbyTreasure is not null)
@@ -2573,7 +2577,7 @@ public sealed class ExecutionService
             }
         }
 
-        if (leaveTreasureInteractionSent)
+        if (considerTreasureCoffers && leaveTreasureInteractionSent)
         {
             if (leaveTreasureSweepClearSinceUtc == DateTime.MinValue)
                 leaveTreasureSweepClearSinceUtc = now;
@@ -2607,7 +2611,7 @@ public sealed class ExecutionService
         ObservationSnapshot observation,
         Vector3 playerPosition)
         => observation.LiveInteractables
-            .Where(x => x.Classification == InteractableClass.TreasureCoffer
+            .Where(x => IsLeaveSweepTreasureCoffer(x)
                 && MatchesCurrentMap(context, x.MapId)
                 && IsInteractableStillAllowedInContext(context, x))
             .Select(x => new
@@ -2623,6 +2627,19 @@ public sealed class ExecutionService
             .OrderBy(x => x.HorizontalDistance)
             .Select(x => x.Interactable)
             .FirstOrDefault();
+
+    private static bool IsLeaveSweepTreasureCoffer(ObservedInteractable interactable)
+        => interactable.Classification == InteractableClass.TreasureCoffer
+           || LooksLikeLeaveSweepTreasureCofferName(interactable.Name);
+
+    private static bool LooksLikeLeaveSweepTreasureCofferName(string name)
+    {
+        var normalized = name.Trim();
+        return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
+    }
 
     private void ResetRecoveryHold()
     {

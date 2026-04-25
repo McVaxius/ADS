@@ -837,7 +837,13 @@ public sealed class ObjectPriorityRuleService
            || string.Equals(NormalizeName(rule.ObjectName), "Treasure Coffer", StringComparison.OrdinalIgnoreCase);
 
     private static bool LooksLikeTreasureCofferName(string objectName)
-        => string.Equals(NormalizeName(objectName), "Treasure Coffer", StringComparison.OrdinalIgnoreCase);
+    {
+        var normalized = NormalizeName(objectName);
+        return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
+    }
 
     private IEnumerable<ObjectPriorityRule> GetMatchingObjectRules(
         DutyContextSnapshot context,

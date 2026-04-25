@@ -240,7 +240,7 @@ public sealed class ObservationMemoryService
                         if (!gameObject.IsTargetable)
                             break;
 
-                        var classification = ClassifyInteractable(gameObject, name, context);
+                        var classification = ClassifyInteractable(gameObject, name, context, considerTreasureCoffers);
                         if (classification == InteractableClass.Ignored)
                         {
                             knownInteractables.Remove(objectKey);
@@ -531,10 +531,13 @@ public sealed class ObservationMemoryService
     private static string BuildProgressionUseKey(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string name, Vector3 position)
         => $"{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{objectKind}:{baseId}:{name}:{Quantize(position)}";
 
-    private InteractableClass ClassifyInteractable(IGameObject gameObject, string name, DutyContextSnapshot context)
+    private InteractableClass ClassifyInteractable(IGameObject gameObject, string name, DutyContextSnapshot context, bool considerTreasureCoffers)
     {
         if (objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out var overrideClassification, gameObject.Position, context.MapId))
         {
+            if (overrideClassification == InteractableClass.TreasureCoffer && !considerTreasureCoffers)
+                return InteractableClass.Ignored;
+
             if (overrideClassification is InteractableClass.Follow
                 or InteractableClass.MapXzDestination
                 or InteractableClass.MapXzForceMarch
@@ -548,7 +551,15 @@ public sealed class ObservationMemoryService
 
         var loweredName = name.ToLowerInvariant();
         if (TreasureDungeonData.TryGetInteractableClassification(context.TerritoryTypeId, name, out var treasureClassification))
+        {
+            if (treasureClassification == InteractableClass.TreasureCoffer && !considerTreasureCoffers)
+                return InteractableClass.Ignored;
+
             return treasureClassification;
+        }
+
+        if (considerTreasureCoffers && LooksLikeTreasureCofferOrChestName(name))
+            return InteractableClass.TreasureCoffer;
 
         if (ExpendableTokens.Any(loweredName.Contains))
             return InteractableClass.Expendable;
@@ -589,6 +600,15 @@ public sealed class ObservationMemoryService
             return treasureClassification;
 
         return InteractableClass.TreasureCoffer;
+    }
+
+    private static bool LooksLikeTreasureCofferOrChestName(string name)
+    {
+        var normalized = name.Trim();
+        return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
+               || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
     }
 
     // Keep the BattleNpc direct-interact seam intentionally narrow so

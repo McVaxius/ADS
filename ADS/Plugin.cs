@@ -313,7 +313,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool LeaveDuty()
     {
-        var result = ExecutionService.LeaveDuty(DutyContextService.Current);
+        var result = ExecutionService.LeaveDuty(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -507,7 +507,7 @@ public sealed class Plugin : IDalamudPlugin
                 ObservationSnapshot.Empty,
                 ExecutionService.CurrentMode,
                 Configuration.ConsiderTreasureCoffers);
-            ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationSnapshot.Empty, Configuration.PluginEnabled);
+            ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationSnapshot.Empty, Configuration.PluginEnabled, Configuration.ConsiderTreasureCoffers);
             UpdateDtrBar();
             return;
         }
@@ -519,7 +519,7 @@ public sealed class Plugin : IDalamudPlugin
             ObservationMemoryService.Current,
             ExecutionService.CurrentMode,
             Configuration.ConsiderTreasureCoffers);
-        ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled);
+        ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled, Configuration.ConsiderTreasureCoffers);
         DialogAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
         InnEntryService.Update();
         UtilityAutomationService.Update();
