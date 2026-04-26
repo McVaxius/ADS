@@ -66,6 +66,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ObjectExplorerWindow objectExplorerWindow;
     private readonly GhostListWindow ghostListWindow;
     private readonly FrontierLabelWindow frontierLabelWindow;
+    private readonly QuickControlWindow quickControlWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private IDtrBarEntry? dtrEntry;
@@ -112,6 +113,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow = new ObjectExplorerWindow(this);
         ghostListWindow = new GhostListWindow(this);
         frontierLabelWindow = new FrontierLabelWindow(this);
+        quickControlWindow = new QuickControlWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         WindowSystem.AddWindow(mainWindow);
@@ -119,6 +121,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(objectExplorerWindow);
         WindowSystem.AddWindow(ghostListWindow);
         WindowSystem.AddWindow(frontierLabelWindow);
+        WindowSystem.AddWindow(quickControlWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
 
@@ -138,6 +141,8 @@ public sealed class Plugin : IDalamudPlugin
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
+        if (Configuration.OpenQuickControlsOnLoad)
+            quickControlWindow.IsOpen = true;
 
         Log.Information("[ADS] Plugin loaded.");
     }
@@ -161,6 +166,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.Dispose();
         ghostListWindow.Dispose();
         frontierLabelWindow.Dispose();
+        quickControlWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
     }
@@ -182,6 +188,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ToggleFrontierLabelUi()
         => frontierLabelWindow.IsOpen = !frontierLabelWindow.IsOpen;
+
+    public void ToggleQuickControlUi()
+        => quickControlWindow.IsOpen = !quickControlWindow.IsOpen;
 
     public void OpenFrontierLabelUi()
         => frontierLabelWindow.IsOpen = true;
@@ -211,6 +220,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.QueueResetToOrigin();
         ghostListWindow.QueueResetToOrigin();
         frontierLabelWindow.QueueResetToOrigin();
+        quickControlWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
     }
@@ -222,6 +232,7 @@ public sealed class Plugin : IDalamudPlugin
         objectExplorerWindow.QueueRandomVisibleJump();
         ghostListWindow.QueueRandomVisibleJump();
         frontierLabelWindow.QueueRandomVisibleJump();
+        quickControlWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
     }
@@ -328,8 +339,19 @@ public sealed class Plugin : IDalamudPlugin
 
     public void StopOwnership()
     {
+        var stoppedInn = InnEntryService.IsRunning;
+        var stoppedUtility = UtilityAutomationService.IsRunning;
         ExecutionService.Stop(DutyContextService.Current);
-        PrintStatus(ExecutionService.LastStatus);
+        InnEntryService.Cancel("operator stop");
+        UtilityAutomationService.Cancel("operator stop");
+        var stoppedText = stoppedInn || stoppedUtility
+            ? $" Stopped manual automation: {string.Join(", ", new[]
+            {
+                stoppedInn ? "enterinn" : string.Empty,
+                stoppedUtility ? "utility" : string.Empty,
+            }.Where(static value => !string.IsNullOrWhiteSpace(value)))}."
+            : string.Empty;
+        PrintStatus($"{ExecutionService.LastStatus}{stoppedText}");
         UpdateDtrBar();
     }
 
@@ -553,6 +575,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads obj - toggle the object explorer\n" +
                 "/ads ghosts - toggle the ghost inspector\n" +
                 "/ads labels - toggle the frontier label window\n" +
+                "/ads mini - toggle the compact control window\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
                 "/ads ws - reset windows to 1,1\n" +
@@ -612,6 +635,12 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("labels", StringComparison.OrdinalIgnoreCase))
         {
             ToggleFrontierLabelUi();
+            return;
+        }
+
+        if (trimmed.Equals("mini", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleQuickControlUi();
             return;
         }
 

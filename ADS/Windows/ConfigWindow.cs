@@ -42,6 +42,13 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
+        var openQuickControlsOnLoad = plugin.Configuration.OpenQuickControlsOnLoad;
+        if (ImGui.Checkbox("Open quick controls on load", ref openQuickControlsOnLoad))
+        {
+            plugin.Configuration.OpenQuickControlsOnLoad = openQuickControlsOnLoad;
+            changed = true;
+        }
+
         var dtrBarEnabled = plugin.Configuration.DtrBarEnabled;
         if (ImGui.Checkbox("Enable DTR bar", ref dtrBarEnabled))
         {

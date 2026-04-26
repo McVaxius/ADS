@@ -70,6 +70,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Labels"))
             plugin.ToggleFrontierLabelUi();
         ImGui.SameLine();
+        if (ImGui.SmallButton("Mini"))
+            plugin.ToggleQuickControlUi();
+        ImGui.SameLine();
         if (ImGui.SmallButton("Rules"))
             plugin.ToggleRuleEditorUi();
         ImGui.SameLine();
