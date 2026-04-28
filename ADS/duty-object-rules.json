@@ -860,8 +860,8 @@
       "ObjectWorldCoordinates": "",
       "ObjectMatchRadius": null,
       "Priority": 1000,
-      "PriorityVerticalRadius": 100,
-      "MaxDistance": 300,
+      "PriorityVerticalRadius": 0,
+      "MaxDistance": 0,
       "WaitAtDestinationSeconds": 0,
       "WaitAfterInteractSeconds": 0,
       "Notes": "boss3 lets go"
