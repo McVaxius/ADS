@@ -2678,7 +2678,7 @@ public sealed class ExecutionService
         var hasVisiblePartyMember = false;
         foreach (var obj in objectTable)
         {
-            if (obj.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player
+            if (obj.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc
                 || obj is not ICharacter playerCharacter)
                 continue;
 
