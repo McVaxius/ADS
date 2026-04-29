@@ -6,6 +6,7 @@ using ADS.Services;
 using ADS.Windows;
 using Dalamud.Game.Command;
 using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.DutyState;
 using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.Dtr;
 using Dalamud.Game.Text.SeStringHandling;
@@ -548,7 +549,10 @@ public sealed class Plugin : IDalamudPlugin
         UpdateDtrBar();
     }
 
-    private void OnDutyCompleted(object? sender, ushort territoryId)
+    private void OnDutyCompleted(IDutyStateEventArgs args)
+        => OnDutyCompleted(args.TerritoryType.RowId);
+
+    private void OnDutyCompleted(uint territoryId)
     {
         var dutyName = DutyContextService.Current.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
         ObservationMemoryService.Reset();

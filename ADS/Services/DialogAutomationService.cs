@@ -57,7 +57,7 @@ public sealed class DialogAutomationService
             return;
 
         var promptNode = addon->PromptText;
-        if (promptNode == null || promptNode->NodeText.StringPtr == null)
+        if (promptNode == null || !promptNode->NodeText.StringPtr.HasValue)
             return;
 
         var promptSeString = MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr));
@@ -90,9 +90,9 @@ public sealed class DialogAutomationService
     {
         var callbackIndex = string.Equals(rule.Response, "No", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         var atkValues = stackalloc AtkValue[2];
-        atkValues[0].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+        atkValues[0].Type = AtkValueType.Int;
         atkValues[0].Int = callbackIndex;
-        atkValues[1].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+        atkValues[1].Type = AtkValueType.Int;
         atkValues[1].Int = 0;
         addon->AtkUnitBase.FireCallback(2, atkValues);
         return true;
