@@ -50,6 +50,13 @@
       "MatchMode": "Contains",
       "Response": "Yes",
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "hypnoslot",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
     }
   ]
 }
