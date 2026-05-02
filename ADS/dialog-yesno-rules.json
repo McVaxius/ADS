@@ -57,6 +57,13 @@
       "MatchMode": "Contains",
       "Response": "Yes",
       "Notes": ""
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Accept Raise from",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": ""
     }
   ]
 }
