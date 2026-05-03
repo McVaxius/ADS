@@ -42,8 +42,6 @@ public sealed class ExecutionService
     private const float CloseRangeInteractFallbackVerticalCap = 4.0f;
     private const float CloseRangeInteractFallbackProgressMargin = 0.2f;
     private const float TreasureCofferProgressMargin = 2.0f;
-    private const float TreasureRouteStuckProgressDistance = 0.5f;
-    private const float TreasureRouteStuckNudgeXOffset = 0.5f;
     //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
     private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
     private const float LeaveTreasureSweepVerticalCap = 6.0f;
@@ -60,7 +58,6 @@ public sealed class ExecutionService
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
-    private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
@@ -106,10 +103,6 @@ public sealed class ExecutionService
     private DateTime treasureCofferRouteStartedUtc;
     private DateTime treasureCofferLastProgressUtc;
     private float treasureCofferBestHorizontalDistance = float.MaxValue;
-    private string? treasureRouteStuckTargetKey;
-    private Vector3? treasureRouteStuckBaselinePosition;
-    private DateTime treasureRouteStuckLastProgressUtc;
-    private int treasureRouteStuckOffsetAttempt;
     private string? closeRangeInteractFallbackKey;
     private DateTime closeRangeInteractFallbackLastProgressUtc;
     private float closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
@@ -156,7 +149,6 @@ public sealed class ExecutionService
     private readonly record struct MountedCombatTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta);
     private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta, int ClusterCount);
     private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
-    private readonly record struct TreasureRouteNavigationDecision(Vector3 Destination, bool ForceNavigationRestart, bool NudgeApplied, int NudgeAttempt);
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
@@ -1567,7 +1559,6 @@ public sealed class ExecutionService
     private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, bool isXyzDestination, string prefix)
     {
         var playerPosition = objectTable.LocalPlayer?.Position;
-        var isTreasureRoutePoint = IsTreasureRouteFrontierPoint();
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
@@ -1586,9 +1577,6 @@ public sealed class ExecutionService
             : dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
                 ? "because Lumina frontier labels were unavailable and no live duty objects are currently visible."
                 : "because no live duty objects are currently visible.";
-        if (!isTreasureRoutePoint)
-            ResetTreasureRouteStuckTracking();
-
         if (!playerPosition.HasValue)
         {
             StopMovementAssists();
@@ -1615,44 +1603,22 @@ public sealed class ExecutionService
                                           || (isMapXzDestination && !frontierPoint.UsePlayerYForNavigation);
             var usedMapFlagNavigation = canUseMapFlagNavigation
                 && TryBeginMapFlagNavigation(context, frontierTargetId, frontierPoint.Name, frontierPoint.Position);
-            var treasureRouteNudgeApplied = false;
-            var treasureRouteNudgeAttempt = 0;
-            var treasureRouteNudgeDestination = Vector3.Zero;
             if (!usedMapFlagNavigation)
             {
-                var originalNavigationDestination = isTreasureRoutePoint || isMapXzDestination || isXyzDestination
+                var navigationDestination = isMapXzDestination || isXyzDestination
                     ? frontierPoint.Position
                     : BuildPreferredApproachPoint(playerPosition.Value, frontierPoint.Position, PreferredFrontierArrivalRange);
-                var navigationDecision = ResolveTreasureRouteNavigationDecision(
-                    frontierPoint,
-                    playerPosition.Value,
-                    originalNavigationDestination);
-                if (navigationDecision.ForceNavigationRestart)
-                    StopNavigationForTreasureRouteNudge();
-
-                if (TryBeginNavigation(frontierTargetId, navigationDecision.Destination)
-                    && navigationDecision.NudgeApplied)
-                {
-                    CommitTreasureRouteStuckNudge(frontierPoint, playerPosition.Value, navigationDecision.NudgeAttempt);
-                    treasureRouteNudgeApplied = true;
-                    treasureRouteNudgeAttempt = navigationDecision.NudgeAttempt;
-                    treasureRouteNudgeDestination = navigationDecision.Destination;
-                    log?.Information(
-                        $"[ADS] Treasure route stuck nudge attempt {treasureRouteNudgeAttempt} for {frontierPoint.Name}: original {FormatVector(frontierPoint.Position)}, adjusted {FormatVector(treasureRouteNudgeDestination)} after XYZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s.");
-                }
+                TryBeginNavigation(frontierTargetId, navigationDestination);
             }
 
             var navigationMethod = usedMapFlagNavigation
                 ? "via map flag and /vnav moveflag"
                 : "via direct /vnav moveto";
-            var treasureRouteNudgeStatus = treasureRouteNudgeApplied
-                ? $"; applied stuck nudge attempt {treasureRouteNudgeAttempt} from {FormatVector(frontierPoint.Position)} to {FormatVector(treasureRouteNudgeDestination)}"
-                : string.Empty;
             SetPhase(
                 GetFrontierNavigatingPhase(isMapXzDestination, isXyzDestination),
                 isXyzDestination
-                    ? $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {xyzArrivalRange:0.0}y) {navigationMethod}{treasureRouteNudgeStatus} {frontierReason}"
-                    : $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {arrivalRange:0.0}y) {navigationMethod}{treasureRouteNudgeStatus} {frontierReason}");
+                    ? $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {xyzArrivalRange:0.0}y) {navigationMethod} {frontierReason}"
+                    : $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {arrivalRange:0.0}y) {navigationMethod} {frontierReason}");
             return;
         }
 
@@ -1684,88 +1650,6 @@ public sealed class ExecutionService
                 ? $"{prefix} Reached {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). Waiting for live duty objects or duty completion."
                 : $"{prefix} Reached {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}). Waiting for live duty objects or duty completion.");
     }
-
-    private bool IsTreasureRouteFrontierPoint()
-        => dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon;
-
-    private TreasureRouteNavigationDecision ResolveTreasureRouteNavigationDecision(
-        DungeonFrontierPoint frontierPoint,
-        Vector3 playerPosition,
-        Vector3 originalDestination)
-    {
-        if (!IsTreasureRouteFrontierPoint())
-            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0);
-
-        var now = DateTime.UtcNow;
-        if (!string.Equals(treasureRouteStuckTargetKey, frontierPoint.Key, StringComparison.Ordinal)
-            || !treasureRouteStuckBaselinePosition.HasValue)
-        {
-            StartTreasureRouteStuckTracking(frontierPoint, playerPosition, now);
-            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0);
-        }
-
-        if (Vector3.Distance(treasureRouteStuckBaselinePosition.Value, playerPosition) > TreasureRouteStuckProgressDistance)
-        {
-            StartTreasureRouteStuckTracking(frontierPoint, playerPosition, now);
-            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0);
-        }
-
-        if (now - treasureRouteStuckLastProgressUtc < TreasureRouteStuckTimeout)
-        {
-            return new TreasureRouteNavigationDecision(
-                BuildTreasureRouteNavigationDestination(originalDestination, treasureRouteStuckOffsetAttempt),
-                ForceNavigationRestart: false,
-                NudgeApplied: false,
-                NudgeAttempt: treasureRouteStuckOffsetAttempt);
-        }
-
-        if (treasureRouteStuckOffsetAttempt >= 2)
-        {
-            treasureRouteStuckOffsetAttempt = 3;
-            treasureRouteStuckBaselinePosition = playerPosition;
-            treasureRouteStuckLastProgressUtc = now;
-            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0);
-        }
-
-        var nextAttempt = treasureRouteStuckOffsetAttempt + 1;
-        return new TreasureRouteNavigationDecision(
-            BuildTreasureRouteNavigationDestination(originalDestination, nextAttempt),
-            ForceNavigationRestart: true,
-            NudgeApplied: true,
-            NudgeAttempt: nextAttempt);
-    }
-
-    private void StartTreasureRouteStuckTracking(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
-    {
-        treasureRouteStuckTargetKey = frontierPoint.Key;
-        treasureRouteStuckBaselinePosition = playerPosition;
-        treasureRouteStuckLastProgressUtc = now;
-        treasureRouteStuckOffsetAttempt = 0;
-    }
-
-    private void CommitTreasureRouteStuckNudge(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, int offsetAttempt)
-    {
-        treasureRouteStuckTargetKey = frontierPoint.Key;
-        treasureRouteStuckBaselinePosition = playerPosition;
-        treasureRouteStuckLastProgressUtc = DateTime.UtcNow;
-        treasureRouteStuckOffsetAttempt = offsetAttempt;
-    }
-
-    private void ResetTreasureRouteStuckTracking()
-    {
-        treasureRouteStuckTargetKey = null;
-        treasureRouteStuckBaselinePosition = null;
-        treasureRouteStuckLastProgressUtc = DateTime.MinValue;
-        treasureRouteStuckOffsetAttempt = 0;
-    }
-
-    private static Vector3 BuildTreasureRouteNavigationDestination(Vector3 originalDestination, int offsetAttempt)
-        => offsetAttempt switch
-        {
-            1 => new Vector3(originalDestination.X + TreasureRouteStuckNudgeXOffset, originalDestination.Y, originalDestination.Z),
-            2 => new Vector3(originalDestination.X - TreasureRouteStuckNudgeXOffset, originalDestination.Y, originalDestination.Z),
-            _ => originalDestination,
-        };
 
     private bool TryAdvancePraetoriumOnFootForceMarchHandoff(
         DutyContextSnapshot context,
@@ -2882,11 +2766,11 @@ public sealed class ExecutionService
         return names;
     }
 
-    private bool TryBeginNavigation(ulong gameObjectId, Vector3 destination)
+    private void TryBeginNavigation(ulong gameObjectId, Vector3 destination)
     {
         var now = DateTime.UtcNow;
         if (navigationActive && !mapFlagNavigationActive && movementTargetGameObjectId == gameObjectId && now < nextNavigationCommandUtc)
-            return true;
+            return;
 
         if (TrySendCommand(string.Format(
                 CultureInfo.InvariantCulture,
@@ -2899,10 +2783,7 @@ public sealed class ExecutionService
             mapFlagNavigationActive = false;
             movementTargetGameObjectId = gameObjectId;
             nextNavigationCommandUtc = now + NavigationRetryCooldown;
-            return true;
         }
-
-        return false;
     }
 
     private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, string targetName, Vector3 destination)
@@ -3438,7 +3319,6 @@ public sealed class ExecutionService
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
-        ResetTreasureRouteStuckTracking();
     }
 
     private void UpdateUnsafeTransitionNavigationStop(DutyContextSnapshot context)
@@ -3469,7 +3349,6 @@ public sealed class ExecutionService
         nextInteractAttemptUtc = DateTime.MinValue;
         nextMountedCombatAttemptUtc = DateTime.MinValue;
         lastInteractGameObjectId = 0;
-        ResetTreasureRouteStuckTracking();
         unsafeTransitionNavigationStopLatched = true;
 
         log?.Information(
@@ -3484,17 +3363,6 @@ public sealed class ExecutionService
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
-    }
-
-    private void StopNavigationForTreasureRouteNudge()
-    {
-        if (navigationActive)
-            TrySendCommand("/vnav stop");
-
-        navigationActive = false;
-        movementTargetGameObjectId = 0;
-        mapFlagNavigationActive = false;
-        nextNavigationCommandUtc = DateTime.MinValue;
     }
 
     private bool TrySendCommand(string command)
