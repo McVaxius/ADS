@@ -40,6 +40,9 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         if (ImGui.Button("STOP", new Vector2(58f, 26f)))
             plugin.StopOwnership();
 
+        if (ImGui.Button("Rules", new Vector2(58f, 26f)))
+            plugin.OpenRuleEditorUi();
+
         ImGui.Separator();
         ImGui.TextUnformatted($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");
         var duty = plugin.DutyContextService.Current.CurrentDuty?.EnglishName ?? "No duty";
