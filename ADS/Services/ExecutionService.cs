@@ -44,6 +44,7 @@ public sealed class ExecutionService
     private const float TreasureCofferProgressMargin = 2.0f;
     private const float TreasureRouteStuckProgressDistance = 0.5f;
     private const float TreasureRouteStuckNudgeXOffset = 0.5f;
+    private const float TreasureDoorJiggleProgressDistance = 0.5f;
     //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
     private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
     private const float LeaveTreasureSweepVerticalCap = 6.0f;
@@ -61,6 +62,10 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan TreasureDoorJiggleStuckTimeout = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan TreasureDoorJiggleHoldDuration = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan TreasureDoorJiggleGapDuration = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan TreasureDoorJiggleRightDelay = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
@@ -75,6 +80,7 @@ public sealed class ExecutionService
     private readonly DungeonFrontierService dungeonFrontierService;
     private readonly MapFlagService mapFlagService;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
+    private readonly Configuration configuration;
     private readonly IPluginLog? log;
     private readonly Dictionary<uint, MountedCombatAction[]> mountedCombatActionCache = [];
     private readonly HashSet<uint> loggedMountedCombatActionMounts = [];
@@ -110,6 +116,13 @@ public sealed class ExecutionService
     private Vector3? treasureRouteStuckBaselinePosition;
     private DateTime treasureRouteStuckLastProgressUtc;
     private int treasureRouteStuckOffsetAttempt;
+    private string? treasureDoorJiggleTargetKey;
+    private Vector3? treasureDoorJiggleBaselinePosition;
+    private DateTime treasureDoorJiggleLastProgressUtc;
+    private TreasureDoorJiggleStep treasureDoorJiggleStep = TreasureDoorJiggleStep.None;
+    private DateTime treasureDoorJiggleNextStepUtc = DateTime.MinValue;
+    private bool treasureDoorJiggleLeftHeld;
+    private bool treasureDoorJiggleRightHeld;
     private string? closeRangeInteractFallbackKey;
     private DateTime closeRangeInteractFallbackLastProgressUtc;
     private float closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
@@ -139,6 +152,7 @@ public sealed class ExecutionService
         DungeonFrontierService dungeonFrontierService,
         MapFlagService mapFlagService,
         ObjectPriorityRuleService objectPriorityRuleService,
+        Configuration configuration,
         IPluginLog? log = null)
     {
         this.dataManager = dataManager;
@@ -149,6 +163,7 @@ public sealed class ExecutionService
         this.dungeonFrontierService = dungeonFrontierService;
         this.mapFlagService = mapFlagService;
         this.objectPriorityRuleService = objectPriorityRuleService;
+        this.configuration = configuration;
         this.log = log;
     }
 
@@ -157,6 +172,20 @@ public sealed class ExecutionService
     private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta, int ClusterCount);
     private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
     private readonly record struct TreasureRouteNavigationDecision(Vector3 Destination, bool ForceNavigationRestart, bool NudgeApplied, int NudgeAttempt);
+
+    private enum TreasureDoorJiggleStep
+    {
+        None,
+        LeftDown1,
+        LeftUp1,
+        LeftDown2,
+        LeftUp2,
+        WaitBeforeRight,
+        RightDown1,
+        RightUp1,
+        RightDown2,
+        RightUp2,
+    }
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
@@ -2507,6 +2536,7 @@ public sealed class ExecutionService
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
     private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint)
@@ -2525,19 +2555,148 @@ public sealed class ExecutionService
             : PreferredFrontierArrivalRange;
         if (targetHorizontalDistance > arrivalRange)
         {
+            var jiggleStatus = UpdateTreasureDoorFollowThroughJiggle(frontierPoint, playerPosition.Value);
             TryBeginNavigation(BuildFrontierTargetId(frontierPoint), frontierPoint.Position);
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Treasure door follow-through is advancing through {frontierPoint.Name} after the interact (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).");
+                $"{prefix} Treasure door follow-through is advancing through {frontierPoint.Name} after the interact (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).{jiggleStatus}");
             return true;
         }
 
         reachedTransitionPoint = true;
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
         StopMovementAssists();
         SetPhase(
             ExecutionPhase.AttemptingInteractableObjective,
             $"{prefix} Treasure door follow-through reached {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y) and is waiting for refreshed duty truth.");
         return true;
+    }
+
+    private string UpdateTreasureDoorFollowThroughJiggle(DungeonFrontierPoint frontierPoint, Vector3 playerPosition)
+    {
+        if (!configuration.TreasureDoorJiggleRecoveryEnabled)
+        {
+            ResetTreasureDoorJiggleTracking(releaseKeys: true);
+            return string.Empty;
+        }
+
+        var now = DateTime.UtcNow;
+        if (!string.Equals(treasureDoorJiggleTargetKey, frontierPoint.Key, StringComparison.Ordinal)
+            || !treasureDoorJiggleBaselinePosition.HasValue)
+        {
+            StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
+            return string.Empty;
+        }
+
+        if (GetHorizontalDistance(treasureDoorJiggleBaselinePosition.Value, playerPosition) > TreasureDoorJiggleProgressDistance)
+        {
+            StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
+            return string.Empty;
+        }
+
+        if (treasureDoorJiggleStep == TreasureDoorJiggleStep.None
+            && now - treasureDoorJiggleLastProgressUtc >= TreasureDoorJiggleStuckTimeout)
+        {
+            treasureDoorJiggleStep = TreasureDoorJiggleStep.LeftDown1;
+            treasureDoorJiggleNextStepUtc = now;
+            log?.Information(
+                $"[ADS] Treasure door follow-through jiggle started for {frontierPoint.Name}; XZ movement stayed under {TreasureDoorJiggleProgressDistance:0.0}y for {TreasureDoorJiggleStuckTimeout.TotalSeconds:0}s. vnav remains active.");
+        }
+
+        if (treasureDoorJiggleStep == TreasureDoorJiggleStep.None)
+            return string.Empty;
+
+        AdvanceTreasureDoorJiggle(playerPosition, now);
+        return " Door-frame recovery is nudging left/right while vnav stays active.";
+    }
+
+    private void StartTreasureDoorJiggleTracking(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
+    {
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+        treasureDoorJiggleTargetKey = frontierPoint.Key;
+        treasureDoorJiggleBaselinePosition = playerPosition;
+        treasureDoorJiggleLastProgressUtc = now;
+    }
+
+    private void AdvanceTreasureDoorJiggle(Vector3 playerPosition, DateTime now)
+    {
+        if (now < treasureDoorJiggleNextStepUtc)
+            return;
+
+        switch (treasureDoorJiggleStep)
+        {
+            case TreasureDoorJiggleStep.LeftDown1:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleLeftKey, true, ref treasureDoorJiggleLeftHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.LeftUp1;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleHoldDuration;
+                break;
+            case TreasureDoorJiggleStep.LeftUp1:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleLeftKey, false, ref treasureDoorJiggleLeftHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.LeftDown2;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleGapDuration;
+                break;
+            case TreasureDoorJiggleStep.LeftDown2:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleLeftKey, true, ref treasureDoorJiggleLeftHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.LeftUp2;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleHoldDuration;
+                break;
+            case TreasureDoorJiggleStep.LeftUp2:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleLeftKey, false, ref treasureDoorJiggleLeftHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.WaitBeforeRight;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleRightDelay;
+                break;
+            case TreasureDoorJiggleStep.WaitBeforeRight:
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.RightDown1;
+                treasureDoorJiggleNextStepUtc = now;
+                break;
+            case TreasureDoorJiggleStep.RightDown1:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleRightKey, true, ref treasureDoorJiggleRightHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.RightUp1;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleHoldDuration;
+                break;
+            case TreasureDoorJiggleStep.RightUp1:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleRightKey, false, ref treasureDoorJiggleRightHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.RightDown2;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleGapDuration;
+                break;
+            case TreasureDoorJiggleStep.RightDown2:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleRightKey, true, ref treasureDoorJiggleRightHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.RightUp2;
+                treasureDoorJiggleNextStepUtc = now + TreasureDoorJiggleHoldDuration;
+                break;
+            case TreasureDoorJiggleStep.RightUp2:
+                SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleRightKey, false, ref treasureDoorJiggleRightHeld);
+                treasureDoorJiggleStep = TreasureDoorJiggleStep.None;
+                treasureDoorJiggleBaselinePosition = playerPosition;
+                treasureDoorJiggleLastProgressUtc = now;
+                treasureDoorJiggleNextStepUtc = DateTime.MinValue;
+                log?.Information("[ADS] Treasure door follow-through jiggle finished; vnav remains active.");
+                break;
+        }
+    }
+
+    private void SetTreasureDoorJiggleKey(string keyName, bool down, ref bool heldFlag)
+    {
+        if (down == heldFlag)
+            return;
+
+        if (GameInteractionHelper.TrySetVirtualKeyState(keyName, down, log))
+            heldFlag = down;
+    }
+
+    private void ResetTreasureDoorJiggleTracking(bool releaseKeys)
+    {
+        if (releaseKeys)
+        {
+            SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleLeftKey, false, ref treasureDoorJiggleLeftHeld);
+            SetTreasureDoorJiggleKey(configuration.TreasureDoorJiggleRightKey, false, ref treasureDoorJiggleRightHeld);
+        }
+
+        treasureDoorJiggleTargetKey = null;
+        treasureDoorJiggleBaselinePosition = null;
+        treasureDoorJiggleLastProgressUtc = DateTime.MinValue;
+        treasureDoorJiggleStep = TreasureDoorJiggleStep.None;
+        treasureDoorJiggleNextStepUtc = DateTime.MinValue;
     }
 
     private static DungeonFrontierPoint BuildTreasureDoorFollowThroughPoint(
@@ -3439,6 +3598,7 @@ public sealed class ExecutionService
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
         ResetTreasureRouteStuckTracking();
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
     private void UpdateUnsafeTransitionNavigationStop(DutyContextSnapshot context)
@@ -3470,6 +3630,7 @@ public sealed class ExecutionService
         nextMountedCombatAttemptUtc = DateTime.MinValue;
         lastInteractGameObjectId = 0;
         ResetTreasureRouteStuckTracking();
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
         unsafeTransitionNavigationStopLatched = true;
 
         log?.Information(

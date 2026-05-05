@@ -72,6 +72,32 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         ImGui.TextWrapped("When treasure-coffer scan is enabled, ADS treats coffers as optional pickups: they must materially beat competing targets on XZ, ADS still tries to stand within about 1y on approach, and coffers more than 5y away in Y are skipped.");
 
+        var treasureDoorJiggleRecoveryEnabled = plugin.Configuration.TreasureDoorJiggleRecoveryEnabled;
+        if (ImGui.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
+        {
+            plugin.Configuration.TreasureDoorJiggleRecoveryEnabled = treasureDoorJiggleRecoveryEnabled;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS keeps vnav running and taps left/right strafe keys to nudge through the frame.");
+
+        var leftKey = plugin.Configuration.TreasureDoorJiggleLeftKey;
+        ImGui.SetNextItemWidth(80f);
+        if (ImGui.InputText("Left strafe key", ref leftKey, 16))
+        {
+            plugin.Configuration.TreasureDoorJiggleLeftKey = string.IsNullOrWhiteSpace(leftKey) ? "A" : leftKey.Trim().ToUpperInvariant();
+            changed = true;
+        }
+
+        ImGui.SameLine();
+        var rightKey = plugin.Configuration.TreasureDoorJiggleRightKey;
+        ImGui.SetNextItemWidth(80f);
+        if (ImGui.InputText("Right strafe key", ref rightKey, 16))
+        {
+            plugin.Configuration.TreasureDoorJiggleRightKey = string.IsNullOrWhiteSpace(rightKey) ? "D" : rightKey.Trim().ToUpperInvariant();
+            changed = true;
+        }
+
         ImGui.Separator();
         ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);

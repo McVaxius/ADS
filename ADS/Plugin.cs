@@ -96,7 +96,7 @@ public sealed class Plugin : IDalamudPlugin
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
-        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Log);
+        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
@@ -843,6 +843,15 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (configuration.Version < 5)
+        {
+            configuration.TreasureDoorJiggleRecoveryEnabled = true;
+            configuration.TreasureDoorJiggleLeftKey = "A";
+            configuration.TreasureDoorJiggleRightKey = "D";
+            configuration.Version = 5;
+            changed = true;
+        }
+
         var clampedDtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
         if (configuration.DtrBarMode != clampedDtrBarMode)
         {
@@ -859,6 +868,24 @@ public sealed class Plugin : IDalamudPlugin
         if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
         {
             configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
+            changed = true;
+        }
+
+        var normalizedLeftKey = string.IsNullOrWhiteSpace(configuration.TreasureDoorJiggleLeftKey)
+            ? "A"
+            : configuration.TreasureDoorJiggleLeftKey.Trim().ToUpperInvariant();
+        if (!string.Equals(configuration.TreasureDoorJiggleLeftKey, normalizedLeftKey, StringComparison.Ordinal))
+        {
+            configuration.TreasureDoorJiggleLeftKey = normalizedLeftKey;
+            changed = true;
+        }
+
+        var normalizedRightKey = string.IsNullOrWhiteSpace(configuration.TreasureDoorJiggleRightKey)
+            ? "D"
+            : configuration.TreasureDoorJiggleRightKey.Trim().ToUpperInvariant();
+        if (!string.Equals(configuration.TreasureDoorJiggleRightKey, normalizedRightKey, StringComparison.Ordinal))
+        {
+            configuration.TreasureDoorJiggleRightKey = normalizedRightKey;
             changed = true;
         }
 

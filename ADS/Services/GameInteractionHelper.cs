@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
@@ -16,6 +17,11 @@ namespace ADS.Services;
 
 public static class GameInteractionHelper
 {
+    private const uint InputKeyboard = 1;
+    private const uint KeyEventKeyUp = 0x0002;
+    private const ushort VirtualKeyLeftArrow = 0x25;
+    private const ushort VirtualKeyRightArrow = 0x27;
+
     private static readonly HashSet<string> KnownInnTerritoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "The Mizzenmast",
@@ -30,6 +36,124 @@ public static class GameInteractionHelper
         "The Baldesion Annex",
         "The For'ard Cabins",
     };
+
+    public static bool TrySetVirtualKeyState(string keyName, bool down, IPluginLog? log = null)
+    {
+        if (!TryResolveVirtualKey(keyName, out var virtualKey))
+        {
+            log?.Warning($"[ADS] Unsupported virtual key '{keyName}'. Use A-Z, 0-9, Left, or Right.");
+            return false;
+        }
+
+        var input = new Input
+        {
+            Type = InputKeyboard,
+            Data = new InputUnion
+            {
+                Keyboard = new KeyboardInput
+                {
+                    VirtualKey = virtualKey,
+                    ScanCode = 0,
+                    Flags = down ? 0 : KeyEventKeyUp,
+                    Time = 0,
+                    ExtraInfo = IntPtr.Zero,
+                },
+            },
+        };
+
+        var sent = SendInput(1, new[] { input }, Marshal.SizeOf<Input>());
+        if (sent == 1)
+            return true;
+
+        log?.Warning($"[ADS] SendInput failed for key '{keyName}' ({(down ? "down" : "up")}), error {Marshal.GetLastWin32Error()}.");
+        return false;
+    }
+
+    private static bool TryResolveVirtualKey(string keyName, out ushort virtualKey)
+    {
+        virtualKey = 0;
+        var normalized = (keyName ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalized.StartsWith("VK_", StringComparison.Ordinal))
+            normalized = normalized[3..];
+
+        if (normalized.Length == 1)
+        {
+            var c = normalized[0];
+            if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+            {
+                virtualKey = (ushort)c;
+                return true;
+            }
+        }
+
+        switch (normalized)
+        {
+            case "LEFT":
+            case "LEFTARROW":
+            case "ARROWLEFT":
+                virtualKey = VirtualKeyLeftArrow;
+                return true;
+            case "RIGHT":
+            case "RIGHTARROW":
+            case "ARROWRIGHT":
+                virtualKey = VirtualKeyRightArrow;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint inputCount, Input[] inputs, int inputSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Input
+    {
+        public uint Type;
+        public InputUnion Data;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public MouseInput Mouse;
+
+        [FieldOffset(0)]
+        public KeyboardInput Keyboard;
+
+        [FieldOffset(0)]
+        public HardwareInput Hardware;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseInput
+    {
+        public int X;
+        public int Y;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HardwareInput
+    {
+        public uint Message;
+        public ushort ParamL;
+        public ushort ParamH;
+    }
 
     public static unsafe bool IsAddonVisible(string addonName)
     {
