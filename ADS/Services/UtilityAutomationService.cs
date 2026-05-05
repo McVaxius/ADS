@@ -40,6 +40,7 @@ public sealed unsafe class UtilityAutomationService
     private const int DismountGeneralAction = 23;
     private const int MaterializeGeneralAction = 14;
     private const int LastMaterializeCategory = 6;
+    private const int FullyRepairedConditionPercent = 100;
     private static readonly AgentSalvage.SalvageItemCategory[] DesynthInventoryCategories =
     [
         AgentSalvage.SalvageItemCategory.InventoryEquipment,
@@ -302,6 +303,9 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateSelfRepair()
     {
+        if (TryCompleteRepairIfFinished("Self-repair finished; equipped gear is fully repaired."))
+            return;
+
         if (!PrepareForUiWork("self-repair"))
             return;
 
@@ -350,6 +354,9 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
+        if (TryCompleteRepairIfFinished("Self-repair finished; equipped gear is fully repaired."))
+            return;
+
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
             StatusMessage = "Confirming self-repair.";
@@ -371,6 +378,9 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepair()
     {
+        if (TryCompleteRepairIfFinished("NPC repair finished; equipped gear is fully repaired."))
+            return;
+
         if (!PrepareForUiWork("NPC repair"))
             return;
 
@@ -424,6 +434,9 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepairWindow(DateTime now)
     {
+        if (TryCompleteRepairIfFinished($"NPC repair finished with {targetNpcName}; equipped gear is fully repaired."))
+            return;
+
         if (TryHandleRepairConfirm(now, $"Confirming NPC repair with {targetNpcName}."))
             return;
 
@@ -461,6 +474,9 @@ public sealed unsafe class UtilityAutomationService
 
             return;
         }
+
+        if (TryCompleteRepairIfFinished($"NPC repair finished with {targetNpcName}; equipped gear is fully repaired."))
+            return;
 
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
@@ -806,6 +822,45 @@ public sealed unsafe class UtilityAutomationService
     private static unsafe bool IsRepairAllEnabled(AddonRepair* repairAddon)
         => repairAddon->RepairAllButton != null && repairAddon->RepairAllButton->IsEnabled;
 
+    private bool TryCompleteRepairIfFinished(string message)
+    {
+        if (!TryGetEquippedGearNeedsRepair(out var needsRepair) || needsRepair)
+            return false;
+
+        CloseRepairAddons();
+        Complete(message);
+        return true;
+    }
+
+    private static unsafe bool TryGetEquippedGearNeedsRepair(out bool needsRepair)
+    {
+        needsRepair = false;
+
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+            return false;
+
+        var equippedContainer = inventoryManager->GetInventoryContainer(InventoryType.EquippedItems);
+        if (equippedContainer == null)
+            return false;
+
+        for (var i = 0; i < equippedContainer->Size; i++)
+        {
+            var item = equippedContainer->GetInventorySlot(i);
+            if (item == null || item->ItemId == 0)
+                continue;
+
+            var conditionPercent = item->Condition / 300;
+            if (conditionPercent < FullyRepairedConditionPercent)
+            {
+                needsRepair = true;
+                return true;
+            }
+        }
+
+        return true;
+    }
+
     private void NoteRepairWindowSeen(DateTime now)
     {
         if (repairWindowSeenUtc == DateTime.MinValue)
@@ -818,6 +873,15 @@ public sealed unsafe class UtilityAutomationService
             return false;
 
         repairSubmissionSent = true;
+        if (TryCompleteRepairIfFinished($"{statusMessage} Equipped gear is fully repaired."))
+            return true;
+
+        if (IsRepairInteractionBlocked(out var blocker))
+        {
+            StatusMessage = $"{statusMessage} Waiting for {blocker}; rechecking durability instead of clicking again.";
+            return true;
+        }
+
         if (repairConfirmClickAttempts >= RepairConfirmMaxAttempts)
         {
             StatusMessage = $"{statusMessage} Waiting for the confirmation dialog to close.";
@@ -845,6 +909,39 @@ public sealed unsafe class UtilityAutomationService
 
         StatusMessage = $"{statusMessage} Waiting to retry confirmation ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts}).";
         return true;
+    }
+
+    private bool IsRepairInteractionBlocked(out string blocker)
+    {
+        if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
+        {
+            blocker = "zoning";
+            return true;
+        }
+
+        if (condition[ConditionFlag.OccupiedInCutSceneEvent]
+            || condition[ConditionFlag.WatchingCutscene])
+        {
+            blocker = "cutscene";
+            return true;
+        }
+
+        if (condition[ConditionFlag.OccupiedInQuestEvent]
+            || condition[ConditionFlag.Occupied33]
+            || condition[ConditionFlag.Occupied39])
+        {
+            blocker = "occupied transition";
+            return true;
+        }
+
+        blocker = string.Empty;
+        return false;
+    }
+
+    private void CloseRepairAddons()
+    {
+        GameInteractionHelper.TryCloseAddon("SelectYesno", log);
+        GameInteractionHelper.TryCloseAddon("Repair", log);
     }
 
     private void ResetRepairSubmission()
