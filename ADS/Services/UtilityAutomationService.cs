@@ -50,12 +50,14 @@ public sealed unsafe class UtilityAutomationService
     private static readonly TimeSpan NpcRepairTravelTimeout = TimeSpan.FromSeconds(75);
     private static readonly TimeSpan UiRetryCooldown = TimeSpan.FromMilliseconds(900);
     private static readonly TimeSpan UiSettleCooldown = TimeSpan.FromMilliseconds(1400);
+    private static readonly TimeSpan RepairConfirmRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DesynthReopenCooldown = TimeSpan.FromMilliseconds(1800);
     private static readonly TimeSpan LifestreamTeleportSettleCooldown = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan MoveRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan InteractRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MenuRetryCooldown = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan MaterializeResultWait = TimeSpan.FromMilliseconds(800);
+    private const int RepairConfirmMaxAttempts = 3;
     private static readonly InnRepairRouteSeed[] InnRepairRouteSeeds =
     [
         new(
@@ -148,6 +150,8 @@ public sealed unsafe class UtilityAutomationService
     private ResolvedInnRepairRoute? activeNpcRepairInnRoute;
     private int npcRepairInnPathIndex;
     private bool repairSubmissionSent;
+    private DateTime lastRepairConfirmClickUtc = DateTime.MinValue;
+    private int repairConfirmClickAttempts;
     private int materializeCategory;
     private bool materializeCategoryArmed;
     private bool materializeAttemptPending;
@@ -302,13 +306,8 @@ public sealed unsafe class UtilityAutomationService
             return;
 
         var now = DateTime.UtcNow;
-        if (GameInteractionHelper.ClickYesIfVisible(log))
-        {
-            repairSubmissionSent = true;
-            lastActionUtc = now;
-            StatusMessage = "Confirming self-repair.";
+        if (TryHandleRepairConfirm(now, "Confirming self-repair."))
             return;
-        }
 
         var repairAddon = GetVisibleAddon<AddonRepair>("Repair");
         if (repairAddon == null)
@@ -425,13 +424,8 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepairWindow(DateTime now)
     {
-        if (GameInteractionHelper.ClickYesIfVisible(log))
-        {
-            repairSubmissionSent = true;
-            lastActionUtc = now;
-            StatusMessage = $"Confirming NPC repair with {targetNpcName}.";
+        if (TryHandleRepairConfirm(now, $"Confirming NPC repair with {targetNpcName}."))
             return;
-        }
 
         var repairAddon = GetVisibleAddon<AddonRepair>("Repair");
         if (repairAddon == null)
@@ -818,6 +812,48 @@ public sealed unsafe class UtilityAutomationService
             repairWindowSeenUtc = now;
     }
 
+    private bool TryHandleRepairConfirm(DateTime now, string statusMessage)
+    {
+        if (!GameInteractionHelper.IsAddonVisible("SelectYesno"))
+            return false;
+
+        repairSubmissionSent = true;
+        if (repairConfirmClickAttempts >= RepairConfirmMaxAttempts)
+        {
+            StatusMessage = $"{statusMessage} Waiting for the confirmation dialog to close.";
+            return true;
+        }
+
+        if (lastRepairConfirmClickUtc != DateTime.MinValue
+            && now - lastRepairConfirmClickUtc < RepairConfirmRetryCooldown)
+        {
+            StatusMessage = statusMessage;
+            return true;
+        }
+
+        repairConfirmClickAttempts++;
+        lastRepairConfirmClickUtc = now;
+        lastActionUtc = now;
+
+        if (GameInteractionHelper.ClickYesIfVisible(log))
+        {
+            StatusMessage = repairConfirmClickAttempts == 1
+                ? statusMessage
+                : $"{statusMessage} Retrying confirmation ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts}).";
+            return true;
+        }
+
+        StatusMessage = $"{statusMessage} Waiting to retry confirmation ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts}).";
+        return true;
+    }
+
+    private void ResetRepairSubmission()
+    {
+        repairSubmissionSent = false;
+        lastRepairConfirmClickUtc = DateTime.MinValue;
+        repairConfirmClickAttempts = 0;
+    }
+
     private void BeginNpcRepairWithCandidate(RepairNpcCandidate targetNpc, string logPrefix)
     {
         ClearNpcRepairInnTravel();
@@ -826,7 +862,7 @@ public sealed unsafe class UtilityAutomationService
         targetNpcName = targetNpc.Name;
         targetNpcRepairIndex = targetNpc.RepairIndex;
         npcRepairFallbackToFirstOption = false;
-        repairSubmissionSent = false;
+        ResetRepairSubmission();
 
         var distance = targetNpc.Distance;
         if (distance <= RepairNpcInteractRadius)
@@ -861,7 +897,7 @@ public sealed unsafe class UtilityAutomationService
         activeNpcRepairInnRoute = route;
         npcRepairInnPathIndex = 0;
         npcRepairTravelCommandUtc = DateTime.MinValue;
-        repairSubmissionSent = false;
+        ResetRepairSubmission();
 
         if (route.TerritoryTypeId == clientState.TerritoryType)
         {
@@ -1295,7 +1331,7 @@ public sealed unsafe class UtilityAutomationService
         targetNpcRepairIndex = 0;
         npcRepairFallbackToFirstOption = false;
         ClearNpcRepairInnTravel();
-        repairSubmissionSent = false;
+        ResetRepairSubmission();
         materializeCategory = 0;
         materializeCategoryArmed = false;
         materializeAttemptPending = false;

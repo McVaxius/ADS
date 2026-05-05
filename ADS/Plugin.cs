@@ -139,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {ObjectRulesSyncStatus}");
         Log.Information($"[ADS] {DialogRulesSyncStatus}");
+        Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
