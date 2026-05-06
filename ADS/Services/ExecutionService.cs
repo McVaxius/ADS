@@ -194,6 +194,14 @@ public sealed class ExecutionService
     public bool IsOwned
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving;
 
+    public void ReleaseHeldMovementKeys(string reason)
+    {
+        var hadHeldKey = treasureDoorJiggleLeftHeld || treasureDoorJiggleRightHeld;
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+        if (hadHeldKey)
+            log?.Information($"[ADS] Released treasure door jiggle movement keys during {reason}.");
+    }
+
     public bool StartDutyFromOutside()
     {
         ClearInteractableCommitment();
@@ -414,6 +422,15 @@ public sealed class ExecutionService
 
         if (TryHoldPendingProgressionInteractResult(context, planner, observation, prefix))
             return;
+
+        if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} SelectYesno is visible; ADS is holding movement while dialog automation resolves the prompt.");
+            return;
+        }
 
         if (IsForceMarchPlannerObjective(planner.ObjectiveKind)
             || committedForceMarchManualDestination is not null)
@@ -2093,6 +2110,14 @@ public sealed class ExecutionService
         var currentPriority = objectPriorityRuleService.GetEffectivePriority(context, currentInteractable, currentDistance, currentVerticalDelta);
         var plannerPriority = objectPriorityRuleService.GetEffectivePriority(context, plannerInteractable, plannerDistance, plannerVerticalDelta);
 
+        if (currentObjectiveKind == PlannerObjectiveKind.TreasureDoor
+            && pendingProgressionInteractable is { Classification: InteractableClass.TreasureDoor }
+            && pendingTreasureDoorTransitionPoint is not null)
+        {
+            reason = $"Holding committed treasure door follow-through on {currentInteractable.Name}; ADS will not switch to {plannerInteractable.Name} until the opened-door follow-through resolves.";
+            return false;
+        }
+
         if (plannerPriority < currentPriority)
         {
             reason = $"Switching from stale {currentInteractable.Classification} target {currentInteractable.Name} to higher-priority planner target {plannerInteractable.Name} ({plannerPriority} < {currentPriority}).";
@@ -2372,6 +2397,15 @@ public sealed class ExecutionService
             return false;
         }
 
+        if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} SelectYesno is visible during {pendingInteractable.Name} follow-through; ADS is holding movement while dialog automation resolves the prompt.");
+            return true;
+        }
+
         if (planner.Mode == PlannerMode.Progression && IsInteractablePlannerObjective(planner.ObjectiveKind))
         {
             var plannerInteractable = ResolveObservedInteractable(planner, observation);
@@ -2545,7 +2579,19 @@ public sealed class ExecutionService
         var frontierPoint = pendingTreasureDoorTransitionPoint;
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (frontierPoint is null || !playerPosition.HasValue)
+        {
+            ResetTreasureDoorJiggleTracking(releaseKeys: true);
             return false;
+        }
+
+        if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Treasure door follow-through is paused because SelectYesno is visible; ADS is waiting for dialog automation.");
+            return true;
+        }
 
         var targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition.Value);
         var targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition.Value);

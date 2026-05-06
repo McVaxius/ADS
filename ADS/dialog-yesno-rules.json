@@ -4,6 +4,20 @@
   "Rules": [
     {
       "Enabled": true,
+      "PromptPattern": "Open the treasure coffer",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": "Treasure dungeon coffer confirmation."
+    },
+    {
+      "Enabled": true,
+      "PromptPattern": "Unlock the Vault Door",
+      "MatchMode": "Contains",
+      "Response": "Yes",
+      "Notes": "Aquapolis vault door confirmation."
+    },
+    {
+      "Enabled": true,
       "PromptPattern": "Use the ",
       "MatchMode": "Contains",
       "Response": "Yes",

@@ -2,7 +2,6 @@ using ADS.Models;
 using Dalamud.Memory;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ADS.Services;
 
@@ -75,7 +74,7 @@ public sealed class DialogAutomationService
         if (matchedRule is null)
             return;
 
-        if (!TryClickResponse(addon, matchedRule))
+        if (!TryClickResponse(matchedRule))
         {
             log.Warning($"[ADS] Dialog rule matched but click failed: {dialogText}");
             return;
@@ -86,15 +85,9 @@ public sealed class DialogAutomationService
         log.Information($"[ADS] Auto-confirmed SelectYesno via dialog rule '{matchedRule.PromptPattern}' -> {matchedRule.Response}: {dialogText}");
     }
 
-    private static unsafe bool TryClickResponse(AddonSelectYesno* addon, DialogYesNoRule rule)
+    private bool TryClickResponse(DialogYesNoRule rule)
     {
-        var callbackIndex = string.Equals(rule.Response, "No", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        var atkValues = stackalloc AtkValue[2];
-        atkValues[0].Type = AtkValueType.Int;
-        atkValues[0].Int = callbackIndex;
-        atkValues[1].Type = AtkValueType.Int;
-        atkValues[1].Int = 0;
-        addon->AtkUnitBase.FireCallback(2, atkValues);
-        return true;
+        var yes = !string.Equals(rule.Response, "No", StringComparison.OrdinalIgnoreCase);
+        return GameInteractionHelper.TrySelectYesNo(yes, gameGui, log);
     }
 }

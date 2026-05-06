@@ -242,7 +242,10 @@ public sealed class DungeonFrontierService
             if (treasureRoutePoints.Count > 0)
             {
                 if (playerPosition.HasValue)
+                {
                     MarkVisitedPoints(treasureRoutePoints, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
+                    MarkTreasureRouteCatchUp(treasureRoutePoints, playerPosition.Value);
+                }
 
                 CurrentTarget = SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
                 if (CurrentTarget is not null)
@@ -847,6 +850,50 @@ public sealed class DungeonFrontierService
             var visitRadius = point.ArrivalRadiusXz > 0f ? point.ArrivalRadiusXz : defaultVisitRadius;
             if (horizontalDistance <= visitRadius && verticalDelta <= defaultVerticalCap)
                 MarkVisited(point, playerPosition);
+        }
+    }
+
+    private void MarkTreasureRouteCatchUp(IReadOnlyList<DungeonFrontierPoint> points, Vector3 playerPosition)
+    {
+        if (points.Count < 2)
+            return;
+
+        var nearest = points
+            .Select((point, index) => new
+            {
+                Point = point,
+                Index = index,
+                HorizontalDistance = GetHorizontalDistance(playerPosition, point.Position),
+                VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Y),
+            })
+            .OrderBy(x => x.HorizontalDistance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Index)
+            .FirstOrDefault();
+        if (nearest is null || nearest.Index <= 0)
+            return;
+
+        var furthestVisitedIndex = -1;
+        for (var index = 0; index < points.Count; index++)
+        {
+            if (visitedFrontierKeys.Contains(points[index].Key))
+                furthestVisitedIndex = index;
+        }
+
+        if (nearest.Index <= furthestVisitedIndex)
+            return;
+
+        var markedCount = 0;
+        for (var index = 0; index < nearest.Index; index++)
+        {
+            if (visitedFrontierKeys.Add(points[index].Key))
+                markedCount++;
+        }
+
+        if (markedCount > 0)
+        {
+            log.Information(
+                $"[ADS] Treasure route catch-up marked {markedCount} earlier room point(s) visited before nearest route point {nearest.Point.Name} at {FormatVector(nearest.Point.Position)}. This prevents post-door backtracking to prior treasure rooms.");
         }
     }
 

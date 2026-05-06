@@ -1,9 +1,11 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Text;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
+using ECommons.Automation;
+using ECommons.UIHelpers.AddonMasterImplementations;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -17,10 +19,8 @@ namespace ADS.Services;
 
 public static class GameInteractionHelper
 {
-    private const uint InputKeyboard = 1;
-    private const uint KeyEventKeyUp = 0x0002;
-    private const ushort VirtualKeyLeftArrow = 0x25;
-    private const ushort VirtualKeyRightArrow = 0x27;
+    private const int VirtualKeyLeftArrow = 0x25;
+    private const int VirtualKeyRightArrow = 0x27;
 
     private static readonly HashSet<string> KnownInnTerritoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -45,33 +45,25 @@ public static class GameInteractionHelper
             return false;
         }
 
-        var input = new Input
+        try
         {
-            Type = InputKeyboard,
-            Data = new InputUnion
-            {
-                Keyboard = new KeyboardInput
-                {
-                    VirtualKey = virtualKey,
-                    ScanCode = 0,
-                    Flags = down ? 0 : KeyEventKeyUp,
-                    Time = 0,
-                    ExtraInfo = IntPtr.Zero,
-                },
-            },
-        };
+            if (down)
+                WindowsKeypress.SendKeyHold(virtualKey, null);
+            else
+                WindowsKeypress.SendKeyRelease(virtualKey, null);
 
-        var sent = SendInput(1, new[] { input }, Marshal.SizeOf<Input>());
-        if (sent == 1)
             return true;
-
-        log?.Warning($"[ADS] SendInput failed for key '{keyName}' ({(down ? "down" : "up")}), error {Marshal.GetLastWin32Error()}.");
-        return false;
+        }
+        catch (Exception ex)
+        {
+            log?.Warning(ex, $"[ADS] ECommons key {(down ? "hold" : "release")} failed for '{keyName}' ({virtualKey}).");
+            return false;
+        }
     }
 
-    private static bool TryResolveVirtualKey(string keyName, out ushort virtualKey)
+    private static bool TryResolveVirtualKey(string keyName, out VirtualKey virtualKey)
     {
-        virtualKey = 0;
+        virtualKey = default;
         var normalized = (keyName ?? string.Empty).Trim().ToUpperInvariant();
         if (normalized.StartsWith("VK_", StringComparison.Ordinal))
             normalized = normalized[3..];
@@ -81,7 +73,7 @@ public static class GameInteractionHelper
             var c = normalized[0];
             if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
             {
-                virtualKey = (ushort)c;
+                virtualKey = (VirtualKey)c;
                 return true;
             }
         }
@@ -91,68 +83,16 @@ public static class GameInteractionHelper
             case "LEFT":
             case "LEFTARROW":
             case "ARROWLEFT":
-                virtualKey = VirtualKeyLeftArrow;
+                virtualKey = (VirtualKey)VirtualKeyLeftArrow;
                 return true;
             case "RIGHT":
             case "RIGHTARROW":
             case "ARROWRIGHT":
-                virtualKey = VirtualKeyRightArrow;
+                virtualKey = (VirtualKey)VirtualKeyRightArrow;
                 return true;
             default:
                 return false;
         }
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint inputCount, Input[] inputs, int inputSize);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Input
-    {
-        public uint Type;
-        public InputUnion Data;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
-    {
-        [FieldOffset(0)]
-        public MouseInput Mouse;
-
-        [FieldOffset(0)]
-        public KeyboardInput Keyboard;
-
-        [FieldOffset(0)]
-        public HardwareInput Hardware;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MouseInput
-    {
-        public int X;
-        public int Y;
-        public uint MouseData;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KeyboardInput
-    {
-        public ushort VirtualKey;
-        public ushort ScanCode;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct HardwareInput
-    {
-        public uint Message;
-        public ushort ParamL;
-        public ushort ParamH;
     }
 
     public static unsafe bool IsAddonVisible(string addonName)
@@ -200,30 +140,61 @@ public static class GameInteractionHelper
     }
 
     public static unsafe bool ClickYesIfVisible(IPluginLog? log = null)
+        => TrySelectYesNo(true, Plugin.GameGui, log);
+
+    public static unsafe bool TrySelectYesNo(bool yes, IGameGui gameGui, IPluginLog? log = null)
     {
         try
         {
-            nint addonPtr = Plugin.GameGui.GetAddonByName("SelectYesno", 1);
+            nint addonPtr = gameGui.GetAddonByName("SelectYesno", 1);
             if (addonPtr == nint.Zero)
                 return false;
 
             var addon = (AtkUnitBase*)addonPtr;
-            if (!addon->IsVisible)
+            if (addon == null || !addon->IsVisible)
                 return false;
 
-            var atkValues = stackalloc AtkValue[2];
-            atkValues[0].Type = AtkValueType.Int;
-            atkValues[0].Int = 0;
-            atkValues[1].Type = AtkValueType.Int;
-            atkValues[1].Int = 0;
+            var addonMaster = new AddonMaster.SelectYesno(addon);
+            if (yes)
+                addonMaster.Yes();
+            else
+                addonMaster.No();
 
-            addon->FireCallback(2, atkValues);
-            log?.Information("[ADS] Clicked Yes on SelectYesno.");
+            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via ECommons AddonMaster.");
             return true;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, "[ADS] ClickYesIfVisible failed.");
+            log?.Warning(ex, $"[ADS] ECommons SelectYesno {(yes ? "Yes" : "No")} failed; falling back to raw callback.");
+            return TryFireSelectYesNoCallback(yes, gameGui, log);
+        }
+    }
+
+    private static unsafe bool TryFireSelectYesNoCallback(bool yes, IGameGui gameGui, IPluginLog? log = null)
+    {
+        try
+        {
+            nint addonPtr = gameGui.GetAddonByName("SelectYesno", 1);
+            if (addonPtr == nint.Zero)
+                return false;
+
+            var addon = (AtkUnitBase*)addonPtr;
+            if (addon == null || !addon->IsVisible)
+                return false;
+
+            var callbackIndex = yes ? 0 : 1;
+            var atkValues = stackalloc AtkValue[2];
+            atkValues[0].Type = AtkValueType.Int;
+            atkValues[0].Int = callbackIndex;
+            atkValues[1].Type = AtkValueType.Int;
+            atkValues[1].Int = 0;
+            addon->FireCallback(2, atkValues);
+            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via raw callback fallback.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log?.Warning(ex, $"[ADS] SelectYesno raw callback failed for {(yes ? "Yes" : "No")}.");
             return false;
         }
     }
