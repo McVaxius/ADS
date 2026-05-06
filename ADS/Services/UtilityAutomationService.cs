@@ -24,10 +24,17 @@ public sealed unsafe class UtilityAutomationService
         DesynthFromInventory,
     }
 
+    private enum NpcRepairMode
+    {
+        InnFallback,
+        NoInn,
+    }
+
     private enum NpcRepairTravelStage
     {
         None,
         TeleportingToInnAethernet,
+        TeleportingToFieldAetheryte,
         WalkingInnPath,
         AwaitingRepairNpc,
     }
@@ -124,6 +131,58 @@ public sealed unsafe class UtilityAutomationService
             ]),
     ];
 
+    private static readonly HashSet<uint> FieldRepairDeniedAetheryteIds =
+    [
+        2,
+        8,
+        9,
+        24,
+        70,
+        111,
+        128,
+        133,
+        182,
+        183,
+        210,
+        211,
+        220,
+    ];
+
+    private static readonly string[] FieldRepairDeniedNameTerms =
+    [
+        "limsa lominsa",
+        "gridania",
+        "ul'dah",
+        "uldah",
+        "foundation",
+        "ishgard",
+        "idyllshire",
+        "rhalgr",
+        "kugane",
+        "crystarium",
+        "eulmore",
+        "old sharlayan",
+        "radz-at-han",
+        "tuliyollal",
+        "solution nine",
+        "gold saucer",
+        "wolves' den",
+        "doman enclave",
+        "revenant's toll",
+        "baldesion annex",
+        "residential",
+        "estate",
+        "apartment",
+        "inn",
+        "mizzenmast",
+        "roost",
+        "hourglass",
+        "forgotten knight",
+        "pendants",
+        "andron",
+        "for'ard",
+    ];
+
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
     private readonly ITargetManager targetManager;
@@ -134,6 +193,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly Dictionary<uint, int?> repairIndexCache = [];
 
     private UtilityTask activeTask = UtilityTask.None;
+    private NpcRepairMode activeNpcRepairMode = NpcRepairMode.InnFallback;
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime lastActionUtc = DateTime.MinValue;
     private DateTime lastMoveCommandUtc = DateTime.MinValue;
@@ -149,6 +209,7 @@ public sealed unsafe class UtilityAutomationService
     private DateTime npcRepairTravelStageStartedUtc = DateTime.MinValue;
     private DateTime npcRepairTravelCommandUtc = DateTime.MinValue;
     private ResolvedInnRepairRoute? activeNpcRepairInnRoute;
+    private ResolvedFieldRepairRoute? activeNpcRepairFieldRoute;
     private int npcRepairInnPathIndex;
     private bool repairSubmissionSent;
     private DateTime lastRepairConfirmClickUtc = DateTime.MinValue;
@@ -186,6 +247,23 @@ public sealed unsafe class UtilityAutomationService
 
     public string StatusMessage { get; private set; } = "Idle";
 
+    public string ActiveTaskName
+        => activeTask == UtilityTask.None ? string.Empty : GetTaskLabel(activeTask);
+
+    public string ActiveModeName
+        => activeTask switch
+        {
+            UtilityTask.SelfRepair => "self",
+            UtilityTask.NpcRepair => activeNpcRepairMode == NpcRepairMode.NoInn ? "npc-no-inn" : "npc",
+            UtilityTask.ExtractMateria => "extract-materia",
+            UtilityTask.DesynthFromInventory => "desynth-inventory",
+            _ => string.Empty,
+        };
+
+    public string LastSuccessMessage { get; private set; } = string.Empty;
+    public string LastFailureMessage { get; private set; } = string.Empty;
+    public DateTime LastCompletionUtc { get; private set; } = DateTime.MinValue;
+
     public bool StartSelfRepair()
     {
         if (!TryStartTask(UtilityTask.SelfRepair, "Starting self-repair."))
@@ -196,21 +274,36 @@ public sealed unsafe class UtilityAutomationService
     }
 
     public bool StartNpcRepair()
+        => StartNpcRepair(NpcRepairMode.InnFallback);
+
+    public bool StartNpcRepairNoInn()
+        => StartNpcRepair(NpcRepairMode.NoInn);
+
+    private bool StartNpcRepair(NpcRepairMode mode)
     {
-        if (!TryStartTask(UtilityTask.NpcRepair, "Starting NPC repair."))
+        var statusMessage = mode == NpcRepairMode.NoInn
+            ? "Starting NPC repair without inn fallback."
+            : "Starting NPC repair.";
+        if (!TryStartTask(UtilityTask.NpcRepair, statusMessage))
             return false;
 
+        activeNpcRepairMode = mode;
         if (TryFindNearbyRepairNpc(out var targetNpc))
         {
             BeginNpcRepairWithCandidate(targetNpc, "Starting NPC repair with");
             return true;
         }
 
-        if (!TryBeginNpcRepairInnTravel(out var failureMessage))
+        var startedTravel = mode == NpcRepairMode.NoInn
+            ? TryBeginNpcRepairFieldTravel(out var failureMessage)
+            : TryBeginNpcRepairInnTravel(out failureMessage);
+
+        if (!startedTravel)
         {
             Fail(failureMessage);
             return false;
         }
+
         return true;
     }
 
@@ -272,9 +365,13 @@ public sealed unsafe class UtilityAutomationService
         if (!IsRunning)
             return;
 
+        var message = $"Cancelled {GetTaskLabel(activeTask)}: {reason}";
+        LastFailureMessage = message;
+        LastCompletionUtc = DateTime.UtcNow;
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] Cancelled {GetTaskLabel(activeTask)}: {reason}");
         ResetState();
+        StatusMessage = message;
     }
 
     private bool TryStartTask(UtilityTask task, string statusMessage)
@@ -401,7 +498,7 @@ public sealed unsafe class UtilityAutomationService
 
         if (npcRepairTravelStage != NpcRepairTravelStage.None)
         {
-            UpdateNpcRepairInnTravel(now);
+            UpdateNpcRepairTravel(now);
             return;
         }
 
@@ -740,8 +837,14 @@ public sealed unsafe class UtilityAutomationService
         StatusMessage = $"Waiting for desynthesis response in {GetDesynthCategoryLabel(desiredCategory)}.";
     }
 
-    private void UpdateNpcRepairInnTravel(DateTime now)
+    private void UpdateNpcRepairTravel(DateTime now)
     {
+        if (activeNpcRepairFieldRoute is { } fieldRoute)
+        {
+            UpdateNpcRepairFieldTravel(now, fieldRoute);
+            return;
+        }
+
         if (activeNpcRepairInnRoute is not { } route)
         {
             Fail("NPC repair inn-travel state was lost.");
@@ -764,6 +867,28 @@ public sealed unsafe class UtilityAutomationService
                 break;
             case NpcRepairTravelStage.AwaitingRepairNpc:
                 UpdateNpcRepairInnNpcSearch(now, route);
+                break;
+        }
+    }
+
+    private void UpdateNpcRepairFieldTravel(DateTime now, ResolvedFieldRepairRoute route)
+    {
+        if (now - npcRepairTravelStageStartedUtc > NpcRepairTravelTimeout)
+        {
+            Fail($"Timed out while travelling to {route.AetheryteName} in {route.TerritoryName} for NPC repair.");
+            return;
+        }
+
+        switch (npcRepairTravelStage)
+        {
+            case NpcRepairTravelStage.TeleportingToFieldAetheryte:
+                UpdateNpcRepairFieldTeleport(now, route);
+                break;
+            case NpcRepairTravelStage.AwaitingRepairNpc:
+                UpdateNpcRepairFieldNpcSearch(now, route);
+                break;
+            default:
+                Fail("NPC repair field-travel state was invalid.");
                 break;
         }
     }
@@ -1022,6 +1147,38 @@ public sealed unsafe class UtilityAutomationService
         return true;
     }
 
+    private bool TryBeginNpcRepairFieldTravel(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (!IsLifestreamLoaded())
+        {
+            failureMessage = $"No repair NPC found within {RepairNpcSearchRadius:0}y, and Lifestream was not loaded for field-aetheryte repair travel.";
+            return false;
+        }
+
+        if (!TryResolveFieldRepairRoute(out var route))
+        {
+            failureMessage = $"No repair NPC found within {RepairNpcSearchRadius:0}y, and no eligible unlocked non-city field aetheryte was available for repair travel.";
+            return false;
+        }
+
+        activeNpcRepairFieldRoute = route;
+        npcRepairInnPathIndex = 0;
+        ResetRepairSubmission();
+
+        if (!TrySendNpcRepairFieldTeleport(route))
+        {
+            activeNpcRepairFieldRoute = null;
+            failureMessage = $"No repair NPC found within {RepairNpcSearchRadius:0}y, and ADS could not start the Lifestream field-aetheryte teleport.";
+            return false;
+        }
+
+        SetNpcRepairTravelStage(
+            NpcRepairTravelStage.TeleportingToFieldAetheryte,
+            $"Travelling to {route.AetheryteName} in {route.TerritoryName} for NPC repair.");
+        return true;
+    }
+
     private bool TryResolveInnRepairRoute(out ResolvedInnRepairRoute route)
     {
         route = default;
@@ -1083,6 +1240,85 @@ public sealed unsafe class UtilityAutomationService
         return false;
     }
 
+    private bool TryResolveFieldRepairRoute(out ResolvedFieldRepairRoute route)
+    {
+        route = default;
+        var aetheryteSheet = dataManager.GetExcelSheet<Aetheryte>();
+        if (aetheryteSheet == null)
+            return false;
+
+        ResolvedFieldRepairRoute? sameTerritoryRoute = null;
+        ResolvedFieldRepairRoute? bestUnlockedRoute = null;
+        try
+        {
+            for (var index = 0; index < Plugin.AetheryteList.Length; index++)
+            {
+                var entry = Plugin.AetheryteList[index];
+                if (entry == null || entry.AetheryteId == 0)
+                    continue;
+
+                if (!aetheryteSheet.TryGetRow(entry.AetheryteId, out var aetheryte))
+                    continue;
+
+                if (!aetheryte.IsAetheryte)
+                    continue;
+
+                var territoryTypeId = aetheryte.Territory.RowId;
+                var territoryName = GameInteractionHelper.GetTerritoryName(dataManager, territoryTypeId);
+                var aetheryteName = aetheryte.PlaceName.ValueNullable?.Name.ToString().Trim();
+                if (string.IsNullOrWhiteSpace(aetheryteName))
+                    continue;
+
+                if (!IsEligibleFieldRepairAetheryte(aetheryte.RowId, aetheryteName, territoryName))
+                    continue;
+
+                var candidate = new ResolvedFieldRepairRoute(
+                    territoryTypeId,
+                    territoryName,
+                    aetheryte.RowId,
+                    aetheryteName,
+                    (int)entry.GilCost);
+
+                if (territoryTypeId == clientState.TerritoryType)
+                {
+                    if (sameTerritoryRoute is null || candidate.GilCost < sameTerritoryRoute.Value.GilCost)
+                        sameTerritoryRoute = candidate;
+                    continue;
+                }
+
+                if (bestUnlockedRoute is null || candidate.GilCost < bestUnlockedRoute.Value.GilCost)
+                    bestUnlockedRoute = candidate;
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[ADS][Utility] Failed to inspect unlocked aetherytes for NPC repair field travel.");
+        }
+
+        if (sameTerritoryRoute is not null)
+        {
+            route = sameTerritoryRoute.Value;
+            return true;
+        }
+
+        if (bestUnlockedRoute is not null)
+        {
+            route = bestUnlockedRoute.Value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsEligibleFieldRepairAetheryte(uint aetheryteId, string aetheryteName, string territoryName)
+    {
+        if (FieldRepairDeniedAetheryteIds.Contains(aetheryteId))
+            return false;
+
+        var combined = $"{aetheryteName} {territoryName}".ToLowerInvariant();
+        return !FieldRepairDeniedNameTerms.Any(combined.Contains);
+    }
+
     private bool TryGetUnlockedInnTerritoryGilCost(uint territoryTypeId, out int gilCost)
     {
         gilCost = int.MaxValue;
@@ -1137,6 +1373,17 @@ public sealed unsafe class UtilityAutomationService
         return true;
     }
 
+    private bool TrySendNpcRepairFieldTeleport(ResolvedFieldRepairRoute route)
+    {
+        var command = $"/li {route.AetheryteName}";
+        npcRepairTravelCommandUtc = DateTime.UtcNow;
+        if (!GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
+            return false;
+
+        log.Information($"[ADS][Utility] No local repair NPC was found; sending {command} to reach field aetheryte {route.AetheryteName} in {route.TerritoryName} for NPC repair.");
+        return true;
+    }
+
     private void UpdateNpcRepairInnTeleport(DateTime now, ResolvedInnRepairRoute route)
     {
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
@@ -1166,6 +1413,33 @@ public sealed unsafe class UtilityAutomationService
             route.Path.Length > 0
                 ? $"Moving toward the {route.TerritoryName} inn repair route."
                 : $"Looking for a repair NPC near the {route.TerritoryName} inn.");
+    }
+
+    private void UpdateNpcRepairFieldTeleport(DateTime now, ResolvedFieldRepairRoute route)
+    {
+        if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
+        {
+            StatusMessage = $"Waiting for the field-aetheryte teleport to {route.TerritoryName} to finish.";
+            return;
+        }
+
+        if (clientState.TerritoryType != route.TerritoryTypeId)
+        {
+            StatusMessage = now - npcRepairTravelCommandUtc < LifestreamTeleportSettleCooldown
+                ? $"Waiting for Lifestream to route to {route.AetheryteName}."
+                : $"Waiting to arrive at {route.TerritoryName} for NPC repair.";
+            return;
+        }
+
+        if (objectTable.LocalPlayer == null || now - npcRepairTravelCommandUtc < UiSettleCooldown)
+        {
+            StatusMessage = $"Waiting for {route.TerritoryName} to settle after the field-aetheryte hop.";
+            return;
+        }
+
+        SetNpcRepairTravelStage(
+            NpcRepairTravelStage.AwaitingRepairNpc,
+            $"Looking for a repair NPC near {route.AetheryteName} in {route.TerritoryName}.");
     }
 
     private void UpdateNpcRepairInnPath(DateTime now, ResolvedInnRepairRoute route)
@@ -1231,6 +1505,23 @@ public sealed unsafe class UtilityAutomationService
         Fail($"Reached the {route.TerritoryName} inn repair route, but no repair NPC was found within {RepairNpcSearchRadius:0}y.");
     }
 
+    private void UpdateNpcRepairFieldNpcSearch(DateTime now, ResolvedFieldRepairRoute route)
+    {
+        if (TryFindNearbyRepairNpc(out var targetNpc))
+        {
+            BeginNpcRepairWithCandidate(targetNpc, $"Reached field aetheryte {route.AetheryteName} and found");
+            return;
+        }
+
+        if (now - npcRepairTravelStageStartedUtc < UiSettleCooldown)
+        {
+            StatusMessage = $"Looking for a repair NPC near {route.AetheryteName} in {route.TerritoryName}.";
+            return;
+        }
+
+        Fail($"Reached field aetheryte {route.AetheryteName} in {route.TerritoryName}, but no repair NPC was found within {RepairNpcSearchRadius:0}y.");
+    }
+
     private void SetNpcRepairTravelStage(NpcRepairTravelStage nextStage, string statusMessage)
     {
         npcRepairTravelStage = nextStage;
@@ -1244,6 +1535,7 @@ public sealed unsafe class UtilityAutomationService
         npcRepairTravelStageStartedUtc = DateTime.MinValue;
         npcRepairTravelCommandUtc = DateTime.MinValue;
         activeNpcRepairInnRoute = null;
+        activeNpcRepairFieldRoute = null;
         npcRepairInnPathIndex = 0;
     }
 
@@ -1401,6 +1693,8 @@ public sealed unsafe class UtilityAutomationService
     {
         StopMovementIfNpcRepair();
         log.Information($"[ADS][Utility] {message}");
+        LastSuccessMessage = message;
+        LastCompletionUtc = DateTime.UtcNow;
         ResetState();
         StatusMessage = message;
     }
@@ -1409,6 +1703,8 @@ public sealed unsafe class UtilityAutomationService
     {
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] {message}");
+        LastFailureMessage = message;
+        LastCompletionUtc = DateTime.UtcNow;
         ResetState();
         StatusMessage = message;
     }
@@ -1416,6 +1712,7 @@ public sealed unsafe class UtilityAutomationService
     private void ResetState()
     {
         activeTask = UtilityTask.None;
+        activeNpcRepairMode = NpcRepairMode.InnFallback;
         startedAtUtc = DateTime.MinValue;
         lastActionUtc = DateTime.MinValue;
         lastMoveCommandUtc = DateTime.MinValue;
@@ -1492,6 +1789,13 @@ public sealed unsafe class UtilityAutomationService
         uint AethernetId,
         string AethernetName,
         Vector3[] Path,
+        int GilCost);
+
+    private readonly record struct ResolvedFieldRepairRoute(
+        uint TerritoryTypeId,
+        string TerritoryName,
+        uint AetheryteId,
+        string AetheryteName,
         int GilCost);
 
     private readonly record struct RepairNpcCandidate(IGameObject GameObject, int RepairIndex, float Distance)

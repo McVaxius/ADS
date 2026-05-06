@@ -1,11 +1,9 @@
 using System.Globalization;
 using System.Text;
 using Dalamud.Memory;
-using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
-using ECommons.Automation;
 using ECommons.UIHelpers.AddonMasterImplementations;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
@@ -20,9 +18,6 @@ namespace ADS.Services;
 
 public static class GameInteractionHelper
 {
-    private const int VirtualKeyLeftArrow = 0x25;
-    private const int VirtualKeyRightArrow = 0x27;
-
     private static readonly HashSet<string> KnownInnTerritoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "The Mizzenmast",
@@ -37,65 +32,6 @@ public static class GameInteractionHelper
         "The Baldesion Annex",
         "The For'ard Cabins",
     };
-
-    public static bool TrySetVirtualKeyState(string keyName, bool down, IPluginLog? log = null)
-    {
-        if (!TryResolveVirtualKey(keyName, out var virtualKey))
-        {
-            log?.Warning($"[ADS] Unsupported virtual key '{keyName}'. Use A-Z, 0-9, Left, or Right.");
-            return false;
-        }
-
-        try
-        {
-            // Match VERMAXION's non-global input path. Focus-based input leaks to desktop.
-            if (down)
-                WindowsKeypress.SendKeyHold(virtualKey, null);
-            else
-                WindowsKeypress.SendKeyRelease(virtualKey, null);
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            log?.Warning(ex, $"[ADS] ECommons key {(down ? "hold" : "release")} failed for '{keyName}' ({virtualKey}).");
-            return false;
-        }
-    }
-
-    private static bool TryResolveVirtualKey(string keyName, out VirtualKey virtualKey)
-    {
-        virtualKey = default;
-        var normalized = (keyName ?? string.Empty).Trim().ToUpperInvariant();
-        if (normalized.StartsWith("VK_", StringComparison.Ordinal))
-            normalized = normalized[3..];
-
-        if (normalized.Length == 1)
-        {
-            var c = normalized[0];
-            if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
-            {
-                virtualKey = (VirtualKey)c;
-                return true;
-            }
-        }
-
-        switch (normalized)
-        {
-            case "LEFT":
-            case "LEFTARROW":
-            case "ARROWLEFT":
-                virtualKey = (VirtualKey)VirtualKeyLeftArrow;
-                return true;
-            case "RIGHT":
-            case "RIGHTARROW":
-            case "ARROWRIGHT":
-                virtualKey = (VirtualKey)VirtualKeyRightArrow;
-                return true;
-            default:
-                return false;
-        }
-    }
 
     public static unsafe bool IsAddonVisible(string addonName)
     {

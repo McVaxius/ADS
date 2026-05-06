@@ -12,6 +12,7 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> startDutyFromInside,
         Func<bool> resumeDutyFromInside,
         Func<bool> leaveDuty,
+        Func<string, bool> startRepair,
         Func<string> getStatusJson,
         Func<string> getCurrentAnalysisJson)
     {
@@ -19,6 +20,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
         Register(pluginInterface, "ADS.ResumeDutyFromInside", resumeDutyFromInside);
         Register(pluginInterface, "ADS.LeaveDuty", leaveDuty);
+        Register(pluginInterface, "ADS.StartRepair", startRepair);
         Register(pluginInterface, "ADS.GetStatusJson", getStatusJson);
         Register(pluginInterface, "ADS.GetCurrentAnalysisJson", getCurrentAnalysisJson);
     }
@@ -32,6 +34,13 @@ public sealed class AdsIpcService : IDisposable
     private void Register<TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<TReturn> func)
     {
         var provider = pluginInterface.GetIpcProvider<TReturn>(name);
+        provider.RegisterFunc(func);
+        disposeActions.Add(provider.UnregisterFunc);
+    }
+
+    private void Register<T, TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<T, TReturn> func)
+    {
+        var provider = pluginInterface.GetIpcProvider<T, TReturn>(name);
         provider.RegisterFunc(func);
         disposeActions.Add(provider.UnregisterFunc);
     }

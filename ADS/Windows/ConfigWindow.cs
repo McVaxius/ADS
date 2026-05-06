@@ -79,24 +79,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS keeps vnav running and taps left/right strafe keys to nudge through the frame.");
-
-        var leftKey = plugin.Configuration.TreasureDoorJiggleLeftKey;
-        ImGui.SetNextItemWidth(80f);
-        if (ImGui.InputText("Left strafe key", ref leftKey, 16))
-        {
-            plugin.Configuration.TreasureDoorJiggleLeftKey = string.IsNullOrWhiteSpace(leftKey) ? "A" : leftKey.Trim().ToUpperInvariant();
-            changed = true;
-        }
-
-        ImGui.SameLine();
-        var rightKey = plugin.Configuration.TreasureDoorJiggleRightKey;
-        ImGui.SetNextItemWidth(80f);
-        if (ImGui.InputText("Right strafe key", ref rightKey, 16))
-        {
-            plugin.Configuration.TreasureDoorJiggleRightKey = string.IsNullOrWhiteSpace(rightKey) ? "D" : rightKey.Trim().ToUpperInvariant();
-            changed = true;
-        }
+        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS uses short vnav side-nudge destinations before resuming the door follow-through path.");
 
         ImGui.Separator();
         ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");

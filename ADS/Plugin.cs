@@ -119,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
             StartDutyFromInside,
             ResumeDutyFromInside,
             LeaveDuty,
+            StartRepair,
             GetStatusJson,
             GetCurrentAnalysisJson);
 
@@ -405,6 +406,34 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    public bool StartNpcRepairNoInn()
+    {
+        if (!CanStartManualUtility("NPC repair without inn fallback"))
+            return false;
+
+        var result = UtilityAutomationService.StartNpcRepairNoInn();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
+    public bool StartRepair(string mode)
+    {
+        var normalized = NormalizeRepairMode(mode);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            PrintStatus("Repair mode must be self, npc, or npc-no-inn.");
+            return false;
+        }
+
+        return normalized switch
+        {
+            "self" => StartSelfRepair(),
+            "npc" => StartNpcRepair(),
+            "npc-no-inn" => StartNpcRepairNoInn(),
+            _ => false,
+        };
+    }
+
     public bool StartExtractMateria()
     {
         if (!CanStartManualUtility("materia extraction"))
@@ -434,6 +463,15 @@ public sealed class Plugin : IDalamudPlugin
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                utilityRunning = UtilityAutomationService.IsRunning,
+                utilityTask = UtilityAutomationService.ActiveTaskName,
+                utilityMode = UtilityAutomationService.ActiveModeName,
+                utilityStatus = UtilityAutomationService.StatusMessage,
+                utilityLastSuccess = UtilityAutomationService.LastSuccessMessage,
+                utilityLastFailure = UtilityAutomationService.LastFailureMessage,
+                utilityCompletedAtUtc = UtilityAutomationService.LastCompletionUtc == DateTime.MinValue
+                    ? null
+                    : UtilityAutomationService.LastCompletionUtc.ToString("O"),
                 duty = DutyContextService.Current.CurrentDuty?.EnglishName,
                 territoryTypeId = DutyContextService.Current.TerritoryTypeId,
                 mapId = DutyContextService.Current.MapId,
@@ -536,6 +574,18 @@ public sealed class Plugin : IDalamudPlugin
     public void PrintStatus(string message)
         => ChatGui.Print($"[ADS] {message}");
 
+    private static string NormalizeRepairMode(string? mode)
+    {
+        var normalized = (mode ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "self" or "selfrepair" or "self-repair" => "self",
+            "npc" or "npcrepair" or "npc-repair" => "npc",
+            "npc-no-inn" or "npcnoinn" or "noinn" or "no-inn" => "npc-no-inn",
+            _ => string.Empty,
+        };
+    }
+
     private static object BuildPositionPayload(System.Numerics.Vector3 value)
         => new
         {
@@ -636,8 +686,10 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads resume - resume inside duty\n" +
                 "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
+                "/ads repair self|npc|npc-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
+                "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
                 "/ads stop - drop ownership",
@@ -749,9 +801,28 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (trimmed.Equals("repair", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus("Repair mode must be self, npc, or npc-no-inn.");
+            return;
+        }
+
+        if (trimmed.StartsWith("repair ", StringComparison.OrdinalIgnoreCase))
+        {
+            StartRepair(trimmed["repair ".Length..]);
+            return;
+        }
+
         if (trimmed.Equals("selfrepair", StringComparison.OrdinalIgnoreCase))
         {
             StartSelfRepair();
+            return;
+        }
+
+        if (trimmed.Equals("npcrepair noinn", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("npcrepair no-inn", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepairNoInn();
             return;
         }
 
@@ -893,8 +964,6 @@ public sealed class Plugin : IDalamudPlugin
         if (configuration.Version < 5)
         {
             configuration.TreasureDoorJiggleRecoveryEnabled = true;
-            configuration.TreasureDoorJiggleLeftKey = "A";
-            configuration.TreasureDoorJiggleRightKey = "D";
             configuration.Version = 5;
             changed = true;
         }
@@ -915,24 +984,6 @@ public sealed class Plugin : IDalamudPlugin
         if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
         {
             configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
-            changed = true;
-        }
-
-        var normalizedLeftKey = string.IsNullOrWhiteSpace(configuration.TreasureDoorJiggleLeftKey)
-            ? "A"
-            : configuration.TreasureDoorJiggleLeftKey.Trim().ToUpperInvariant();
-        if (!string.Equals(configuration.TreasureDoorJiggleLeftKey, normalizedLeftKey, StringComparison.Ordinal))
-        {
-            configuration.TreasureDoorJiggleLeftKey = normalizedLeftKey;
-            changed = true;
-        }
-
-        var normalizedRightKey = string.IsNullOrWhiteSpace(configuration.TreasureDoorJiggleRightKey)
-            ? "D"
-            : configuration.TreasureDoorJiggleRightKey.Trim().ToUpperInvariant();
-        if (!string.Equals(configuration.TreasureDoorJiggleRightKey, normalizedRightKey, StringComparison.Ordinal))
-        {
-            configuration.TreasureDoorJiggleRightKey = normalizedRightKey;
             changed = true;
         }
 

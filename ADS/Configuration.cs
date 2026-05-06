@@ -18,8 +18,6 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowDebugSections { get; set; }
     public bool ConsiderTreasureCoffers { get; set; } = true;
     public bool TreasureDoorJiggleRecoveryEnabled { get; set; } = true;
-    public string TreasureDoorJiggleLeftKey { get; set; } = "A";
-    public string TreasureDoorJiggleRightKey { get; set; } = "D";
     public string InstalledRuleSyncVersion { get; set; } = string.Empty;
 
     public void Save()
