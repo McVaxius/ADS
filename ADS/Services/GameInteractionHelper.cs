@@ -48,6 +48,7 @@ public static class GameInteractionHelper
 
         try
         {
+            // Match VERMAXION's non-global input path. Focus-based input leaks to desktop.
             if (down)
                 WindowsKeypress.SendKeyHold(virtualKey, null);
             else

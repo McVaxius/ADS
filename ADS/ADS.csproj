@@ -6,9 +6,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.1.1.7</Version>
-    <FileVersion>0.1.1.7</FileVersion>
-    <AssemblyVersion>0.1.1.7</AssemblyVersion>
+    <Version>0.1.1.8</Version>
+    <FileVersion>0.1.1.8</FileVersion>
+    <AssemblyVersion>0.1.1.8</AssemblyVersion>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <RootNamespace>ADS</RootNamespace>
@@ -16,7 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ECommons" Version="3.1.0.1" />
+    <PackageReference Include="ECommons" Version="2.3.0" />
+    <PackageReference Include="PInvoke.User32" Version="0.7.0" />
   </ItemGroup>
 
   <ItemGroup>
