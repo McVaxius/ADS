@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Dalamud.Memory;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
@@ -141,6 +142,34 @@ public static class GameInteractionHelper
 
     public static unsafe bool ClickYesIfVisible(IPluginLog? log = null)
         => TrySelectYesNo(true, Plugin.GameGui, log);
+
+    public static unsafe bool TryGetSelectYesNoPromptText(IGameGui gameGui, out string promptText)
+    {
+        promptText = string.Empty;
+        try
+        {
+            nint addonPtr = gameGui.GetAddonByName("SelectYesno", 1);
+            if (addonPtr == nint.Zero)
+                return false;
+
+            var addon = (AddonSelectYesno*)addonPtr;
+            if (addon == null || !addon->AtkUnitBase.IsVisible)
+                return false;
+
+            var promptNode = addon->PromptText;
+            if (promptNode == null || !promptNode->NodeText.StringPtr.HasValue)
+                return false;
+
+            var promptSeString = MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr));
+            promptText = promptSeString.TextValue?.Trim() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(promptText);
+        }
+        catch
+        {
+            promptText = string.Empty;
+            return false;
+        }
+    }
 
     public static unsafe bool TrySelectYesNo(bool yes, IGameGui gameGui, IPluginLog? log = null)
     {

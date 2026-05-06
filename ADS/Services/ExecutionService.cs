@@ -69,6 +69,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
+    private static readonly TimeSpan LeaveFinalCofferSpawnGrace = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
     private const float LivePartyDamageProgressRange = 35.0f;
 
@@ -130,7 +131,14 @@ public sealed class ExecutionService
     private DateTime nextLeaveUiAttemptUtc;
     private DateTime leaveLootDistributionWaitUntilUtc;
     private DateTime leaveTreasureSweepClearSinceUtc;
+    private DateTime leaveTreasureSweepGraceUntilUtc;
     private bool leaveTreasureInteractionSent;
+    private bool leaveTreasureSweepStarted;
+    private bool leaveTreasureSweepGraceLogged;
+    private bool leaveTreasureSweepClearLogged;
+    private bool leaveLootDistributionWaitLogged;
+    private bool leaveDutyExitArmed;
+    private string lastLoggedLeaveTreasureKey = string.Empty;
     private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
     private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
     private DateTime livePartyDamageProgressUntilUtc;
@@ -263,12 +271,35 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ResetLeaveState();
+        if (considerTreasureCoffers)
+            BeginLeaveTreasureSweep(DateTime.UtcNow, "manual leave request");
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(
             ExecutionPhase.LeavingDuty,
             considerTreasureCoffers
-                ? "Leave requested. Clearing nearby treasure before duty exit."
+                ? "Leave requested. Final treasure sweep started before duty exit."
                 : "Leave requested. Treasure-coffer scan is off; preparing duty exit.");
+        return true;
+    }
+
+    public bool BeginDutyCompletionTreasureSweep(DutyContextSnapshot context, string dutyName)
+    {
+        if (!context.InInstancedDuty)
+        {
+            SetPhase(CurrentPhase, $"Duty completed: {dutyName}, but ADS is already outside duty.");
+            return false;
+        }
+
+        StopMovementAssists();
+        ClearInteractableCommitment();
+        ClearCommittedForceMarchManualDestination();
+        ResetRecoveryHold();
+        ResetLeaveState();
+        BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
+        CurrentMode = OwnershipMode.Leaving;
+        SetPhase(
+            ExecutionPhase.LeavingDuty,
+            $"Duty completed: {dutyName}. Final treasure sweep started; ADS will arm duty exit after coffers and loot settle.");
         return true;
     }
 
@@ -358,6 +389,8 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
+                    observationMemoryService.Reset();
+                    dungeonFrontierService.Reset();
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty exit detected; ADS ownership released.");
@@ -2867,10 +2900,24 @@ public sealed class ExecutionService
         }
 
         var now = DateTime.UtcNow;
+        if (considerTreasureCoffers && !leaveTreasureSweepStarted)
+            BeginLeaveTreasureSweep(now, "leave state");
+
+        if (considerTreasureCoffers
+            && !leaveDutyExitArmed
+            && GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.LeavingDuty,
+                "Leave requested. SelectYesno is visible before duty exit is armed; ADS is waiting for dialog automation before continuing the treasure sweep.");
+            return;
+        }
+
         if (considerTreasureCoffers && leaveTreasureInteractionSent && now < nextInteractAttemptUtc)
         {
             StopMovementAssists();
-            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Clearing nearby treasure before duty exit.");
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Final treasure sweep is waiting for the treasure interaction result.");
             return;
         }
 
@@ -2882,47 +2929,71 @@ public sealed class ExecutionService
             {
                 leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
                 leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+                leaveTreasureSweepClearLogged = false;
+                leaveLootDistributionWaitLogged = false;
+                LogLeaveTreasureFound(nearbyTreasure);
                 var previousInteractGameObjectId = lastInteractGameObjectId;
                 var previousInteractAttemptUtc = nextInteractAttemptUtc;
                 TryAdvanceInteractableObjective(
                     context,
                     nearbyTreasure,
-                    "Leave requested. Clearing nearby treasure before duty exit.");
+                    "Leave requested. Final treasure sweep is clearing nearby treasure before duty exit.");
                 if (lastInteractGameObjectId == nearbyTreasure.GameObjectId
                     && (previousInteractGameObjectId != lastInteractGameObjectId
                         || nextInteractAttemptUtc > previousInteractAttemptUtc))
                 {
                     leaveTreasureInteractionSent = true;
+                    log?.Information($"[ADS] Final treasure sweep interacted with {nearbyTreasure.Name}; waiting for dialog automation and loot distribution before duty exit.");
                 }
                 return;
             }
         }
 
-        if (considerTreasureCoffers && leaveTreasureInteractionSent)
+        if (considerTreasureCoffers)
         {
+            if (now < leaveTreasureSweepGraceUntilUtc)
+            {
+                StopMovementAssists();
+                LogLeaveTreasureGraceActive(now);
+                SetPhase(
+                    ExecutionPhase.LeavingDuty,
+                    $"Leave requested. Final coffer grace active for {(leaveTreasureSweepGraceUntilUtc - now).TotalSeconds:0.0}s before sweep-clear.");
+                return;
+            }
+
             if (leaveTreasureSweepClearSinceUtc == DateTime.MinValue)
+            {
                 leaveTreasureSweepClearSinceUtc = now;
+                LogLeaveTreasureSweepClear();
+            }
 
             if (now - leaveTreasureSweepClearSinceUtc < LeaveTreasureSweepSettleDelay)
             {
                 StopMovementAssists();
-                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for nearby treasure list to settle before duty exit.");
+                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Final treasure sweep is clear; waiting for the nearby treasure list to settle before duty exit.");
                 return;
             }
 
-            if (leaveLootDistributionWaitUntilUtc == DateTime.MinValue)
-                leaveLootDistributionWaitUntilUtc = now + LeaveLootDistributionDelay;
-
-            if (now < leaveLootDistributionWaitUntilUtc)
+            if (leaveTreasureInteractionSent)
             {
-                StopMovementAssists();
-                SetPhase(
-                    ExecutionPhase.LeavingDuty,
-                    $"Leave requested. Nearby treasure sweep is clear, waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
-                return;
+                if (leaveLootDistributionWaitUntilUtc == DateTime.MinValue)
+                {
+                    leaveLootDistributionWaitUntilUtc = now + LeaveLootDistributionDelay;
+                    LogLeaveLootDistributionWait();
+                }
+
+                if (now < leaveLootDistributionWaitUntilUtc)
+                {
+                    StopMovementAssists();
+                    SetPhase(
+                        ExecutionPhase.LeavingDuty,
+                        $"Leave requested. Final treasure sweep is clear, waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
+                    return;
+                }
             }
         }
 
+        ArmLeaveDutyExit(considerTreasureCoffers ? "final treasure sweep complete" : "treasure sweep disabled");
         StopMovementAssists();
         TrySendLeaveDutyUi();
     }
@@ -2957,9 +3028,63 @@ public sealed class ExecutionService
     {
         var normalized = name.Trim();
         return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("leather sack", StringComparison.OrdinalIgnoreCase)
                || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void BeginLeaveTreasureSweep(DateTime now, string reason)
+    {
+        leaveTreasureSweepStarted = true;
+        leaveTreasureSweepGraceUntilUtc = now + LeaveFinalCofferSpawnGrace;
+        leaveDutyExitArmed = false;
+        log?.Information($"[ADS] Final treasure sweep started ({reason}); final coffer grace active for {LeaveFinalCofferSpawnGrace.TotalSeconds:0.0}s.");
+    }
+
+    private void LogLeaveTreasureGraceActive(DateTime now)
+    {
+        if (leaveTreasureSweepGraceLogged)
+            return;
+
+        leaveTreasureSweepGraceLogged = true;
+        log?.Information($"[ADS] Final coffer grace active; ADS will keep scanning until {(leaveTreasureSweepGraceUntilUtc - now).TotalSeconds:0.0}s elapse.");
+    }
+
+    private void LogLeaveTreasureFound(ObservedInteractable treasure)
+    {
+        if (string.Equals(lastLoggedLeaveTreasureKey, treasure.Key, StringComparison.Ordinal))
+            return;
+
+        lastLoggedLeaveTreasureKey = treasure.Key;
+        log?.Information($"[ADS] Final treasure sweep found {treasure.Name} at {FormatVector(treasure.Position)}; clearing it before duty exit.");
+    }
+
+    private void LogLeaveTreasureSweepClear()
+    {
+        if (leaveTreasureSweepClearLogged)
+            return;
+
+        leaveTreasureSweepClearLogged = true;
+        log?.Information($"[ADS] Final treasure sweep clear; settling for {LeaveTreasureSweepSettleDelay.TotalSeconds:0.0}s before duty exit.");
+    }
+
+    private void LogLeaveLootDistributionWait()
+    {
+        if (leaveLootDistributionWaitLogged)
+            return;
+
+        leaveLootDistributionWaitLogged = true;
+        log?.Information($"[ADS] Final treasure sweep loot wait started for {LeaveLootDistributionDelay.TotalSeconds:0.0}s before duty exit.");
+    }
+
+    private void ArmLeaveDutyExit(string reason)
+    {
+        if (leaveDutyExitArmed)
+            return;
+
+        leaveDutyExitArmed = true;
+        log?.Information($"[ADS] Final treasure sweep safe; duty exit armed ({reason}).");
     }
 
     private void ResetRecoveryHold()
@@ -2974,7 +3099,14 @@ public sealed class ExecutionService
         nextLeaveUiAttemptUtc = DateTime.MinValue;
         leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
         leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
+        leaveTreasureSweepGraceUntilUtc = DateTime.MinValue;
         leaveTreasureInteractionSent = false;
+        leaveTreasureSweepStarted = false;
+        leaveTreasureSweepGraceLogged = false;
+        leaveTreasureSweepClearLogged = false;
+        leaveLootDistributionWaitLogged = false;
+        leaveDutyExitArmed = false;
+        lastLoggedLeaveTreasureKey = string.Empty;
     }
 
     private bool HasRecentLivePartyDamageProgression()
@@ -3597,10 +3729,31 @@ public sealed class ExecutionService
     private unsafe void TrySendLeaveDutyUi()
     {
         var now = DateTime.UtcNow;
-        if (GameInteractionHelper.ClickYesIfVisible(log))
+        if (GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var selectYesnoPrompt))
         {
-            nextLeaveUiAttemptUtc = now + LeaveUiRetryCooldown;
-            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Confirmed the duty-exit prompt; waiting for the zone-out.");
+            if (!IsLeaveDutyConfirmationPrompt(selectYesnoPrompt))
+            {
+                SetPhase(
+                    ExecutionPhase.LeavingDuty,
+                    $"Leave requested. SelectYesno is visible but is not a leave-duty prompt, so ADS is waiting for dialog automation: {selectYesnoPrompt}");
+                return;
+            }
+
+            if (GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log))
+            {
+                nextLeaveUiAttemptUtc = now + LeaveUiRetryCooldown;
+                log?.Information($"[ADS] Leave confirmation clicked after final treasure sweep: {selectYesnoPrompt}");
+                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Confirmed the duty-exit prompt after final treasure sweep; waiting for the zone-out.");
+                return;
+            }
+
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Leave-duty prompt was visible, but ADS could not confirm it yet.");
+            return;
+        }
+
+        if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. SelectYesno is visible, but ADS could not read the prompt; waiting before duty-exit confirmation.");
             return;
         }
 
@@ -3635,6 +3788,23 @@ public sealed class ExecutionService
         }
 
         SetPhase(ExecutionPhase.LeavingDuty, "Leave requested, but ADS could not open the leave-duty UI yet.");
+    }
+
+    private static bool IsLeaveDutyConfirmationPrompt(string prompt)
+    {
+        var normalized = string.Join(
+                ' ',
+                prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToLowerInvariant();
+        if (normalized.Length == 0)
+            return false;
+
+        var asksToLeave = normalized.Contains("leave", StringComparison.Ordinal)
+                          || normalized.Contains("exit", StringComparison.Ordinal);
+        var dutyScoped = normalized.Contains("duty", StringComparison.Ordinal)
+                         || normalized.Contains("instance", StringComparison.Ordinal)
+                         || normalized.Contains("instanced", StringComparison.Ordinal);
+        return asksToLeave && dutyScoped;
     }
 
     private void StopMovementAssists()

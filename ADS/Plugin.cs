@@ -583,20 +583,38 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnDutyCompleted(uint territoryId)
     {
-        var dutyName = DutyContextService.Current.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
-        ObservationMemoryService.Reset();
-        DungeonFrontierService.Reset();
+        var context = DutyContextService.Current;
+        var dutyName = context.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
         if (!ExecutionService.IsOwned)
         {
+            ObservationMemoryService.Reset();
+            DungeonFrontierService.Reset();
             Log.Information($"[ADS] DutyCompleted event for {dutyName}; observation memory cleared while ADS was not executing.");
             return;
         }
 
+        if (ShouldRunDutyCompletionTreasureSweep(context)
+            && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
+        {
+            PrintStatus(ExecutionService.LastStatus);
+            UpdateDtrBar();
+            Log.Information($"[ADS] DutyCompleted event for {dutyName}; ADS kept ownership for the final treasure sweep.");
+            return;
+        }
+
+        ObservationMemoryService.Reset();
+        DungeonFrontierService.Reset();
         ExecutionService.CompleteDuty(dutyName);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         Log.Information($"[ADS] DutyCompleted event for {dutyName}; ownership released and observation memory cleared.");
     }
+
+    private bool ShouldRunDutyCompletionTreasureSweep(DutyContextSnapshot context)
+        => Configuration.ConsiderTreasureCoffers
+           && context.InInstancedDuty
+           && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
+               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
 
     private void RegisterCommands()
     {
