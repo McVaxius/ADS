@@ -1020,19 +1020,20 @@ public sealed unsafe class UtilityAutomationService
             return true;
         }
 
-        repairConfirmClickAttempts++;
         lastRepairConfirmClickUtc = now;
         lastActionUtc = now;
 
         if (GameInteractionHelper.ClickYesIfVisible(log))
         {
+            repairConfirmClickAttempts++;
             StatusMessage = repairConfirmClickAttempts == 1
                 ? statusMessage
                 : $"{statusMessage} Retrying confirmation ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts}).";
             return true;
         }
 
-        StatusMessage = $"{statusMessage} Waiting to retry confirmation ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts}).";
+        StatusMessage = $"{statusMessage} Yes click failed; retrying confirmation after cooldown ({repairConfirmClickAttempts}/{RepairConfirmMaxAttempts} sent).";
+        log.Warning("[ADS] Repair SelectYesno was visible, but the Yes click failed; ADS will retry after cooldown without consuming a repair-confirm attempt.");
         return true;
     }
 
@@ -1048,14 +1049,6 @@ public sealed unsafe class UtilityAutomationService
             || condition[ConditionFlag.WatchingCutscene])
         {
             blocker = "cutscene";
-            return true;
-        }
-
-        if (condition[ConditionFlag.OccupiedInQuestEvent]
-            || condition[ConditionFlag.Occupied33]
-            || condition[ConditionFlag.Occupied39])
-        {
-            blocker = "occupied transition";
             return true;
         }
 
