@@ -968,6 +968,13 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (configuration.Version < 6)
+        {
+            configuration.ResetCameraBeforeInteractEnabled = true;
+            configuration.Version = 6;
+            changed = true;
+        }
+
         var clampedDtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
         if (configuration.DtrBarMode != clampedDtrBarMode)
         {

@@ -81,6 +81,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS uses short vnav side-nudge destinations before resuming the door follow-through path.");
 
+        var resetCameraBeforeInteractEnabled = plugin.Configuration.ResetCameraBeforeInteractEnabled;
+        if (ImGui.Checkbox("Reset camera before progression interact", ref resetCameraBeforeInteractEnabled))
+        {
+            plugin.Configuration.ResetCameraBeforeInteractEnabled = resetCameraBeforeInteractEnabled;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("Before camera-based progression interactions, ADS requests the in-game camera reset flag and waits briefly before sending InteractWithObject. This does not use desktop focus or keyboard input.");
+
         ImGui.Separator();
         ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);

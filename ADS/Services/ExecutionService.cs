@@ -66,6 +66,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
@@ -148,6 +149,9 @@ public sealed class ExecutionService
     private string lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
     private string lastMountedCombatBlindRearFallbackKey = string.Empty;
     private string lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = string.Empty;
+    private string? resetCameraBeforeInteractKey;
+    private DateTime resetCameraBeforeInteractReadyUtc;
+    private string lastResetCameraBeforeInteractLogKey = string.Empty;
     private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
 
     public ExecutionService(
@@ -1945,7 +1949,11 @@ public sealed class ExecutionService
         if (useCameraIndependentInteract)
             LogPraetoriumMagitekArmorCameraIndependentInteract(observedInteractable);
 
-        if (TryInteractWithObject(gameObject, cameraBasedInteract: !useCameraIndependentInteract))
+        var cameraBasedInteract = !useCameraIndependentInteract;
+        if (TryHoldResetCameraBeforeInteract(observedInteractable, cameraBasedInteract, prefix, now))
+            return;
+
+        if (TryInteractWithObject(gameObject, cameraBasedInteract: cameraBasedInteract))
         {
             if (observedInteractable.Classification == InteractableClass.TreasureCoffer)
             {
@@ -2247,6 +2255,7 @@ public sealed class ExecutionService
         nextInteractAttemptUtc = DateTime.MinValue;
         ResetTreasureCofferRouteTracking();
         ResetCloseRangeInteractFallbackTracking();
+        ResetCameraBeforeInteractTracking();
         ClearPendingProgressionInteractResult();
         ResetInteractArrivalWait();
     }
@@ -2377,6 +2386,77 @@ public sealed class ExecutionService
 
     private static string BuildRetryIdentityPositionBucket(Vector3 position)
         => $"{MathF.Round(position.X / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Y / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Z / InteractableRetryIdentityPositionBucketSize, 0):0}";
+
+    private bool TryHoldResetCameraBeforeInteract(ObservedInteractable interactable, bool cameraBasedInteract, string prefix, DateTime now)
+    {
+        if (!ShouldResetCameraBeforeInteract(interactable, cameraBasedInteract))
+        {
+            ResetCameraBeforeInteractTracking();
+            return false;
+        }
+
+        var retryKey = BuildInteractableRetryIdentity(interactable);
+        if (!string.Equals(resetCameraBeforeInteractKey, retryKey, StringComparison.Ordinal))
+        {
+            if (!TryRequestCameraResetBeforeInteract(interactable))
+                return false;
+
+            resetCameraBeforeInteractKey = retryKey;
+            resetCameraBeforeInteractReadyUtc = now + ResetCameraBeforeInteractDelay;
+            if (!string.Equals(lastResetCameraBeforeInteractLogKey, retryKey, StringComparison.Ordinal))
+            {
+                lastResetCameraBeforeInteractLogKey = retryKey;
+                log?.Information($"[ADS] Requested camera reset before interacting with {interactable.Name} ({interactable.Classification}).");
+            }
+
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Resetting camera before interacting with {interactable.Name}.");
+            return true;
+        }
+
+        if (now < resetCameraBeforeInteractReadyUtc)
+        {
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Waiting briefly for camera reset before interacting with {interactable.Name}.");
+            return true;
+        }
+
+        ResetCameraBeforeInteractTracking();
+        return false;
+    }
+
+    private bool ShouldResetCameraBeforeInteract(ObservedInteractable interactable, bool cameraBasedInteract)
+    {
+        return configuration.ResetCameraBeforeInteractEnabled
+               && cameraBasedInteract
+               && interactable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
+    }
+
+    private unsafe bool TryRequestCameraResetBeforeInteract(ObservedInteractable interactable)
+    {
+        try
+        {
+            var cameraManager = CameraManager.Instance();
+            if (cameraManager == null || cameraManager->Camera == null)
+                return false;
+
+            cameraManager->Camera->ShouldResetAngles = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log?.Warning(ex, $"[ADS] Failed to request camera reset before interacting with {interactable.Name}.");
+            return false;
+        }
+    }
+
+    private void ResetCameraBeforeInteractTracking()
+    {
+        resetCameraBeforeInteractKey = null;
+        resetCameraBeforeInteractReadyUtc = DateTime.MinValue;
+    }
 
     private static bool ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(DutyContextSnapshot context, ObservedInteractable interactable)
     {
