@@ -71,6 +71,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan LeaveFinalCofferSpawnGrace = TimeSpan.FromSeconds(2.0);
+    private static readonly TimeSpan LeavePromptLogCooldown = TimeSpan.FromSeconds(5.0);
     private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
     private const float LivePartyDamageProgressRange = 35.0f;
 
@@ -139,6 +140,8 @@ public sealed class ExecutionService
     private bool leaveLootDistributionWaitLogged;
     private bool leaveDutyExitArmed;
     private string lastLoggedLeaveTreasureKey = string.Empty;
+    private string lastLoggedLeavePromptKey = string.Empty;
+    private DateTime lastLoggedLeavePromptAtUtc = DateTime.MinValue;
     private readonly Dictionary<ulong, uint> recentVisiblePartyMemberHp = [];
     private readonly Dictionary<ulong, uint> recentNearbyMonsterHp = [];
     private DateTime livePartyDamageProgressUntilUtc;
@@ -3137,6 +3140,8 @@ public sealed class ExecutionService
         leaveLootDistributionWaitLogged = false;
         leaveDutyExitArmed = false;
         lastLoggedLeaveTreasureKey = string.Empty;
+        lastLoggedLeavePromptKey = string.Empty;
+        lastLoggedLeavePromptAtUtc = DateTime.MinValue;
     }
 
     private bool HasRecentLivePartyDamageProgression()
@@ -3763,6 +3768,7 @@ public sealed class ExecutionService
         {
             if (!IsLeaveDutyConfirmationPrompt(selectYesnoPrompt))
             {
+                LogLeavePromptRejected(selectYesnoPrompt, now);
                 SetPhase(
                     ExecutionPhase.LeavingDuty,
                     $"Leave requested. SelectYesno is visible but is not a leave-duty prompt, so ADS is waiting for dialog automation: {selectYesnoPrompt}");
@@ -3772,11 +3778,12 @@ public sealed class ExecutionService
             if (GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log))
             {
                 nextLeaveUiAttemptUtc = now + LeaveUiRetryCooldown;
-                log?.Information($"[ADS] Leave confirmation clicked after final treasure sweep: {selectYesnoPrompt}");
+                LogLeavePromptClicked(selectYesnoPrompt, now);
                 SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Confirmed the duty-exit prompt after final treasure sweep; waiting for the zone-out.");
                 return;
             }
 
+            LogLeavePromptClickFailed(selectYesnoPrompt, now);
             SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Leave-duty prompt was visible, but ADS could not confirm it yet.");
             return;
         }
@@ -3830,11 +3837,58 @@ public sealed class ExecutionService
             return false;
 
         var asksToLeave = normalized.Contains("leave", StringComparison.Ordinal)
-                          || normalized.Contains("exit", StringComparison.Ordinal);
+                          || normalized.Contains("exit", StringComparison.Ordinal)
+                          || normalized.Contains("abandon", StringComparison.Ordinal);
         var dutyScoped = normalized.Contains("duty", StringComparison.Ordinal)
                          || normalized.Contains("instance", StringComparison.Ordinal)
                          || normalized.Contains("instanced", StringComparison.Ordinal);
         return asksToLeave && dutyScoped;
+    }
+
+    private void LogLeavePromptClicked(string prompt, DateTime now)
+        => LogLeavePrompt(
+            "clicked",
+            prompt,
+            now,
+            static promptText => $"[ADS] Leave SelectYesno prompt recognized and clicked: {promptText}");
+
+    private void LogLeavePromptClickFailed(string prompt, DateTime now)
+        => LogLeavePrompt(
+            "click-failed",
+            prompt,
+            now,
+            static promptText => $"[ADS] Leave SelectYesno prompt recognized but Yes click failed: {promptText}",
+            warning: true);
+
+    private void LogLeavePromptRejected(string prompt, DateTime now)
+        => LogLeavePrompt(
+            "rejected",
+            prompt,
+            now,
+            static promptText => $"[ADS] SelectYesno visible during ADS leave but rejected as non-leave prompt: {promptText}");
+
+    private void LogLeavePrompt(
+        string outcome,
+        string prompt,
+        DateTime now,
+        Func<string, string> buildMessage,
+        bool warning = false)
+    {
+        var logKey = $"{outcome}|{prompt}";
+        if (string.Equals(lastLoggedLeavePromptKey, logKey, StringComparison.Ordinal)
+            && now - lastLoggedLeavePromptAtUtc < LeavePromptLogCooldown)
+        {
+            return;
+        }
+
+        lastLoggedLeavePromptKey = logKey;
+        lastLoggedLeavePromptAtUtc = now;
+
+        var message = buildMessage(prompt);
+        if (warning)
+            log?.Warning(message);
+        else
+            log?.Information(message);
     }
 
     private void StopMovementAssists()
