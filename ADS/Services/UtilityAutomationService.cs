@@ -40,7 +40,7 @@ public sealed unsafe class UtilityAutomationService
     }
 
     private const uint RepairShopEventId = 720915;
-    private const float RepairNpcSearchRadius = 30.0f;
+    private const float RepairNpcSearchRadius = 80.0f;
     private const float RepairNpcInteractRadius = 3.0f;
     private const float InnPathWaypointReachedRadius = 4.0f;
     private const int SelfRepairGeneralAction = 6;
