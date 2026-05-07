@@ -866,6 +866,7 @@ public sealed class DungeonFrontierService
                 HorizontalDistance = GetHorizontalDistance(playerPosition, point.Position),
                 VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Y),
             })
+            .Where(x => x.VerticalDelta <= FrontierVisitVerticalCap)
             .OrderBy(x => x.HorizontalDistance)
             .ThenBy(x => x.VerticalDelta)
             .ThenBy(x => x.Index)
@@ -893,7 +894,7 @@ public sealed class DungeonFrontierService
         if (markedCount > 0)
         {
             log.Information(
-                $"[ADS] Treasure route catch-up marked {markedCount} earlier room point(s) visited before nearest route point {nearest.Point.Name} at {FormatVector(nearest.Point.Position)}. This prevents post-door backtracking to prior treasure rooms.");
+                $"[ADS] Treasure route catch-up marked {markedCount} earlier room point(s) visited before same-floor route point {nearest.Point.Name} at {FormatVector(nearest.Point.Position)} (XZ {nearest.HorizontalDistance:0.0}y, Y {nearest.VerticalDelta:0.0}y). This prevents post-door backtracking to prior treasure rooms.");
         }
     }
 
@@ -1024,8 +1025,13 @@ public sealed class DungeonFrontierService
             {
                 Point = point,
                 Distance = GetHorizontalDistance(playerPosition.Value, point.Position),
+                VerticalDelta = point.UsePlayerYForNavigation
+                    ? 0f
+                    : MathF.Abs(point.Position.Y - playerPosition.Value.Y),
             })
-            .OrderBy(x => x.Distance)
+            .OrderBy(x => x.VerticalDelta <= FrontierVisitVerticalCap ? 0 : 1)
+            .ThenBy(x => x.Distance)
+            .ThenBy(x => x.VerticalDelta)
             .ThenBy(x => x.Point.LevelRowId)
             .Select(x => x.Point)
             .First();

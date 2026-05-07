@@ -25,6 +25,8 @@ public sealed class ExecutionService
     private const float RequiredInteractionConsumedRelocationRange = 20.0f;
     private const float TreasureDoorFollowThroughDistance = 10.0f;
     private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
+    private const float TreasureDoorFollowThroughStaleVerticalDelta = 20.0f;
+    private const float TreasureDoorPlannerSameFloorVerticalDelta = 6.0f;
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const uint BigCheekedCakeMonsters = 6942069; // Hello adventurer, are you enjoying my ai slop today :D
     private const uint PraetoriumMagitekCannonActionId = 1128;
@@ -505,6 +507,13 @@ public sealed class ExecutionService
                         planner.ObjectiveKind,
                         out var switchReason))
                 {
+                    PrepareInteractableSwitch(
+                        context,
+                        committedInteractable,
+                        committedInteractableObjectiveKind,
+                        plannerInteractable,
+                        planner.ObjectiveKind,
+                        switchReason);
                     CommitInteractable(plannerInteractable, planner.ObjectiveKind);
                     TryAdvanceInteractableObjective(context, plannerInteractable, $"{prefix} {switchReason}");
                     return;
@@ -2144,6 +2153,16 @@ public sealed class ExecutionService
             && pendingProgressionInteractable is { Classification: InteractableClass.TreasureDoor }
             && pendingTreasureDoorTransitionPoint is not null)
         {
+            if (ShouldSwitchFromStaleTreasureDoorFollowThrough(
+                    plannerInteractable,
+                    plannerObjectiveKind,
+                    playerPosition,
+                    out var staleReason))
+            {
+                reason = $"Switching from stale treasure door follow-through on {currentInteractable.Name} to same-floor planner target {plannerInteractable.Name}. {staleReason}";
+                return true;
+            }
+
             reason = $"Holding committed treasure door follow-through on {currentInteractable.Name}; ADS will not switch to {plannerInteractable.Name} until the opened-door follow-through resolves.";
             return false;
         }
@@ -2163,6 +2182,63 @@ public sealed class ExecutionService
         }
 
         return false;
+    }
+
+    private bool ShouldSwitchFromStaleTreasureDoorFollowThrough(
+        ObservedInteractable plannerInteractable,
+        PlannerObjectiveKind plannerObjectiveKind,
+        Vector3? playerPosition,
+        out string reason)
+    {
+        reason = string.Empty;
+        var transitionPoint = pendingTreasureDoorTransitionPoint;
+        if (!playerPosition.HasValue || transitionPoint is null)
+            return false;
+
+        if (plannerObjectiveKind is not (PlannerObjectiveKind.TreasureDoor or PlannerObjectiveKind.TreasureCoffer)
+            || plannerInteractable.Classification is not (InteractableClass.TreasureDoor or InteractableClass.TreasureCoffer))
+        {
+            return false;
+        }
+
+        var followThroughVerticalDelta = MathF.Abs(transitionPoint.Position.Y - playerPosition.Value.Y);
+        var plannerVerticalDelta = MathF.Abs(plannerInteractable.Position.Y - playerPosition.Value.Y);
+        if (followThroughVerticalDelta <= TreasureDoorFollowThroughStaleVerticalDelta
+            || plannerVerticalDelta > TreasureDoorPlannerSameFloorVerticalDelta)
+        {
+            return false;
+        }
+
+        reason = $"Pending follow-through {transitionPoint.Name} at {FormatVector(transitionPoint.Position)} is Y {followThroughVerticalDelta:0.0}y from player {FormatVector(playerPosition.Value)}, while planner target is Y {plannerVerticalDelta:0.0}y from player.";
+        return true;
+    }
+
+    private void PrepareInteractableSwitch(
+        DutyContextSnapshot context,
+        ObservedInteractable currentInteractable,
+        PlannerObjectiveKind currentObjectiveKind,
+        ObservedInteractable plannerInteractable,
+        PlannerObjectiveKind plannerObjectiveKind,
+        string switchReason)
+    {
+        if (currentObjectiveKind != PlannerObjectiveKind.TreasureDoor
+            || currentInteractable.Classification != InteractableClass.TreasureDoor)
+        {
+            return;
+        }
+
+        if (!ShouldSwitchFromStaleTreasureDoorFollowThrough(
+                plannerInteractable,
+                plannerObjectiveKind,
+                objectTable.LocalPlayer?.Position,
+                out var staleReason))
+        {
+            return;
+        }
+
+        observationMemoryService.MarkProgressionInteractionSent(context, currentInteractable);
+        TryRetirePendingSatisfiedManualDestination(currentInteractable, objectTable.LocalPlayer?.Position);
+        log?.Information($"[ADS] Retired stale treasure door follow-through on {currentInteractable.Name} before planner switch. {staleReason} {switchReason}");
     }
 
     private static PlannerObjectiveKind GetObjectiveKindForInteractable(InteractableClass classification)
@@ -2521,6 +2597,13 @@ public sealed class ExecutionService
                     planner.ObjectiveKind,
                     out var switchReason))
             {
+                PrepareInteractableSwitch(
+                    context,
+                    pendingInteractable,
+                    GetObjectiveKindForInteractable(pendingInteractable.Classification),
+                    plannerInteractable,
+                    planner.ObjectiveKind,
+                    switchReason);
                 log?.Information($"[ADS] Clearing stale interact follow-through on {pendingInteractable.Name}. {switchReason}");
                 ClearInteractableCommitment();
                 return false;
@@ -2579,17 +2662,25 @@ public sealed class ExecutionService
             && pendingProgressionInteractAfterWaitUntilUtc <= now;
         if (now < pendingProgressionInteractResultUntilUtc)
         {
-            if (treasureDoorReadyForFollowThrough
-                && TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPoint))
+            if (treasureDoorReadyForFollowThrough)
             {
-                if (reachedTreasureDoorTransitionPoint)
+                if (TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPoint, out var staleTreasureDoorFollowThrough))
                 {
-                    observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
-                    TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
-                    ClearInteractableCommitment();
+                    if (reachedTreasureDoorTransitionPoint)
+                    {
+                        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                        TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                        ClearInteractableCommitment();
+                    }
+
+                    return true;
                 }
 
-                return true;
+                if (staleTreasureDoorFollowThrough)
+                {
+                    ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
+                    return true;
+                }
             }
 
             StopMovementAssists();
@@ -2635,17 +2726,25 @@ public sealed class ExecutionService
             return true;
         }
 
-        if (treasureDoorReadyForFollowThrough
-            && TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPointAfterWindow))
+        if (treasureDoorReadyForFollowThrough)
         {
-            if (reachedTreasureDoorTransitionPointAfterWindow)
+            if (TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPointAfterWindow, out var staleTreasureDoorFollowThroughAfterWindow))
             {
-                observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
-                TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
-                ClearInteractableCommitment();
+                if (reachedTreasureDoorTransitionPointAfterWindow)
+                {
+                    observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                    TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                    ClearInteractableCommitment();
+                }
+
+                return true;
             }
 
-            return true;
+            if (staleTreasureDoorFollowThroughAfterWindow)
+            {
+                ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
+                return true;
+            }
         }
 
         observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
@@ -2663,6 +2762,27 @@ public sealed class ExecutionService
         return true;
     }
 
+    private void ClearStaleTreasureDoorFollowThrough(
+        DutyContextSnapshot context,
+        ObservedInteractable pendingInteractable,
+        Vector3? playerPosition,
+        string prefix)
+    {
+        var transitionPoint = pendingTreasureDoorTransitionPoint;
+        var staleSummary = transitionPoint is not null && playerPosition.HasValue
+            ? $"target {transitionPoint.Name} at {FormatVector(transitionPoint.Position)} was Y {MathF.Abs(transitionPoint.Position.Y - playerPosition.Value.Y):0.0}y from player {FormatVector(playerPosition.Value)}"
+            : "target no longer had enough live position truth";
+
+        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+        TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+        ClearInteractableCommitment();
+        StopMovementAssists();
+        log?.Information($"[ADS] Cleared stale treasure door follow-through for {pendingInteractable.Name}; {staleSummary}. ADS will replan from refreshed live duty truth.");
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"{prefix} Treasure door follow-through for {pendingInteractable.Name} became stale across floors; ADS marked the opened door consumed and is replanning from live duty truth.");
+    }
+
     private void ClearPendingProgressionInteractResult()
     {
         pendingProgressionInteractable = null;
@@ -2675,9 +2795,10 @@ public sealed class ExecutionService
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
-    private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint)
+    private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint, out bool staleCrossFloorTarget)
     {
         reachedTransitionPoint = false;
+        staleCrossFloorTarget = false;
         var frontierPoint = pendingTreasureDoorTransitionPoint;
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (frontierPoint is null || !playerPosition.HasValue)
@@ -2698,6 +2819,13 @@ public sealed class ExecutionService
         var targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition.Value);
         var targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition.Value);
         var targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y);
+        if (targetVerticalDelta > TreasureDoorFollowThroughStaleVerticalDelta)
+        {
+            staleCrossFloorTarget = true;
+            ResetTreasureDoorJiggleTracking(releaseKeys: true);
+            return false;
+        }
+
         var arrivalRange = frontierPoint.ArrivalRadiusXz > 0f
             ? frontierPoint.ArrivalRadiusXz
             : PreferredFrontierArrivalRange;
