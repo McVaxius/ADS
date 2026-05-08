@@ -4,7 +4,6 @@ using Dalamud.Memory;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
-using ECommons.UIHelpers.AddonMasterImplementations;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -120,47 +119,21 @@ public static class GameInteractionHelper
             if (addon == null || !addon->IsVisible)
                 return false;
 
-            var addonMaster = new AddonMaster.SelectYesno(addon);
-            if (yes)
-                addonMaster.Yes();
-            else
-                addonMaster.No();
-
-            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via ECommons AddonMaster.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            log?.Warning(ex, $"[ADS] ECommons SelectYesno {(yes ? "Yes" : "No")} failed; falling back to raw callback.");
-            return TryFireSelectYesNoCallback(yes, gameGui, log);
-        }
-    }
-
-    private static unsafe bool TryFireSelectYesNoCallback(bool yes, IGameGui gameGui, IPluginLog? log = null)
-    {
-        try
-        {
-            nint addonPtr = gameGui.GetAddonByName("SelectYesno", 1);
-            if (addonPtr == nint.Zero)
-                return false;
-
-            var addon = (AtkUnitBase*)addonPtr;
-            if (addon == null || !addon->IsVisible)
-                return false;
-
             var callbackIndex = yes ? 0 : 1;
             var atkValues = stackalloc AtkValue[2];
+            atkValues[0] = default;
+            atkValues[1] = default;
             atkValues[0].Type = AtkValueType.Int;
             atkValues[0].Int = callbackIndex;
             atkValues[1].Type = AtkValueType.Int;
             atkValues[1].Int = 0;
             addon->FireCallback(2, atkValues);
-            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via raw callback fallback.");
+            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via direct callback.");
             return true;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, $"[ADS] SelectYesno raw callback failed for {(yes ? "Yes" : "No")}.");
+            log?.Warning(ex, $"[ADS] SelectYesno direct callback failed for {(yes ? "Yes" : "No")}.");
             return false;
         }
     }

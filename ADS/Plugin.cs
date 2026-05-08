@@ -15,7 +15,6 @@ using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using ECommons;
 
 namespace ADS;
 
@@ -73,21 +72,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
-    private bool ecommonsInitialized;
 
     public Plugin()
     {
-        try
-        {
-            ECommonsMain.Init(PluginInterface, this);
-            ecommonsInitialized = true;
-            Log.Information("[ADS] ECommons initialized.");
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "[ADS] Failed to initialize ECommons; ECommons-backed input/dialog helpers may be unavailable.");
-        }
-
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         var bundledRuleSync = BundledConfigSyncHelper.SyncBundledRulesIfPluginVersionAdvanced(
@@ -186,20 +173,6 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
-
-        if (ecommonsInitialized)
-        {
-            try
-            {
-                ECommonsMain.Dispose();
-                ecommonsInitialized = false;
-                Log.Information("[ADS] ECommons disposed.");
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "[ADS] Failed to dispose ECommons.");
-            }
-        }
     }
 
     public void OpenMainUi()
