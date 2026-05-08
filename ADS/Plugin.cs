@@ -5,6 +5,7 @@ using ADS.Models;
 using ADS.Services;
 using ADS.Windows;
 using Dalamud.Game.Command;
+using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.DutyState;
 using Dalamud.Game.Gui;
@@ -134,6 +135,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         Framework.Update += OnFrameworkUpdate;
         DutyState.DutyCompleted += OnDutyCompleted;
+        ChatGui.ChatMessage += OnChatMessage;
 
         SetupDtrBar();
         UpdateDtrBar();
@@ -158,6 +160,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         DutyState.DutyCompleted -= OnDutyCompleted;
+        ChatGui.ChatMessage -= OnChatMessage;
 
         InnEntryService.Cancel("plugin dispose");
         UtilityAutomationService.Cancel("plugin dispose");
@@ -600,6 +603,9 @@ public sealed class Plugin : IDalamudPlugin
         UtilityAutomationService.Update();
         UpdateDtrBar();
     }
+
+    private void OnChatMessage(IHandleableChatMessage message)
+        => ExecutionService.HandleChatMessage(message.Message.TextValue);
 
     private void OnDutyCompleted(IDutyStateEventArgs args)
         => OnDutyCompleted(args.TerritoryType.RowId);

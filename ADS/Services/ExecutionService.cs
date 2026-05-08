@@ -65,6 +65,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
+    private static readonly TimeSpan TreasureCofferLockedRetryDelay = TimeSpan.FromSeconds(15.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
@@ -76,6 +77,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan LeavePromptLogCooldown = TimeSpan.FromSeconds(5.0);
     private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
     private const float LivePartyDamageProgressRange = 35.0f;
+    private const string TreasureCofferLockedTightMessage = "The coffer is locked tight.";
 
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
@@ -117,6 +119,8 @@ public sealed class ExecutionService
     private DateTime treasureCofferRouteStartedUtc;
     private DateTime treasureCofferLastProgressUtc;
     private float treasureCofferBestHorizontalDistance = float.MaxValue;
+    private string? treasureCofferLockedRetryKey;
+    private DateTime treasureCofferLockedNextRetryUtc;
     private string? treasureRouteStuckTargetKey;
     private Vector3? treasureRouteStuckBaselinePosition;
     private DateTime treasureRouteStuckLastProgressUtc;
@@ -197,6 +201,31 @@ public sealed class ExecutionService
     public bool IsOwned
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving;
 
+    public bool HandleChatMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)
+            || !message.Contains(TreasureCofferLockedTightMessage, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!IsActiveOwnedDutyMode()
+            || committedInteractableObjectiveKind != PlannerObjectiveKind.TreasureCoffer
+            || string.IsNullOrWhiteSpace(committedInteractableKey))
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        ArmTreasureCofferLockedRetry(committedInteractableKey, now, "locked-tight chat");
+        observationMemoryService.ClearTreasureCofferSuppression(committedInteractableKey, "locked-tight chat");
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"Treasure coffer reported locked tight. ADS is holding the committed coffer and will retry in {TreasureCofferLockedRetryDelay.TotalSeconds:0}s.");
+        return true;
+    }
+
     public void ReleaseHeldMovementKeys(string reason)
     {
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
@@ -204,6 +233,9 @@ public sealed class ExecutionService
         if (hadNudge)
             log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
     }
+
+    private bool IsActiveOwnedDutyMode()
+        => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside;
 
     public bool StartDutyFromOutside()
     {
@@ -475,6 +507,13 @@ public sealed class ExecutionService
             ResetRecoveryHold();
             StopMovementAssists();
             SetPhase(ExecutionPhase.CombatHold, $"{prefix} Combat is active, so ADS is holding progression until combat clears.");
+            return;
+        }
+
+        var lockedRetryInteractable = ResolveCommittedInteractable(context, observation);
+        if (lockedRetryInteractable is not null
+            && TryAdvanceCommittedTreasureCofferLockedRetry(context, lockedRetryInteractable, prefix))
+        {
             return;
         }
 
@@ -1902,6 +1941,10 @@ public sealed class ExecutionService
             return;
         }
 
+        var now = DateTime.UtcNow;
+        if (TryHoldTreasureCofferLockedRetry(context, observedInteractable, prefix, now))
+            return;
+
         StageSatisfiedManualDestinationForLiveProgression(context, observedInteractable, playerPosition.Value);
 
         var effectiveRule = objectPriorityRuleService.GetEffectiveRule(
@@ -1935,7 +1978,6 @@ public sealed class ExecutionService
         }
 
         StopMovementAssists();
-        var now = DateTime.UtcNow;
         if (TryHoldConfiguredArrivalWait(
                 observedInteractable,
                 waitBeforeInteractSeconds,
@@ -1969,7 +2011,15 @@ public sealed class ExecutionService
         {
             if (observedInteractable.Classification == InteractableClass.TreasureCoffer)
             {
-                observationMemoryService.MarkTreasureInteractionSent(observedInteractable);
+                if (IsTreasureCofferLockedRetryActive(observedInteractable))
+                {
+                    ArmTreasureCofferLockedRetry(observedInteractable.Key, now, "retry interact sent");
+                    observationMemoryService.ClearTreasureCofferSuppression(observedInteractable.Key, "locked-tight retry interact");
+                }
+                else
+                {
+                    observationMemoryService.MarkTreasureInteractionSent(observedInteractable);
+                }
             }
             else
             {
@@ -2100,8 +2150,12 @@ public sealed class ExecutionService
         if (committedInteractableKey == interactable.Key && committedInteractableObjectiveKind == objectiveKind)
             return;
 
-        if (objectiveKind != PlannerObjectiveKind.TreasureCoffer || committedInteractableKey != interactable.Key)
+        var switchingTreasureCofferIdentity = objectiveKind != PlannerObjectiveKind.TreasureCoffer || committedInteractableKey != interactable.Key;
+        if (switchingTreasureCofferIdentity)
+        {
+            ResetTreasureCofferLockedRetry();
             ResetTreasureCofferRouteTracking();
+        }
 
         if (committedInteractableKey != interactable.Key || committedInteractableObjectiveKind != objectiveKind)
             ResetCloseRangeInteractFallbackTracking();
@@ -2115,6 +2169,78 @@ public sealed class ExecutionService
 
     private static bool IsStickyInteractableCommitment(PlannerObjectiveKind objectiveKind)
         => objectiveKind == PlannerObjectiveKind.TreasureCoffer;
+
+    private bool TryAdvanceCommittedTreasureCofferLockedRetry(
+        DutyContextSnapshot context,
+        ObservedInteractable interactable,
+        string prefix)
+    {
+        if (!IsTreasureCofferLockedRetryActive(interactable))
+            return false;
+
+        var now = DateTime.UtcNow;
+        if (TryHoldTreasureCofferLockedRetry(context, interactable, prefix, now))
+            return true;
+
+        TryAdvanceInteractableObjective(
+            context,
+            interactable,
+            $"{prefix} Retrying locked treasure coffer after {TreasureCofferLockedRetryDelay.TotalSeconds:0}s.");
+        return true;
+    }
+
+    private bool TryHoldTreasureCofferLockedRetry(
+        DutyContextSnapshot context,
+        ObservedInteractable interactable,
+        string prefix,
+        DateTime now)
+    {
+        if (!IsTreasureCofferLockedRetryActive(interactable))
+            return false;
+
+        observationMemoryService.ClearTreasureCofferSuppression(interactable.Key, "locked-tight retry hold");
+
+        if (context.InCombat)
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.CombatHold,
+                $"{prefix} Treasure coffer {interactable.Name} is locked tight; ADS is holding this coffer until combat clears.");
+            return true;
+        }
+
+        if (now < treasureCofferLockedNextRetryUtc)
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Treasure coffer {interactable.Name} is locked tight; retry in {(treasureCofferLockedNextRetryUtc - now).TotalSeconds:0.0}s.");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ArmTreasureCofferLockedRetry(string interactableKey, DateTime now, string reason)
+    {
+        treasureCofferLockedRetryKey = interactableKey;
+        treasureCofferLockedNextRetryUtc = now + TreasureCofferLockedRetryDelay;
+        log?.Information($"[ADS] Treasure coffer {interactableKey} reported locked tight; retry armed for {TreasureCofferLockedRetryDelay.TotalSeconds:0}s after {reason}.");
+    }
+
+    private bool IsTreasureCofferLockedRetryActive(ObservedInteractable interactable)
+        => interactable.Classification == InteractableClass.TreasureCoffer
+           && IsTreasureCofferLockedRetryActive(interactable.Key);
+
+    private bool IsTreasureCofferLockedRetryActive(string interactableKey)
+        => !string.IsNullOrWhiteSpace(treasureCofferLockedRetryKey)
+           && string.Equals(treasureCofferLockedRetryKey, interactableKey, StringComparison.Ordinal);
+
+    private void ResetTreasureCofferLockedRetry()
+    {
+        treasureCofferLockedRetryKey = null;
+        treasureCofferLockedNextRetryUtc = DateTime.MinValue;
+    }
 
     private static bool IsInteractablePlannerObjective(PlannerObjectiveKind objectiveKind)
         => objectiveKind is PlannerObjectiveKind.RequiredInteractable
@@ -2332,6 +2458,7 @@ public sealed class ExecutionService
         committedInteractableObjectiveKind = PlannerObjectiveKind.None;
         lastInteractGameObjectId = 0;
         nextInteractAttemptUtc = DateTime.MinValue;
+        ResetTreasureCofferLockedRetry();
         ResetTreasureCofferRouteTracking();
         ResetCloseRangeInteractFallbackTracking();
         ResetCameraBeforeInteractTracking();
@@ -2342,6 +2469,9 @@ public sealed class ExecutionService
     private bool TrySkipStuckTreasureCoffer(ObservedInteractable observedInteractable, float targetHorizontalDistance, string prefix)
     {
         if (observedInteractable.Classification != InteractableClass.TreasureCoffer)
+            return false;
+
+        if (IsTreasureCofferLockedRetryActive(observedInteractable))
             return false;
 
         var now = DateTime.UtcNow;

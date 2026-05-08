@@ -350,6 +350,37 @@ public sealed class ObservationMemoryService
     public void MarkTreasureCofferSkipped(ObservedInteractable interactable, string reason)
         => MarkTreasureSuppressed(interactable, SkippedTreasureSuppressionDuration, reason);
 
+    public bool ClearTreasureCofferSuppression(string interactableKey, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(interactableKey))
+            return false;
+
+        var removed = treasureSuppressionUntil.Remove(interactableKey);
+        if (knownInteractables.TryGetValue(interactableKey, out var interactable)
+            && interactable.Classification == InteractableClass.TreasureCoffer
+            && interactable.GhostReason == GhostReason.Consumed)
+        {
+            knownInteractables[interactableKey] = new ObservedInteractable
+            {
+                Key = interactable.Key,
+                GameObjectId = interactable.GameObjectId,
+                DataId = interactable.DataId,
+                MapId = interactable.MapId,
+                ObjectKind = interactable.ObjectKind,
+                Name = interactable.Name,
+                Position = interactable.Position,
+                LastSeenUtc = DateTime.UtcNow,
+                Classification = interactable.Classification,
+                GhostReason = GhostReason.SeenPreviously,
+            };
+        }
+
+        if (removed)
+            log.Information($"[ADS] Cleared treasure coffer suppression for {interactableKey} after {reason}.");
+
+        return removed;
+    }
+
     private void MarkTreasureSuppressed(ObservedInteractable interactable, TimeSpan duration, string reason)
     {
         if (interactable.Classification != InteractableClass.TreasureCoffer)
