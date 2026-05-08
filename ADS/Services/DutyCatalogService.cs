@@ -29,7 +29,7 @@ public sealed class DutyCatalogService
     private static readonly Dictionary<string, DutyClearanceStatus> ClearanceStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["copperbell mines"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        ["copperbell mines"] = DutyClearanceStatus.FourPlayerSyncCleared,
         ["haukke manor"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
         ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerDutySupport,
