@@ -122,6 +122,13 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             plugin.DialogYesNoRuleService.Reload();
         ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastLoadStatus);
+        var processDialogRulesOutsideOwnedDuty = plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty;
+        if (ImGui.Checkbox("Process dialog rules outside owned duties", ref processDialogRulesOutsideOwnedDuty))
+        {
+            plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty = processDialogRulesOutsideOwnedDuty;
+            changed = true;
+        }
+        ImGui.TextWrapped("When enabled, dialog rules can run whenever ADS is enabled, your character is logged in, and the game is not zoning. Disable this to require ADS-owned or leaving duty execution.");
         ImGui.TextWrapped("Dialog yes/no rules are still loaded from the plugin config directory, but ADS refreshes this default JSON from the packaged file when it detects a newer plugin version than the last synced version stored in PluginConfigDirectory\\ADS.json. No separate dialog preset system is added in this pass.");
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };

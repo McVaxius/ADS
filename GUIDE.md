@@ -82,6 +82,7 @@
   - `Enable DTR bar`
   - `Show debug sections in the main window`
   - `Consider treasure coffers in planner`
+  - `Process dialog rules outside owned duties`
 - Important buttons:
   - `Open rules JSON`
   - `Open frontier labels`
@@ -146,7 +147,7 @@
 
 - Spreadsheet editor for `dialog-yesno-rules.json`.
 - These are global prompt matches, not duty-scoped object rules.
-- `Addon` defaults to `SelectYesno`; use this mainly when ADS needs to answer a yes/no prompt while it owns a supported duty.
+- `Addon` defaults to `SelectYesno`; use this when ADS needs to answer a yes/no prompt under the configured dialog-rule scope.
 - `Delay` waits that many seconds before ADS restores/clicks. If the watched addon or notification disappears first, the delay timer resets.
 - `Notification` can name a minimized notification addon, and `NotificationCB` can restore it with callback text such as `_Notification true 0 16`.
 
@@ -415,7 +416,9 @@
 
 - Dialog rules live in `ADS/dialog-yesno-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
 - These rules are global prompt matches. They are not duty-scoped.
-- ADS only applies them while it owns a supported duty, so they do not become a global background yes-clicker.
+- By default, ADS applies them whenever the plugin is enabled, the character is logged in, and the game is not zoning. This covers idle, observing, unsupported duty, and outside-duty states.
+- Disable `Process dialog rules outside owned duties` in Settings to restore the older owned-or-leaving instanced-duty-only behavior.
+- `Status JSON` includes `processDialogRulesOutsideOwnedDuty` so testers can confirm which gate is active.
 - `Addon` defaults to `SelectYesno`. Existing rules without an `Addon` field keep that default.
 - `MatchMode` supports `Contains` and `Exact`.
 - `Response` supports `Yes` and `No`.

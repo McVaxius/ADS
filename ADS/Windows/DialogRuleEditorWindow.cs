@@ -47,6 +47,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         EnsureDraftLoaded();
 
         ImGui.TextWrapped("Spreadsheet-style editor for dialog-yesno-rules.json. These rules are global dialog matches, not duty-scoped.");
+        ImGui.TextWrapped("Processing scope follows Settings > Process dialog rules outside owned duties.");
         ImGui.TextWrapped("Default Addon is SelectYesno. Optional Notification/NotificationCB can restore minimized prompts before ADS clicks.");
         ImGui.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
         ImGui.TextWrapped(editorStatus);

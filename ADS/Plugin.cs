@@ -435,6 +435,7 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 pluginEnabled = Configuration.PluginEnabled,
+                processDialogRulesOutsideOwnedDuty = Configuration.ProcessDialogRulesOutsideOwnedDuty,
                 version = PluginInfo.GetVersion(),
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
@@ -598,7 +599,11 @@ public sealed class Plugin : IDalamudPlugin
             ExecutionService.CurrentMode,
             Configuration.ConsiderTreasureCoffers);
         ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled, Configuration.ConsiderTreasureCoffers);
-        DialogAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+        DialogAutomationService.Update(
+            DutyContextService.Current,
+            ExecutionService.CurrentMode,
+            Configuration.PluginEnabled,
+            Configuration.ProcessDialogRulesOutsideOwnedDuty);
         InnEntryService.Update();
         UtilityAutomationService.Update();
         UpdateDtrBar();
@@ -951,6 +956,13 @@ public sealed class Plugin : IDalamudPlugin
         {
             configuration.ResetCameraBeforeInteractEnabled = true;
             configuration.Version = 6;
+            changed = true;
+        }
+
+        if (configuration.Version < 7)
+        {
+            configuration.ProcessDialogRulesOutsideOwnedDuty = true;
+            configuration.Version = 7;
             changed = true;
         }
 

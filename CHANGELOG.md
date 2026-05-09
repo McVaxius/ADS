@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-09
+
+- Added `Process dialog rules outside owned duties`, enabled by default. Dialog rules now run while ADS is enabled, the character is logged in, and the game is not zoning, including idle, observing, unsupported-duty, and outside-duty states; disabling the setting restores the older owned-or-leaving instanced-duty gate.
+- Added `processDialogRulesOutsideOwnedDuty` to Status JSON for tester confirmation.
+
 ## 2026-04-12
 
 - Restored the missing GitHub Actions release surface for ADS by adding the standard `build-release.yml` workflow with ADS-specific solution, manifest, and packaged `latest.zip` paths.

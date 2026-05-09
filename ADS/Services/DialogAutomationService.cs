@@ -40,15 +40,17 @@ public sealed class DialogAutomationService
         this.log = log;
     }
 
-    public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode, bool pluginEnabled)
+    public void Update(
+        DutyContextSnapshot context,
+        OwnershipMode ownershipMode,
+        bool pluginEnabled,
+        bool processDialogRulesOutsideOwnedDuty)
     {
-        if (!pluginEnabled || !context.InInstancedDuty || context.IsUnsafeTransition)
+        if (!pluginEnabled || !context.IsLoggedIn || context.IsUnsafeTransition)
             return;
 
-        if (ownershipMode is not OwnershipMode.OwnedStartOutside
-            and not OwnershipMode.OwnedStartInside
-            and not OwnershipMode.OwnedResumeInside
-            and not OwnershipMode.Leaving)
+        if (!processDialogRulesOutsideOwnedDuty
+            && (!context.InInstancedDuty || !IsOwnedOrLeaving(ownershipMode)))
         {
             return;
         }
@@ -60,6 +62,12 @@ public sealed class DialogAutomationService
         lastDialogCheckUtc = now;
         TryHandleDialogRules(now);
     }
+
+    private static bool IsOwnedOrLeaving(OwnershipMode ownershipMode)
+        => ownershipMode is OwnershipMode.OwnedStartOutside
+            or OwnershipMode.OwnedStartInside
+            or OwnershipMode.OwnedResumeInside
+            or OwnershipMode.Leaving;
 
     private void TryHandleDialogRules(DateTime now)
     {

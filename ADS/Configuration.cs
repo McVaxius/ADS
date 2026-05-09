@@ -7,7 +7,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 7;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = true;
@@ -19,6 +19,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool ConsiderTreasureCoffers { get; set; } = true;
     public bool TreasureDoorJiggleRecoveryEnabled { get; set; } = true;
     public bool ResetCameraBeforeInteractEnabled { get; set; } = true;
+    public bool ProcessDialogRulesOutsideOwnedDuty { get; set; } = true;
     public string InstalledRuleSyncVersion { get; set; } = string.Empty;
 
     public void Save()

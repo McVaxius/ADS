@@ -224,7 +224,7 @@ public sealed class DialogYesNoRuleService
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS dialog rules. These are global, not duty-scoped. Default Addon is SelectYesno; optional Notification/NotificationCB can restore minimized prompts before ADS clicks.",
+  "description": "Human-edited ADS dialog rules. These are global, not duty-scoped. Default Addon is SelectYesno; processing scope follows the ADS Settings dialog-rule toggle.",
   "rules": [
     {
       "enabled": true,

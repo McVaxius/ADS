@@ -1,6 +1,6 @@
 {
   "SchemaVersion": 1,
-  "Description": "Human-edited ADS SelectYesno rules. These are global, not duty-scoped. Match prompt text and choose whether ADS should click Yes or No when it owns a supported duty.",
+  "Description": "Human-edited ADS SelectYesno rules. These are global, not duty-scoped. Match prompt text and choose whether ADS should click Yes or No when dialog-rule processing is allowed by Settings.",
   "Rules": [
     {
       "Enabled": true,
