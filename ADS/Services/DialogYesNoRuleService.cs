@@ -60,6 +60,9 @@ public sealed class DialogYesNoRuleService
     public DialogYesNoRule CreateBlankRule()
         => new();
 
+    public IEnumerable<DialogYesNoRule> GetEnabledRules()
+        => Current.Rules.Where(x => x.Enabled);
+
     public bool Reload()
     {
         try
@@ -68,6 +71,7 @@ public sealed class DialogYesNoRuleService
             var json = File.ReadAllText(configPath);
             var manifest = JsonSerializer.Deserialize<DialogYesNoRuleManifest>(json, JsonOptions) ?? new DialogYesNoRuleManifest();
             manifest.Rules ??= [];
+            NormalizeManifest(manifest);
 
             Current = manifest;
             lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
@@ -116,6 +120,7 @@ public sealed class DialogYesNoRuleService
         try
         {
             manifest.Rules ??= [];
+            NormalizeManifest(manifest);
             var json = JsonSerializer.Serialize(manifest, JsonOptions);
             File.WriteAllText(configPath, json);
             return Reload();
@@ -133,6 +138,9 @@ public sealed class DialogYesNoRuleService
             .Where(x => x.Enabled)
             .Where(x => Matches(x, promptText))
             .FirstOrDefault();
+
+    public bool MatchesPrompt(DialogYesNoRule rule, string promptText)
+        => Matches(rule, promptText);
 
     private void EnsureSeeded()
     {
@@ -179,23 +187,54 @@ public sealed class DialogYesNoRuleService
         => new()
         {
             Enabled = rule.Enabled,
+            Addon = NormalizeAddon(rule.Addon),
             PromptPattern = rule.PromptPattern,
             MatchMode = rule.MatchMode,
             Response = rule.Response,
+            Delay = Math.Max(0, rule.Delay),
+            Notification = NormalizeOptional(rule.Notification),
+            NotificationCB = NormalizeOptional(rule.NotificationCB),
             Notes = rule.Notes,
         };
+
+    private static void NormalizeManifest(DialogYesNoRuleManifest manifest)
+    {
+        manifest.Description ??= string.Empty;
+
+        foreach (var rule in manifest.Rules)
+        {
+            rule.Addon = NormalizeAddon(rule.Addon);
+            rule.PromptPattern = NormalizeOptional(rule.PromptPattern);
+            rule.MatchMode = string.IsNullOrWhiteSpace(rule.MatchMode) ? "Contains" : rule.MatchMode.Trim();
+            rule.Response = string.IsNullOrWhiteSpace(rule.Response) ? "Yes" : rule.Response.Trim();
+            rule.Delay = Math.Max(0, rule.Delay);
+            rule.Notification = NormalizeOptional(rule.Notification);
+            rule.NotificationCB = NormalizeOptional(rule.NotificationCB);
+            rule.Notes = NormalizeOptional(rule.Notes);
+        }
+    }
+
+    private static string NormalizeAddon(string? addon)
+        => string.IsNullOrWhiteSpace(addon) ? "SelectYesno" : addon.Trim();
+
+    private static string NormalizeOptional(string? value)
+        => value?.Trim() ?? string.Empty;
 
     private static string GetDefaultJson()
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS SelectYesno rules. These are global, not duty-scoped. Match prompt text and choose whether ADS should click Yes or No when it owns a supported duty.",
+  "description": "Human-edited ADS dialog rules. These are global, not duty-scoped. Default Addon is SelectYesno; optional Notification/NotificationCB can restore minimized prompts before ADS clicks.",
   "rules": [
     {
       "enabled": true,
+      "addon": "SelectYesno",
       "promptPattern": "imperial identification key to deactivate the barrier",
       "matchMode": "Contains",
       "response": "Yes",
+      "delay": 0,
+      "notification": "",
+      "notificationCB": "",
       "notes": "Keeper of the Lake barrier confirmation."
     }
   ]

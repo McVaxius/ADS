@@ -145,8 +145,10 @@
 ## Dialog Rules
 
 - Spreadsheet editor for `dialog-yesno-rules.json`.
-- These are global `SelectYesno` prompt matches, not duty-scoped object rules.
-- Use this only when ADS needs to answer a yes/no prompt while it owns a supported duty.
+- These are global prompt matches, not duty-scoped object rules.
+- `Addon` defaults to `SelectYesno`; use this mainly when ADS needs to answer a yes/no prompt while it owns a supported duty.
+- `Delay` waits that many seconds before ADS restores/clicks. If the watched addon or notification disappears first, the delay timer resets.
+- `Notification` can name a minimized notification addon, and `NotificationCB` can restore it with callback text such as `_Notification true 0 16`.
 
 ## The Columns That Matter Most In The Rules Editor
 
@@ -412,8 +414,12 @@
 ## Dialog Yes/No Rules
 
 - Dialog rules live in `ADS/dialog-yesno-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
-- These rules are global `SelectYesno` prompt matches. They are not duty-scoped.
+- These rules are global prompt matches. They are not duty-scoped.
 - ADS only applies them while it owns a supported duty, so they do not become a global background yes-clicker.
+- `Addon` defaults to `SelectYesno`. Existing rules without an `Addon` field keep that default.
 - `MatchMode` supports `Contains` and `Exact`.
 - `Response` supports `Yes` and `No`.
+- `Delay` is seconds to wait before ADS acts. The timer resets if the watched addon or notification disappears.
+- `Notification` names an optional minimized notification addon to watch before the dialog addon is visible.
+- `NotificationCB` accepts callback text like `_Notification true 0 16`; ADS parses the addon name, update-state boolean, and integer arguments.
 - The bundled starter rule matches `imperial identification key to deactivate the barrier` and clicks `Yes`.

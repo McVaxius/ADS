@@ -18,7 +18,7 @@ public sealed class InnEntryService
         WaitingForZone,
     }
 
-    private const float SearchRadiusYalms = 30.0f;
+    private const float SearchRadiusYalms = 120.0f;
     private const float InteractRadiusYalms = 3.0f;
     private static readonly TimeSpan MoveRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan InteractRetryCooldown = TimeSpan.FromSeconds(2);

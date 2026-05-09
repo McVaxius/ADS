@@ -45,13 +45,16 @@ public static class GameInteractionHelper
         }
     }
 
-    public static unsafe void FireAddonCallback(string addonName, bool updateState, params object[] args)
+    public static void FireAddonCallback(string addonName, bool updateState, params object[] args)
+        => TryFireAddonCallback(addonName, updateState, args);
+
+    public static unsafe bool TryFireAddonCallback(string addonName, bool updateState, params object[] args)
     {
         try
         {
             var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(addonName);
             if (addon == null || !addon->IsVisible)
-                return;
+                return false;
 
             var atkValues = new AtkValue[args.Length];
             for (var i = 0; i < args.Length; i++)
@@ -69,10 +72,12 @@ public static class GameInteractionHelper
             {
                 addon->FireCallback((uint)atkValues.Length, ptr, updateState);
             }
+
+            return true;
         }
         catch
         {
-            // Intentionally quiet here; callers already retry and status on failure.
+            return false;
         }
     }
 
