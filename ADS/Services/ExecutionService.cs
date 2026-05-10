@@ -22,6 +22,7 @@ public sealed class ExecutionService
     private const float PreferredFollowArrivalRange = 3.0f;
     private const float PreferredRecoveryArrivalRange = 2.0f;
     private const float PreferredFrontierArrivalRange = 4.0f;
+    private const float BossFightCombatGhostRange = 5.0f;
     private const float RequiredInteractionConsumedRelocationRange = 20.0f;
     private const float TreasureDoorFollowThroughDistance = 10.0f;
     private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
@@ -162,6 +163,9 @@ public sealed class ExecutionService
     private DateTime resetCameraBeforeInteractReadyUtc;
     private string lastResetCameraBeforeInteractLogKey = string.Empty;
     private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
+    private string? bossFightCombatGhostKey;
+    private string bossFightCombatGhostName = string.Empty;
+    private uint bossFightCombatGhostMapId;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -229,6 +233,7 @@ public sealed class ExecutionService
     public void ReleaseHeldMovementKeys(string reason)
     {
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
+        ClearBossFightCombatGhost(reason);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         if (hadNudge)
             log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
@@ -241,6 +246,7 @@ public sealed class ExecutionService
     {
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("outside start");
         CurrentMode = OwnershipMode.OwnedStartOutside;
         SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter instanced duty.");
         return true;
@@ -250,6 +256,7 @@ public sealed class ExecutionService
     {
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("inside start");
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -270,6 +277,7 @@ public sealed class ExecutionService
     {
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("inside resume");
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -297,6 +305,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("manual leave request");
         ResetLeaveState();
         if (considerTreasureCoffers)
             BeginLeaveTreasureSweep(DateTime.UtcNow, "manual leave request");
@@ -320,6 +329,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("duty completion treasure sweep");
         ResetRecoveryHold();
         ResetLeaveState();
         BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
@@ -335,6 +345,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("stop");
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
@@ -350,6 +361,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("duty complete");
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Observing;
@@ -361,12 +373,15 @@ public sealed class ExecutionService
     public void Update(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, bool pluginEnabled, bool considerTreasureCoffers)
     {
         UpdateUnsafeTransitionNavigationStop(context);
+        if (!context.InCombat)
+            ClearBossFightCombatGhost("combat cleared");
 
         if (!pluginEnabled)
         {
             StopMovementAssists();
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
+            ClearBossFightCombatGhost("plugin disabled");
             ResetLeaveState();
             CurrentMode = OwnershipMode.Idle;
             SetPhase(ExecutionPhase.Idle, "ADS disabled.");
@@ -375,6 +390,7 @@ public sealed class ExecutionService
 
         if (context.IsUnsafeTransition)
         {
+            ClearBossFightCombatGhost("unsafe transition");
             UpdateUnsafeTransitionHold(context);
             return;
         }
@@ -387,6 +403,7 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
+                    ClearBossFightCombatGhost("outside start waiting outside duty");
                     SetPhase(ExecutionPhase.OutsideQueue, "Waiting to enter instanced duty from outside.");
                     return;
                 }
@@ -401,6 +418,7 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
+                    ClearBossFightCombatGhost("duty ended");
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty ended; ADS ownership released.");
@@ -416,6 +434,7 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
+                    ClearBossFightCombatGhost("duty exit detected");
                     observationMemoryService.Reset();
                     dungeonFrontierService.Reset();
                     ResetLeaveState();
@@ -433,6 +452,7 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
+                    ClearBossFightCombatGhost("failure cleared outside duty");
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Failure state cleared outside duty.");
@@ -448,6 +468,7 @@ public sealed class ExecutionService
             StopMovementAssists();
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
+            ClearBossFightCombatGhost("ownership observing");
             ResetLeaveState();
             CurrentMode = OwnershipMode.Observing;
             SetPhase(ExecutionPhase.ObservingOnly, "Observing only; ADS does not currently own this duty.");
@@ -457,6 +478,7 @@ public sealed class ExecutionService
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("ownership idle");
         ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
@@ -474,6 +496,7 @@ public sealed class ExecutionService
 
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
+            ClearBossFightCombatGhost("unsafe transition");
             ResetRecoveryHold();
             StopMovementAssists();
             SetPhase(ExecutionPhase.TransitionHold, $"{prefix} Waiting for safe post-transition duty truth before advancing.");
@@ -502,11 +525,11 @@ public sealed class ExecutionService
             return;
 
         if ((context.InCombat || planner.Mode == PlannerMode.Combat)
-            && !ShouldBypassCombatHold(context, planner))
+            && !ShouldBypassCombatHold(context, planner, observation))
         {
             ResetRecoveryHold();
             StopMovementAssists();
-            SetPhase(ExecutionPhase.CombatHold, $"{prefix} Combat is active, so ADS is holding progression until combat clears.");
+            SetPhase(ExecutionPhase.CombatHold, BuildCombatHoldStatus(prefix, planner, observation));
             return;
         }
 
@@ -615,7 +638,7 @@ public sealed class ExecutionService
 
             if (planner.ObjectiveKind is PlannerObjectiveKind.Monster or PlannerObjectiveKind.BossFightMonster)
             {
-                TryAdvanceMonsterObjective(planner, observation, $"{prefix}");
+                TryAdvanceMonsterObjective(context, planner, observation, $"{prefix}");
                 return;
             }
 
@@ -670,6 +693,7 @@ public sealed class ExecutionService
 
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
+        ClearBossFightCombatGhost("unsafe transition hold");
         ResetRecoveryHold();
         StopMovementAssists();
         SetPhase(
@@ -740,7 +764,7 @@ public sealed class ExecutionService
                 : $"{prefix} Reached the recovery cluster area for {planner.Objective} ({targetDistance:0.0}y). Waiting for stronger live truth.");
     }
 
-    private void TryAdvanceMonsterObjective(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
+    private void TryAdvanceMonsterObjective(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
     {
         var observedMonster = ResolveObservedMonster(planner, observation);
         var objectiveLabel = planner.ObjectiveKind == PlannerObjectiveKind.BossFightMonster
@@ -774,6 +798,28 @@ public sealed class ExecutionService
         }
 
         targetManager.Target = gameObject;
+        if (planner.ObjectiveKind == PlannerObjectiveKind.BossFightMonster && context.InCombat)
+        {
+            if (IsBossFightCombatGhosted(observedMonster))
+            {
+                StopMovementAssists();
+                SetPhase(
+                    ExecutionPhase.CombatHold,
+                    $"{prefix} BossFight target {observedMonster.Name} already reached {BossFightCombatGhostRange:0.0}y in this combat. ADS is holding progression and combat owns movement until combat clears.");
+                return;
+            }
+
+            if (targetDistance <= BossFightCombatGhostRange)
+            {
+                ArmBossFightCombatGhost(observedMonster, targetDistance);
+                StopMovementAssists();
+                SetPhase(
+                    ExecutionPhase.CombatHold,
+                    $"{prefix} BossFight target {observedMonster.Name} reached {targetDistance:0.0}y (<= {BossFightCombatGhostRange:0.0}y). ADS stopped navigation and combat owns movement until combat clears.");
+                return;
+            }
+        }
+
         if (targetDistance > PreferredMonsterArrivalRange)
         {
             LogLiveTargetNavigation("monster", gameObject.GameObjectId, observedMonster.Name, playerPosition.Value, gameObject.Position, targetDistance, mountedCombat: false);
@@ -2378,7 +2424,7 @@ public sealed class ExecutionService
             _ => PlannerObjectiveKind.RequiredInteractable,
         };
 
-    private bool ShouldBypassCombatHold(DutyContextSnapshot context, PlannerSnapshot planner)
+    private bool ShouldBypassCombatHold(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation)
     {
         if (IsPraetoriumMountedCombatContext(context))
             return true;
@@ -2396,8 +2442,13 @@ public sealed class ExecutionService
         }
 
         if (planner.Mode == PlannerMode.Progression
+            && planner.ObjectiveKind == PlannerObjectiveKind.BossFightMonster)
+        {
+            return ResolveBossFightCombatGhost(planner, observation) is null;
+        }
+
+        if (planner.Mode == PlannerMode.Progression
             && planner.ObjectiveKind is PlannerObjectiveKind.CombatFriendlyInteractable
-                or PlannerObjectiveKind.BossFightMonster
                 or PlannerObjectiveKind.MapXzForceMarchDestination
                 or PlannerObjectiveKind.XyzForceMarchDestination)
         {
@@ -3400,6 +3451,65 @@ public sealed class ExecutionService
         lastLoggedLeaveTreasureKey = string.Empty;
         lastLoggedLeavePromptKey = string.Empty;
         lastLoggedLeavePromptAtUtc = DateTime.MinValue;
+    }
+
+    private string BuildCombatHoldStatus(string prefix, PlannerSnapshot planner, ObservationSnapshot observation)
+    {
+        var ghostedBoss = ResolveBossFightCombatGhost(planner, observation);
+        if (ghostedBoss is not null)
+        {
+            return $"{prefix} BossFight target {ghostedBoss.Name} already reached {BossFightCombatGhostRange:0.0}y in this combat. ADS is holding progression and combat owns movement until combat clears.";
+        }
+
+        return $"{prefix} Combat is active, so ADS is holding progression until combat clears.";
+    }
+
+    private void ArmBossFightCombatGhost(ObservedMonster observedMonster, float targetDistance)
+    {
+        if (IsBossFightCombatGhosted(observedMonster))
+            return;
+
+        bossFightCombatGhostKey = observedMonster.Key;
+        bossFightCombatGhostName = observedMonster.Name;
+        bossFightCombatGhostMapId = observedMonster.MapId;
+        log?.Information(
+            $"[ADS] BossFight combat ghost armed for {observedMonster.Name} at {targetDistance:0.0}y (key {observedMonster.Key}). ADS will hold combat movement for this live boss until combat clears.");
+    }
+
+    private void ClearBossFightCombatGhost(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(bossFightCombatGhostKey))
+            return;
+
+        log?.Information($"[ADS] Cleared BossFight combat ghost for {bossFightCombatGhostName} during {reason}.");
+        bossFightCombatGhostKey = null;
+        bossFightCombatGhostName = string.Empty;
+        bossFightCombatGhostMapId = 0;
+    }
+
+    private ObservedMonster? ResolveBossFightCombatGhost(PlannerSnapshot planner, ObservationSnapshot observation)
+    {
+        if (string.IsNullOrWhiteSpace(bossFightCombatGhostKey)
+            || planner.ObjectiveKind != PlannerObjectiveKind.BossFightMonster)
+        {
+            return null;
+        }
+
+        var observedMonster = ResolveObservedMonster(planner, observation);
+        return observedMonster is not null && IsBossFightCombatGhosted(observedMonster)
+            ? observedMonster
+            : null;
+    }
+
+    private bool IsBossFightCombatGhosted(ObservedMonster observedMonster)
+    {
+        if (string.IsNullOrWhiteSpace(bossFightCombatGhostKey))
+            return false;
+
+        return string.Equals(observedMonster.Key, bossFightCombatGhostKey, StringComparison.Ordinal)
+            && (bossFightCombatGhostMapId == 0
+                || observedMonster.MapId == 0
+                || observedMonster.MapId == bossFightCombatGhostMapId);
     }
 
     private bool HasRecentLivePartyDamageProgression()

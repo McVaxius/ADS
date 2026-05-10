@@ -266,7 +266,8 @@
 
 - Use `Classification: BossFight` on live boss BattleNpc rows that should beat nearby trash, treasure, ghosts, and remembered manual Map XZ follow-through once the rule gates pass.
 - `BossFight` uses the same `PriorityVerticalRadius` and `MaxDistance` gates as other BattleNpc rules, so “near one” is controlled by the row's own distance/Y limits.
-- If the planner emits `Engage boss-fight target: ...`, execution treats that as a monster route and bypasses the generic `CombatHold`.
+- If the planner emits `Engage boss-fight target: ...` during combat, execution may approach the live boss only until the player is within `5y`.
+- Once ADS reaches that `5y` combat range, it targets the boss, stops `/vnav`, and holds progression for that same live boss until combat clears. If the boss moves away during the same combat, ADS does not chase it again.
 - Non-BattleNpc `BossFight` rows are migrated to `Ignored` on load.
 
 ## Scope Fields

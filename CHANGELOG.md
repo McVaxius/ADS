@@ -4,6 +4,7 @@
 
 - Added `Process dialog rules outside owned duties`, enabled by default. Dialog rules now run while ADS is enabled, the character is logged in, and the game is not zoning, including idle, observing, unsupported-duty, and outside-duty states; disabling the setting restores the older owned-or-leaving instanced-duty gate.
 - Added `processDialogRulesOutsideOwnedDuty` to Status JSON for tester confirmation.
+- Tightened in-combat `BossFight` routing. ADS can still approach a live boss while combat is active, but only until it reaches `5y`; then it targets the boss, stops navigation, and combat-holds that same live boss until combat clears instead of chasing it again.
 
 ## 2026-04-12
 
