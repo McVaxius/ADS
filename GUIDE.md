@@ -3,8 +3,8 @@
 ## If You Are Helping With Duty Maturity Testing
 
 - ADS has two different rule surfaces:
-  - bundled repo rules in `ADS/duty-object-rules.json`
-  - live runtime rules in the active Dalamud profile config
+  - live runtime cache files in the active Dalamud profile config
+  - maintainer working copies in `botologyupdates/ads/*.json`
 - During active scouting/testing, the live runtime file is the one ADS actually uses.
 - The rules editor `DEFAULT` preset is the live runtime dataset.
 - Parked `PRESET`s are just parked manifests. They do not affect runtime until you copy/import them back into `DEFAULT`.
@@ -40,6 +40,8 @@
   - version
   - Ko-fi / Discord / Repo links
   - quick-open buttons for Settings, Objects, Ghosts, Labels, Rules, and Dialogs
+  - `Update`: refresh `dialog-yesno-rules.json`, `duty-object-rules.json`, and `duty-maturity.json` from botologyupdates into the live config cache
+  - per-file cache age/status lines
 - Action row:
   - `Start Outside`: queue ADS before entering the duty
   - `Start Inside`: claim active ownership while already inside a supported duty
@@ -84,11 +86,12 @@
   - `Consider treasure coffers in planner`
   - `Process dialog rules outside owned duties`
 - Important buttons:
+  - `Update rules cache`
   - `Open rules JSON`
   - `Open frontier labels`
   - `Open rules table`
   - `Reload rules JSON`
-- This window also shows the exact live rule-file path ADS is using.
+- This window also shows the exact live rule/maturity file paths ADS is using.
 
 ## Object Explorer
 
@@ -140,13 +143,16 @@
   - `Disk+`: full-manifest file import/export
   - `+`: create parked preset
   - `-`: delete parked preset
-  - `@`: reload packaged bundled rules into the live `DEFAULT` draft
+  - `@`: reload the current live `DEFAULT` cache into the draft
 - New rows from `+ Row` or `CREATE RULE` stay highlighted until saved.
 
 ## Dialog Rules
 
 - Spreadsheet editor for `dialog-yesno-rules.json`.
 - These are global prompt matches, not duty-scoped object rules.
+- `DEFAULT` is the live runtime dialog rule set.
+- Other dialog presets are parked manifests under `dialog-rule-presets`.
+- Toolbar supports full-manifest clipboard export/import, disk import/export, preset create/delete, and `@` reset from the current live `DEFAULT` cache.
 - `Addon` defaults to `SelectYesno`; use this when ADS needs to answer a yes/no prompt under the configured dialog-rule scope.
 - `Delay` waits that many seconds before ADS restores/clicks. If the watched addon or notification disappears first, the delay timer resets.
 - `Notification` can name a minimized notification addon, and `NotificationCB` can restore it with callback text such as `_Notification true 0 16`.
@@ -239,11 +245,13 @@
 - Add `Layer` only when the duty actually has multiple live sub-areas and the row should not apply everywhere.
 - Use positional selectors only when same-name objects really need to be separated.
 - Do not use a manual waypoint when a normal object rule is enough.
-- Do not promote a repo/bundled rule until the live runtime version is proven.
+- Do not promote a botologyupdates rule until the live runtime version is proven.
 
 ## Duty-Object Rules
 
-- Rules live in `ADS/duty-object-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
+- Runtime object rules live in the active Dalamud profile config as `duty-object-rules.json`.
+- The maintainer working copy lives in `botologyupdates/ads/duty-object-rules.json`; ADS refreshes the runtime cache from raw GitHub when the cache is missing, older than 24h on duty ownership, or the operator clicks `Update`.
+- Remote refresh overwrites only the live `DEFAULT` cache file. Parked object presets under `rule-presets` are never overwritten by remote updates.
 - Lower `Priority` wins.
 - For monster-versus-progression arbitration, if both sides have active rules, ADS now spends that comparison on rule priority first. Distance and Y-space only break ties or no-rule cases.
 - Equal priorities do not automatically force a required interactable over the best live monster. In that case ADS falls back to distance and Y-space heuristics.
@@ -283,7 +291,7 @@
 - `DEFAULT` is the live runtime rules file. Other `PRESET`s are parked full-manifest datasets stored beside the live config.
 - `Export` / `Import` on the preset bar copy or replace the entire manifest through the clipboard.
 - `Disk+` opens full-manifest disk import/export for large presets without going through the clipboard.
-- `+` creates a new preset from the current draft, `-` deletes the selected parked preset, and `@` loads the packaged bundled rules into the `DEFAULT` draft so you can inspect/reset them before saving live.
+- `+` creates a new preset from the current draft, `-` deletes the selected parked preset, and `@` loads the current `DEFAULT` cache into the `DEFAULT` draft so you can inspect/reset it before saving live.
 - `+ Row` and Object Explorer `CREATE RULE` additions stay visually highlighted until you save, so new rows are easy to find inside a dense ruleset.
 - The `Layer` column now uses a territory-aware dropdown when ADS knows the duty's sub-area labels. The blank top option still means “any layer”.
 - Object Explorer `CREATE RULE` seeds duty scope, live layer, object kind, base id, and exact object name; fill in classification/priority from there instead of typing the boilerplate every time.
@@ -415,7 +423,9 @@
 
 ## Dialog Yes/No Rules
 
-- Dialog rules live in `ADS/dialog-yesno-rules.json` for the bundled copy and in the active Dalamud profile config for runtime edits.
+- Runtime dialog rules live in the active Dalamud profile config as `dialog-yesno-rules.json`.
+- The maintainer working copy lives in `botologyupdates/ads/dialog-yesno-rules.json`; ADS refreshes the runtime cache from raw GitHub when the cache is missing, older than 24h on duty ownership, or the operator clicks `Update`.
+- Remote refresh overwrites only the live `DEFAULT` dialog cache file. Parked dialog presets under `dialog-rule-presets` are never overwritten by remote updates.
 - These rules are global prompt matches. They are not duty-scoped.
 - By default, ADS applies them whenever the plugin is enabled, the character is logged in, and the game is not zoning. This covers idle, observing, unsupported duty, and outside-duty states.
 - Disable `Process dialog rules outside owned duties` in Settings to restore the older owned-or-leaving instanced-duty-only behavior.
@@ -426,4 +436,4 @@
 - `Delay` is seconds to wait before ADS acts. The timer resets if the watched addon or notification disappears.
 - `Notification` names an optional minimized notification addon to watch before the dialog addon is visible.
 - `NotificationCB` accepts callback text like `_Notification true 0 16`; ADS parses the addon name, update-state boolean, and integer arguments.
-- The bundled starter rule matches `imperial identification key to deactivate the barrier` and clicks `Yes`.
+- The built-in no-network fallback includes one starter rule that matches `imperial identification key to deactivate the barrier` and clicks `Yes`; normal source of truth is the botologyupdates cache.

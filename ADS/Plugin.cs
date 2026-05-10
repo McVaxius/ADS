@@ -60,8 +60,7 @@ public sealed class Plugin : IDalamudPlugin
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
-    public string ObjectRulesSyncStatus { get; }
-    public string DialogRulesSyncStatus { get; }
+    public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -78,21 +77,17 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
-        var bundledRuleSync = BundledConfigSyncHelper.SyncBundledRulesIfPluginVersionAdvanced(
-            PluginInfo.GetVersion(),
-            Configuration.InstalledRuleSyncVersion,
-            PluginInterface.GetPluginConfigDirectory(),
-            PluginInterface.AssemblyLocation.DirectoryName,
-            version => Configuration.InstalledRuleSyncVersion = version);
-        ObjectRulesSyncStatus = bundledRuleSync.ObjectRulesStatus;
-        DialogRulesSyncStatus = bundledRuleSync.DialogRulesStatus;
-        if (configurationChanged || bundledRuleSync.ConfigurationChanged)
+        if (configurationChanged)
             Configuration.Save();
 
-        DutyCatalogService = new DutyCatalogService(DataManager, Log);
+        var configDirectory = PluginInterface.GetPluginConfigDirectory();
+        RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
+        RemoteJsonUpdateService.TryStartMissingUpdate("startup");
+
+        DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName, ObjectRulesSyncStatus);
-        DialogYesNoRuleService = new DialogYesNoRuleService(Log, PluginInterface.GetPluginConfigDirectory(), PluginInterface.AssemblyLocation.DirectoryName, DialogRulesSyncStatus);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, configDirectory);
+        DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
@@ -140,8 +135,7 @@ public sealed class Plugin : IDalamudPlugin
         SetupDtrBar();
         UpdateDtrBar();
 
-        Log.Information($"[ADS] {ObjectRulesSyncStatus}");
-        Log.Information($"[ADS] {DialogRulesSyncStatus}");
+        Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
 
         if (Configuration.OpenMainWindowOnLoad)
@@ -166,6 +160,7 @@ public sealed class Plugin : IDalamudPlugin
         UtilityAutomationService.Cancel("plugin dispose");
         UnregisterCommands();
         AdsIpcService.Dispose();
+        RemoteJsonUpdateService.Dispose();
         WindowSystem.RemoveAllWindows();
         dtrEntry?.Remove();
         configWindow.Dispose();
@@ -219,6 +214,9 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.Save();
         UpdateDtrBar();
     }
+
+    public void ForceRemoteJsonUpdate()
+        => RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button");
 
     public void ResetWindowPositions()
     {
@@ -307,6 +305,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromOutside()
     {
+        QueueDutyOwnershipRemoteUpdate();
         var result = ExecutionService.StartDutyFromOutside();
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -315,6 +314,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromInside()
     {
+        QueueDutyOwnershipRemoteUpdate();
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -323,6 +323,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool ResumeDutyFromInside()
     {
+        QueueDutyOwnershipRemoteUpdate();
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -571,8 +572,18 @@ public sealed class Plugin : IDalamudPlugin
             z = MathF.Round(value.Z, 2),
         };
 
+    private void QueueDutyOwnershipRemoteUpdate()
+        => RemoteJsonUpdateService.TryStartStaleUpdate("duty ownership");
+
     private void OnFrameworkUpdate(IFramework framework)
     {
+        if (RemoteJsonUpdateService.TryConsumeCompletedUpdate())
+        {
+            ObjectPriorityRuleService.Reload();
+            DialogYesNoRuleService.Reload();
+            DutyCatalogService.ReloadMaturity();
+        }
+
         DutyContextService.Update(Configuration.PluginEnabled);
         ObjectPriorityRuleService.ReloadIfChanged();
         DialogYesNoRuleService.ReloadIfChanged();
@@ -940,7 +951,6 @@ public sealed class Plugin : IDalamudPlugin
 
         if (configuration.Version < 4)
         {
-            configuration.InstalledRuleSyncVersion ??= string.Empty;
             configuration.Version = 4;
             changed = true;
         }
@@ -982,13 +992,6 @@ public sealed class Plugin : IDalamudPlugin
         if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
         {
             configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
-            changed = true;
-        }
-
-        var normalizedInstalledRuleSyncVersion = configuration.InstalledRuleSyncVersion?.Trim() ?? string.Empty;
-        if (!string.Equals(configuration.InstalledRuleSyncVersion, normalizedInstalledRuleSyncVersion, StringComparison.Ordinal))
-        {
-            configuration.InstalledRuleSyncVersion = normalizedInstalledRuleSyncVersion;
             changed = true;
         }
 

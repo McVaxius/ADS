@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using ADS.Models;
 using Dalamud.Game;
 using Dalamud.Plugin.Services;
@@ -7,56 +9,34 @@ namespace ADS.Services;
 
 public sealed class DutyCatalogService
 {
-    private static readonly HashSet<string> PilotDutyNames =
-    [
-        "the tam-tara deepcroft",
-        "the thousand maws of toto-rak",
-        "brayflox's longstop",
-        "the stone vigil",
-        "the aurum vale",
-        "castrum meridianum",
-    ];
+    private const string MaturityFileName = "duty-maturity.json";
+    private const string DefaultSupportNote = "Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion.";
 
-    private static readonly HashSet<string> LaterWaveDutyNames =
-    [
-        "sastasha",
-        "copperbell mines",
-        "haukke manor",
-        "the keeper of the lake",
-        "the praetorium",
-    ];
-
-    private static readonly Dictionary<string, DutyClearanceStatus> ClearanceStatuses = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        ["sastasha"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["copperbell mines"] = DutyClearanceStatus.FourPlayerSyncCleared,
-        ["haukke manor"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["halatali"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the tam-tara deepcroft"] = DutyClearanceStatus.OnePlayerDutySupport,
-        ["the thousand maws of toto-rak"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the keeper of the lake"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the stone vigil"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the aurum vale"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["hells' lid"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the sunken temple of qarn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["castrum meridianum"] = DutyClearanceStatus.FourPlayerSyncCleared,
-        ["the praetorium"] = DutyClearanceStatus.FourPlayerSyncCleared,
-        ["dzemael darkhold"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["the burn"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["cutter's cry"] = DutyClearanceStatus.FourPlayerSyncCleared,
-        ["pharos sirius"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["hullbreaker isle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["doma castle"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["castrum abania"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
-        ["brayflox's longstop"] = DutyClearanceStatus.OnePlayerUnsyncCleared,
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        WriteIndented = true,
+        Converters =
+        {
+            new JsonStringEnumConverter<DutyClearanceStatus>(),
+            new JsonStringEnumConverter<DutySupportLevel>(),
+        },
     };
 
     private readonly List<DutyCatalogEntry> entries = [];
     private readonly Dictionary<uint, DutyCatalogEntry> entriesByCfc = [];
     private readonly Dictionary<uint, DutyCatalogEntry> entriesByTerritory = [];
+    private readonly IPluginLog log;
+    private readonly string maturityPath;
 
-    public DutyCatalogService(IDataManager dataManager, IPluginLog log)
+    public DutyCatalogService(IDataManager dataManager, IPluginLog log, string configDirectory)
     {
+        this.log = log;
+        Directory.CreateDirectory(configDirectory);
+        maturityPath = Path.Combine(configDirectory, MaturityFileName);
+
         var contentFinderSheet = dataManager.GetExcelSheet<ContentFinderCondition>();
         var englishSheet = dataManager.GetExcelSheet<ContentFinderCondition>(ClientLanguage.English);
         if (contentFinderSheet is null)
@@ -93,18 +73,6 @@ public sealed class DutyCatalogService
                 contentMemberTypeRowId: row.ContentMemberType.Value.RowId,
                 partySize: partySize,
                 contentTypeName: contentTypeName);
-            var supportLevel = DutySupportLevel.PassiveOnly;
-            var supportNote = "Runtime ownership now keys off instanced-duty truth. This catalog row is maturity metadata only; pilot execution validation still needs work.";
-            if (PilotDutyNames.Contains(englishName.ToLowerInvariant()))
-            {
-                supportLevel = DutySupportLevel.ActiveSupported;
-                supportNote = "Pilot active wave: operator-validated starter route.";
-            }
-            else if (LaterWaveDutyNames.Contains(englishName.ToLowerInvariant()))
-            {
-                supportNote = "Planned test list; runtime is allowed, but this row still needs pilot promotion.";
-            }
-
             var entry = new DutyCatalogEntry
             {
                 ContentFinderConditionId = row.RowId,
@@ -113,7 +81,7 @@ public sealed class DutyCatalogService
                 EnglishName = englishName,
                 ContentTypeName = contentTypeName,
                 ExpansionName = GetExpansionName(row.TerritoryType.Value.ExVersion.ValueNullable?.RowId ?? 0),
-                SupportNote = supportNote,
+                SupportNote = DefaultSupportNote,
                 LevelRequired = row.ClassJobLevelRequired,
                 SortKey = row.SortKey,
                 ExVersion = row.TerritoryType.Value.ExVersion.ValueNullable?.RowId ?? 0,
@@ -121,9 +89,9 @@ public sealed class DutyCatalogService
                 ContentMemberTypeRowId = row.ContentMemberType.Value.RowId,
                 PartySize = partySize,
                 Category = category,
-                SupportLevel = supportLevel,
-                ClearanceStatus = ClearanceStatuses.GetValueOrDefault(englishName, DutyClearanceStatus.NotCleared),
-                IsPlannedTest = LaterWaveDutyNames.Contains(englishName.ToLowerInvariant()),
+                SupportLevel = DutySupportLevel.PassiveOnly,
+                ClearanceStatus = DutyClearanceStatus.NotCleared,
+                IsPlannedTest = false,
             };
 
             entries.Add(entry);
@@ -132,6 +100,7 @@ public sealed class DutyCatalogService
         }
 
         AddSyntheticTreasureDutyEntries(dataManager);
+        ReloadMaturity();
 
         entries.Sort(static (left, right) =>
         {
@@ -162,6 +131,49 @@ public sealed class DutyCatalogService
     public IReadOnlyList<DutyCatalogEntry> Entries
         => entries;
 
+    public string MaturityConfigPath
+        => maturityPath;
+
+    public string LastMaturityLoadStatus { get; private set; } = "Duty maturity not loaded yet.";
+
+    public bool ReloadMaturity()
+    {
+        ResetMaturityDefaults();
+
+        try
+        {
+            EnsureMaturitySeeded();
+            var json = File.ReadAllText(maturityPath);
+            var manifest = JsonSerializer.Deserialize<DutyMaturityManifest>(json, JsonOptions) ?? new DutyMaturityManifest();
+            manifest.Duties ??= [];
+            var applied = 0;
+
+            foreach (var row in manifest.Duties)
+            {
+                if (!TryFindMaturityEntry(row, out var entry))
+                    continue;
+
+                entry.ClearanceStatus = row.ClearanceStatus;
+                entry.SupportLevel = row.SupportLevel;
+                entry.IsPlannedTest = row.IsPlannedTest;
+                entry.SupportNote = string.IsNullOrWhiteSpace(row.SupportNote)
+                    ? DefaultSupportNote
+                    : NormalizeName(row.SupportNote);
+                applied++;
+            }
+
+            LastMaturityLoadStatus = $"Loaded duty maturity overlay from {maturityPath}: applied {applied}/{manifest.Duties.Count} row(s).";
+            log.Information($"[ADS] {LastMaturityLoadStatus}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastMaturityLoadStatus = $"Failed to load duty maturity overlay from {maturityPath}: {ex.Message}. Using default untested maturity for all catalog rows.";
+            log.Warning(ex, $"[ADS] {LastMaturityLoadStatus}");
+            return false;
+        }
+    }
+
     public DutyCatalogEntry? ResolveCurrentDuty(uint contentFinderConditionId, uint territoryTypeId)
     {
         if (contentFinderConditionId != 0 && entriesByCfc.TryGetValue(contentFinderConditionId, out var byCfc))
@@ -171,6 +183,47 @@ public sealed class DutyCatalogService
             return byTerritory;
 
         return null;
+    }
+
+    private void ResetMaturityDefaults()
+    {
+        foreach (var entry in entries)
+        {
+            entry.ClearanceStatus = DutyClearanceStatus.NotCleared;
+            entry.SupportLevel = DutySupportLevel.PassiveOnly;
+            entry.IsPlannedTest = false;
+            entry.SupportNote = DefaultSupportNote;
+        }
+    }
+
+    private void EnsureMaturitySeeded()
+    {
+        if (File.Exists(maturityPath))
+            return;
+
+        File.WriteAllText(maturityPath, GetDefaultMaturityJson());
+        File.SetLastWriteTimeUtc(maturityPath, DateTime.UtcNow - TimeSpan.FromDays(2));
+        LastMaturityLoadStatus = "Duty maturity config was missing, so ADS seeded a built-in empty fallback until the botologyupdates cache refresh succeeds.";
+        log.Warning($"[ADS] {LastMaturityLoadStatus}");
+    }
+
+    private bool TryFindMaturityEntry(DutyMaturityRow row, out DutyCatalogEntry entry)
+    {
+        if (row.ContentFinderConditionId != 0 && entriesByCfc.TryGetValue(row.ContentFinderConditionId, out entry!))
+            return true;
+
+        if (row.TerritoryTypeId != 0 && entriesByTerritory.TryGetValue(row.TerritoryTypeId, out entry!))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(row.DutyEnglishName))
+        {
+            entry = entries.FirstOrDefault(x => x.EnglishName.Equals(row.DutyEnglishName, StringComparison.OrdinalIgnoreCase))!;
+            if (entry is not null)
+                return true;
+        }
+
+        entry = null!;
+        return false;
     }
 
     private void AddSyntheticTreasureDutyEntries(IDataManager dataManager)
@@ -199,7 +252,7 @@ public sealed class DutyCatalogService
                 EnglishName = territoryName,
                 ContentTypeName = "Treasure Dungeon",
                 ExpansionName = GetExpansionName(territory.ExVersion.ValueNullable?.RowId ?? 0),
-                SupportNote = "Synthetic treasure-duty catalog row from built-in treasure routing/classification data.",
+                SupportNote = DefaultSupportNote,
                 LevelRequired = 0,
                 SortKey = ushort.MaxValue,
                 ExVersion = territory.ExVersion.ValueNullable?.RowId ?? 0,
@@ -207,8 +260,8 @@ public sealed class DutyCatalogService
                 ContentMemberTypeRowId = 0,
                 PartySize = 4,
                 Category = DutyCategory.TreasureDungeon,
-                SupportLevel = DutySupportLevel.ActiveSupported,
-                ClearanceStatus = DutyClearanceStatus.FourPlayerSyncCleared,
+                SupportLevel = DutySupportLevel.PassiveOnly,
+                ClearanceStatus = DutyClearanceStatus.NotCleared,
                 IsPlannedTest = false,
             };
 
@@ -281,4 +334,13 @@ public sealed class DutyCatalogService
             5 => "DT",
             _ => $"EX{exVersion}",
         };
+
+    private static string GetDefaultMaturityJson()
+        => """
+{
+  "schemaVersion": 1,
+  "description": "Minimal built-in ADS duty maturity fallback. The live DEFAULT cache should normally be refreshed from botologyupdates.",
+  "duties": []
+}
+""";
 }

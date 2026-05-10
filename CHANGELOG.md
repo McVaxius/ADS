@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-10
+
+- Replaced packaged JSON rule sync with a botologyupdates-backed config cache. ADS now refreshes `duty-object-rules.json`, `dialog-yesno-rules.json`, and `duty-maturity.json` from raw GitHub when cache files are missing, when ownership starts with a cache older than 24h, or when the operator clicks `Update`.
+- Added `duty-maturity.json` as the data source for duty clearance/support metadata. The Lumina duty catalog still owns identity/category/level, while maturity rows overlay `ClearanceStatus`, `SupportLevel`, planned-test flag, and support notes.
+- Added dialog-rule presets matching object-rule presets: live `DEFAULT`, parked `dialog-rule-presets/*.json`, full-manifest clipboard/disk import/export, create/delete, and `@` reset from the current DEFAULT cache.
+- Removed packaged `duty-object-rules.json` / `dialog-yesno-rules.json` from plugin output; built-in JSON is now only a minimal first-run fallback.
+
 ## 2026-05-09
 
 - Added `Process dialog rules outside owned duties`, enabled by default. Dialog rules now run while ADS is enabled, the character is logged in, and the game is not zoning, including idle, observing, unsupported-duty, and outside-duty states; disabling the setting restores the older owned-or-leaving instanced-duty gate.

@@ -32,13 +32,12 @@ public sealed class ObjectPriorityRuleService
     private readonly IDataManager dataManager;
     private readonly string configPath;
     private readonly string presetDirectoryPath;
-    private readonly string bundledPath;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
-    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory, string? assemblyDirectory, string initialSyncStatus)
+    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory)
     {
         this.log = log;
         this.dataManager = dataManager;
@@ -46,10 +45,7 @@ public sealed class ObjectPriorityRuleService
         configPath = Path.Combine(configDirectory, FileName);
         presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
         Directory.CreateDirectory(presetDirectoryPath);
-        bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
-            ? string.Empty
-            : Path.Combine(assemblyDirectory, FileName);
-        LastSyncStatus = initialSyncStatus;
+        LastSyncStatus = "DEFAULT object rules load from the plugin config cache; the remote updater refreshes this file from botologyupdates.";
 
         EnsureSeeded();
         Reload();
@@ -61,12 +57,9 @@ public sealed class ObjectPriorityRuleService
     public string PresetDirectoryPath
         => presetDirectoryPath;
 
-    public string BundledPath
-        => bundledPath;
-
     public string LastLoadStatus { get; private set; } = "Rules not loaded yet.";
 
-    public string LastSyncStatus { get; private set; } = "Packaged rules sync not checked yet.";
+    public string LastSyncStatus { get; private set; }
 
     public ObjectPriorityRuleManifest Current { get; private set; } = new();
 
@@ -221,25 +214,19 @@ public sealed class ObjectPriorityRuleService
         }
     }
 
-    public bool TryLoadBundledManifest(out ObjectPriorityRuleManifest manifest, out string status)
+    public bool TryLoadDefaultCacheManifest(out ObjectPriorityRuleManifest manifest, out string status)
     {
         manifest = new ObjectPriorityRuleManifest();
-        status = "Bundled preset was not loaded.";
+        status = "DEFAULT cache preset was not loaded.";
 
         try
         {
-            var sourcePath = !string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath)
-                ? bundledPath
-                : string.Empty;
-            if (!string.IsNullOrWhiteSpace(sourcePath))
-                return TryLoadManifestFromPath(sourcePath, out manifest, out status, persistMigrations: false);
-
-            var json = GetDefaultJson();
-            return TryDeserializeManifest(json, "<packaged default>", out manifest, out status);
+            EnsureSeeded();
+            return TryLoadManifestFromPath(configPath, out manifest, out status, persistMigrations: false);
         }
         catch (Exception ex)
         {
-            status = $"Failed to load packaged preset: {ex.Message}";
+            status = $"Failed to load DEFAULT cache preset: {ex.Message}";
             return false;
         }
     }
@@ -720,16 +707,9 @@ public sealed class ObjectPriorityRuleService
         if (File.Exists(configPath))
             return;
 
-        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
-        {
-            File.Copy(bundledPath, configPath, overwrite: false);
-            LastSyncStatus = $"Default object rules config was missing, so ADS re-seeded it from {bundledPath}.";
-            log.Information($"[ADS] {LastSyncStatus}");
-            return;
-        }
-
         File.WriteAllText(configPath, GetDefaultJson());
-        LastSyncStatus = $"Default object rules config was missing, so ADS re-seeded it from built-in defaults.";
+        File.SetLastWriteTimeUtc(configPath, DateTime.UtcNow - TimeSpan.FromDays(2));
+        LastSyncStatus = "Default object rules config was missing, so ADS seeded a minimal built-in fallback until the botologyupdates cache refresh succeeds.";
         log.Warning($"[ADS] {LastSyncStatus}");
     }
 
@@ -748,12 +728,6 @@ public sealed class ObjectPriorityRuleService
         if (File.Exists(configPath))
         {
             File.Copy(configPath, path, overwrite: false);
-            return path;
-        }
-
-        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
-        {
-            File.Copy(bundledPath, path, overwrite: false);
             return path;
         }
 

@@ -20,7 +20,6 @@ public sealed class Configuration : IPluginConfiguration
     public bool TreasureDoorJiggleRecoveryEnabled { get; set; } = true;
     public bool ResetCameraBeforeInteractEnabled { get; set; } = true;
     public bool ProcessDialogRulesOutsideOwnedDuty { get; set; } = true;
-    public string InstalledRuleSyncVersion { get; set; } = string.Empty;
 
     public void Save()
         => Plugin.PluginInterface.SavePluginConfig(this);

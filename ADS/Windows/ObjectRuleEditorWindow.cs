@@ -214,7 +214,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         {
             ImGui.SameLine();
             if (ImGui.SmallButton("@"))
-                ResetDefaultDraftFromBundled();
+                ResetDefaultDraftFromCache();
         }
     }
 
@@ -838,15 +838,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         editorStatus = status;
     }
 
-    private void ResetDefaultDraftFromBundled()
+    private void ResetDefaultDraftFromCache()
     {
-        if (plugin.ObjectPriorityRuleService.TryLoadBundledManifest(out var bundledManifest, out var status))
+        if (plugin.ObjectPriorityRuleService.TryLoadDefaultCacheManifest(out var cacheManifest, out var status))
         {
-            draft = bundledManifest;
+            draft = cacheManifest;
             dirty = true;
             unsavedNewRules.Clear();
             pendingScrollRule = null;
-            editorStatus = $"Loaded the packaged DEFAULT rules into the current draft. {status} Press Save to write them live.";
+            editorStatus = $"Loaded the current DEFAULT cache rules into the draft. {status} Press Save to write them live.";
             return;
         }
 

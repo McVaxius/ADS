@@ -21,7 +21,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 - Show a real Lumina-backed catalog of all 4-man dungeons in the ADS main window.
 - Keep the implementation honest: staged execution, passive observation, planner explanation, ownership controls, IPC surfaces, and live movement/interaction only where currently validated.
-- Seed active support only for the validated ARR pilot wave: Tam-Tara, Toto-Rak, Brayflox, Stone Vigil, Aurum Vale, and Castrum Meridianum.
+- Overlay duty maturity from `duty-maturity.json`; active support is data-driven instead of hard-coded in the plugin.
 - Keep harder duties visible but non-actionable until their duty-profile overlays are written.
 - Treat monsters as the default objective, but when both a live monster and a live progression interactable have active rules, lower rule priority wins first. Distance/Y only breaks ties or no-rule cases.
 - Status colors in the catalog:
@@ -33,11 +33,10 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 
 ## Current Validation
 
-- Halatali and The Tam-Tara Deepcroft are marked `[1P Unsync Cleared]`.
-- The Keeper of the Lake is now also marked `[1P Unsync Cleared]`.
-- Sastasha and Copperbell Mines are now also marked `[1P Unsync Cleared]`.
-- The Thousand Maws of Toto-Rak, Aurum Vale, and Castrum Meridianum are marked `[1P Unsync Cleared]`.
-- The Praetorium is now also marked `[1P Unsync Cleared]`.
+- Maturity status comes from `botologyupdates/ads/duty-maturity.json`; missing rows default to `[Not Cleared]` and passive-only support.
+- Current promoted rows include Sastasha, Haukke Manor, Halatali, Toto-Rak, Keeper of the Lake, Stone Vigil, Aurum Vale, Qarn, Hells' Lid, Dzemael Darkhold, The Burn, Pharos Sirius, Hullbreaker Isle, Doma Castle, Castrum Abania, and Brayflox as `[1P Unsync Cleared]`.
+- The Tam-Tara Deepcroft is marked `[1P Duty Support]`.
+- Copperbell Mines, Cutter's Cry, Castrum Meridianum, The Praetorium, and synthetic treasure-duty rows are marked `[4P Sync Cleared]`.
 - ADS stops owned execution and clears recovery memory when Dalamud reports `DutyCompleted`.
 - When the object table goes empty mid-duty, ADS can promote the next unvisited map-label frontier point instead of backtracking through stale ghosts.
 - The frontier label inspector reads the `MapMarker` collection referenced by `Map.MapMarkerRange`; this is required for Toto-Rak, where the territory map row and marker collection row are different.
@@ -49,6 +48,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - Manual `MapXzDestination` rows can now intentionally beat a worse live progression interactable when there are no live monsters or follow anchors and the waypoint row has the better priority. This makes authored staging points usable for cases like Brayflox talk NPCs instead of being ignored behind a later gate.
 - Duty-object rules now auto-reload while ADS is running; `Ignored` can suppress `BattleNpc` rows such as Cid, and used progression interactables are suppressed by stable duty/object/position until duty reset or a large relocation.
 - Dialog rules now auto-reload while ADS is running; these are global prompt matches that default to running whenever ADS is enabled, the character is logged in, and the game is not zoning. `SelectYesno` remains the default addon, with optional delay and minimized-notification restore callbacks, and Settings can restore the old owned-duty-only gate.
+- ADS now refreshes live `DEFAULT` JSON cache files from raw botologyupdates GitHub URLs: `duty-object-rules.json`, `dialog-yesno-rules.json`, and `duty-maturity.json`. The cache updates when a file is missing, when a file is older than 24h as ADS takes duty ownership, or when the operator clicks `Update`.
 - `Required` BattleNpc rules make ADS seek/kill by configured priority before distance tie-breaks.
 - `BossFight` BattleNpc rules are a stronger live-boss classification: once the rule distance/Y gates pass, ADS promotes that boss over nearby trash, treasure, ghosts, and remembered manual Map XZ follow-through.
 - `Required` progression interactables only hard-override monster-first flow when their effective rule priority actually beats the best live monster; equal priorities fall back to the distance and Y-space heuristics.
@@ -79,7 +79,7 @@ Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for s
 - ADS now has a standalone Ghost Inspector window and `/ads ghosts` command so you can see the current monster/interactable ghost cache, including ghost reason, live map id, age, and coordinates. It also exposes the current, remembered, and last-ghosted manual `MapXzDestination` state so Keeper-style waypoint failures are visible in the UI instead of only in `dalamud.log`.
 - The global `Automaton Queen` ignore row is now authored as an exact-name wildcard-kind ignore so player pet suppression is not coupled to one object-kind guess.
 - Fallback map-label frontier selection now prefers labels ahead of the current route heading instead of raw sheet order.
-- The rules editor now supports parked full-manifest `PRESET`s in addition to the live `DEFAULT` file. You can switch presets, full-manifest export/import through the clipboard, disk import/export for giant manifests, create/delete presets, and load the packaged rules back into the `DEFAULT` draft with `@` before saving them live.
+- The object and dialog rules editors now support parked full-manifest `PRESET`s in addition to the live `DEFAULT` file. You can switch presets, full-manifest export/import through the clipboard, disk import/export for giant manifests, create/delete presets, and load the current `DEFAULT` cache back into the `DEFAULT` draft with `@` before saving it live.
 - The rules editor now highlights brand-new rows from `+ Row` or Object Explorer `CREATE RULE` until you save, scrolls them into view, and gives the `Layer` column a live sub-area dropdown with a blank top option whenever the duty territory exposes known map/sub-area labels.
 - Object Explorer now has `CREATE RULE`, which seeds a new rules-editor row with the current duty scope, current live layer, object kind, base id, and exact object name.
 - The main window duty catalog now shows explicit per-duty rule counts and a top rule-atlas summary with global/grand-total counts, per-class breakdown, and maturity coverage signals.

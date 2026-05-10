@@ -91,6 +91,16 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped("Before camera-based progression interactions, ADS requests the in-game camera reset flag and waits briefly before sending InteractWithObject. This does not use desktop focus or keyboard input.");
 
         ImGui.Separator();
+        ImGui.TextWrapped("Remote JSON cache");
+        ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
+        if (ImGui.Button("Update rules cache"))
+            plugin.ForceRemoteJsonUpdate();
+        ImGui.EndDisabled();
+        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
+        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
+            ImGui.TextDisabled(statusLine);
+
+        ImGui.Separator();
         ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
         if (ImGui.Button("Open rules JSON"))
@@ -107,7 +117,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
         ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds for pre-interact arrival hold, waitAfterInteractSeconds for post-interact follow-through hold, BossFight for BattleNpc bosses that should beat nearby trash/objectives once in range, CombatFriendly on BattleNpc or EventNpc for direct-interact talk targets such as Goblin Pathfinder, TreasureDoor for explicit treasure-dungeon gate overrides, and for manual waypoints classification MapXzDestination / MapXzForceMarch + mapCoordinates like 11.3,10.4 or XYZ / XYZForceMarch + worldCoordinates like 154.1,101.9,-34.2. ForceMarch rows are authored inside-duty bypass waypoints, not Praetorium-mounted-only rows. Layer now scopes any rule to the current live sub-area only: leave it blank for any layer, or set it to a live subarea name / map row id. Legacy DestinationType layer rows are auto-migrated on load.");
-        ImGui.TextWrapped("When ADS detects a newer plugin version than the last synced version stored in PluginConfigDirectory\\ADS.json, it overwrites this default JSON from the packaged file in the installed plugin directory before loading rules. Durable custom object-rule edits should live in named presets, not the DEFAULT config copy.");
+        ImGui.TextWrapped("ADS loads DEFAULT object rules from the plugin config cache. The Update button refreshes that cache from botologyupdates; duty ownership refreshes it only when a cache file is missing or older than 24h. Named object presets are parked files and are never overwritten by remote updates.");
 
         ImGui.Separator();
         ImGui.TextWrapped($"Dialog yes/no rules: {plugin.DialogYesNoRuleService.ActiveRuleCount} active rule(s).");
@@ -129,7 +139,17 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
         ImGui.TextWrapped("When enabled, dialog rules can run whenever ADS is enabled, your character is logged in, and the game is not zoning. Disable this to require ADS-owned or leaving duty execution.");
-        ImGui.TextWrapped("Dialog yes/no rules are still loaded from the plugin config directory, but ADS refreshes this default JSON from the packaged file when it detects a newer plugin version than the last synced version stored in PluginConfigDirectory\\ADS.json. No separate dialog preset system is added in this pass.");
+        ImGui.TextWrapped("ADS loads DEFAULT dialog rules from the plugin config cache. The dialog editor supports parked presets under dialog-rule-presets; only saving/importing into DEFAULT changes runtime behavior.");
+
+        ImGui.Separator();
+        ImGui.TextWrapped("Duty maturity");
+        ImGui.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
+        if (ImGui.Button("Open duty maturity JSON"))
+            plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath);
+        ImGui.SameLine();
+        if (ImGui.Button("Reload duty maturity JSON"))
+            plugin.DutyCatalogService.ReloadMaturity();
+        ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
         var dtrMode = plugin.Configuration.DtrBarMode;

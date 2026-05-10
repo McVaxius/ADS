@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using ADS.Models;
 using Dalamud.Plugin.Services;
@@ -6,7 +7,9 @@ namespace ADS.Services;
 
 public sealed class DialogYesNoRuleService
 {
+    public const string DefaultPresetName = "DEFAULT";
     private const string FileName = "dialog-yesno-rules.json";
+    private const string PresetDirectoryName = "dialog-rule-presets";
     private static readonly TimeSpan ReloadPollInterval = TimeSpan.FromSeconds(1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -19,19 +22,18 @@ public sealed class DialogYesNoRuleService
 
     private readonly IPluginLog log;
     private readonly string configPath;
-    private readonly string bundledPath;
+    private readonly string presetDirectoryPath;
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
-    public DialogYesNoRuleService(IPluginLog log, string configDirectory, string? assemblyDirectory, string initialSyncStatus)
+    public DialogYesNoRuleService(IPluginLog log, string configDirectory)
     {
         this.log = log;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
-        bundledPath = string.IsNullOrWhiteSpace(assemblyDirectory)
-            ? string.Empty
-            : Path.Combine(assemblyDirectory, FileName);
-        LastSyncStatus = initialSyncStatus;
+        presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
+        Directory.CreateDirectory(presetDirectoryPath);
+        LastSyncStatus = "DEFAULT dialog rules load from the plugin config cache; the remote updater refreshes this file from botologyupdates.";
 
         EnsureSeeded();
         Reload();
@@ -40,9 +42,12 @@ public sealed class DialogYesNoRuleService
     public string ConfigPath
         => configPath;
 
+    public string PresetDirectoryPath
+        => presetDirectoryPath;
+
     public string LastLoadStatus { get; private set; } = "Dialog rules not loaded yet.";
 
-    public string LastSyncStatus { get; private set; } = "Packaged dialog sync not checked yet.";
+    public string LastSyncStatus { get; private set; }
 
     public DialogYesNoRuleManifest Current { get; private set; } = new();
 
@@ -63,19 +68,60 @@ public sealed class DialogYesNoRuleService
     public IEnumerable<DialogYesNoRule> GetEnabledRules()
         => Current.Rules.Where(x => x.Enabled);
 
+    public bool IsDefaultPreset(string presetName)
+        => string.Equals(presetName, DefaultPresetName, StringComparison.OrdinalIgnoreCase);
+
+    public IReadOnlyList<string> GetPresetNames()
+    {
+        var names = new List<string> { DefaultPresetName };
+        if (!Directory.Exists(presetDirectoryPath))
+            return names;
+
+        names.AddRange(
+            Directory.EnumerateFiles(presetDirectoryPath, "*.json", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Where(x => !string.Equals(x, DefaultPresetName, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)!);
+        return names;
+    }
+
+    public string GetPresetPath(string presetName)
+        => IsDefaultPreset(presetName)
+            ? configPath
+            : Path.Combine(presetDirectoryPath, $"{SanitizePresetName(presetName)}.json");
+
+    public string SanitizePresetName(string presetName)
+    {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var cleaned = new string((presetName ?? string.Empty).Where(ch => !invalidCharacters.Contains(ch)).ToArray());
+        cleaned = NormalizeOptional(cleaned).Trim('.', ' ');
+        if (string.IsNullOrWhiteSpace(cleaned))
+            cleaned = "Preset";
+
+        if (IsDefaultPreset(cleaned))
+            cleaned = $"{DefaultPresetName}-copy";
+
+        return cleaned;
+    }
+
     public bool Reload()
     {
         try
         {
             EnsureSeeded();
-            var json = File.ReadAllText(configPath);
-            var manifest = JsonSerializer.Deserialize<DialogYesNoRuleManifest>(json, JsonOptions) ?? new DialogYesNoRuleManifest();
-            manifest.Rules ??= [];
-            NormalizeManifest(manifest);
+            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
+            {
+                Current = new DialogYesNoRuleManifest();
+                LastLoadStatus = status;
+                log.Warning($"[ADS] {LastLoadStatus}");
+                return false;
+            }
 
             Current = manifest;
             lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
-            LastLoadStatus = $"Loaded {ActiveRuleCount} active dialog rule(s) from {configPath}.";
+            LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
             return true;
         }
@@ -116,19 +162,170 @@ public sealed class DialogYesNoRuleService
     }
 
     public bool SaveManifest(DialogYesNoRuleManifest manifest)
+        => SaveManifest(DefaultPresetName, manifest);
+
+    public bool SaveManifest(string presetName, DialogYesNoRuleManifest manifest)
     {
         try
         {
             manifest.Rules ??= [];
             NormalizeManifest(manifest);
-            var json = JsonSerializer.Serialize(manifest, JsonOptions);
-            File.WriteAllText(configPath, json);
+            var path = EnsurePresetSeeded(presetName);
+            WriteManifestToPath(path, manifest);
+            if (!IsDefaultPreset(presetName))
+            {
+                LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active dialog rule(s) to preset {presetName} at {path}.";
+                log.Information($"[ADS] {LastLoadStatus}");
+                return true;
+            }
+
             return Reload();
         }
         catch (Exception ex)
         {
-            LastLoadStatus = $"Failed to save {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to save dialog preset {presetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
+            return false;
+        }
+    }
+
+    public bool TryLoadManifest(string presetName, out DialogYesNoRuleManifest manifest, out string status)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = "Dialog preset was not loaded.";
+
+        try
+        {
+            var path = EnsurePresetSeeded(presetName);
+            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: true);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load dialog preset {presetName}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryLoadDefaultCacheManifest(out DialogYesNoRuleManifest manifest, out string status)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = "DEFAULT dialog cache preset was not loaded.";
+
+        try
+        {
+            EnsureSeeded();
+            return TryLoadManifestFromPath(configPath, out manifest, out status, persistMigrations: false);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load DEFAULT dialog cache preset: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryDeletePreset(string presetName, out string status)
+    {
+        status = "Dialog preset was not deleted.";
+        if (IsDefaultPreset(presetName))
+        {
+            status = "DEFAULT cannot be deleted.";
+            return false;
+        }
+
+        try
+        {
+            var path = GetPresetPath(presetName);
+            if (!File.Exists(path))
+            {
+                status = $"Dialog preset {presetName} did not exist on disk.";
+                return false;
+            }
+
+            File.Delete(path);
+            status = $"Deleted dialog preset {presetName}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to delete dialog preset {presetName}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryImportManifestText(string text, out DialogYesNoRuleManifest manifest, out string status)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = "Clipboard dialog manifest import failed.";
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            status = "Clipboard was empty; no full-manifest import performed.";
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        if (!trimmed.StartsWith('{'))
+        {
+            try
+            {
+                trimmed = Encoding.UTF8.GetString(Convert.FromBase64String(trimmed));
+            }
+            catch
+            {
+                // Treat clipboard as raw JSON if it is not valid base64.
+            }
+        }
+
+        return TryDeserializeManifest(trimmed, "<clipboard>", out manifest, out status);
+    }
+
+    public bool TryImportManifestFromPath(string path, out DialogYesNoRuleManifest manifest, out string status)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = "Disk dialog manifest import failed.";
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                status = "Disk path was blank; no import performed.";
+                return false;
+            }
+
+            if (!File.Exists(path))
+            {
+                status = $"Disk import path did not exist: {path}";
+                return false;
+            }
+
+            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: false);
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to import dialog manifest from {path}: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryExportManifestToPath(string path, DialogYesNoRuleManifest manifest, out string status)
+    {
+        status = "Disk dialog manifest export failed.";
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                status = "Disk path was blank; no export performed.";
+                return false;
+            }
+
+            WriteManifestToPath(path, manifest);
+            status = $"Exported dialog manifest to {path}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to export dialog manifest to {path}: {ex.Message}";
             return false;
         }
     }
@@ -147,17 +344,32 @@ public sealed class DialogYesNoRuleService
         if (File.Exists(configPath))
             return;
 
-        if (!string.IsNullOrWhiteSpace(bundledPath) && File.Exists(bundledPath))
+        File.WriteAllText(configPath, GetDefaultJson());
+        File.SetLastWriteTimeUtc(configPath, DateTime.UtcNow - TimeSpan.FromDays(2));
+        LastSyncStatus = "Default dialog rules config was missing, so ADS seeded a minimal built-in fallback until the botologyupdates cache refresh succeeds.";
+        log.Warning($"[ADS] {LastSyncStatus}");
+    }
+
+    private string EnsurePresetSeeded(string presetName)
+    {
+        if (IsDefaultPreset(presetName))
         {
-            File.Copy(bundledPath, configPath, overwrite: false);
-            LastSyncStatus = $"Default dialog rules config was missing, so ADS re-seeded it from {bundledPath}.";
-            log.Information($"[ADS] {LastSyncStatus}");
-            return;
+            EnsureSeeded();
+            return configPath;
         }
 
-        File.WriteAllText(configPath, GetDefaultJson());
-        LastSyncStatus = $"Default dialog rules config was missing, so ADS re-seeded it from built-in defaults.";
-        log.Warning($"[ADS] {LastSyncStatus}");
+        var path = GetPresetPath(presetName);
+        if (File.Exists(path))
+            return path;
+
+        if (File.Exists(configPath))
+        {
+            File.Copy(configPath, path, overwrite: false);
+            return path;
+        }
+
+        File.WriteAllText(path, GetDefaultJson());
+        return path;
     }
 
     private void RememberCurrentRulesWriteTime()
@@ -171,6 +383,58 @@ public sealed class DialogYesNoRuleService
         {
             // Best effort only.
         }
+    }
+
+    private bool TryLoadManifestFromPath(string path, out DialogYesNoRuleManifest manifest, out string status, bool persistMigrations)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = $"Failed to load dialog manifest from {path}.";
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            if (!TryDeserializeManifest(json, path, out manifest, out status))
+                return false;
+
+            NormalizeManifest(manifest);
+
+            status = $"Loaded {manifest.Rules.Count(x => x.Enabled)} active dialog rule(s) from {path}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to load dialog manifest from {path}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryDeserializeManifest(string json, string sourcePath, out DialogYesNoRuleManifest manifest, out string status)
+    {
+        manifest = new DialogYesNoRuleManifest();
+        status = $"Failed to parse dialog manifest from {sourcePath}.";
+
+        try
+        {
+            manifest = JsonSerializer.Deserialize<DialogYesNoRuleManifest>(json, JsonOptions) ?? new DialogYesNoRuleManifest();
+            manifest.Rules ??= [];
+            NormalizeManifest(manifest);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to parse dialog manifest from {sourcePath}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static void WriteManifestToPath(string path, DialogYesNoRuleManifest manifest)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var json = JsonSerializer.Serialize(manifest, JsonOptions);
+        File.WriteAllText(path, json);
     }
 
     private static bool Matches(DialogYesNoRule rule, string promptText)
@@ -200,6 +464,7 @@ public sealed class DialogYesNoRuleService
     private static void NormalizeManifest(DialogYesNoRuleManifest manifest)
     {
         manifest.Description ??= string.Empty;
+        manifest.Rules ??= [];
 
         foreach (var rule in manifest.Rules)
         {
@@ -224,7 +489,7 @@ public sealed class DialogYesNoRuleService
         => """
 {
   "schemaVersion": 1,
-  "description": "Human-edited ADS dialog rules. These are global, not duty-scoped. Default Addon is SelectYesno; processing scope follows the ADS Settings dialog-rule toggle.",
+  "description": "Minimal built-in ADS dialog fallback. The live DEFAULT cache should normally be refreshed from botologyupdates.",
   "rules": [
     {
       "enabled": true,

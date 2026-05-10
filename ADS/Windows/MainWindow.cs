@@ -78,9 +78,18 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Dialogs"))
             plugin.ToggleDialogRuleEditorUi();
+        ImGui.SameLine();
+        using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
+        {
+            if (ImGui.SmallButton("Update"))
+                plugin.ForceRemoteJsonUpdate();
+        }
 
         ImGui.TextWrapped(PluginInfo.Summary);
         ImGui.TextWrapped(PluginInfo.PilotDutySummary);
+        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
+        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
+            ImGui.TextDisabled(statusLine);
     }
 
     private void DrawCurrentState()
@@ -116,6 +125,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Treasure coffers: {(plugin.Configuration.ConsiderTreasureCoffers ? "ON" : "OFF")}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount}");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"Dialog rules: {plugin.DialogYesNoRuleService.ActiveRuleCount}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Layer: {activeLayer}");
         ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
@@ -340,6 +351,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var plannedTests = entries.Count(x => x.IsPlannedTest);
         ImGui.TextDisabled(categorySummary);
         ImGui.TextDisabled($"{plannedTests} planned test{(plannedTests == 1 ? string.Empty : "s")} flagged in the catalog.");
+        ImGui.TextDisabled(plugin.DutyCatalogService.LastMaturityLoadStatus);
 
         int CountStatus(DutyClearanceStatus status)
             => entries.Count(x => x.ClearanceStatus == status);
