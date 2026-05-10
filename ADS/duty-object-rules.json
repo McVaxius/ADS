@@ -579,7 +579,7 @@
       "Notes": ""
     },
     {
-      "Enabled": true,
+      "Enabled": false,
       "TerritoryTypeId": 1063,
       "ContentFinderConditionId": 32,
       "DutyEnglishName": "The Keeper of the Lake",
