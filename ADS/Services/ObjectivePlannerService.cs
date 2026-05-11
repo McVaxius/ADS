@@ -12,7 +12,7 @@ public sealed class ObjectivePlannerService
     private const float CombatFriendlyInteractableDistanceCap = 25f;
     private const float CombatFriendlyVerticalCap = 6f;
     private const float TreasureCofferMaterialLead = 8f;
-    private const float TreasureCofferMaxHorizontalDistance = 30f;
+    private const float TreasureCofferMaxHorizontalDistance = 100f;
     private const float TreasureCofferVerticalCap = 5f;
     private const float BattleNpcVerticalSanityCap = 100f;
 
