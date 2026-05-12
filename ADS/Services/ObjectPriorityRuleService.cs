@@ -1246,6 +1246,40 @@ public sealed class ObjectPriorityRuleService
                 changed = true;
             }
 
+            if (string.Equals(rule.DutyEnglishName, "Copperbell Mines", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectName, "Lift Lever", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.ObjectKind, ObjectKind.BattleNpc.ToString(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rule.Classification, InteractableClass.Required.ToString(), StringComparison.OrdinalIgnoreCase)
+                && rule.Enabled)
+            {
+                rule.Enabled = false;
+                var migrationNote = "Disabled stale Copperbell BattleNpc Lift Lever row; generic non-kind Lift Lever plus positional ignored rows handle lever interaction.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
+            if (string.Equals(rule.DutyEnglishName, "Copperbell Mines", StringComparison.OrdinalIgnoreCase)
+                && TryParseClassification(rule.Classification, out ruleClassification)
+                && ruleClassification == InteractableClass.XYZ
+                && string.IsNullOrWhiteSpace(rule.WorldCoordinates)
+                && string.IsNullOrWhiteSpace(rule.MapCoordinates)
+                && !string.IsNullOrWhiteSpace(rule.ObjectWorldCoordinates)
+                && rule.Enabled)
+            {
+                rule.Enabled = false;
+                var migrationNote = "Disabled stale malformed Copperbell XYZ row that stored the destination in ObjectWorldCoordinates; use WorldCoordinates on the fixed post-door XYZ row.";
+                rule.Notes = string.IsNullOrWhiteSpace(rule.Notes)
+                    ? migrationNote
+                    : rule.Notes.Contains(migrationNote, StringComparison.OrdinalIgnoreCase)
+                        ? rule.Notes
+                        : $"{rule.Notes} {migrationNote}";
+                changed = true;
+            }
+
             if (string.Equals(rule.DutyEnglishName, "the Praetorium", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(rule.Layer, "Castrum Defense", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(rule.ObjectName, "Magitek Terminal", StringComparison.OrdinalIgnoreCase)

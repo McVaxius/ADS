@@ -441,6 +441,19 @@ public sealed class Plugin : IDalamudPlugin
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                dialogVisible = DialogAutomationService.DialogVisible,
+                dialogPrompt = DialogAutomationService.DialogPrompt,
+                dialogRule = DialogAutomationService.DialogRule,
+                dialogStatus = DialogAutomationService.DialogStatus,
+                dialogLastAction = DialogAutomationService.DialogLastAction,
+                dialogLastFailure = DialogAutomationService.DialogLastFailure,
+                dialogLastActionAtUtc = DialogAutomationService.DialogLastActionAtUtc == DateTime.MinValue
+                    ? null
+                    : DialogAutomationService.DialogLastActionAtUtc.ToString("O"),
+                manualDestinationTarget = ExecutionService.CurrentManualDestinationTarget,
+                manualDestinationDistance = ExecutionService.CurrentManualDestinationDistance,
+                manualDestinationLastProgressAgeSeconds = ExecutionService.ManualDestinationLastProgressAgeSeconds,
+                manualDestinationLastGhostReason = DungeonFrontierService.LastGhostedManualDestinationReason,
                 utilityRunning = UtilityAutomationService.IsRunning,
                 utilityTask = UtilityAutomationService.ActiveTaskName,
                 utilityMode = UtilityAutomationService.ActiveModeName,
@@ -474,6 +487,10 @@ public sealed class Plugin : IDalamudPlugin
                 explanation = ObjectivePlannerService.Current.Explanation,
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                dialogVisible = DialogAutomationService.DialogVisible,
+                dialogPrompt = DialogAutomationService.DialogPrompt,
+                dialogRule = DialogAutomationService.DialogRule,
+                dialogStatus = DialogAutomationService.DialogStatus,
                 mounted = DutyContextService.Current.Mounted,
                 targetName = ObjectivePlannerService.Current.TargetName,
                 targetDistance = ObjectivePlannerService.Current.TargetDistance,
@@ -491,6 +508,10 @@ public sealed class Plugin : IDalamudPlugin
                     visitedManualMapXzDestinations = DungeonFrontierService.VisitedManualMapXzDestinations,
                     manualXyzDestinationCount = DungeonFrontierService.ManualXyzDestinationCount,
                     visitedManualXyzDestinations = DungeonFrontierService.VisitedManualXyzDestinations,
+                    manualDestinationTarget = ExecutionService.CurrentManualDestinationTarget,
+                    manualDestinationDistance = ExecutionService.CurrentManualDestinationDistance,
+                    manualDestinationLastProgressAgeSeconds = ExecutionService.ManualDestinationLastProgressAgeSeconds,
+                    manualDestinationLastGhostReason = DungeonFrontierService.LastGhostedManualDestinationReason,
                     currentTarget = DungeonFrontierService.CurrentTarget?.Name,
                     currentTargetMapId = DungeonFrontierService.CurrentTarget?.MapId,
                     currentTargetPosition = DungeonFrontierService.CurrentTarget is { } frontierPoint
@@ -587,6 +608,11 @@ public sealed class Plugin : IDalamudPlugin
         DutyContextService.Update(Configuration.PluginEnabled);
         ObjectPriorityRuleService.ReloadIfChanged();
         DialogYesNoRuleService.ReloadIfChanged();
+        DialogAutomationService.Update(
+            DutyContextService.Current,
+            ExecutionService.CurrentMode,
+            Configuration.PluginEnabled,
+            Configuration.ProcessDialogRulesOutsideOwnedDuty);
 
         if (DutyContextService.Current.IsUnsafeTransition)
         {
@@ -597,7 +623,13 @@ public sealed class Plugin : IDalamudPlugin
                 ObservationSnapshot.Empty,
                 ExecutionService.CurrentMode,
                 Configuration.ConsiderTreasureCoffers);
-            ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationSnapshot.Empty, Configuration.PluginEnabled, Configuration.ConsiderTreasureCoffers);
+            ExecutionService.Update(
+                DutyContextService.Current,
+                ObjectivePlannerService.Current,
+                ObservationSnapshot.Empty,
+                Configuration.PluginEnabled,
+                Configuration.ConsiderTreasureCoffers,
+                DialogAutomationService.DialogStatus);
             UpdateDtrBar();
             return;
         }
@@ -609,12 +641,13 @@ public sealed class Plugin : IDalamudPlugin
             ObservationMemoryService.Current,
             ExecutionService.CurrentMode,
             Configuration.ConsiderTreasureCoffers);
-        ExecutionService.Update(DutyContextService.Current, ObjectivePlannerService.Current, ObservationMemoryService.Current, Configuration.PluginEnabled, Configuration.ConsiderTreasureCoffers);
-        DialogAutomationService.Update(
+        ExecutionService.Update(
             DutyContextService.Current,
-            ExecutionService.CurrentMode,
+            ObjectivePlannerService.Current,
+            ObservationMemoryService.Current,
             Configuration.PluginEnabled,
-            Configuration.ProcessDialogRulesOutsideOwnedDuty);
+            Configuration.ConsiderTreasureCoffers,
+            DialogAutomationService.DialogStatus);
         InnEntryService.Update();
         UtilityAutomationService.Update();
         UpdateDtrBar();

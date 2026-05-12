@@ -7,6 +7,10 @@ public sealed class DialogAutomationService
 {
     private static readonly TimeSpan DialogCheckCooldown = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan DialogHandleCooldown = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SelectYesNoResponseWindow = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SelectYesNoResponseRetryCooldown = TimeSpan.FromMilliseconds(500);
+    private const int MaxSelectYesNoResponseAttempts = 3;
+    private const string IdleStatus = "Dialog automation idle; no actionable dialog visible.";
 
     private enum DialogRuleActionKind
     {
@@ -32,6 +36,17 @@ public sealed class DialogAutomationService
     private DateTime pendingActionFirstSeenUtc = DateTime.MinValue;
     private string lastHandledActionKey = string.Empty;
     private DateTime lastHandledActionAtUtc = DateTime.MinValue;
+    private bool selectYesNoResponsePending;
+    private bool pendingSelectYesNoResponseYes;
+    private DateTime pendingSelectYesNoStartedAtUtc = DateTime.MinValue;
+    private DateTime pendingSelectYesNoLastAttemptAtUtc = DateTime.MinValue;
+    private int pendingSelectYesNoAttempts;
+    private string pendingSelectYesNoActionKey = string.Empty;
+    private string pendingSelectYesNoRule = string.Empty;
+    private string pendingSelectYesNoPrompt = string.Empty;
+    private string pendingSelectYesNoSource = string.Empty;
+    private string suppressedSelectYesNoActionKey = string.Empty;
+    private string suppressedSelectYesNoPrompt = string.Empty;
 
     public DialogAutomationService(IGameGui gameGui, DialogYesNoRuleService ruleService, IPluginLog log)
     {
@@ -40,18 +55,50 @@ public sealed class DialogAutomationService
         this.log = log;
     }
 
+    public bool DialogVisible { get; private set; }
+
+    public string DialogPrompt { get; private set; } = string.Empty;
+
+    public string DialogRule { get; private set; } = string.Empty;
+
+    public string DialogStatus { get; private set; } = IdleStatus;
+
+    public string DialogLastAction { get; private set; } = string.Empty;
+
+    public string DialogLastFailure { get; private set; } = string.Empty;
+
+    public DateTime DialogLastActionAtUtc { get; private set; } = DateTime.MinValue;
+
     public void Update(
         DutyContextSnapshot context,
         OwnershipMode ownershipMode,
         bool pluginEnabled,
         bool processDialogRulesOutsideOwnedDuty)
     {
-        if (!pluginEnabled || !context.IsLoggedIn || context.IsUnsafeTransition)
+        RefreshVisibleDialogSnapshot();
+
+        if (!pluginEnabled)
+        {
+            SetBlockedStatus("ADS disabled");
             return;
+        }
+
+        if (!context.IsLoggedIn)
+        {
+            SetBlockedStatus("character not logged in");
+            return;
+        }
+
+        if (context.IsUnsafeTransition)
+        {
+            SetBlockedStatus("unsafe transition active");
+            return;
+        }
 
         if (!processDialogRulesOutsideOwnedDuty
             && (!context.InInstancedDuty || !IsOwnedOrLeaving(ownershipMode)))
         {
+            SetBlockedStatus("dialog scope requires owned/leaving duty");
             return;
         }
 
@@ -71,33 +118,176 @@ public sealed class DialogAutomationService
 
     private void TryHandleDialogRules(DateTime now)
     {
+        ClearSuppressedSelectYesNoIfDialogChanged();
+
+        if (TryHandlePendingSelectYesNoResponse(now))
+            return;
+
         var action = FindNextAction();
         if (action is null)
         {
             ResetPendingAction();
+            SetNoActionStatus();
+            return;
+        }
+
+        DialogRule = DescribeRule(action.Rule);
+        if (IsSuppressedSelectYesNoAction(action))
+        {
+            DialogStatus = $"SelectYesno response exhausted for this prompt; manual action required: {DescribeAction(action)}";
+            DialogLastFailure = DialogStatus;
             return;
         }
 
         if (string.Equals(action.Key, lastHandledActionKey, StringComparison.OrdinalIgnoreCase)
             && now - lastHandledActionAtUtc < DialogHandleCooldown)
         {
+            var remaining = DialogHandleCooldown - (now - lastHandledActionAtUtc);
+            DialogStatus = $"Dialog rule matched, but last action cooldown is still active for {Math.Max(0, remaining.TotalSeconds):0.0}s: {DescribeAction(action)}";
             return;
         }
 
         if (!IsActionDelaySatisfied(action, now))
             return;
 
+        if (IsSelectYesNoAction(action))
+        {
+            StartSelectYesNoResponse(action, now);
+            return;
+        }
+
         if (!ExecuteAction(action))
         {
-            log.Warning($"[ADS] Dialog rule matched but action failed: {DescribeAction(action)}");
+            var failure = $"Dialog rule matched but action failed: {DescribeAction(action)}";
+            DialogLastFailure = failure;
+            DialogStatus = failure;
+            log.Warning($"[ADS] {failure}");
             ResetPendingAction();
             return;
         }
 
+        var actionDescription = DescribeAction(action);
         lastHandledActionKey = action.Key;
         lastHandledActionAtUtc = now;
+        DialogLastAction = actionDescription;
+        DialogLastActionAtUtc = now;
+        DialogLastFailure = string.Empty;
+        DialogStatus = $"Dialog rule action completed: {actionDescription}";
         ResetPendingAction();
-        log.Information($"[ADS] Dialog rule action completed: {DescribeAction(action)}");
+        log.Information($"[ADS] {DialogStatus}");
+    }
+
+    private bool TryHandlePendingSelectYesNoResponse(DateTime now)
+    {
+        if (!selectYesNoResponsePending)
+            return false;
+
+        DialogRule = pendingSelectYesNoRule;
+
+        if (!DialogVisible)
+        {
+            CompletePendingSelectYesNoResponse(now, "dialog closed");
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(DialogPrompt)
+            && !string.Equals(DialogPrompt, pendingSelectYesNoPrompt, StringComparison.Ordinal))
+        {
+            CompletePendingSelectYesNoResponse(now, $"prompt changed to: {DialogPrompt}");
+            return true;
+        }
+
+        if (pendingSelectYesNoAttempts >= MaxSelectYesNoResponseAttempts)
+        {
+            ExhaustPendingSelectYesNoResponse();
+            return true;
+        }
+
+        if (now - pendingSelectYesNoStartedAtUtc > SelectYesNoResponseWindow)
+        {
+            ExhaustPendingSelectYesNoResponse();
+            return true;
+        }
+
+        if (pendingSelectYesNoLastAttemptAtUtc != DateTime.MinValue
+            && now - pendingSelectYesNoLastAttemptAtUtc < SelectYesNoResponseRetryCooldown)
+        {
+            var remaining = SelectYesNoResponseRetryCooldown - (now - pendingSelectYesNoLastAttemptAtUtc);
+            DialogStatus = $"Sent {FormatYesNo(pendingSelectYesNoResponseYes)} to SelectYesno; waiting {Math.Max(0, remaining.TotalSeconds):0.0}s for close before retry: {pendingSelectYesNoSource}";
+            return true;
+        }
+
+        SendPendingSelectYesNoResponse(now);
+        return true;
+    }
+
+    private void StartSelectYesNoResponse(DialogRuleAction action, DateTime now)
+    {
+        ResetPendingAction();
+        selectYesNoResponsePending = true;
+        pendingSelectYesNoResponseYes = IsYesResponse(action.Rule);
+        pendingSelectYesNoStartedAtUtc = now;
+        pendingSelectYesNoLastAttemptAtUtc = DateTime.MinValue;
+        pendingSelectYesNoAttempts = 0;
+        pendingSelectYesNoActionKey = action.Key;
+        pendingSelectYesNoRule = DescribeRule(action.Rule);
+        pendingSelectYesNoPrompt = action.DialogText;
+        pendingSelectYesNoSource = DescribeAction(action);
+        DialogRule = pendingSelectYesNoRule;
+        SendPendingSelectYesNoResponse(now);
+    }
+
+    private void SendPendingSelectYesNoResponse(DateTime now)
+    {
+        pendingSelectYesNoAttempts++;
+        pendingSelectYesNoLastAttemptAtUtc = now;
+
+        var responseText = FormatYesNo(pendingSelectYesNoResponseYes);
+        var method = GetSelectYesNoClickMethodForAttempt(pendingSelectYesNoAttempts);
+        var methodDescription = GameInteractionHelper.DescribeSelectYesNoClickMethod(method);
+        if (GameInteractionHelper.TrySelectYesNo(pendingSelectYesNoResponseYes, gameGui, method, log))
+        {
+            var action = pendingSelectYesNoAttempts == 1
+                ? $"sent {responseText} via {methodDescription}; waiting for SelectYesno to close: {pendingSelectYesNoSource}"
+                : $"retried {responseText} via {methodDescription} (attempt {pendingSelectYesNoAttempts}/{MaxSelectYesNoResponseAttempts}); waiting for SelectYesno to close: {pendingSelectYesNoSource}";
+            DialogLastAction = action;
+            DialogLastActionAtUtc = now;
+            DialogLastFailure = string.Empty;
+            DialogStatus = action;
+            log.Information($"[ADS] {DialogStatus}");
+            return;
+        }
+
+        var failure = $"SelectYesno {responseText} send failed via {methodDescription} (attempt {pendingSelectYesNoAttempts}/{MaxSelectYesNoResponseAttempts}): {pendingSelectYesNoSource}";
+        DialogLastFailure = failure;
+        DialogStatus = pendingSelectYesNoAttempts >= MaxSelectYesNoResponseAttempts
+            ? $"{failure}; manual action required."
+            : $"{failure}; will retry.";
+        log.Warning($"[ADS] {DialogStatus}");
+    }
+
+    private void CompletePendingSelectYesNoResponse(DateTime now, string reason)
+    {
+        var action = $"SelectYesno response accepted; {reason}: {pendingSelectYesNoSource}";
+        lastHandledActionKey = pendingSelectYesNoActionKey;
+        lastHandledActionAtUtc = now;
+        DialogLastAction = action;
+        DialogLastActionAtUtc = now;
+        DialogLastFailure = string.Empty;
+        DialogStatus = action;
+        ClearPendingSelectYesNoResponse();
+        log.Information($"[ADS] {DialogStatus}");
+    }
+
+    private void ExhaustPendingSelectYesNoResponse()
+    {
+        suppressedSelectYesNoActionKey = pendingSelectYesNoActionKey;
+        suppressedSelectYesNoPrompt = pendingSelectYesNoPrompt;
+        var failure = $"SelectYesno response exhausted after {pendingSelectYesNoAttempts} attempt(s); still visible; manual action required: {pendingSelectYesNoSource}";
+        DialogLastFailure = failure;
+        DialogStatus = failure;
+        ClearPendingSelectYesNoResponse();
+        log.Warning($"[ADS] {failure}");
     }
 
     private DialogRuleAction? FindNextAction()
@@ -182,10 +372,16 @@ public sealed class DialogAutomationService
         {
             pendingActionKey = action.Key;
             pendingActionFirstSeenUtc = now;
+            DialogStatus = $"Dialog rule matched; waiting configured delay {action.DelaySeconds:0.0}s before action: {DescribeAction(action)}";
             return false;
         }
 
-        return (now - pendingActionFirstSeenUtc).TotalSeconds >= action.DelaySeconds;
+        var elapsed = (now - pendingActionFirstSeenUtc).TotalSeconds;
+        if (elapsed >= action.DelaySeconds)
+            return true;
+
+        DialogStatus = $"Dialog rule matched; waiting configured delay {Math.Max(0, action.DelaySeconds - elapsed):0.0}s before action: {DescribeAction(action)}";
+        return false;
     }
 
     private void ResetPendingAction()
@@ -222,9 +418,58 @@ public sealed class DialogAutomationService
 
     private bool TryClickResponse(DialogYesNoRule rule)
     {
-        var yes = !string.Equals(rule.Response, "No", StringComparison.OrdinalIgnoreCase);
+        var yes = IsYesResponse(rule);
         return GameInteractionHelper.TrySelectYesNo(yes, gameGui, log);
     }
+
+    private static bool IsSelectYesNoAction(DialogRuleAction action)
+        => action.Kind == DialogRuleActionKind.ClickAddon && IsSelectYesnoAddon(action.AddonName);
+
+    private bool IsSuppressedSelectYesNoAction(DialogRuleAction action)
+        => IsSelectYesNoAction(action)
+            && !string.IsNullOrWhiteSpace(suppressedSelectYesNoActionKey)
+            && string.Equals(action.Key, suppressedSelectYesNoActionKey, StringComparison.OrdinalIgnoreCase);
+
+    private void ClearPendingSelectYesNoResponse()
+    {
+        selectYesNoResponsePending = false;
+        pendingSelectYesNoResponseYes = false;
+        pendingSelectYesNoStartedAtUtc = DateTime.MinValue;
+        pendingSelectYesNoLastAttemptAtUtc = DateTime.MinValue;
+        pendingSelectYesNoAttempts = 0;
+        pendingSelectYesNoActionKey = string.Empty;
+        pendingSelectYesNoRule = string.Empty;
+        pendingSelectYesNoPrompt = string.Empty;
+        pendingSelectYesNoSource = string.Empty;
+    }
+
+    private void ClearSuppressedSelectYesNoIfDialogChanged()
+    {
+        if (string.IsNullOrWhiteSpace(suppressedSelectYesNoActionKey))
+            return;
+
+        if (!DialogVisible
+            || (!string.IsNullOrWhiteSpace(DialogPrompt)
+                && !string.Equals(DialogPrompt, suppressedSelectYesNoPrompt, StringComparison.Ordinal)))
+        {
+            suppressedSelectYesNoActionKey = string.Empty;
+            suppressedSelectYesNoPrompt = string.Empty;
+        }
+    }
+
+    private static GameInteractionHelper.SelectYesNoClickMethod GetSelectYesNoClickMethodForAttempt(int attempt)
+        => attempt switch
+        {
+            1 => GameInteractionHelper.SelectYesNoClickMethod.ButtonEvent,
+            2 => GameInteractionHelper.SelectYesNoClickMethod.FireCallbackInt,
+            _ => GameInteractionHelper.SelectYesNoClickMethod.LegacyCallback,
+        };
+
+    private static bool IsYesResponse(DialogYesNoRule rule)
+        => !string.Equals(rule.Response, "No", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatYesNo(bool yes)
+        => yes ? "Yes" : "No";
 
     private static bool TryParseAddonCallback(string callbackText, out string addonName, out bool updateState, out object[] args)
     {
@@ -266,6 +511,49 @@ public sealed class DialogAutomationService
             DialogRuleActionKind.ClickAddon => $"fire {action.CallbackText} for {action.AddonName}",
             _ => action.Key,
         };
+
+    private void RefreshVisibleDialogSnapshot()
+    {
+        DialogVisible = GameInteractionHelper.IsAddonVisible("SelectYesno");
+        if (!DialogVisible)
+        {
+            DialogPrompt = string.Empty;
+            return;
+        }
+
+        DialogPrompt = GameInteractionHelper.TryGetSelectYesNoPromptText(gameGui, out var dialogText)
+            ? dialogText
+            : string.Empty;
+    }
+
+    private void SetBlockedStatus(string reason)
+    {
+        ResetPendingAction();
+        ClearPendingSelectYesNoResponse();
+        DialogRule = string.Empty;
+        DialogStatus = DialogVisible
+            ? string.IsNullOrWhiteSpace(DialogPrompt)
+                ? $"Dialog automation blocked ({reason}) while SelectYesno is visible, but prompt text could not be read."
+                : $"Dialog automation blocked ({reason}) while SelectYesno is visible: {DialogPrompt}"
+            : $"Dialog automation blocked ({reason}).";
+    }
+
+    private void SetNoActionStatus()
+    {
+        DialogRule = string.Empty;
+        if (!DialogVisible)
+        {
+            DialogStatus = IdleStatus;
+            return;
+        }
+
+        DialogStatus = string.IsNullOrWhiteSpace(DialogPrompt)
+            ? "SelectYesno is visible, but ADS could not read the prompt text; no dialog rule action was taken."
+            : $"SelectYesno is visible, but no dialog rule matched prompt: {DialogPrompt}";
+    }
+
+    private static string DescribeRule(DialogYesNoRule rule)
+        => $"{NormalizeAddon(rule.Addon)} {rule.MatchMode} '{rule.PromptPattern}' => {rule.Response}";
 
     private static string BuildActionKey(string kind, DialogYesNoRule rule, string first, string second, string third)
         => string.Join('|', kind, NormalizeAddon(rule.Addon), rule.PromptPattern, rule.MatchMode, rule.Response, first, second, third);

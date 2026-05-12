@@ -388,8 +388,13 @@
 - Put authored world coordinates in `WorldCoordinates` as `x,y,z`, for example `154.1,101.9,-34.2`.
 - `Layer` is optional for `XYZ` rows. Leave it blank to allow that waypoint on any active submap, or set it to the live subarea name / map row id to restrict the waypoint to one layer.
 - `XYZ` is for precise same-subarea staging where `MapXzDestination` is too loose because Y matters and you do not want current-player-Y conversion.
-- ADS routes directly to the authored world X/Y/Z point with `/vnav moveto` and ghosts the destination once execution reaches the 1y 3D arrival rule.
-- Status / analysis JSON now expose `frontier.manualXyzDestinationCount`, `frontier.visitedManualXyzDestinations`, and `frontier.currentTargetWorldCoordinates` for active XYZ points.
+- ADS routes directly to the authored world X/Y/Z point with `/vnav moveto` and ghosts normal `XYZ` destinations once execution reaches the `2.5y` 3D arrival rule. Force-march `XYZ` destinations keep the tighter `1y` rule.
+- Status / analysis JSON now expose `frontier.manualXyzDestinationCount`, `frontier.visitedManualXyzDestinations`, `frontier.currentTargetWorldCoordinates`, `frontier.manualDestinationTarget`, `frontier.manualDestinationDistance`, `frontier.manualDestinationLastProgressAgeSeconds`, and `frontier.manualDestinationLastGhostReason` for active manual points.
+
+## Manual Destination Stuck Recovery
+
+- If ADS is navigating to the same non-treasure manual `MapXzDestination` / `XYZ` point for `12s` while player movement stays under `0.5y`, it stops `/vnav`, ghosts that manual point as `ManualDestinationNoProgress`, and replans.
+- Force-march destinations use the same stuck watchdog; only treasure-route points keep their separate nudge recovery.
 
 ## Gate-Aware Manual Blocking
 
@@ -407,7 +412,7 @@
 
 - Use the main-window `Ghosts` button or `/ads ghosts`.
 - This window shows the current monster/interactable ghost cache with type, classification, ghost reason, live `MapId`, age, position, and a map-flag button.
-- It also shows the current, remembered, and last-ghosted manual `MapXzDestination` state, so a Keeper waypoint can be verified there even though it is not an observation-memory ghost.
+- It also shows the current, remembered, and last-ghosted manual `MapXzDestination` / `XYZ` state, so a waypoint can be verified there even though it is not an observation-memory ghost.
 - `Current Map Only` is useful when checking whether a stale ghost belongs to another sub-area.
 
 ## Frontier Labels

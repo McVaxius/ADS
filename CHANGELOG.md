@@ -6,6 +6,8 @@
 - Added `duty-maturity.json` as the data source for duty clearance/support metadata. The Lumina duty catalog still owns identity/category/level, while maturity rows overlay `ClearanceStatus`, `SupportLevel`, planned-test flag, and support notes.
 - Added dialog-rule presets matching object-rule presets: live `DEFAULT`, parked `dialog-rule-presets/*.json`, full-manifest clipboard/disk import/export, create/delete, and `@` reset from the current DEFAULT cache.
 - Removed packaged `duty-object-rules.json` / `dialog-yesno-rules.json` from plugin output; built-in JSON is now only a minimal first-run fallback.
+- Loosened normal manual `XYZ` arrival to a `2.5y` 3D radius while keeping force-march destinations on the tighter `1y` rule. Manual destinations now ghost as `ManualDestinationNoProgress` if player movement stays under `0.5y` for `12s`, and status/analysis JSON expose the active manual target, distance, progress age, and last manual ghost reason.
+- Cleaned Copperbell rule migration/source data: `Sealed Blasting Door` stays `Expendable`, stale `BattleNpc` `Lift Lever` rows are disabled, malformed manual `XYZ` rows with `ObjectWorldCoordinates` are disabled, and lever use stays on the generic non-kind row plus positional ignores.
 
 ## 2026-05-09
 

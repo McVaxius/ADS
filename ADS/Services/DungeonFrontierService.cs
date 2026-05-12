@@ -14,6 +14,7 @@ public sealed class DungeonFrontierService
     private const float FrontierVisitVerticalCap = 12f;
     private const float FrontierBlockingVerticalSanityCap = 100f;
     private const float ManualMapXzDestinationVisitRadius = 1f;
+    private const float ManualXyzDestinationVisitRadius = 2.5f;
     private const float HeadingSampleMinDistance = 6f;
     private const float HeadingScoutProjectionDistance = 18f;
     private const float HeadingScoutAdvanceRadius = 4f;
@@ -536,6 +537,7 @@ public sealed class DungeonFrontierService
                     $"[ADS] Resolved XYZ destination {name} on map row {map.RowId} to world {FormatVector(worldCoordinates)}.");
             }
 
+            var allowCombatBypass = AllowsCombatBypass(rule);
             points.Add(new DungeonFrontierPoint
             {
                 Key = $"{ruleKey}:{map.RowId}:{worldCoordinates.X:0.###},{worldCoordinates.Y:0.###},{worldCoordinates.Z:0.###}",
@@ -545,8 +547,10 @@ public sealed class DungeonFrontierService
                 MapId = map.RowId,
                 Priority = rule.Priority,
                 ManualDestinationKind = ManualDestinationKind.Xyz,
-                AllowCombatBypass = AllowsCombatBypass(rule),
-                ArrivalRadius3d = ManualMapXzDestinationVisitRadius,
+                AllowCombatBypass = allowCombatBypass,
+                ArrivalRadius3d = allowCombatBypass
+                    ? ManualMapXzDestinationVisitRadius
+                    : ManualXyzDestinationVisitRadius,
             });
         }
 

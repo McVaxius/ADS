@@ -54,6 +54,7 @@ public sealed class ExecutionService
     private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
     private const float LeaveTreasureSweepVerticalCap = 6.0f;
     private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
+    private const float ManualDestinationNoProgressDistance = 0.5f;
     private const float InteractableRetryIdentityPositionBucketSize = 5.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
@@ -68,6 +69,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan TreasureCofferLockedRetryDelay = TimeSpan.FromSeconds(15.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan ManualDestinationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
     private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
@@ -132,6 +134,12 @@ public sealed class ExecutionService
     private int treasureDoorNudgeAttempt;
     private DateTime treasureDoorNudgeUntilUtc = DateTime.MinValue;
     private Vector3 treasureDoorNudgeDestination;
+    private string? manualDestinationNoProgressTargetKey;
+    private ulong? manualDestinationNavigationTargetId;
+    private Vector3? manualDestinationNoProgressBaselinePosition;
+    private DateTime manualDestinationLastProgressUtc;
+    private string currentManualDestinationTarget = string.Empty;
+    private float? currentManualDestinationDistance;
     private string? closeRangeInteractFallbackKey;
     private DateTime closeRangeInteractFallbackLastProgressUtc;
     private float closeRangeInteractFallbackBestHorizontalDistance = float.MaxValue;
@@ -166,6 +174,7 @@ public sealed class ExecutionService
     private string? bossFightCombatGhostKey;
     private string bossFightCombatGhostName = string.Empty;
     private uint bossFightCombatGhostMapId;
+    private string currentDialogAutomationStatus = string.Empty;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -201,6 +210,17 @@ public sealed class ExecutionService
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
     public string LastStatus { get; private set; } = "Idle.";
+
+    public string CurrentManualDestinationTarget
+        => currentManualDestinationTarget;
+
+    public float? CurrentManualDestinationDistance
+        => currentManualDestinationDistance;
+
+    public double? ManualDestinationLastProgressAgeSeconds
+        => manualDestinationNoProgressTargetKey is null || manualDestinationLastProgressUtc == DateTime.MinValue
+            ? null
+            : Math.Max(0, (DateTime.UtcNow - manualDestinationLastProgressUtc).TotalSeconds);
 
     public bool IsOwned
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving;
@@ -370,8 +390,15 @@ public sealed class ExecutionService
             $"Duty completed: {dutyName}. ADS stopped automation and cleared recovery follow-through; use Start/Resume for another run.");
     }
 
-    public void Update(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, bool pluginEnabled, bool considerTreasureCoffers)
+    public void Update(
+        DutyContextSnapshot context,
+        PlannerSnapshot planner,
+        ObservationSnapshot observation,
+        bool pluginEnabled,
+        bool considerTreasureCoffers,
+        string dialogAutomationStatus)
     {
+        currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateUnsafeTransitionNavigationStop(context);
         if (!context.InCombat)
             ClearBossFightCombatGhost("combat cleared");
@@ -511,7 +538,7 @@ public sealed class ExecutionService
             StopMovementAssists();
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} SelectYesno is visible; ADS is holding movement while dialog automation resolves the prompt.");
+                $"{prefix} {BuildSelectYesnoHoldStatus("SelectYesno is visible; ADS is holding movement while dialog automation resolves the prompt.")}");
             return;
         }
 
@@ -1764,6 +1791,7 @@ public sealed class ExecutionService
             return;
         }
 
+        var isManualDestination = isMapXzDestination || isXyzDestination;
         var destinationReached = IsFrontierDestinationReached(
             frontierPoint,
             playerPosition.Value,
@@ -1776,6 +1804,20 @@ public sealed class ExecutionService
             out var xyzArrivalRange);
         if (!destinationReached)
         {
+            if (isManualDestination
+                && !isTreasureRoutePoint
+                && TryRetireManualDestinationForNoProgress(
+                    frontierPoint,
+                    playerPosition.Value,
+                    isXyzDestination,
+                    targetHorizontalDistance,
+                    targetDistance,
+                    targetVerticalDelta,
+                    prefix))
+            {
+                return;
+            }
+
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
             var canUseMapFlagNavigation = dungeonFrontierService.CurrentMode == FrontierMode.Label
                                           || (isMapXzDestination && !frontierPoint.UsePlayerYForNavigation);
@@ -1923,6 +1965,73 @@ public sealed class ExecutionService
         treasureRouteStuckBaselinePosition = null;
         treasureRouteStuckLastProgressUtc = DateTime.MinValue;
         treasureRouteStuckOffsetAttempt = 0;
+    }
+
+    private bool TryRetireManualDestinationForNoProgress(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        bool isXyzDestination,
+        float targetHorizontalDistance,
+        float targetDistance,
+        float targetVerticalDelta,
+        string prefix)
+    {
+        var now = DateTime.UtcNow;
+        currentManualDestinationTarget = frontierPoint.Name;
+        currentManualDestinationDistance = isXyzDestination
+            ? targetDistance
+            : targetHorizontalDistance;
+        manualDestinationNavigationTargetId = BuildFrontierTargetId(frontierPoint);
+
+        if (!string.Equals(manualDestinationNoProgressTargetKey, frontierPoint.Key, StringComparison.Ordinal)
+            || !manualDestinationNoProgressBaselinePosition.HasValue)
+        {
+            StartManualDestinationNoProgressTracking(frontierPoint, playerPosition, now);
+            return false;
+        }
+
+        var playerMovement = Vector3.Distance(playerPosition, manualDestinationNoProgressBaselinePosition.Value);
+        if (playerMovement >= ManualDestinationNoProgressDistance)
+        {
+            StartManualDestinationNoProgressTracking(frontierPoint, playerPosition, now);
+            return false;
+        }
+
+        var noProgressAge = now - manualDestinationLastProgressUtc;
+        if (noProgressAge < ManualDestinationNoProgressTimeout)
+            return false;
+
+        var destinationLabel = isXyzDestination ? "XYZ destination" : "map XZ destination";
+        var detail =
+            $"because player movement stayed under {ManualDestinationNoProgressDistance:0.0}y for {ManualDestinationNoProgressTimeout.TotalSeconds:0}s while navigating to {destinationLabel}; player {FormatVector(playerPosition)}, target {FormatVector(frontierPoint.Position)}, 3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}.";
+        StopMovementAssists();
+        dungeonFrontierService.RetireManualDestination(frontierPoint, "ManualDestinationNoProgress", detail);
+        ClearCommittedForceMarchManualDestinationIfMatches(frontierPoint);
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        SetPhase(
+            GetFrontierHintPhase(frontierPoint.IsManualMapXzDestination, frontierPoint.IsManualXyzDestination),
+            $"{prefix} Ghosted stuck manual {destinationLabel} {frontierPoint.Name} after {noProgressAge.TotalSeconds:0.0}s without player movement; ADS will replan.");
+        return true;
+    }
+
+    private void StartManualDestinationNoProgressTracking(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
+    {
+        manualDestinationNoProgressTargetKey = frontierPoint.Key;
+        manualDestinationNoProgressBaselinePosition = playerPosition;
+        manualDestinationLastProgressUtc = now;
+    }
+
+    private void ResetManualDestinationNoProgressTracking(bool clearStatus)
+    {
+        manualDestinationNoProgressTargetKey = null;
+        manualDestinationNavigationTargetId = null;
+        manualDestinationNoProgressBaselinePosition = null;
+        manualDestinationLastProgressUtc = DateTime.MinValue;
+        if (!clearStatus)
+            return;
+
+        currentManualDestinationTarget = string.Empty;
+        currentManualDestinationDistance = null;
     }
 
     private static Vector3 BuildTreasureRouteNavigationDestination(Vector3 originalDestination, int offsetAttempt)
@@ -2761,7 +2870,7 @@ public sealed class ExecutionService
             StopMovementAssists();
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} SelectYesno is visible during {pendingInteractable.Name} follow-through; ADS is holding movement while dialog automation resolves the prompt.");
+                $"{prefix} {BuildSelectYesnoHoldStatus($"SelectYesno is visible during {pendingInteractable.Name} follow-through; ADS is holding movement while dialog automation resolves the prompt.")}");
             return true;
         }
 
@@ -2993,7 +3102,7 @@ public sealed class ExecutionService
             StopMovementAssists();
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Treasure door follow-through is paused because SelectYesno is visible; ADS is waiting for dialog automation.");
+                $"{prefix} {BuildSelectYesnoHoldStatus("Treasure door follow-through is paused because SelectYesno is visible; ADS is waiting for dialog automation.")}");
             return true;
         }
 
@@ -3184,6 +3293,11 @@ public sealed class ExecutionService
         interactArrivalWaitUntilUtc = DateTime.MinValue;
     }
 
+    private string BuildSelectYesnoHoldStatus(string fallback)
+        => string.IsNullOrWhiteSpace(currentDialogAutomationStatus)
+            ? fallback
+            : $"{fallback} Dialog automation status: {currentDialogAutomationStatus}";
+
     private static ObservedInteractable? ResolvePendingProgressionInteractable(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
@@ -3252,7 +3366,7 @@ public sealed class ExecutionService
             StopMovementAssists();
             SetPhase(
                 ExecutionPhase.LeavingDuty,
-                "Leave requested. SelectYesno is visible before duty exit is armed; ADS is waiting for dialog automation before continuing the treasure sweep.");
+                BuildSelectYesnoHoldStatus("Leave requested. SelectYesno is visible before duty exit is armed; ADS is waiting for dialog automation before continuing the treasure sweep."));
             return;
         }
 
@@ -3624,6 +3738,12 @@ public sealed class ExecutionService
 
     private bool TryBeginNavigation(ulong gameObjectId, Vector3 destination)
     {
+        if (manualDestinationNavigationTargetId.HasValue
+            && manualDestinationNavigationTargetId.Value != gameObjectId)
+        {
+            ResetManualDestinationNoProgressTracking(clearStatus: true);
+        }
+
         var now = DateTime.UtcNow;
         if (navigationActive && !mapFlagNavigationActive && movementTargetGameObjectId == gameObjectId && now < nextNavigationCommandUtc)
             return true;
@@ -3647,6 +3767,12 @@ public sealed class ExecutionService
 
     private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, string targetName, Vector3 destination)
     {
+        if (manualDestinationNavigationTargetId.HasValue
+            && manualDestinationNavigationTargetId.Value != targetId)
+        {
+            ResetManualDestinationNoProgressTracking(clearStatus: true);
+        }
+
         var now = DateTime.UtcNow;
         if (navigationActive && mapFlagNavigationActive && movementTargetGameObjectId == targetId && now < nextNavigationCommandUtc)
             return true;
@@ -4266,6 +4392,7 @@ public sealed class ExecutionService
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
         ResetTreasureRouteStuckTracking();
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
@@ -4298,6 +4425,7 @@ public sealed class ExecutionService
         nextMountedCombatAttemptUtc = DateTime.MinValue;
         lastInteractGameObjectId = 0;
         ResetTreasureRouteStuckTracking();
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         unsafeTransitionNavigationStopLatched = true;
 

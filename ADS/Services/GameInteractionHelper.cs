@@ -17,6 +17,13 @@ namespace ADS.Services;
 
 public static class GameInteractionHelper
 {
+    public enum SelectYesNoClickMethod
+    {
+        ButtonEvent,
+        FireCallbackInt,
+        LegacyCallback,
+    }
+
     private static readonly HashSet<string> KnownInnTerritoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "The Mizzenmast",
@@ -113,6 +120,9 @@ public static class GameInteractionHelper
     }
 
     public static unsafe bool TrySelectYesNo(bool yes, IGameGui gameGui, IPluginLog? log = null)
+        => TrySelectYesNo(yes, gameGui, SelectYesNoClickMethod.ButtonEvent, log);
+
+    public static unsafe bool TrySelectYesNo(bool yes, IGameGui gameGui, SelectYesNoClickMethod method, IPluginLog? log = null)
     {
         try
         {
@@ -120,27 +130,90 @@ public static class GameInteractionHelper
             if (addonPtr == nint.Zero)
                 return false;
 
-            var addon = (AtkUnitBase*)addonPtr;
-            if (addon == null || !addon->IsVisible)
+            var addon = (AddonSelectYesno*)addonPtr;
+            if (addon == null || !addon->AtkUnitBase.IsVisible)
                 return false;
 
-            var callbackIndex = yes ? 0 : 1;
-            var atkValues = stackalloc AtkValue[2];
-            atkValues[0] = default;
-            atkValues[1] = default;
-            atkValues[0].Type = AtkValueType.Int;
-            atkValues[0].Int = callbackIndex;
-            atkValues[1].Type = AtkValueType.Int;
-            atkValues[1].Int = 0;
-            addon->FireCallback(2, atkValues);
-            log?.Information($"[ADS] Selected {(yes ? "Yes" : "No")} on SelectYesno via direct callback.");
-            return true;
+            var clicked = method switch
+            {
+                SelectYesNoClickMethod.ButtonEvent => TryClickSelectYesNoButton(addon, yes, log),
+                SelectYesNoClickMethod.FireCallbackInt => TrySelectYesNoCallbackInt(addon, yes, log),
+                SelectYesNoClickMethod.LegacyCallback => TrySelectYesNoLegacyCallback(&addon->AtkUnitBase, yes, log),
+                _ => false,
+            };
+
+            if (clicked)
+                log?.Information($"[ADS] Sent {(yes ? "Yes" : "No")} to SelectYesno via {DescribeSelectYesNoClickMethod(method)}.");
+
+            return clicked;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, $"[ADS] SelectYesno direct callback failed for {(yes ? "Yes" : "No")}.");
+            log?.Warning(ex, $"[ADS] SelectYesno {DescribeSelectYesNoClickMethod(method)} failed for {(yes ? "Yes" : "No")}.");
             return false;
         }
+    }
+
+    public static string DescribeSelectYesNoClickMethod(SelectYesNoClickMethod method)
+        => method switch
+        {
+            SelectYesNoClickMethod.ButtonEvent => "button event",
+            SelectYesNoClickMethod.FireCallbackInt => "FireCallbackInt",
+            SelectYesNoClickMethod.LegacyCallback => "legacy callback",
+            _ => method.ToString(),
+        };
+
+    private static unsafe bool TryClickSelectYesNoButton(AddonSelectYesno* addon, bool yes, IPluginLog? log)
+    {
+        var button = yes ? addon->YesButton : addon->NoButton;
+        if (button == null)
+            return false;
+
+        var ownerNode = button->AtkComponentBase.OwnerNode;
+        if (ownerNode == null)
+            return false;
+
+        if (!button->IsEnabled)
+        {
+            log?.Warning($"[ADS] SelectYesno {(yes ? "Yes" : "No")} button is not enabled.");
+            return false;
+        }
+
+        var eventNode = ownerNode->AtkResNode;
+        var atkEvent = eventNode.AtkEventManager.Event;
+        while (atkEvent != null && atkEvent->State.EventType != AtkEventType.ButtonClick)
+            atkEvent = atkEvent->NextEvent;
+
+        if (atkEvent == null)
+            atkEvent = eventNode.AtkEventManager.Event;
+        if (atkEvent == null)
+            return false;
+
+        addon->AtkUnitBase.ReceiveEvent(atkEvent->State.EventType, (int)atkEvent->Param, atkEvent);
+        return true;
+    }
+
+    private static unsafe bool TrySelectYesNoCallbackInt(AddonSelectYesno* addon, bool yes, IPluginLog? log)
+    {
+        if (addon->AtkUnitBase.FireCallbackInt(yes ? 0 : 1))
+            return true;
+
+        log?.Warning($"[ADS] SelectYesno FireCallbackInt returned false for {(yes ? "Yes" : "No")}.");
+        return false;
+    }
+
+    private static unsafe bool TrySelectYesNoLegacyCallback(AtkUnitBase* addon, bool yes, IPluginLog? log)
+    {
+        var callbackIndex = yes ? 0 : 1;
+        var atkValues = stackalloc AtkValue[2];
+        atkValues[0] = default;
+        atkValues[1] = default;
+        atkValues[0].Type = AtkValueType.Int;
+        atkValues[0].Int = callbackIndex;
+        atkValues[1].Type = AtkValueType.Int;
+        atkValues[1].Int = 0;
+        addon->FireCallback(2, atkValues);
+        return true;
     }
 
     public static unsafe bool TryInteractWithObject(ITargetManager targetManager, IGameObject gameObject, IPluginLog? log = null)
