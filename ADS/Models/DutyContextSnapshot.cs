@@ -8,6 +8,10 @@ public sealed class DutyContextSnapshot
     public required bool BoundByDuty56 { get; init; }
     public required bool BetweenAreas { get; init; }
     public required bool BetweenAreas51 { get; init; }
+    public required bool Jumping { get; init; }
+    public required bool Jumping61 { get; init; }
+    public required bool Occupied33 { get; init; }
+    public required bool OccupiedInCutSceneEvent { get; init; }
     public required bool InCombat { get; init; }
     public required bool Mounted { get; init; }
     public required uint TerritoryTypeId { get; init; }
@@ -20,6 +24,14 @@ public sealed class DutyContextSnapshot
 
     public bool IsUnsafeTransition
         => BetweenAreas || BetweenAreas51;
+
+    public bool IsTreasureRouteTransitHold
+        => BetweenAreas
+           || BetweenAreas51
+           || Jumping
+           || Jumping61
+           || Occupied33
+           || OccupiedInCutSceneEvent;
 
     public bool HasCatalogMetadata
         => CurrentDuty is not null;

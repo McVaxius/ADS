@@ -21,6 +21,7 @@ public sealed class DungeonFrontierService
     private const float HeadingScoutMinForwardDot = 0.25f;
     private const float LabelFrontierMinForwardDot = 0.25f;
     private const float LabelFrontierRetargetBacktrackDot = -0.10f;
+    private const float TreasureFollowerRoomReachRadius = 12f;
 
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
@@ -42,6 +43,7 @@ public sealed class DungeonFrontierService
     private DungeonFrontierPoint? headingScoutTarget;
     private DungeonFrontierPoint? lastValidManualDestination;
     private string? heldTreasureFollowerCandidateKey;
+    private int highestTreasureFollowerRoomReached;
     private int headingScoutSequence;
 
     public DungeonFrontierService(
@@ -103,11 +105,14 @@ public sealed class DungeonFrontierService
 
     public void SetTreasureDungeonRole(TreasureDungeonRoleInference inference)
     {
+        var roleChanged = TreasureDungeonRole != inference.Role;
         TreasureDungeonRole = inference.Role;
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
         ClearTreasureFollowerCandidateHold("treasure role changed");
         TreasureFollowerRetryCycle = 0;
+        if (roleChanged)
+            highestTreasureFollowerRoomReached = 0;
     }
 
     public void HoldUnsafeTransition(DutyContextSnapshot context)
@@ -264,13 +269,26 @@ public sealed class DungeonFrontierService
             var treasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, manualDestinations);
             if (treasureRoutePoints.Count > 0)
             {
-                if (playerPosition.HasValue)
+                var isTreasureFollower = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
+                var treasureFollowerTransitHold = isTreasureFollower && context.IsTreasureRouteTransitHold;
+                if (playerPosition.HasValue && !treasureFollowerTransitHold)
                 {
                     MarkVisitedPoints(treasureRoutePoints, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
+                    MarkTreasureFollowerHighestRoomReached(treasureRoutePoints, playerPosition.Value);
                     MarkTreasureRouteCatchUp(treasureRoutePoints, playerPosition.Value);
                 }
 
-                CurrentTarget = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                if (treasureFollowerTransitHold)
+                {
+                    CurrentTarget = previousTarget is { IsTreasureRoutePoint: true }
+                        ? BuildNavigationPoint(previousTarget, playerPosition)
+                        : null;
+                    CurrentMode = CurrentTarget is not null ? FrontierMode.TreasureDungeon : FrontierMode.None;
+                    CurrentLabelStatus = "Holding treasure follower route updates during passage movement.";
+                    return;
+                }
+
+                CurrentTarget = isTreasureFollower
                     ? SelectTreasureFollowerTarget(treasureRoutePoints, playerPosition, previousTarget)
                     : SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
                 if (CurrentTarget is not null)
@@ -342,6 +360,7 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
         heldTreasureFollowerCandidateKey = null;
+        highestTreasureFollowerRoomReached = 0;
         TreasureFollowerRetryCycle = 0;
         loggedCombatBypassManualSelections.Clear();
     }
@@ -982,6 +1001,32 @@ public sealed class DungeonFrontierService
         }
     }
 
+    private void MarkTreasureFollowerHighestRoomReached(IReadOnlyList<DungeonFrontierPoint> points, Vector3 playerPosition)
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || points.Count == 0)
+            return;
+
+        var nearest = points
+            .Select((point, index) => new
+            {
+                Point = point,
+                Index = index,
+                HorizontalDistance = GetHorizontalDistance(playerPosition, point.Position),
+                VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Y),
+            })
+            .Where(x => x.Point.TreasureRoomIndex > 0
+                        && x.HorizontalDistance <= TreasureFollowerRoomReachRadius
+                        && x.VerticalDelta <= FrontierVisitVerticalCap)
+            .OrderBy(x => x.HorizontalDistance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Index)
+            .FirstOrDefault();
+        if (nearest is null || nearest.Point.TreasureRoomIndex <= highestTreasureFollowerRoomReached)
+            return;
+
+        highestTreasureFollowerRoomReached = nearest.Point.TreasureRoomIndex;
+    }
+
     private DungeonFrontierPoint? SelectCurrentManualDestination(IReadOnlyList<DungeonFrontierPoint> points, Vector3? playerPosition)
     {
         if (points.Count == 0)
@@ -1048,6 +1093,9 @@ public sealed class DungeonFrontierService
         foreach (var group in candidateGroups)
         {
             var roomIndex = group[0].TreasureRoomIndex;
+            if (highestTreasureFollowerRoomReached > 0 && roomIndex < highestTreasureFollowerRoomReached)
+                continue;
+
             var unvisitedCandidates = group
                 .Where(point => !visitedFrontierKeys.Contains(point.Key))
                 .ToList();

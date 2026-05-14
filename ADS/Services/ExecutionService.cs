@@ -595,6 +595,15 @@ public sealed class ExecutionService
         if (planner.Mode != PlannerMode.Progression || !IsFrontierLikePlannerObjective(planner.ObjectiveKind))
             ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
 
+        if (ShouldHoldTreasureFollowerRouteTransit(context, planner))
+        {
+            StopNavigationForTreasureRouteTransit();
+            SetPhase(
+                ExecutionPhase.TransitionHold,
+                $"{prefix} Waiting for treasure passage movement to settle.");
+            return;
+        }
+
         if (planner.Mode == PlannerMode.Recovery)
         {
             TryAdvanceRecoveryObjective(planner, observation, $"{prefix}");
@@ -1740,6 +1749,14 @@ public sealed class ExecutionService
             or PlannerObjectiveKind.XyzDestination
             or PlannerObjectiveKind.MapXzForceMarchDestination
             or PlannerObjectiveKind.XyzForceMarchDestination;
+
+    private bool ShouldHoldTreasureFollowerRouteTransit(DutyContextSnapshot context, PlannerSnapshot planner)
+        => context.IsTreasureRouteTransitHold
+           && TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+           && planner.Mode == PlannerMode.Progression
+           && planner.ObjectiveKind == PlannerObjectiveKind.Frontier
+           && dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+           && dungeonFrontierService.CurrentTarget is { IsTreasureRoutePoint: true };
 
     private static DungeonFrontierPoint RebuildCommittedForceMarchManualDestination(DungeonFrontierPoint point, Vector3? playerPosition)
     {
@@ -4662,6 +4679,12 @@ public sealed class ExecutionService
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
+    }
+
+    private void StopNavigationForTreasureRouteTransit()
+    {
+        StopNavigationForTreasureRouteNudge();
+        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
     }
 
     private bool TrySendCommand(string command)
