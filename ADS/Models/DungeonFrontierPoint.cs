@@ -22,4 +22,11 @@ public sealed class DungeonFrontierPoint
     public bool AllowCombatBypass { get; init; }
     public float ArrivalRadiusXz { get; init; } = 8f;
     public float ArrivalRadius3d { get; init; }
+    public int TreasureRouteIndex { get; init; } = -1;
+    public int TreasureRoomIndex { get; init; }
+    public string TreasurePassageGroup { get; init; } = string.Empty;
+    public bool IsTreasureRoutePoint
+        => TreasureRouteIndex >= 0;
+    public bool IsTreasurePassageCandidate
+        => IsTreasureRoutePoint && TreasureRoomIndex > 0;
 }

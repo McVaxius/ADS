@@ -61,6 +61,7 @@ public sealed class Plugin : IDalamudPlugin
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
+    public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -81,6 +82,7 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.Save();
 
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
+        TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
 
@@ -315,6 +317,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
+        InferAndApplyTreasureDungeonRole("inside start");
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -324,6 +327,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool ResumeDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
+        InferAndApplyTreasureDungeonRole("inside resume");
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -441,6 +445,9 @@ public sealed class Plugin : IDalamudPlugin
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
+                treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
+                treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -487,6 +494,9 @@ public sealed class Plugin : IDalamudPlugin
                 explanation = ObjectivePlannerService.Current.Explanation,
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
+                treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
+                treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -500,6 +510,10 @@ public sealed class Plugin : IDalamudPlugin
                 frontier = new
                 {
                     mode = DungeonFrontierService.CurrentMode.ToString(),
+                    treasureDungeonRole = DungeonFrontierService.TreasureDungeonRole.ToString(),
+                    treasureDungeonRoleSource = DungeonFrontierService.TreasureDungeonRoleSource,
+                    treasureDungeonRoleDetail = DungeonFrontierService.TreasureDungeonRoleDetail,
+                    treasureFollowerRetryCycle = DungeonFrontierService.TreasureFollowerRetryCycle,
                     activeMapId = DungeonFrontierService.ActiveMapId,
                     activeMapName = DungeonFrontierService.ActiveMapName,
                     totalPoints = DungeonFrontierService.TotalPoints,
@@ -514,6 +528,8 @@ public sealed class Plugin : IDalamudPlugin
                     manualDestinationLastGhostReason = DungeonFrontierService.LastGhostedManualDestinationReason,
                     currentTarget = DungeonFrontierService.CurrentTarget?.Name,
                     currentTargetMapId = DungeonFrontierService.CurrentTarget?.MapId,
+                    currentTargetTreasureRoomIndex = DungeonFrontierService.CurrentTarget?.TreasureRoomIndex,
+                    currentTargetTreasurePassageGroup = DungeonFrontierService.CurrentTarget?.TreasurePassageGroup,
                     currentTargetPosition = DungeonFrontierService.CurrentTarget is { } frontierPoint
                         ? BuildPositionPayload(frontierPoint.Position)
                         : null,
@@ -595,6 +611,15 @@ public sealed class Plugin : IDalamudPlugin
 
     private void QueueDutyOwnershipRemoteUpdate()
         => RemoteJsonUpdateService.TryStartStaleUpdate("duty ownership");
+
+    private void InferAndApplyTreasureDungeonRole(string reason)
+    {
+        var inference = TreasureDungeonRoleDetector.Infer();
+        ExecutionService.SetTreasureDungeonRole(inference);
+        DungeonFrontierService.SetTreasureDungeonRole(inference);
+        Log.Information(
+            $"[ADS] Treasure role inference for {reason}: role={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
+    }
 
     private void OnFrameworkUpdate(IFramework framework)
     {

@@ -92,6 +92,22 @@ public sealed class DungeonFrontierService
 
     public string LastGhostedManualDestinationReason { get; private set; } = string.Empty;
 
+    public TreasureDungeonRole TreasureDungeonRole { get; private set; } = ADS.Models.TreasureDungeonRole.MapOpener;
+
+    public string TreasureDungeonRoleSource { get; private set; } = "Default";
+
+    public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS keeps map-opener behavior.";
+
+    public int TreasureFollowerRetryCycle { get; private set; }
+
+    public void SetTreasureDungeonRole(TreasureDungeonRoleInference inference)
+    {
+        TreasureDungeonRole = inference.Role;
+        TreasureDungeonRoleSource = inference.Source;
+        TreasureDungeonRoleDetail = inference.Detail;
+        TreasureFollowerRetryCycle = 0;
+    }
+
     public void HoldUnsafeTransition(DutyContextSnapshot context)
     {
         if (!context.PluginEnabled || !context.IsLoggedIn)
@@ -248,7 +264,9 @@ public sealed class DungeonFrontierService
                     MarkTreasureRouteCatchUp(treasureRoutePoints, playerPosition.Value);
                 }
 
-                CurrentTarget = SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
+                CurrentTarget = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                    ? SelectTreasureFollowerTarget(treasureRoutePoints, playerPosition, previousTarget)
+                    : SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
                 if (CurrentTarget is not null)
                 {
                     CurrentMode = FrontierMode.TreasureDungeon;
@@ -311,6 +329,7 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestination = null;
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
+        TreasureFollowerRetryCycle = 0;
         loggedCombatBypassManualSelections.Clear();
     }
 
@@ -320,6 +339,12 @@ public sealed class DungeonFrontierService
             return;
 
         ClearRememberedManualDestination(point);
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && point.IsTreasurePassageCandidate)
+        {
+            log.Information(
+                $"[ADS] Treasure follower reached passage candidate {point.Name} ({point.TreasurePassageGroup}, room {point.TreasureRoomIndex}) without a transition on this tick; ADS will try another current-room candidate.");
+        }
+
         if (point.IsManualDestination)
         {
             var ghostReason = point.IsManualXyzDestination ? "ReachedXyzArrival" : "ReachedXzArrival";
@@ -329,6 +354,18 @@ public sealed class DungeonFrontierService
                 : $"after reaching XZ {GetHorizontalDistance(playerPosition, point.Position):0.0}y";
             log.Information($"[ADS] Ghosted {GetManualDestinationLabel(point)} {point.Name} at {FormatVector(point.Position)} {reachText}.");
         }
+    }
+
+    public void MarkTreasureFollowerCandidateFailed(DungeonFrontierPoint point, string reason, string detail)
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
+            return;
+
+        if (!visitedFrontierKeys.Add(point.Key))
+            return;
+
+        log.Information(
+            $"[ADS] Treasure follower marked passage candidate {point.Name} ({point.TreasurePassageGroup}, room {point.TreasureRoomIndex}) failed after {reason}. {detail}");
     }
 
     public void RetireManualDestination(DungeonFrontierPoint point, string reason, string detail)
@@ -847,6 +884,12 @@ public sealed class DungeonFrontierService
     {
         foreach (var point in points)
         {
+            if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                && point.IsTreasurePassageCandidate)
+            {
+                continue;
+            }
+
             var horizontalDistance = GetHorizontalDistance(playerPosition, point.Position);
             var verticalDelta = point.UsePlayerYForNavigation
                 ? 0f
@@ -891,6 +934,13 @@ public sealed class DungeonFrontierService
         var markedCount = 0;
         for (var index = 0; index < nearest.Index; index++)
         {
+            if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                && points[index].IsTreasurePassageCandidate
+                && points[index].TreasureRoomIndex == nearest.Point.TreasureRoomIndex)
+            {
+                continue;
+            }
+
             if (visitedFrontierKeys.Add(points[index].Key))
                 markedCount++;
         }
@@ -930,6 +980,94 @@ public sealed class DungeonFrontierService
                 .OrderBy(x => x.Point.Priority)
                 .ThenBy(x => x.Distance)
                 .ThenBy(x => x.VerticalDelta)
+                .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Point)
+                .First(),
+            playerPosition);
+    }
+
+    private DungeonFrontierPoint? SelectTreasureFollowerTarget(
+        IReadOnlyList<DungeonFrontierPoint> points,
+        Vector3? playerPosition,
+        DungeonFrontierPoint? previousTarget)
+    {
+        if (points.Count == 0)
+            return null;
+
+        var startPoint = points.FirstOrDefault(point => !point.IsTreasurePassageCandidate);
+        if (startPoint is not null
+            && !visitedFrontierKeys.Contains(startPoint.Key)
+            && !playerPosition.HasValue)
+        {
+            return startPoint;
+        }
+
+        var candidateGroups = points
+            .Where(point => point.IsTreasurePassageCandidate)
+            .GroupBy(point => point.TreasureRoomIndex)
+            .OrderBy(group => group.Key)
+            .Select(group => group.OrderBy(point => point.Priority).ThenBy(point => point.Name, StringComparer.OrdinalIgnoreCase).ToList())
+            .ToList();
+        if (candidateGroups.Count == 0)
+            return SelectCurrentTarget(points, playerPosition, previousTarget);
+
+        foreach (var group in candidateGroups)
+        {
+            var roomIndex = group[0].TreasureRoomIndex;
+            var unvisitedCandidates = group
+                .Where(point => !visitedFrontierKeys.Contains(point.Key))
+                .ToList();
+            if (unvisitedCandidates.Count > 0)
+                return SelectTreasureFollowerCandidate(unvisitedCandidates, playerPosition, previousTarget);
+
+            var laterRoomReached = candidateGroups
+                .Where(laterGroup => laterGroup[0].TreasureRoomIndex > roomIndex)
+                .SelectMany(laterGroup => laterGroup)
+                .Any(point => visitedFrontierKeys.Contains(point.Key));
+            if (laterRoomReached)
+                continue;
+
+            foreach (var point in group)
+                visitedFrontierKeys.Remove(point.Key);
+
+            TreasureFollowerRetryCycle++;
+            log.Information(
+                $"[ADS] Treasure follower cycling room {roomIndex} passage candidates again; all {group.Count} candidate(s) were reached without a transition/catch-up into the next room.");
+            return SelectTreasureFollowerCandidate(group, playerPosition, null);
+        }
+
+        return null;
+    }
+
+    private DungeonFrontierPoint SelectTreasureFollowerCandidate(
+        IReadOnlyList<DungeonFrontierPoint> candidates,
+        Vector3? playerPosition,
+        DungeonFrontierPoint? previousTarget)
+    {
+        if (previousTarget is not null)
+        {
+            var matchingPrevious = candidates.FirstOrDefault(point => string.Equals(point.Key, previousTarget.Key, StringComparison.Ordinal));
+            if (matchingPrevious is not null)
+                return BuildNavigationPoint(matchingPrevious, playerPosition);
+        }
+
+        if (!playerPosition.HasValue)
+            return candidates
+                .OrderBy(point => point.Priority)
+                .ThenBy(point => point.Name, StringComparer.OrdinalIgnoreCase)
+                .First();
+
+        return BuildNavigationPoint(
+            candidates
+                .Select(point => new
+                {
+                    Point = point,
+                    HorizontalDistance = GetHorizontalDistance(playerPosition.Value, point.Position),
+                    VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Value.Y),
+                })
+                .OrderBy(x => x.HorizontalDistance)
+                .ThenBy(x => x.VerticalDelta)
+                .ThenBy(x => x.Point.Priority)
                 .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(x => x.Point)
                 .First(),
@@ -1565,6 +1703,9 @@ public sealed class DungeonFrontierService
             AllowCombatBypass = point.AllowCombatBypass,
             ArrivalRadiusXz = point.ArrivalRadiusXz,
             ArrivalRadius3d = point.ArrivalRadius3d,
+            TreasureRouteIndex = point.TreasureRouteIndex,
+            TreasureRoomIndex = point.TreasureRoomIndex,
+            TreasurePassageGroup = point.TreasurePassageGroup,
         };
     }
 

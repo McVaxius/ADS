@@ -207,5 +207,44 @@ public static class TreasureDungeonData
             Priority = priority,
             ManualDestinationKind = ManualDestinationKind.None,
             ArrivalRadiusXz = 6.0f,
+            TreasureRouteIndex = priority,
+            TreasureRoomIndex = InferRoomIndex(routePoint.Label, priority),
+            TreasurePassageGroup = InferPassageGroup(routePoint.Label, priority),
         };
+
+    private static int InferRoomIndex(string label, int priority)
+    {
+        var roomIndex = label.IndexOf("Room ", StringComparison.OrdinalIgnoreCase);
+        if (roomIndex < 0)
+            return 0;
+
+        var start = roomIndex + "Room ".Length;
+        var end = start;
+        while (end < label.Length && char.IsDigit(label[end]))
+            end++;
+
+        if (end == start)
+            return 0;
+
+        return int.TryParse(label[start..end], out var parsed)
+            ? parsed
+            : Math.Max(0, priority);
+    }
+
+    private static string InferPassageGroup(string label, int priority)
+    {
+        if (label.Contains("Left", StringComparison.OrdinalIgnoreCase))
+            return "Left";
+
+        if (label.Contains("Right", StringComparison.OrdinalIgnoreCase))
+            return "Right";
+
+        if (label.Contains("Centre", StringComparison.OrdinalIgnoreCase)
+            || label.Contains("Center", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Centre";
+        }
+
+        return priority == 0 ? "Start" : $"Passage {priority}";
+    }
 }
