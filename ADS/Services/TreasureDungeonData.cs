@@ -93,7 +93,7 @@ public static class TreasureDungeonData
                     new RoutePoint(new Vector3(81.37923f, -10.03865f, -48.60507f), "Room 3 Left Door"),
                     new RoutePoint(new Vector3(138.87137f, -10.03865f, -48.890167f), "Room 3 Right Door"),
                     new RoutePoint(new Vector3(-138.5103f, 19.96135f, -168.72546f), "Room 4 Left Door"),
-                    new RoutePoint(new Vector3(138.79027f, -10.03865f, -48.79255f), "Room 4 Right Door"),
+                    new RoutePoint(new Vector3(-81.4899f, 19.96135f, -168.72546f), "Room 4 Right Door"),
                     new RoutePoint(new Vector3(-138.91505f, 19.961369f, -319.07587f), "Room 5 Left Door"),
                     new RoutePoint(new Vector3(-81.35945f, 19.961378f, -318.83533f), "Room 5 Right Door"),
                 ])
