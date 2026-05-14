@@ -753,11 +753,12 @@ public sealed class ObjectivePlannerService
             .FirstOrDefault();
     }
 
-    private static bool IsProgressionInteractable(ObservedInteractable interactable)
+    private bool IsProgressionInteractable(ObservedInteractable interactable)
         => interactable.Classification is InteractableClass.Required
             or InteractableClass.CombatFriendly
             or InteractableClass.Expendable
-            or InteractableClass.TreasureDoor;
+            || (interactable.Classification == InteractableClass.TreasureDoor
+                && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
 
     private static PlannerObjectiveKind GetProgressionInteractableObjectiveKind(ObservedInteractable interactable)
         => interactable.Classification switch

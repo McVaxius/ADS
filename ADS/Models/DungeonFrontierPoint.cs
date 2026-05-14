@@ -28,5 +28,5 @@ public sealed class DungeonFrontierPoint
     public bool IsTreasureRoutePoint
         => TreasureRouteIndex >= 0;
     public bool IsTreasurePassageCandidate
-        => IsTreasureRoutePoint && TreasureRoomIndex > 0;
+        => TreasureRouteIndex > 0 && TreasureRoomIndex > 0;
 }

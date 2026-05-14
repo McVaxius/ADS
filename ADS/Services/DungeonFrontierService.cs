@@ -41,6 +41,7 @@ public sealed class DungeonFrontierService
     private Vector3? currentHeading;
     private DungeonFrontierPoint? headingScoutTarget;
     private DungeonFrontierPoint? lastValidManualDestination;
+    private string? heldTreasureFollowerCandidateKey;
     private int headingScoutSequence;
 
     public DungeonFrontierService(
@@ -105,6 +106,7 @@ public sealed class DungeonFrontierService
         TreasureDungeonRole = inference.Role;
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
+        ClearTreasureFollowerCandidateHold("treasure role changed");
         TreasureFollowerRetryCycle = 0;
     }
 
@@ -123,6 +125,7 @@ public sealed class DungeonFrontierService
 
         var previousTarget = CurrentTarget;
         RememberManualDestination(previousTarget);
+        ClearTreasureFollowerCandidateHold("unsafe transition hold");
         CurrentTarget = null;
         CurrentMode = FrontierMode.None;
         CurrentLabelMarkers = [];
@@ -178,6 +181,8 @@ public sealed class DungeonFrontierService
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (context.IsUnsafeTransition)
         {
+            ClearTreasureFollowerCandidateHold("unsafe transition");
+
             if (context.BetweenAreas || context.BetweenAreas51)
                 GhostCurrentOrLastManualDestination(previousTarget, FormatUnsafeTransitionFlags(context));
 
@@ -248,6 +253,7 @@ public sealed class DungeonFrontierService
                 CurrentMode = CurrentTarget.IsManualXyzDestination
                     ? FrontierMode.XyzDestination
                     : FrontierMode.MapXzDestination;
+                ClearTreasureFollowerCandidateHold("manual destination selected");
                 RememberManualDestination(CurrentTarget);
                 return;
             }
@@ -292,7 +298,10 @@ public sealed class DungeonFrontierService
 
                 CurrentTarget = SelectCurrentTarget(points, playerPosition, previousTarget);
                 if (CurrentTarget is not null)
+                {
+                    ClearTreasureFollowerCandidateHold("label frontier selected");
                     CurrentMode = FrontierMode.Label;
+                }
 
                 return;
             }
@@ -303,7 +312,10 @@ public sealed class DungeonFrontierService
 
         CurrentTarget = SelectHeadingScoutTarget(context, playerPosition.Value);
         if (CurrentTarget is not null)
+        {
+            ClearTreasureFollowerCandidateHold("heading scout selected");
             CurrentMode = FrontierMode.HeadingScout;
+        }
     }
 
     public void Reset()
@@ -329,8 +341,25 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestination = null;
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
+        heldTreasureFollowerCandidateKey = null;
         TreasureFollowerRetryCycle = 0;
         loggedCombatBypassManualSelections.Clear();
+    }
+
+    public void HoldTreasureFollowerCandidate(DungeonFrontierPoint point)
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
+            return;
+
+        heldTreasureFollowerCandidateKey = point.Key;
+    }
+
+    public void ClearTreasureFollowerCandidateHold(string reason)
+    {
+        if (heldTreasureFollowerCandidateKey is null)
+            return;
+
+        heldTreasureFollowerCandidateKey = null;
     }
 
     public void MarkVisited(DungeonFrontierPoint point, Vector3 playerPosition)
@@ -936,7 +965,8 @@ public sealed class DungeonFrontierService
         {
             if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
                 && points[index].IsTreasurePassageCandidate
-                && points[index].TreasureRoomIndex == nearest.Point.TreasureRoomIndex)
+                && (points[index].TreasureRoomIndex == nearest.Point.TreasureRoomIndex
+                    || IsHeldTreasureFollowerCandidate(points[index])))
             {
                 continue;
             }
@@ -993,6 +1023,10 @@ public sealed class DungeonFrontierService
     {
         if (points.Count == 0)
             return null;
+
+        var heldCandidate = GetHeldTreasureFollowerCandidate(points);
+        if (heldCandidate is not null)
+            return BuildNavigationPoint(heldCandidate, playerPosition);
 
         var startPoint = points.FirstOrDefault(point => !point.IsTreasurePassageCandidate);
         if (startPoint is not null
@@ -1905,6 +1939,12 @@ public sealed class DungeonFrontierService
         if (interactable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable or InteractableClass.TreasureDoor))
             return false;
 
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+            && interactable.Classification == InteractableClass.TreasureDoor)
+        {
+            return false;
+        }
+
         var distance = playerPosition.HasValue
             ? Vector3.Distance(playerPosition.Value, interactable.Position)
             : (float?)null;
@@ -1913,6 +1953,22 @@ public sealed class DungeonFrontierService
             : (float?)null;
         return !objectPriorityRuleService.IsSuppressedByRuleGates(context, interactable, distance, verticalDelta);
     }
+
+    private DungeonFrontierPoint? GetHeldTreasureFollowerCandidate(IReadOnlyList<DungeonFrontierPoint> points)
+    {
+        if (heldTreasureFollowerCandidateKey is null)
+            return null;
+
+        var heldCandidate = points.FirstOrDefault(point => string.Equals(point.Key, heldTreasureFollowerCandidateKey, StringComparison.Ordinal));
+        if (heldCandidate is null)
+            ClearTreasureFollowerCandidateHold("held candidate left active route");
+
+        return heldCandidate;
+    }
+
+    private bool IsHeldTreasureFollowerCandidate(DungeonFrontierPoint point)
+        => heldTreasureFollowerCandidateKey is not null
+           && string.Equals(point.Key, heldTreasureFollowerCandidateKey, StringComparison.Ordinal);
 
     private static float GetManualDestinationDistance(Vector3 playerPosition, DungeonFrontierPoint point)
         => point.IsManualXyzDestination

@@ -270,6 +270,7 @@ public sealed class ExecutionService
     {
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
         ClearBossFightCombatGhost(reason);
+        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         if (hadNudge)
             log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
@@ -1997,6 +1998,7 @@ public sealed class ExecutionService
 
             treasureFollowerForwardCandidateKey = frontierPoint.Key;
             treasureFollowerForwardDestination = BuildTreasureFollowerForwardDestination(playerPosition, frontierPoint.Position);
+            dungeonFrontierService.HoldTreasureFollowerCandidate(frontierPoint);
             ResetTreasureRouteStuckTracking();
             StopNavigationForTreasureRouteNudge();
             log?.Information(
@@ -2152,6 +2154,7 @@ public sealed class ExecutionService
     {
         treasureFollowerForwardCandidateKey = null;
         treasureFollowerForwardDestination = Vector3.Zero;
+        dungeonFrontierService.ClearTreasureFollowerCandidateHold("treasure follower forward attempt cleared");
 
         if (resetStuckTracking)
             ResetTreasureRouteStuckTracking();

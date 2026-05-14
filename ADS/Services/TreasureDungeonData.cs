@@ -73,7 +73,7 @@ public static class TreasureDungeonData
             new TreasureRoute(
                 new RoutePoint(new Vector3(0.3018191f, -39.97151f, 142.62704f), "Room 1 Start"),
                 [
-                    new RoutePoint(new Vector3(28.071524f, -39.235474f, 101.0369f), "Room 2 Left Door"),
+                    new RoutePoint(new Vector3(-28.071524f, -39.235474f, 101.0369f), "Room 2 Left Door"),
                     new RoutePoint(new Vector3(28.071524f, -39.235474f, 101.0369f), "Room 2 Right Door"),
                     new RoutePoint(new Vector3(-29.093864f, 1.1753497f, -29.101763f), "Room 3 Left Door"),
                     new RoutePoint(new Vector3(29.33053f, 1.2513843f, -29.013733f), "Room 3 Right Door"),
@@ -140,6 +140,13 @@ public static class TreasureDungeonData
 
     public static bool TryGetInteractableClassification(uint territoryId, string objectName, out InteractableClass classification)
     {
+        if (DoorNames.TryGetValue(territoryId, out var doorName)
+            && string.Equals(objectName, doorName, StringComparison.OrdinalIgnoreCase))
+        {
+            classification = InteractableClass.TreasureDoor;
+            return true;
+        }
+
         if (IsRepeatableProgressionInteractable(territoryId, objectName))
         {
             classification = InteractableClass.Required;
