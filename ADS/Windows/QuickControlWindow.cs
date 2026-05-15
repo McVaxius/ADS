@@ -14,10 +14,10 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(250f, 120f),
-            MaximumSize = new Vector2(420f, 240f),
+            MinimumSize = new Vector2(360f, 120f),
+            MaximumSize = new Vector2(520f, 260f),
         };
-        Size = new Vector2(300f, 150f);
+        Size = new Vector2(420f, 170f);
     }
 
     public void Dispose()
@@ -42,6 +42,19 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
         if (ImGui.Button("Rules", new Vector2(58f, 26f)))
             plugin.OpenRuleEditorUi();
+        ImGui.SameLine();
+        if (ImGui.Button("Object", new Vector2(58f, 26f)))
+            plugin.OpenObjectExplorerUi();
+        ImGui.SameLine();
+        if (ImGui.Button("Dialog", new Vector2(76f, 26f)))
+            plugin.OpenDialogRuleEditorUi();
+        ImGui.SameLine();
+        if (plugin.RemoteJsonUpdateService.IsUpdateRunning)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("UPDATE", new Vector2(76f, 26f)))
+            plugin.ForceRemoteJsonUpdate();
+        if (plugin.RemoteJsonUpdateService.IsUpdateRunning)
+            ImGui.EndDisabled();
 
         ImGui.Separator();
         ImGui.TextUnformatted($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");

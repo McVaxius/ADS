@@ -187,6 +187,9 @@ public sealed class Plugin : IDalamudPlugin
     public void ToggleObjectExplorerUi()
         => objectExplorerWindow.IsOpen = !objectExplorerWindow.IsOpen;
 
+    public void OpenObjectExplorerUi()
+        => objectExplorerWindow.IsOpen = true;
+
     public void ToggleGhostListUi()
         => ghostListWindow.IsOpen = !ghostListWindow.IsOpen;
 
