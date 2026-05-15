@@ -69,6 +69,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan TreasureCofferLockedRetryDelay = TimeSpan.FromSeconds(15.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan TreasureFollowerForwardAttemptMaxDuration = TimeSpan.FromSeconds(3.0);
     private static readonly TimeSpan ManualDestinationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
@@ -129,6 +130,9 @@ public sealed class ExecutionService
     private DateTime treasureRouteStuckLastProgressUtc;
     private int treasureRouteStuckOffsetAttempt;
     private string? treasureFollowerForwardCandidateKey;
+    private DungeonFrontierPoint? treasureFollowerForwardCandidatePoint;
+    private TimeSpan treasureFollowerForwardActiveElapsed;
+    private DateTime treasureFollowerForwardLastActiveUtc;
     private Vector3 treasureFollowerForwardDestination;
     private string? treasureDoorNudgeTargetKey;
     private Vector3? treasureDoorNudgeBaselinePosition;
@@ -547,8 +551,17 @@ public sealed class ExecutionService
             ClearCommittedForceMarchManualDestination();
             ClearBossFightCombatGhost("unsafe transition");
             ResetRecoveryHold();
-            StopMovementAssists();
+            StopMovementAssists(preserveTreasureFollowerForwardAttempt: ShouldPreserveTreasureFollowerForwardAttemptForTransit(context));
             SetPhase(ExecutionPhase.TransitionHold, $"{prefix} Waiting for safe post-transition duty truth before advancing.");
+            return;
+        }
+
+        if (ShouldHoldTreasureFollowerRouteTransit(context, planner))
+        {
+            StopNavigationForTreasureRouteTransit();
+            SetPhase(
+                ExecutionPhase.TransitionHold,
+                $"{prefix} Waiting for treasure passage movement to settle.");
             return;
         }
 
@@ -592,17 +605,9 @@ public sealed class ExecutionService
         if (TryAdvancePraetoriumMountedCombat(context, planner, observation, prefix))
             return;
 
-        if (planner.Mode != PlannerMode.Progression || !IsFrontierLikePlannerObjective(planner.ObjectiveKind))
+        if ((planner.Mode != PlannerMode.Progression || !IsFrontierLikePlannerObjective(planner.ObjectiveKind))
+            && !ShouldPreserveTreasureFollowerForwardAttemptForTransit(context))
             ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
-
-        if (ShouldHoldTreasureFollowerRouteTransit(context, planner))
-        {
-            StopNavigationForTreasureRouteTransit();
-            SetPhase(
-                ExecutionPhase.TransitionHold,
-                $"{prefix} Waiting for treasure passage movement to settle.");
-            return;
-        }
 
         if (planner.Mode == PlannerMode.Recovery)
         {
@@ -756,7 +761,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("unsafe transition hold");
         ResetRecoveryHold();
-        StopMovementAssists();
+        StopMovementAssists(preserveTreasureFollowerForwardAttempt: ShouldPreserveTreasureFollowerForwardAttemptForTransit(context));
         SetPhase(
             ExecutionPhase.TransitionHold,
             $"Unsafe transition active ({FormatUnsafeTransitionFlags(context)}); ADS stopped navigation and is waiting for stable post-transition duty truth.");
@@ -1753,10 +1758,20 @@ public sealed class ExecutionService
     private bool ShouldHoldTreasureFollowerRouteTransit(DutyContextSnapshot context, PlannerSnapshot planner)
         => context.IsTreasureRouteTransitHold
            && TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-           && planner.Mode == PlannerMode.Progression
-           && planner.ObjectiveKind == PlannerObjectiveKind.Frontier
-           && dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
-           && dungeonFrontierService.CurrentTarget is { IsTreasureRoutePoint: true };
+           && (HasPendingTreasureFollowerForwardAttempt()
+               || (planner.Mode == PlannerMode.Progression
+                   && planner.ObjectiveKind == PlannerObjectiveKind.Frontier))
+           && (HasPendingTreasureFollowerForwardAttempt()
+               || (dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+                   && dungeonFrontierService.CurrentTarget is { IsTreasureRoutePoint: true }));
+
+    private bool ShouldPreserveTreasureFollowerForwardAttemptForTransit(DutyContextSnapshot context)
+        => context.IsTreasureRouteTransitHold
+           && TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+           && HasPendingTreasureFollowerForwardAttempt();
+
+    private bool HasPendingTreasureFollowerForwardAttempt()
+        => treasureFollowerForwardCandidateKey is not null;
 
     private static DungeonFrontierPoint RebuildCommittedForceMarchManualDestination(DungeonFrontierPoint point, Vector3? playerPosition)
     {
@@ -2008,12 +2023,19 @@ public sealed class ExecutionService
             treasureFollowerForwardCandidateKey,
             frontierPoint.Key,
             StringComparison.Ordinal);
+        if (treasureFollowerForwardCandidateKey is not null && !hasPendingForwardAttempt)
+            ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+
         if (!hasPendingForwardAttempt)
         {
             if (!candidateReached)
                 return false;
 
+            var now = DateTime.UtcNow;
             treasureFollowerForwardCandidateKey = frontierPoint.Key;
+            treasureFollowerForwardCandidatePoint = frontierPoint;
+            treasureFollowerForwardActiveElapsed = TimeSpan.Zero;
+            treasureFollowerForwardLastActiveUtc = now;
             treasureFollowerForwardDestination = BuildTreasureFollowerForwardDestination(playerPosition, frontierPoint.Position);
             dungeonFrontierService.HoldTreasureFollowerCandidate(frontierPoint);
             ResetTreasureRouteStuckTracking();
@@ -2025,6 +2047,20 @@ public sealed class ExecutionService
         var forwardHorizontalDistance = GetHorizontalDistance(treasureFollowerForwardDestination, playerPosition);
         var forwardDistance = Vector3.Distance(treasureFollowerForwardDestination, playerPosition);
         var forwardVerticalDelta = MathF.Abs(treasureFollowerForwardDestination.Y - playerPosition.Y);
+        var elapsed = AccumulateTreasureFollowerForwardAttemptActiveTime(DateTime.UtcNow);
+        if (TryFailTreasureFollowerForwardAttemptOnActiveTimeout(
+                frontierPoint,
+                playerPosition,
+                "active forward movement",
+                elapsed,
+                out _))
+        {
+            SetPhase(
+                ExecutionPhase.FrontierHint,
+                $"{prefix} Treasure follower forward push for passage candidate {frontierPoint.Name} timed out after {elapsed.TotalSeconds:0.0}s active movement (budget {TreasureFollowerForwardAttemptMaxDuration.TotalSeconds:0.0}s; forward XZ {forwardHorizontalDistance:0.0}y). ADS is trying another current-room candidate.{treasureRouteRadiusStatus}");
+            return true;
+        }
+
         if (forwardHorizontalDistance <= TreasureDoorFollowThroughArrivalRange)
         {
             StopNavigationForTreasureRouteNudge();
@@ -2167,9 +2203,69 @@ public sealed class ExecutionService
         treasureRouteStuckOffsetAttempt = 0;
     }
 
+    private TimeSpan AccumulateTreasureFollowerForwardAttemptActiveTime(DateTime now)
+    {
+        if (!HasPendingTreasureFollowerForwardAttempt())
+            return TimeSpan.Zero;
+
+        if (treasureFollowerForwardLastActiveUtc == DateTime.MinValue)
+        {
+            treasureFollowerForwardLastActiveUtc = now;
+            return treasureFollowerForwardActiveElapsed;
+        }
+
+        if (now > treasureFollowerForwardLastActiveUtc)
+            treasureFollowerForwardActiveElapsed += now - treasureFollowerForwardLastActiveUtc;
+
+        treasureFollowerForwardLastActiveUtc = now;
+        return treasureFollowerForwardActiveElapsed;
+    }
+
+    private void PauseTreasureFollowerForwardAttemptTimer()
+    {
+        if (HasPendingTreasureFollowerForwardAttempt())
+        {
+            treasureFollowerForwardLastActiveUtc = DateTime.MinValue;
+            ResetTreasureRouteStuckTracking();
+        }
+    }
+
+    private bool TryFailTreasureFollowerForwardAttemptOnActiveTimeout(
+        DungeonFrontierPoint? fallbackPoint,
+        Vector3? playerPosition,
+        string contextDetail,
+        TimeSpan elapsed,
+        out DungeonFrontierPoint? timedOutPoint)
+    {
+        timedOutPoint = null;
+
+        if (!HasPendingTreasureFollowerForwardAttempt())
+            return false;
+
+        if (elapsed < TreasureFollowerForwardAttemptMaxDuration)
+            return false;
+
+        timedOutPoint = treasureFollowerForwardCandidatePoint ?? fallbackPoint;
+        if (timedOutPoint is null)
+            return false;
+
+        StopNavigationForTreasureRouteNudge();
+        var playerDetail = playerPosition.HasValue
+            ? $"player {FormatVector(playerPosition.Value)}, forward XZ {GetHorizontalDistance(treasureFollowerForwardDestination, playerPosition.Value):0.0}y, 3D {Vector3.Distance(treasureFollowerForwardDestination, playerPosition.Value):0.0}y, Y {MathF.Abs(treasureFollowerForwardDestination.Y - playerPosition.Value.Y):0.0}"
+            : "player position unavailable";
+        var detail =
+            $"Forward attempt exceeded {TreasureFollowerForwardAttemptMaxDuration.TotalSeconds:0.0}s active forward-push budget during {contextDetail}; active elapsed {elapsed.TotalSeconds:0.0}s, candidate {FormatVector(timedOutPoint.Position)}, forward destination {FormatVector(treasureFollowerForwardDestination)}, {playerDetail}.";
+        dungeonFrontierService.MarkTreasureFollowerCandidateFailed(timedOutPoint, "ForwardAttemptTimedOut", detail);
+        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        return true;
+    }
+
     private void ClearTreasureFollowerForwardAttempt(bool resetStuckTracking)
     {
         treasureFollowerForwardCandidateKey = null;
+        treasureFollowerForwardCandidatePoint = null;
+        treasureFollowerForwardActiveElapsed = TimeSpan.Zero;
+        treasureFollowerForwardLastActiveUtc = DateTime.MinValue;
         treasureFollowerForwardDestination = Vector3.Zero;
         dungeonFrontierService.ClearTreasureFollowerCandidateHold("treasure follower forward attempt cleared");
 
@@ -4612,13 +4708,20 @@ public sealed class ExecutionService
             log?.Information(message);
     }
 
-    private void StopMovementAssists()
+    private void StopMovementAssists(bool preserveTreasureFollowerForwardAttempt = false)
     {
         StopNavigationIfNeeded();
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
-        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        if (!preserveTreasureFollowerForwardAttempt)
+        {
+            ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        }
+        else
+        {
+            PauseTreasureFollowerForwardAttemptTimer();
+        }
         ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
@@ -4651,7 +4754,14 @@ public sealed class ExecutionService
         nextInteractAttemptUtc = DateTime.MinValue;
         nextMountedCombatAttemptUtc = DateTime.MinValue;
         lastInteractGameObjectId = 0;
-        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        if (!ShouldPreserveTreasureFollowerForwardAttemptForTransit(context))
+        {
+            ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        }
+        else
+        {
+            PauseTreasureFollowerForwardAttemptTimer();
+        }
         ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         unsafeTransitionNavigationStopLatched = true;
@@ -4684,7 +4794,8 @@ public sealed class ExecutionService
     private void StopNavigationForTreasureRouteTransit()
     {
         StopNavigationForTreasureRouteNudge();
-        ClearTreasureFollowerForwardAttempt(resetStuckTracking: true);
+        ResetTreasureRouteStuckTracking();
+        PauseTreasureFollowerForwardAttemptTimer();
     }
 
     private bool TrySendCommand(string command)
