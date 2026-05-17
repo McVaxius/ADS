@@ -16,6 +16,8 @@ using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons;
+using ECommons.GameHelpers;
 
 namespace ADS;
 
@@ -35,6 +37,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
+    [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -62,6 +66,11 @@ public sealed class Plugin : IDalamudPlugin
     public UtilityAutomationService UtilityAutomationService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
     public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
+    public TreasureHighLowDiagnosticService TreasureHighLowDiagnosticService { get; }
+    public HigherLowerServerEventTraceService HigherLowerServerEventTraceService { get; }
+    public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
+    public HigherLowerCardVfxSolverService HigherLowerCardVfxSolverService { get; }
+    public HigherLowerAutomationService HigherLowerAutomationService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -71,6 +80,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly QuickControlWindow quickControlWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
+    private readonly HigherLowerWindow higherLowerWindow;
+    private readonly ServerEventExplorerWindow serverEventExplorerWindow;
+    private readonly VfxExplorerWindow vfxExplorerWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
 
@@ -80,6 +92,10 @@ public sealed class Plugin : IDalamudPlugin
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         if (configurationChanged)
             Configuration.Save();
+        ECommonsMain.Init(PluginInterface, this, [ECommons.Module.VfxTracking]);
+        VfxManager.EnableStaticVfxCreationTracking = true;
+        VfxManager.Logging = false;
+        VfxManager.LoggingFilter = string.Empty;
 
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
         TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
@@ -96,6 +112,12 @@ public sealed class Plugin : IDalamudPlugin
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
+        TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
+        HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
+        HigherLowerVfxTraceService = new HigherLowerVfxTraceService(ObjectTable, ClientState, TreasureHighLowDiagnosticService, Log);
+        HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, DataManager, Log);
+        HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
+        HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         AdsIpcService = new AdsIpcService(
@@ -116,6 +138,9 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow = new QuickControlWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
+        higherLowerWindow = new HigherLowerWindow(this);
+        serverEventExplorerWindow = new ServerEventExplorerWindow(this);
+        vfxExplorerWindow = new VfxExplorerWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
@@ -124,6 +149,9 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(quickControlWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
+        WindowSystem.AddWindow(higherLowerWindow);
+        WindowSystem.AddWindow(serverEventExplorerWindow);
+        WindowSystem.AddWindow(vfxExplorerWindow);
 
         RegisterCommands();
 
@@ -161,6 +189,9 @@ public sealed class Plugin : IDalamudPlugin
         InnEntryService.Cancel("plugin dispose");
         UtilityAutomationService.Cancel("plugin dispose");
         UnregisterCommands();
+        HigherLowerServerEventTraceService.Dispose();
+        HigherLowerVfxTraceService.Dispose();
+        TreasureHighLowDiagnosticService.Dispose();
         AdsIpcService.Dispose();
         RemoteJsonUpdateService.Dispose();
         WindowSystem.RemoveAllWindows();
@@ -173,6 +204,10 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
+        higherLowerWindow.Dispose();
+        serverEventExplorerWindow.Dispose();
+        vfxExplorerWindow.Dispose();
+        ECommonsMain.Dispose();
     }
 
     public void OpenMainUi()
@@ -214,6 +249,24 @@ public sealed class Plugin : IDalamudPlugin
     public void OpenDialogRuleEditorUi()
         => dialogRuleEditorWindow.IsOpen = true;
 
+    public void ToggleHigherLowerUi()
+        => higherLowerWindow.IsOpen = !higherLowerWindow.IsOpen;
+
+    public void OpenHigherLowerUi()
+        => higherLowerWindow.IsOpen = true;
+
+    public void ToggleServerEventExplorerUi()
+        => serverEventExplorerWindow.IsOpen = !serverEventExplorerWindow.IsOpen;
+
+    public void OpenServerEventExplorerUi()
+        => serverEventExplorerWindow.IsOpen = true;
+
+    public void ToggleVfxExplorerUi()
+        => vfxExplorerWindow.IsOpen = !vfxExplorerWindow.IsOpen;
+
+    public void OpenVfxExplorerUi()
+        => vfxExplorerWindow.IsOpen = true;
+
     public void SaveConfiguration()
     {
         Configuration.Save();
@@ -233,6 +286,9 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
+        higherLowerWindow.QueueResetToOrigin();
+        serverEventExplorerWindow.QueueResetToOrigin();
+        vfxExplorerWindow.QueueResetToOrigin();
     }
 
     public void JumpWindows()
@@ -245,6 +301,9 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
+        higherLowerWindow.QueueRandomVisibleJump();
+        serverEventExplorerWindow.QueueRandomVisibleJump();
+        vfxExplorerWindow.QueueRandomVisibleJump();
     }
 
     public string ObjectExplorerStatus
@@ -451,6 +510,8 @@ public sealed class Plugin : IDalamudPlugin
                 treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
+                frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
+                liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -460,6 +521,7 @@ public sealed class Plugin : IDalamudPlugin
                 dialogLastActionAtUtc = DialogAutomationService.DialogLastActionAtUtc == DateTime.MinValue
                     ? null
                     : DialogAutomationService.DialogLastActionAtUtc.ToString("O"),
+                higherLowerAutomation = HigherLowerAutomationService.CaptureDebugState(),
                 manualDestinationTarget = ExecutionService.CurrentManualDestinationTarget,
                 manualDestinationDistance = ExecutionService.CurrentManualDestinationDistance,
                 manualDestinationLastProgressAgeSeconds = ExecutionService.ManualDestinationLastProgressAgeSeconds,
@@ -504,6 +566,7 @@ public sealed class Plugin : IDalamudPlugin
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
                 dialogStatus = DialogAutomationService.DialogStatus,
+                higherLowerAutomation = HigherLowerAutomationService.CaptureDebugState(),
                 mounted = DutyContextService.Current.Mounted,
                 targetName = ObjectivePlannerService.Current.TargetName,
                 targetDistance = ObjectivePlannerService.Current.TargetDistance,
@@ -517,6 +580,8 @@ public sealed class Plugin : IDalamudPlugin
                     treasureDungeonRoleSource = DungeonFrontierService.TreasureDungeonRoleSource,
                     treasureDungeonRoleDetail = DungeonFrontierService.TreasureDungeonRoleDetail,
                     treasureFollowerRetryCycle = DungeonFrontierService.TreasureFollowerRetryCycle,
+                    liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
+                    currentTreasureRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                     activeMapId = DungeonFrontierService.ActiveMapId,
                     activeMapName = DungeonFrontierService.ActiveMapName,
                     totalPoints = DungeonFrontierService.TotalPoints,
@@ -530,6 +595,8 @@ public sealed class Plugin : IDalamudPlugin
                     manualDestinationLastProgressAgeSeconds = ExecutionService.ManualDestinationLastProgressAgeSeconds,
                     manualDestinationLastGhostReason = DungeonFrontierService.LastGhostedManualDestinationReason,
                     currentTarget = DungeonFrontierService.CurrentTarget?.Name,
+                    currentTargetTreasureRouteSource = DungeonFrontierService.CurrentTarget?.TreasureRouteSource,
+                    currentTargetIsLiveTreasureDoorCandidate = DungeonFrontierService.CurrentTarget?.IsLiveTreasureDoorCandidate,
                     currentTargetMapId = DungeonFrontierService.CurrentTarget?.MapId,
                     currentTargetTreasureRoomIndex = DungeonFrontierService.CurrentTarget?.TreasureRoomIndex,
                     currentTargetTreasurePassageGroup = DungeonFrontierService.CurrentTarget?.TreasurePassageGroup,
@@ -554,6 +621,15 @@ public sealed class Plugin : IDalamudPlugin
                     liveInteractables = ObservationMemoryService.Current.LiveInteractables.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString() }),
                     interactableGhosts = ObservationMemoryService.Current.InteractableGhosts.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position), classification = x.Classification.ToString(), ghostReason = x.GhostReason.ToString() }),
                 },
+            },
+            JsonOptions);
+
+    public string GetHigherLowerLiveProbeJson()
+        => JsonSerializer.Serialize(
+            new
+            {
+                liveProbe = TreasureHighLowDiagnosticService.CaptureLiveProbe(),
+                automation = HigherLowerAutomationService.CaptureDebugState(),
             },
             JsonOptions);
 
@@ -634,6 +710,9 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         DutyContextService.Update(Configuration.PluginEnabled);
+        HigherLowerServerEventTraceService.Update(DutyContextService.Current);
+        HigherLowerVfxTraceService.Update(DutyContextService.Current);
+        HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
         ObjectPriorityRuleService.ReloadIfChanged();
         DialogYesNoRuleService.ReloadIfChanged();
         DialogAutomationService.Update(
@@ -641,6 +720,12 @@ public sealed class Plugin : IDalamudPlugin
             ExecutionService.CurrentMode,
             Configuration.PluginEnabled,
             Configuration.ProcessDialogRulesOutsideOwnedDuty);
+        HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+        ExecutionService.SetHigherLowerAutomationHold(
+            HigherLowerAutomationService.HoldMovement,
+            HigherLowerAutomationService.Status,
+            HigherLowerAutomationService.BlocksDutyExit,
+            HigherLowerAutomationService.LastHigherLowerActivityUtc);
 
         if (DutyContextService.Current.IsUnsafeTransition)
         {
@@ -657,6 +742,11 @@ public sealed class Plugin : IDalamudPlugin
                 ObservationSnapshot.Empty,
                 Configuration.PluginEnabled,
                 Configuration.ConsiderTreasureCoffers,
+                DialogAutomationService.DialogStatus);
+            TreasureHighLowDiagnosticService.Update(
+                DutyContextService.Current,
+                ObservationSnapshot.Empty,
+                ObjectivePlannerService.Current,
                 DialogAutomationService.DialogStatus);
             UpdateDtrBar();
             return;
@@ -675,6 +765,11 @@ public sealed class Plugin : IDalamudPlugin
             ObservationMemoryService.Current,
             Configuration.PluginEnabled,
             Configuration.ConsiderTreasureCoffers,
+            DialogAutomationService.DialogStatus);
+        TreasureHighLowDiagnosticService.Update(
+            DutyContextService.Current,
+            ObservationMemoryService.Current,
+            ObjectivePlannerService.Current,
             DialogAutomationService.DialogStatus);
         InnEntryService.Update();
         UtilityAutomationService.Update();
@@ -699,12 +794,10 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (ShouldRunDutyCompletionTreasureSweep(context)
-            && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
+        if (IsTreasureDungeonDutyCompletedNoise(context, territoryId))
         {
-            PrintStatus(ExecutionService.LastStatus);
             UpdateDtrBar();
-            Log.Information($"[ADS] DutyCompleted event for {dutyName}; ADS kept ownership for the final treasure sweep.");
+            Log.Information($"[ADS] DutyCompleted event for {dutyName}; ignored as treasure-dungeon chamber-complete noise while ADS keeps ownership.");
             return;
         }
 
@@ -716,11 +809,11 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] DutyCompleted event for {dutyName}; ownership released and observation memory cleared.");
     }
 
-    private bool ShouldRunDutyCompletionTreasureSweep(DutyContextSnapshot context)
-        => Configuration.ConsiderTreasureCoffers
-           && context.InInstancedDuty
+    private static bool IsTreasureDungeonDutyCompletedNoise(DutyContextSnapshot context, uint territoryId)
+        => context.InInstancedDuty
            && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
-               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
+               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
+               || TreasureDungeonData.IsSupportedDutyTerritory(territoryId));
 
     private void RegisterCommands()
     {
@@ -735,6 +828,10 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads mini - toggle the compact control window\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
+                "/ads hl - toggle the Higher/Lower calibration window\n" +
+                "/ads events - toggle the server event explorer\n" +
+                "/ads vfx - toggle the VFX explorer\n" +
+                "/ads mapeffects - alias for /ads events\n" +
                 "/ads ws - reset windows to 1,1\n" +
                 "/ads j - jump windows to visible random positions\n" +
                 "/ads outside - queue outside ownership\n" +
@@ -748,6 +845,8 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
+                "/ads hldebug on|off|dump|state|trace [seconds]|export|exportpath <tex> [u v w h]|card <1-9> [current|next|previous]|board <left> <right> [label...]|solver|status|folder - Higher/Lower diagnostic file logging\n" +
+                "/ads hlauto on|off|status - Higher/Lower guarded automation\n" +
                 "/ads stop - drop ownership",
             ShowInHelp = true,
         };
@@ -812,6 +911,27 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("dialogs", StringComparison.OrdinalIgnoreCase))
         {
             ToggleDialogRuleEditorUi();
+            return;
+        }
+
+        if (trimmed.Equals("hl", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("higherlower", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("higher-lower", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleHigherLowerUi();
+            return;
+        }
+
+        if (trimmed.Equals("events", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("mapeffects", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleServerEventExplorerUi();
+            return;
+        }
+
+        if (trimmed.Equals("vfx", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleVfxExplorerUi();
             return;
         }
 
@@ -897,6 +1017,163 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("desynthfrominventory", StringComparison.OrdinalIgnoreCase))
         {
             StartDesynthFromInventory();
+            return;
+        }
+
+        if (trimmed.Equals("hldebug trace", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("hldebug trace ", StringComparison.OrdinalIgnoreCase))
+        {
+            var traceText = trimmed.Length == "hldebug trace".Length
+                ? string.Empty
+                : trimmed["hldebug trace ".Length..].Trim();
+            var seconds = TreasureHighLowDiagnosticService.DefaultTraceSeconds;
+            if (!string.IsNullOrWhiteSpace(traceText)
+                && (!double.TryParse(traceText, NumberStyles.Float, CultureInfo.InvariantCulture, out seconds)
+                    || seconds <= 0))
+            {
+                PrintStatus($"Higher/Lower trace must be: /ads hldebug trace [seconds], max {TreasureHighLowDiagnosticService.MaxTraceSeconds.ToString("0.###", CultureInfo.InvariantCulture)}.");
+                return;
+            }
+
+            var result = TreasureHighLowDiagnosticService.StartTrace(seconds);
+            PrintStatus(result.Message);
+            return;
+        }
+
+        if (trimmed.Equals("hldebug export", StringComparison.OrdinalIgnoreCase))
+        {
+            var result = TreasureHighLowDiagnosticService.ExportCurrentTextureProbe();
+            PrintStatus(result.Message);
+            return;
+        }
+
+        if (trimmed.StartsWith("hldebug exportpath ", StringComparison.OrdinalIgnoreCase))
+        {
+            var exportArgs = trimmed["hldebug exportpath ".Length..]
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (exportArgs.Length is not (1 or 5))
+            {
+                PrintStatus("Higher/Lower exportpath must be: /ads hldebug exportpath <tex path> [u v w h].");
+                return;
+            }
+
+            var result = TreasureHighLowDiagnosticService.ExportTexturePath(exportArgs[0], exportArgs.Skip(1).ToArray());
+            PrintStatus(result.Message);
+            return;
+        }
+
+        if (trimmed.Equals("hldebug", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("hldebug dump", StringComparison.OrdinalIgnoreCase))
+        {
+            TreasureHighLowDiagnosticService.ForceDump();
+            PrintStatus("Higher/Lower diagnostic snapshot queued.");
+            return;
+        }
+
+        if (trimmed.Equals("hldebug state", StringComparison.OrdinalIgnoreCase))
+        {
+            TreasureHighLowDiagnosticService.ForceStateProbe();
+            PrintStatus("Higher/Lower focused state probe queued.");
+            return;
+        }
+
+        if (trimmed.Equals("hldebug status", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = TreasureHighLowDiagnosticService.CurrentLogPath;
+            PrintStatus(
+                $"Higher/Lower diagnostics enabled={TreasureHighLowDiagnosticService.Enabled}; " +
+                $"file={(string.IsNullOrWhiteSpace(path) ? "(not opened yet)" : path)}");
+            return;
+        }
+
+        if (trimmed.Equals("hldebug solver", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(HigherLowerCardVfxSolverService.DumpState());
+            return;
+        }
+
+        if (trimmed.Equals("hldebug folder", StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(TreasureHighLowDiagnosticService.DiagnosticDirectory);
+            OpenPath(TreasureHighLowDiagnosticService.DiagnosticDirectory);
+            PrintStatus($"Opened Higher/Lower diagnostics folder: {TreasureHighLowDiagnosticService.DiagnosticDirectory}");
+            return;
+        }
+
+        if (trimmed.StartsWith("hldebug card ", StringComparison.OrdinalIgnoreCase))
+        {
+            var cardArgs = trimmed["hldebug card ".Length..]
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var role = cardArgs.Length >= 2 ? cardArgs[1] : "current";
+            if (cardArgs.Length is < 1 or > 2
+                || !int.TryParse(cardArgs[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var card)
+                || !TreasureHighLowDiagnosticService.TagKnownCard(card, role))
+            {
+                PrintStatus("Higher/Lower card tag must be: /ads hldebug card <1-9> [current|next|previous].");
+                return;
+            }
+
+            PrintStatus($"Higher/Lower known-card tag queued: card={card} role={TreasureHighLowDiagnosticService.NormalizeKnownCardRole(role)}.");
+            return;
+        }
+
+        if (trimmed.StartsWith("hldebug board ", StringComparison.OrdinalIgnoreCase))
+        {
+            var boardText = trimmed["hldebug board ".Length..].Trim();
+            var boardArgs = boardText.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (boardArgs.Length < 2
+                || !TreasureHighLowDiagnosticService.TagKnownBoard(
+                    boardArgs[0],
+                    boardArgs[1],
+                    boardArgs.Length >= 3 ? boardArgs[2] : string.Empty))
+            {
+                Log.Information($"{TreasureHighLowDiagnosticService.LogPrefix} invalid board tag args text='{boardText.Replace("'", "\\'", StringComparison.Ordinal)}'.");
+                PrintStatus("Higher/Lower board tag must be: /ads hldebug board <left> <right> [label...], where cards are 1-9, blank, or unknown.");
+                return;
+            }
+
+            var left = TreasureHighLowDiagnosticService.NormalizeKnownBoardCardToken(boardArgs[0]);
+            var right = TreasureHighLowDiagnosticService.NormalizeKnownBoardCardToken(boardArgs[1]);
+            var label = boardArgs.Length >= 3 ? boardArgs[2].Trim() : string.Empty;
+            if (label.Length > 80)
+                label = label[..80];
+
+            PrintStatus($"Higher/Lower board tag queued: left={left} right={right} label='{label}'.");
+            return;
+        }
+
+        if (trimmed.Equals("hldebug on", StringComparison.OrdinalIgnoreCase))
+        {
+            TreasureHighLowDiagnosticService.SetEnabled(true);
+            PrintStatus("Higher/Lower diagnostics enabled.");
+            return;
+        }
+
+        if (trimmed.Equals("hldebug off", StringComparison.OrdinalIgnoreCase))
+        {
+            TreasureHighLowDiagnosticService.SetEnabled(false);
+            PrintStatus("Higher/Lower diagnostics disabled.");
+            return;
+        }
+
+        if (trimmed.Equals("hlauto status", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("hlauto", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(HigherLowerAutomationService.Status);
+            return;
+        }
+
+        if (trimmed.Equals("hlauto on", StringComparison.OrdinalIgnoreCase))
+        {
+            HigherLowerAutomationService.SetEnabled(true);
+            PrintStatus(HigherLowerAutomationService.Status);
+            return;
+        }
+
+        if (trimmed.Equals("hlauto off", StringComparison.OrdinalIgnoreCase))
+        {
+            HigherLowerAutomationService.SetEnabled(false);
+            PrintStatus(HigherLowerAutomationService.Status);
             return;
         }
 
@@ -1034,6 +1311,35 @@ public sealed class Plugin : IDalamudPlugin
         {
             configuration.ProcessDialogRulesOutsideOwnedDuty = true;
             configuration.Version = 7;
+            changed = true;
+        }
+
+        if (configuration.Version < 8)
+        {
+            configuration.HigherLowerDiagnosticsEnabled = false;
+            configuration.Version = 8;
+            changed = true;
+        }
+
+        if (configuration.Version < 9)
+        {
+            configuration.HigherLowerDiagnosticsEnabled = false;
+            configuration.Version = 9;
+            changed = true;
+        }
+
+        if (configuration.Version < 10)
+        {
+            configuration.HigherLowerAutomationEnabled = false;
+            configuration.Version = 10;
+            changed = true;
+        }
+
+        if (configuration.Version < 11)
+        {
+            configuration.HigherLowerDiagnosticsEnabled = true;
+            configuration.HigherLowerAutomationEnabled = true;
+            configuration.Version = 11;
             changed = true;
         }
 

@@ -25,6 +25,15 @@ public sealed class DungeonFrontierPoint
     public int TreasureRouteIndex { get; init; } = -1;
     public int TreasureRoomIndex { get; init; }
     public string TreasurePassageGroup { get; init; } = string.Empty;
+    public bool IsLiveTreasureDoorCandidate { get; init; }
+    public string TreasureRouteSource
+        => IsLiveTreasureDoorCandidate
+            ? "LiveTreasureDoor"
+            : IsTreasureRoutePoint
+                ? "StaticTreasureRoute"
+                : IsManualDestination
+                    ? "ManualDestination"
+                    : "Frontier";
     public bool IsTreasureRoutePoint
         => TreasureRouteIndex >= 0;
     public bool IsTreasurePassageCandidate

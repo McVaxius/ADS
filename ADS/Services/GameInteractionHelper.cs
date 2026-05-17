@@ -163,6 +163,53 @@ public static class GameInteractionHelper
             _ => method.ToString(),
         };
 
+    public static unsafe bool TryClickAddonNodeButton(
+        string addonName,
+        uint nodeId,
+        IGameGui gameGui,
+        IPluginLog? log = null)
+    {
+        try
+        {
+            nint addonPtr = gameGui.GetAddonByName(addonName, 1);
+            if (addonPtr == nint.Zero)
+                return false;
+
+            var addon = (AtkUnitBase*)addonPtr;
+            if (addon == null || !addon->IsVisible)
+                return false;
+
+            var node = addon->GetNodeById(nodeId);
+            if (node == null || !node->IsVisible())
+                return false;
+
+            var atkEvent = node->AtkEventManager.Event;
+            while (atkEvent != null && atkEvent->State.EventType != AtkEventType.ButtonClick)
+                atkEvent = atkEvent->NextEvent;
+
+            if (atkEvent == null)
+            {
+                atkEvent = node->AtkEventManager.Event;
+                while (atkEvent != null
+                       && atkEvent->State.EventType is not (AtkEventType.MouseClick or AtkEventType.MouseDown or AtkEventType.MouseUp))
+                {
+                    atkEvent = atkEvent->NextEvent;
+                }
+            }
+
+            if (atkEvent == null)
+                return false;
+
+            addon->ReceiveEvent(atkEvent->State.EventType, (int)atkEvent->Param, atkEvent);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log?.Warning(ex, $"[ADS] Failed to click {addonName} node {nodeId}.");
+            return false;
+        }
+    }
+
     private static unsafe bool TryClickSelectYesNoButton(AddonSelectYesno* addon, bool yes, IPluginLog? log)
     {
         var button = yes ? addon->YesButton : addon->NoButton;

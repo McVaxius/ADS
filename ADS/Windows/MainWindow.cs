@@ -79,6 +79,15 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Dialogs"))
             plugin.ToggleDialogRuleEditorUi();
         ImGui.SameLine();
+        //if (ImGui.SmallButton("Higher/Lower"))
+        ///    plugin.ToggleHigherLowerUi();
+        //ImGui.SameLine();
+        if (ImGui.SmallButton("Events"))
+            plugin.ToggleServerEventExplorerUi();
+        ImGui.SameLine();
+        if (ImGui.SmallButton("VFX"))
+            plugin.ToggleVfxExplorerUi();
+        ImGui.SameLine();
         using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
         {
             if (ImGui.SmallButton("Update"))

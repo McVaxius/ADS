@@ -70,7 +70,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan TreasureCofferLockedRetryDelay = TimeSpan.FromSeconds(15.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
-    private static readonly TimeSpan TreasureFollowerForwardAttemptMaxDuration = TimeSpan.FromSeconds(3.0);
+    private static readonly TimeSpan TreasureFollowerForwardAttemptMaxDuration = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan ManualDestinationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
@@ -183,6 +183,13 @@ public sealed class ExecutionService
     private string bossFightCombatGhostName = string.Empty;
     private uint bossFightCombatGhostMapId;
     private string currentDialogAutomationStatus = string.Empty;
+    private bool higherLowerAutomationHold;
+    private bool higherLowerBlocksDutyExit;
+    private string higherLowerAutomationStatus = string.Empty;
+    private DateTime higherLowerLastActivityUtc = DateTime.MinValue;
+    private bool higherLowerOwnedMovementHoldLogged;
+    private bool higherLowerDutyExitHoldLogged;
+    private string lastTreasureFollowerSelectYesnoPreserveLogKey = string.Empty;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -284,6 +291,18 @@ public sealed class ExecutionService
 
     private bool IsActiveOwnedDutyMode()
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside;
+
+    public void SetHigherLowerAutomationHold(bool hold, string status, bool blocksDutyExit, DateTime lastActivityUtc)
+    {
+        higherLowerAutomationHold = hold;
+        higherLowerBlocksDutyExit = blocksDutyExit;
+        higherLowerAutomationStatus = status;
+        higherLowerLastActivityUtc = lastActivityUtc;
+        if (!hold)
+            higherLowerOwnedMovementHoldLogged = false;
+        if (!blocksDutyExit)
+            higherLowerDutyExitHoldLogged = false;
+    }
 
     private string BuildTreasureRoleStatus()
         => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
@@ -568,12 +587,22 @@ public sealed class ExecutionService
             return;
         }
 
+        if (higherLowerAutomationHold)
+        {
+            PauseMovementAssistsForHigherLower();
+            LogHigherLowerOwnedMovementHoldOnce();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} {higherLowerAutomationStatus}");
+            return;
+        }
+
         if (TryHoldPendingProgressionInteractResult(context, planner, observation, prefix))
             return;
 
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
-            StopMovementAssists();
+            StopMovementAssistsForSelectYesno(planner);
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {BuildSelectYesnoHoldStatus("SelectYesno is visible; ADS is holding movement while dialog automation resolves the prompt.")}");
@@ -1630,6 +1659,8 @@ public sealed class ExecutionService
                 navigationPoint.IsManualMapXzDestination,
                 navigationPoint.IsManualXyzDestination,
                 enforceVerticalArrivalCap: false,
+                forcedArrivalRangeXz: null,
+                forcedVerticalArrivalCap: null,
                 out _,
                 out _,
                 out _,
@@ -1799,6 +1830,7 @@ public sealed class ExecutionService
             TreasureRouteIndex = point.TreasureRouteIndex,
             TreasureRoomIndex = point.TreasureRoomIndex,
             TreasurePassageGroup = point.TreasurePassageGroup,
+            IsLiveTreasureDoorCandidate = point.IsLiveTreasureDoorCandidate,
         };
     }
 
@@ -1808,6 +1840,8 @@ public sealed class ExecutionService
         bool isMapXzDestination,
         bool isXyzDestination,
         bool enforceVerticalArrivalCap,
+        float? forcedArrivalRangeXz,
+        float? forcedVerticalArrivalCap,
         out float targetHorizontalDistance,
         out float targetDistance,
         out float targetVerticalDelta,
@@ -1817,14 +1851,16 @@ public sealed class ExecutionService
         targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition);
         targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition);
         targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Y);
-        arrivalRange = isMapXzDestination && frontierPoint.ArrivalRadiusXz > 0f
+        arrivalRange = forcedArrivalRangeXz
+            ?? (isMapXzDestination && frontierPoint.ArrivalRadiusXz > 0f
             ? frontierPoint.ArrivalRadiusXz
-            : PreferredFrontierArrivalRange;
+            : PreferredFrontierArrivalRange);
         xyzArrivalRange = isXyzDestination && frontierPoint.ArrivalRadius3d > 0f
             ? frontierPoint.ArrivalRadius3d
             : PreferredFrontierArrivalRange;
 
-        if (enforceVerticalArrivalCap && targetVerticalDelta > TreasureFollowerRouteVerticalCap)
+        var verticalArrivalCap = forcedVerticalArrivalCap ?? TreasureFollowerRouteVerticalCap;
+        if (enforceVerticalArrivalCap && targetVerticalDelta > verticalArrivalCap)
             return false;
 
         return isXyzDestination
@@ -1832,7 +1868,9 @@ public sealed class ExecutionService
             : targetHorizontalDistance <= arrivalRange;
     }
 
-    private static string BuildTreasureRouteRadiusStatus(DungeonFrontierPoint frontierPoint, bool isTreasureFollowerPassageCandidate)
+    private static string BuildTreasureRouteRadiusStatus(
+        DungeonFrontierPoint frontierPoint,
+        bool isTreasureFollowerPassageCandidate)
     {
         if (!frontierPoint.IsTreasureRoutePoint)
             return string.Empty;
@@ -1871,12 +1909,14 @@ public sealed class ExecutionService
                 ? isTreasureFollowerPassageCandidate
                     ? "because ADS inferred this client is a treasure-dungeon follower and is sweeping current-room passage candidates after live blockers are gone."
                     : isTreasureFollowerRoutePoint
-                        ? "because ADS inferred this client is a treasure-dungeon follower and is preserving the authored entry/start route before post-entry passage sweeps."
+                        ? "because ADS inferred this client is a treasure-dungeon follower and is using the authored static treasure route."
                     : "because ADS inferred map-opener/default treasure role and LootGoblin-derived treasure-dungeon routing data is available for this territory with no live duty objects currently visible."
             : dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
                 ? "because Lumina frontier labels were unavailable and no live duty objects are currently visible."
                 : "because no live duty objects are currently visible.";
-        var treasureRouteRadiusStatus = BuildTreasureRouteRadiusStatus(frontierPoint, isTreasureFollowerPassageCandidate);
+        var treasureRouteRadiusStatus = BuildTreasureRouteRadiusStatus(
+            frontierPoint,
+            isTreasureFollowerPassageCandidate);
         if (!isTreasureRoutePoint)
             ResetTreasureRouteStuckTracking();
 
@@ -1896,6 +1936,8 @@ public sealed class ExecutionService
             isMapXzDestination,
             isXyzDestination,
             isTreasureFollowerPassageCandidate,
+            null,
+            null,
             out var targetHorizontalDistance,
             out var targetDistance,
             out var targetVerticalDelta,
@@ -1976,8 +2018,7 @@ public sealed class ExecutionService
                 if (navigationDecision.ForceNavigationRestart)
                     StopNavigationForTreasureRouteNudge();
 
-                if (TryBeginNavigation(frontierTargetId, navigationDecision.Destination)
-                    && navigationDecision.NudgeApplied)
+                if (navigationDecision.NudgeApplied)
                 {
                     CommitTreasureRouteStuckNudge(frontierPoint, playerPosition.Value, navigationDecision.NudgeAttempt);
                     treasureRouteNudgeApplied = true;
@@ -1986,6 +2027,8 @@ public sealed class ExecutionService
                     log?.Information(
                         $"[ADS] Treasure route stuck nudge attempt {treasureRouteNudgeAttempt} for {frontierPoint.Name}: original {FormatVector(frontierPoint.Position)}, adjusted {FormatVector(treasureRouteNudgeDestination)} after XYZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s.");
                 }
+
+                TryBeginNavigation(frontierTargetId, navigationDecision.Destination);
             }
 
             var navigationMethod = usedMapFlagNavigation
@@ -2108,7 +2151,8 @@ public sealed class ExecutionService
         var navigationDecision = ResolveTreasureRouteNavigationDecision(
             frontierPoint,
             playerPosition,
-            treasureFollowerForwardDestination);
+            treasureFollowerForwardDestination,
+            maxFollowerPassageNudgeAttempts: 1);
         if (navigationDecision.CandidateFailed)
         {
             StopNavigationForTreasureRouteNudge();
@@ -2126,13 +2170,14 @@ public sealed class ExecutionService
             StopNavigationForTreasureRouteNudge();
 
         var forwardTargetId = BuildTreasureFollowerForwardTargetId(frontierPoint, navigationDecision.NudgeAttempt);
-        if (TryBeginNavigation(forwardTargetId, navigationDecision.Destination)
-            && navigationDecision.NudgeApplied)
+        if (navigationDecision.NudgeApplied)
         {
             CommitTreasureRouteStuckNudge(frontierPoint, playerPosition, navigationDecision.NudgeAttempt);
             log?.Information(
                 $"[ADS] Treasure follower forward stuck nudge attempt {navigationDecision.NudgeAttempt} for {frontierPoint.Name}: original {FormatVector(treasureFollowerForwardDestination)}, adjusted {FormatVector(navigationDecision.Destination)} after XYZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s.");
         }
+
+        TryBeginNavigation(forwardTargetId, navigationDecision.Destination);
 
         var treasureRouteNudgeStatus = navigationDecision.NudgeApplied
             ? $"; applied stuck nudge attempt {navigationDecision.NudgeAttempt} from {FormatVector(treasureFollowerForwardDestination)} to {FormatVector(navigationDecision.Destination)}"
@@ -2154,7 +2199,8 @@ public sealed class ExecutionService
     private TreasureRouteNavigationDecision ResolveTreasureRouteNavigationDecision(
         DungeonFrontierPoint frontierPoint,
         Vector3 playerPosition,
-        Vector3 originalDestination)
+        Vector3 originalDestination,
+        int maxFollowerPassageNudgeAttempts = 2)
     {
         if (!IsTreasureRouteFrontierPoint())
             return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0, CandidateFailed: false);
@@ -2183,7 +2229,10 @@ public sealed class ExecutionService
                 CandidateFailed: false);
         }
 
-        if (treasureRouteStuckOffsetAttempt >= 2)
+        var maxNudgeAttempts = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && frontierPoint.IsTreasurePassageCandidate
+            ? maxFollowerPassageNudgeAttempts
+            : 2;
+        if (treasureRouteStuckOffsetAttempt >= maxNudgeAttempts)
         {
             if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && frontierPoint.IsTreasurePassageCandidate)
             {
@@ -3218,7 +3267,7 @@ public sealed class ExecutionService
 
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
-            StopMovementAssists();
+            StopMovementAssistsForSelectYesno(planner);
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {BuildSelectYesnoHoldStatus($"SelectYesno is visible during {pendingInteractable.Name} follow-through; ADS is holding movement while dialog automation resolves the prompt.")}");
@@ -3450,7 +3499,7 @@ public sealed class ExecutionService
 
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
-            StopMovementAssists();
+            StopMovementAssistsForSelectYesno();
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {BuildSelectYesnoHoldStatus("Treasure door follow-through is paused because SelectYesno is visible; ADS is waiting for dialog automation.")}");
@@ -3649,6 +3698,51 @@ public sealed class ExecutionService
             ? fallback
             : $"{fallback} Dialog automation status: {currentDialogAutomationStatus}";
 
+    private void StopMovementAssistsForSelectYesno(PlannerSnapshot? planner = null)
+    {
+        var hadPendingTreasureFollowerForwardAttempt = HasPendingTreasureFollowerForwardAttempt();
+        var preserveTreasureFollowerForwardAttempt = ShouldPreserveTreasureFollowerForwardAttemptForSelectYesno(planner);
+        StopMovementAssists(preserveTreasureFollowerForwardAttempt);
+        if (preserveTreasureFollowerForwardAttempt && !hadPendingTreasureFollowerForwardAttempt)
+            ResetTreasureRouteStuckTracking();
+
+        if (preserveTreasureFollowerForwardAttempt)
+            LogTreasureFollowerSelectYesnoPreserveOnce();
+        else
+            lastTreasureFollowerSelectYesnoPreserveLogKey = string.Empty;
+    }
+
+    private bool ShouldPreserveTreasureFollowerForwardAttemptForSelectYesno(PlannerSnapshot? planner)
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+            return false;
+
+        if (HasPendingTreasureFollowerForwardAttempt())
+            return true;
+
+        if (dungeonFrontierService.CurrentMode != FrontierMode.TreasureDungeon
+            || dungeonFrontierService.CurrentTarget is not { IsTreasurePassageCandidate: true })
+        {
+            return false;
+        }
+
+        return planner is null
+               || (planner.Mode == PlannerMode.Progression
+                   && planner.ObjectiveKind == PlannerObjectiveKind.Frontier);
+    }
+
+    private void LogTreasureFollowerSelectYesnoPreserveOnce()
+    {
+        var key = treasureFollowerForwardCandidateKey
+                  ?? dungeonFrontierService.CurrentTarget?.Key
+                  ?? "unknown";
+        if (string.Equals(key, lastTreasureFollowerSelectYesnoPreserveLogKey, StringComparison.Ordinal))
+            return;
+
+        lastTreasureFollowerSelectYesnoPreserveLogKey = key;
+        log?.Information("[ADS] treasure follower selectyesno action=preserve-forward-attempt");
+    }
+
     private static ObservedInteractable? ResolvePendingProgressionInteractable(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
@@ -3698,6 +3792,16 @@ public sealed class ExecutionService
 
     private void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers)
     {
+        var now = DateTime.UtcNow;
+        if (considerTreasureCoffers && !leaveTreasureSweepStarted)
+            BeginLeaveTreasureSweep(now, "leave state");
+
+        if (higherLowerBlocksDutyExit)
+        {
+            HoldLeaveDutyForHigherLower(now, considerTreasureCoffers);
+            return;
+        }
+
         if (context.InCombat)
         {
             StopMovementAssists();
@@ -3705,10 +3809,6 @@ public sealed class ExecutionService
             SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for combat to clear before duty exit.");
             return;
         }
-
-        var now = DateTime.UtcNow;
-        if (considerTreasureCoffers && !leaveTreasureSweepStarted)
-            BeginLeaveTreasureSweep(now, "leave state");
 
         if (considerTreasureCoffers
             && !leaveDutyExitArmed
@@ -3849,6 +3949,31 @@ public sealed class ExecutionService
         log?.Information($"[ADS] Final treasure sweep started ({reason}); final coffer grace active for {LeaveFinalCofferSpawnGrace.TotalSeconds:0.0}s.");
     }
 
+    private void HoldLeaveDutyForHigherLower(DateTime now, bool considerTreasureCoffers)
+    {
+        if (higherLowerAutomationHold)
+            PauseMovementAssistsForHigherLower();
+        else
+            StopMovementAssists();
+
+        leaveDutyExitArmed = false;
+        nextLeaveUiAttemptUtc = DateTime.MinValue;
+        if (considerTreasureCoffers)
+        {
+            leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
+            leaveTreasureSweepGraceUntilUtc = now + LeaveFinalCofferSpawnGrace;
+            leaveTreasureSweepGraceLogged = false;
+            leaveTreasureSweepClearLogged = false;
+            leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+            leaveLootDistributionWaitLogged = false;
+        }
+
+        LogHigherLowerDutyExitHoldOnce();
+        SetPhase(
+            ExecutionPhase.LeavingDuty,
+            $"Leave requested. Higher/Lower activity is blocking duty exit; ADS is holding leave UI and will re-run final treasure sweep after the quiet grace. {higherLowerAutomationStatus}");
+    }
+
     private void LogLeaveTreasureGraceActive(DateTime now)
     {
         if (leaveTreasureSweepGraceLogged)
@@ -3913,6 +4038,7 @@ public sealed class ExecutionService
         leaveTreasureSweepClearLogged = false;
         leaveLootDistributionWaitLogged = false;
         leaveDutyExitArmed = false;
+        higherLowerDutyExitHoldLogged = false;
         lastLoggedLeaveTreasureKey = string.Empty;
         lastLoggedLeavePromptKey = string.Empty;
         lastLoggedLeavePromptAtUtc = DateTime.MinValue;
@@ -4739,6 +4865,28 @@ public sealed class ExecutionService
             log?.Information(message);
     }
 
+    private void LogHigherLowerOwnedMovementHoldOnce()
+    {
+        if (higherLowerOwnedMovementHoldLogged)
+            return;
+
+        higherLowerOwnedMovementHoldLogged = true;
+        var mode = CurrentMode == OwnershipMode.Leaving ? "leaving" : "owned";
+        log?.Information($"[ADS][HLAUTO] hlauto movement-hold mode={mode} action=preempt-progression");
+    }
+
+    private void LogHigherLowerDutyExitHoldOnce()
+    {
+        if (higherLowerDutyExitHoldLogged)
+            return;
+
+        higherLowerDutyExitHoldLogged = true;
+        var lastActivityAge = higherLowerLastActivityUtc == DateTime.MinValue
+            ? "none"
+            : Math.Max(0, (DateTime.UtcNow - higherLowerLastActivityUtc).TotalSeconds).ToString("0.0", CultureInfo.InvariantCulture);
+        log?.Information($"[ADS][HLAUTO] hlauto duty-exit-hold mode=leaving lastActivityAge={lastActivityAge}s");
+    }
+
     private void StopMovementAssists(bool preserveTreasureFollowerForwardAttempt = false)
     {
         StopNavigationIfNeeded();
@@ -4753,6 +4901,17 @@ public sealed class ExecutionService
         {
             PauseTreasureFollowerForwardAttemptTimer();
         }
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+    }
+
+    private void PauseMovementAssistsForHigherLower()
+    {
+        navigationActive = false;
+        movementTargetGameObjectId = 0;
+        mapFlagNavigationActive = false;
+        nextNavigationCommandUtc = DateTime.MinValue;
+        PauseTreasureFollowerForwardAttemptTimer();
         ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }

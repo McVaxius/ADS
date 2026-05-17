@@ -11,6 +11,8 @@ public sealed class DialogAutomationService
     private static readonly TimeSpan SelectYesNoResponseRetryCooldown = TimeSpan.FromMilliseconds(500);
     private const int MaxSelectYesNoResponseAttempts = 3;
     private const string IdleStatus = "Dialog automation idle; no actionable dialog visible.";
+    private const string TreasurePassagePrompt = "Move immediately to sealed area?";
+    private const string TreasurePassageActionKeyPrefix = "builtin|treasure-passage|";
 
     private enum DialogRuleActionKind
     {
@@ -47,6 +49,7 @@ public sealed class DialogAutomationService
     private string pendingSelectYesNoSource = string.Empty;
     private string suppressedSelectYesNoActionKey = string.Empty;
     private string suppressedSelectYesNoPrompt = string.Empty;
+    private string loggedTreasurePassageAcceptedKey = string.Empty;
 
     public DialogAutomationService(IGameGui gameGui, DialogYesNoRuleService ruleService, IPluginLog log)
     {
@@ -96,7 +99,8 @@ public sealed class DialogAutomationService
         }
 
         if (!processDialogRulesOutsideOwnedDuty
-            && (!context.InInstancedDuty || !IsOwnedOrLeaving(ownershipMode)))
+            && (!context.InInstancedDuty || !IsOwnedOrLeaving(ownershipMode))
+            && !HasBuiltInTreasurePassagePrompt(context))
         {
             SetBlockedStatus("dialog scope requires owned/leaving duty");
             return;
@@ -107,7 +111,7 @@ public sealed class DialogAutomationService
             return;
 
         lastDialogCheckUtc = now;
-        TryHandleDialogRules(now);
+        TryHandleDialogRules(context, now);
     }
 
     private static bool IsOwnedOrLeaving(OwnershipMode ownershipMode)
@@ -116,14 +120,14 @@ public sealed class DialogAutomationService
             or OwnershipMode.OwnedResumeInside
             or OwnershipMode.Leaving;
 
-    private void TryHandleDialogRules(DateTime now)
+    private void TryHandleDialogRules(DutyContextSnapshot context, DateTime now)
     {
         ClearSuppressedSelectYesNoIfDialogChanged();
 
         if (TryHandlePendingSelectYesNoResponse(now))
             return;
 
-        var action = FindNextAction();
+        var action = FindBuiltInTreasurePassageAction(context) ?? FindNextAction();
         if (action is null)
         {
             ResetPendingAction();
@@ -275,6 +279,7 @@ public sealed class DialogAutomationService
         DialogLastActionAtUtc = now;
         DialogLastFailure = string.Empty;
         DialogStatus = action;
+        LogTreasurePassageAcceptedIfNeeded();
         ClearPendingSelectYesNoResponse();
         log.Information($"[ADS] {DialogStatus}");
     }
@@ -363,6 +368,41 @@ public sealed class DialogAutomationService
         return null;
     }
 
+    private DialogRuleAction? FindBuiltInTreasurePassageAction(DutyContextSnapshot context)
+    {
+        if (!HasBuiltInTreasurePassagePrompt(context))
+        {
+            return null;
+        }
+
+        var rule = new DialogYesNoRule
+        {
+            Enabled = true,
+            Addon = "SelectYesno",
+            PromptPattern = TreasurePassagePrompt,
+            MatchMode = "Equals",
+            Response = "Yes",
+            Delay = 0,
+            Notes = "Built-in treasure passage prompt."
+        };
+
+        return new DialogRuleAction(
+            DialogRuleActionKind.ClickAddon,
+            rule,
+            "SelectYesno",
+            DialogPrompt,
+            string.Empty,
+            string.Empty,
+            BuildTreasurePassageActionKey(DialogPrompt),
+            0);
+    }
+
+    private bool HasBuiltInTreasurePassagePrompt(DutyContextSnapshot context)
+        => context.InInstancedDuty
+           && TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
+           && DialogVisible
+           && IsTreasurePassagePrompt(DialogPrompt);
+
     private bool IsActionDelaySatisfied(DialogRuleAction action, DateTime now)
     {
         if (action.DelaySeconds <= 0)
@@ -441,6 +481,19 @@ public sealed class DialogAutomationService
         pendingSelectYesNoRule = string.Empty;
         pendingSelectYesNoPrompt = string.Empty;
         pendingSelectYesNoSource = string.Empty;
+    }
+
+    private void LogTreasurePassageAcceptedIfNeeded()
+    {
+        if (!IsTreasurePassageActionKey(pendingSelectYesNoActionKey))
+            return;
+
+        var key = $"{pendingSelectYesNoActionKey}|{pendingSelectYesNoStartedAtUtc.Ticks}";
+        if (string.Equals(key, loggedTreasurePassageAcceptedKey, StringComparison.Ordinal))
+            return;
+
+        loggedTreasurePassageAcceptedKey = key;
+        log.Information($"[ADS] treasure passage prompt accepted prompt='{EscapeLogText(pendingSelectYesNoPrompt)}'");
     }
 
     private void ClearSuppressedSelectYesNoIfDialogChanged()
@@ -566,4 +619,20 @@ public sealed class DialogAutomationService
 
     private static bool IsSelectYesnoAddon(string addonName)
         => string.Equals(addonName, "SelectYesno", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTreasurePassagePrompt(string prompt)
+        => string.Equals(prompt?.Trim(), TreasurePassagePrompt, StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildTreasurePassageActionKey(string prompt)
+        => $"{TreasurePassageActionKeyPrefix}{prompt.Trim()}";
+
+    private static bool IsTreasurePassageActionKey(string actionKey)
+        => actionKey.StartsWith(TreasurePassageActionKeyPrefix, StringComparison.OrdinalIgnoreCase);
+
+    private static string EscapeLogText(string value)
+        => (value ?? string.Empty)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 }
