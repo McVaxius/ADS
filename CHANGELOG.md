@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-18
+
+- Matched treasure-follower door movement to map-opener door follow-through. Followers still never click TreasureDoor/coffer objectives, but they now use the shared through-point, stale-floor detection, and door-frame jiggle recovery before cycling failed same-room door candidates.
+- Added a separate, default-off Higher/Lower VFX datamining gate. Normal diagnostics and solver traces stay unchanged; bulky `HigherLowerDiagnostics\Datamine` sessions write only when the experimental datamine checkbox is enabled.
+
+## 2026-05-17
+
+- Fixed treasure-follower routing after the initial manual XYZ. Followers now prefer live TreasureDoor route targets mapped onto static room metadata, skip stale entry/start points once entry progress is proven, and expose the current route key/source and live-door count in status JSON.
+
 ## 2026-05-10
 
 - Replaced packaged JSON rule sync with a botologyupdates-backed config cache. ADS now refreshes `duty-object-rules.json`, `dialog-yesno-rules.json`, and `duty-maturity.json` from raw GitHub when cache files are missing, when ownership starts with a cache older than 24h, or when the operator clicks `Update`.

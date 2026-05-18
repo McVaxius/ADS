@@ -82,6 +82,12 @@ public sealed class HigherLowerWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.SmallButton("Clear Unsafe Calibration Map"))
             plugin.TreasureHighLowDiagnosticService.ClearUnsafeCalibrationMap();
+
+        var vfxDataminingEnabled = plugin.TreasureHighLowDiagnosticService.VfxDataminingEnabled;
+        if (ImGui.Checkbox("Experimental VFX datamining for high/low game in treasure maps", ref vfxDataminingEnabled))
+            plugin.TreasureHighLowDiagnosticService.SetVfxDataminingEnabled(vfxDataminingEnabled);
+        ImGui.TextWrapped(
+            $"Datamine: enabled={probe.VfxDataminingEnabled} session={(string.IsNullOrWhiteSpace(probe.CurrentDatamineSessionDirectory) ? "(not opened yet)" : probe.CurrentDatamineSessionDirectory)}");
     }
 
     private static void DrawRuntime(

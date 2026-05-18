@@ -105,22 +105,19 @@ public sealed class ObjectivePlannerService
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
-        var suppressFollowerEntryFollowTargets = dungeonFrontierService.TreasureFollowerEntryMapOpenerRoleActive;
         var nearestBossFightMonster = GetBestBossFightBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestMonster = GetBestBattleNpc(observation.LiveMonsters, playerPosition, context);
-        var nearestFollowTarget = suppressFollowerEntryFollowTargets
-            ? null
-            : GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
+        var nearestFollowTarget = GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
         var nearestRequiredInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(IsProgressionInteractable),
             playerPosition,
             context);
         var nearestCombatFriendlyInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(x => x.Classification == InteractableClass.CombatFriendly),
-                playerPosition,
-                context);
+            playerPosition,
+            context);
         var nearestTreasureCoffer = considerTreasureCoffers
-            && dungeonFrontierService.EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+            && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
             ? GetBestInteractable(
                 observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureCoffer),
                 playerPosition,
@@ -627,8 +624,7 @@ public sealed class ObjectivePlannerService
         ObservedInteractable? nearestOptionalInteractable,
         DateTime now)
     {
-        if (dungeonFrontierService.EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || !dungeonFrontierService.TreasureFollowerStartGateActive
+        if (!dungeonFrontierService.TreasureFollowerStartGateActive
             || dungeonFrontierService.CurrentTarget is not { } startGateTarget
             || !dungeonFrontierService.IsTreasureFollowerStartGateTarget(startGateTarget))
         {
@@ -641,6 +637,10 @@ public sealed class ObjectivePlannerService
         var verticalDelta = playerPosition.HasValue
             ? MathF.Abs(startGateTarget.Position.Y - playerPosition.Value.Y)
             : (float?)null;
+        var isXyzDestination = startGateTarget.IsManualXyzDestination;
+        var objectiveKind = isXyzDestination
+            ? GetManualDestinationObjectiveKind(startGateTarget)
+            : PlannerObjectiveKind.Frontier;
 
         LogTreasureFollowerStartGateDeferral(
             startGateTarget,
@@ -655,8 +655,10 @@ public sealed class ObjectivePlannerService
         Current = new PlannerSnapshot
         {
             Mode = PlannerMode.Progression,
-            ObjectiveKind = PlannerObjectiveKind.Frontier,
-            Objective = $"Advance toward treasure follower start: {startGateTarget.Name}",
+            ObjectiveKind = objectiveKind,
+            Objective = isXyzDestination
+                ? $"Advance toward follower start XYZ: {startGateTarget.Name}"
+                : $"Advance toward treasure follower start: {startGateTarget.Name}",
             Explanation = $"Treasure follower start gate is active from {dungeonFrontierService.TreasureDungeonRoleSource}; ADS must reach the initial {dungeonFrontierService.TreasureFollowerStartGateSource} target {startGateTarget.Name} before live monsters, coffers, follow anchors, interactables, heading scouts, or passage candidates can preempt it. Live observations remain visible ({observation.LiveMonsters.Count} monster / {observation.LiveFollowTargets.Count} follow / {observation.LiveInteractables.Count} interactable), but start arrival owns progression until this target is visited.",
             TargetName = startGateTarget.Name,
             TargetDistance = distance,
@@ -868,7 +870,7 @@ public sealed class ObjectivePlannerService
             or InteractableClass.CombatFriendly
             or InteractableClass.Expendable
             || (interactable.Classification == InteractableClass.TreasureDoor
-                && dungeonFrontierService.EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
+                && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
 
     private static PlannerObjectiveKind GetProgressionInteractableObjectiveKind(ObservedInteractable interactable)
         => interactable.Classification switch
@@ -1190,9 +1192,9 @@ public sealed class ObjectivePlannerService
                     ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored force-march XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. This authored bypass waypoint keeps advancing even while incidental local combat is active and ghosts once execution reaches the 1y 3D arrival rule."
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
             FrontierMode.TreasureDungeon
-                => dungeonFrontierService.EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                => dungeonFrontierService.TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
                     ? frontierPoint.IsTreasurePassageCandidate
-                        ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is sweeping {frontierPoint.TreasureRouteSource} passage candidate {frontierPoint.Name} ({frontierPoint.TreasurePassageGroup}, room {frontierPoint.TreasureRoomIndex}). Post-entry follower passage routing prefers same-floor live TreasureDoor targets, falls back to static same-floor route points, requires Y <= 5y, reaches candidates at XZ <= 4y, then uses treasure-door follow-through/jiggle without interacting. Retry cycle: {dungeonFrontierService.TreasureFollowerRetryCycle}."
+                        ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is sweeping {frontierPoint.TreasureRouteSource} passage candidate {frontierPoint.Name} ({frontierPoint.TreasurePassageGroup}, room {frontierPoint.TreasureRoomIndex}). Post-entry follower passage routing prefers same-floor live TreasureDoor targets, falls back to static same-floor route points, requires Y <= 5y, reaches candidates at XZ <= 4y, pushes 10y forward with one side-offset recovery, and advances room progress monotonically so lower rooms are not retried after catch-up. Retry cycle: {dungeonFrontierService.TreasureFollowerRetryCycle}."
                         : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is using static treasure route point {frontierPoint.Name} before current-room passage sweeps. Treasure route reach is XZ <= 4y, not true 3D XYZ."
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred map-opener/default treasure role from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is using the authored treasure-dungeon opener route point {frontierPoint.Name}. Treasure route reach is XZ <= 4y, not true 3D XYZ; frontier pre-sweep currently uses XZ <= 6y.",
             FrontierMode.HeadingScout

@@ -21,8 +21,8 @@ public sealed class DungeonFrontierService
     private const float HeadingScoutMinForwardDot = 0.25f;
     private const float LabelFrontierMinForwardDot = 0.25f;
     private const float LabelFrontierRetargetBacktrackDot = -0.10f;
+    private const float TreasureFollowerRoomReachRadius = 12f;
     private const float TreasureFollowerCandidateVerticalCap = 5f;
-    private const float TreasureFollowerStartGateTransitRadius = 4f;
     private static readonly TimeSpan TreasureFollowerCatchUpLogCooldown = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan TreasureFollowerRetryCycleLogCooldown = TimeSpan.FromSeconds(5);
 
@@ -45,26 +45,12 @@ public sealed class DungeonFrontierService
     private Vector3? currentHeading;
     private DungeonFrontierPoint? headingScoutTarget;
     private DungeonFrontierPoint? lastValidManualDestination;
-    private DungeonFrontierPoint? treasureFollowerStartGateTargetPoint;
-    private uint treasureFollowerStartGateDutyKey;
     private string? treasureFollowerStartGateTargetKey;
     private string treasureFollowerStartGateTargetName = string.Empty;
     private string treasureFollowerStartGateTargetSource = "None";
-    private uint treasureFollowerEntryProofDutyKey;
-    private bool treasureFollowerEntryStartVisited;
-    private bool treasureFollowerEntryTransitionConsumed;
-    private bool treasureFollowerEntryTransitionHoldActive;
-    private string treasureFollowerStartGateConsumedTargetKey = string.Empty;
-    private string treasureFollowerStartGateConsumedTargetName = string.Empty;
-    private string treasureFollowerStartGateConsumedTargetSource = "None";
-    private string treasureFollowerStartGateConsumedReason = string.Empty;
-    private DateTime? treasureFollowerStartGateConsumedAtUtc;
     private string? heldTreasureFollowerCandidateKey;
     private DungeonFrontierPoint? heldTreasureFollowerCandidatePoint;
     private bool heldTreasureFollowerCandidateTransitObserved;
-    private string treasureFollowerLastFailedCandidateKey = string.Empty;
-    private string treasureFollowerLastFailedCandidateReason = string.Empty;
-    private bool treasureFollowerEntryMapOpenerRoleActive;
     private int treasureFollowerTransitConsumedRoomIndex;
     private int highestTreasureFollowerRoomReached;
     private DateTime nextTreasureFollowerCatchUpLogUtc;
@@ -127,14 +113,6 @@ public sealed class DungeonFrontierService
 
     public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS keeps map-opener behavior.";
 
-    public TreasureDungeonRole EffectiveTreasureDungeonRole
-        => treasureFollowerEntryMapOpenerRoleActive
-            ? ADS.Models.TreasureDungeonRole.MapOpener
-            : TreasureDungeonRole;
-
-    public bool TreasureFollowerEntryMapOpenerRoleActive
-        => treasureFollowerEntryMapOpenerRoleActive;
-
     public int TreasureFollowerRetryCycle { get; private set; }
 
     public int LiveTreasureDoorCandidateCount { get; private set; }
@@ -142,58 +120,16 @@ public sealed class DungeonFrontierService
     public string CurrentTreasureRouteSource
         => CurrentTarget?.TreasureRouteSource ?? "None";
 
-    public string TreasureFollowerHeldCandidateKey
-        => heldTreasureFollowerCandidateKey ?? string.Empty;
-
-    public string TreasureFollowerHeldCandidateName
-        => heldTreasureFollowerCandidatePoint?.Name ?? string.Empty;
-
-    public bool TreasureFollowerHeldCandidateTransitObserved
-        => heldTreasureFollowerCandidateTransitObserved;
-
-    public string TreasureFollowerLastFailedCandidateKey
-        => treasureFollowerLastFailedCandidateKey;
-
-    public string TreasureFollowerLastFailedCandidateReason
-        => treasureFollowerLastFailedCandidateReason;
-
     public bool TreasureFollowerStartGateActive { get; private set; }
 
     public string TreasureFollowerStartGateTarget
-        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetPoint?.Name ?? treasureFollowerStartGateTargetName : string.Empty;
+        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetName : string.Empty;
 
     public string TreasureFollowerStartGateSource
-        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetPoint?.TreasureRouteSource ?? treasureFollowerStartGateTargetSource : "None";
+        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetSource : "None";
 
     public string TreasureFollowerStartGateTargetKey
-        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetPoint?.Key ?? treasureFollowerStartGateTargetKey ?? string.Empty : string.Empty;
-
-    public uint TreasureFollowerStartGateDutyKey
-        => TreasureFollowerStartGateActive ? treasureFollowerStartGateDutyKey : 0;
-
-    public uint TreasureFollowerEntryProofDutyKey
-        => treasureFollowerEntryProofDutyKey;
-
-    public bool TreasureFollowerEntryTransitionConsumed
-        => treasureFollowerEntryTransitionConsumed;
-
-    public bool TreasureFollowerEntryTransitionHoldActive
-        => treasureFollowerEntryTransitionHoldActive;
-
-    public string TreasureFollowerStartGateConsumedTargetKey
-        => treasureFollowerStartGateConsumedTargetKey;
-
-    public string TreasureFollowerStartGateConsumedTargetName
-        => treasureFollowerStartGateConsumedTargetName;
-
-    public string TreasureFollowerStartGateConsumedTargetSource
-        => treasureFollowerStartGateConsumedTargetSource;
-
-    public string TreasureFollowerStartGateConsumedReason
-        => treasureFollowerStartGateConsumedReason;
-
-    public DateTime? TreasureFollowerStartGateConsumedAtUtc
-        => treasureFollowerStartGateConsumedAtUtc;
+        => TreasureFollowerStartGateActive ? treasureFollowerStartGateTargetKey ?? string.Empty : string.Empty;
 
     public bool IsTreasureFollowerStartGateTarget(DungeonFrontierPoint point)
         => TreasureFollowerStartGateActive
@@ -227,18 +163,9 @@ public sealed class DungeonFrontierService
             return;
         }
 
-        var dutyKey = GetDutyKey(context);
-        if (dutyKey != 0 && dutyKey != activeDutyKey)
-        {
-            Reset();
-            activeDutyKey = dutyKey;
-        }
-
         var previousTarget = CurrentTarget;
         RememberManualDestination(previousTarget);
-        var playerPosition = objectTable.LocalPlayer?.Position;
         ObserveTreasureFollowerCandidateTransit(context);
-        ObserveTreasureFollowerStartGateTransit(context, previousTarget, playerPosition);
         if (!ShouldPreserveTreasureFollowerCandidateHoldForTransit(context))
             ClearTreasureFollowerCandidateHold("unsafe transition hold");
         CurrentTarget = null;
@@ -272,7 +199,7 @@ public sealed class DungeonFrontierService
             return;
         }
 
-        var dutyKey = GetDutyKey(context);
+        var dutyKey = context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
         if (dutyKey != activeDutyKey)
         {
             Reset();
@@ -297,7 +224,6 @@ public sealed class DungeonFrontierService
 
         var playerPosition = objectTable.LocalPlayer?.Position;
         ObserveTreasureFollowerCandidateTransit(context);
-        ObserveTreasureFollowerStartGateTransit(context, previousTarget, playerPosition);
         ClearTreasureFollowerStartGateIfComplete();
         if (context.IsUnsafeTransition)
         {
@@ -327,6 +253,8 @@ public sealed class DungeonFrontierService
                 CurrentLabelStatus = labelStatus;
         }
 
+        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(context, observation, playerPosition);
+
         var manualMapXzDestinations = hasActiveMap && playerPosition.HasValue
             ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
@@ -340,12 +268,6 @@ public sealed class DungeonFrontierService
         var manualDestinations = manualMapXzDestinations
             .Concat(manualXyzDestinations)
             .ToList();
-
-        UpdateTreasureFollowerEntryMapOpenerRole(manualXyzDestinations);
-        var ignoreLiveFollowTargetsForManualEntry = treasureFollowerEntryMapOpenerRoleActive;
-        var noFrontierBlockingLiveObjects = ignoreLiveFollowTargetsForManualEntry
-            ? HasNoFrontierBlockingLiveObjectsIgnoringFollowTargets(context, observation, playerPosition)
-            : HasNoFrontierBlockingLiveObjects(context, observation, playerPosition);
 
         if (TryApplyTreasureFollowerStartGate(
                 context,
@@ -361,27 +283,23 @@ public sealed class DungeonFrontierService
             context,
             observation,
             playerPosition,
-            manualDestinations,
-            ignoreLiveFollowTargetsForManualEntry);
+            manualDestinations);
         var selectedCombatBypassManualDestination = SelectPraetoriumOnFootCombatBypassManualDestination(
                 context,
                 observation,
                 playerPosition,
                 manualDestinations,
-                previousTarget,
-                ignoreLiveFollowTargetsForManualEntry)
+                previousTarget)
             ?? SelectCombatBypassManualDestinationAgainstLiveBlockers(
                 context,
                 observation,
                 playerPosition,
-                manualDestinations,
-                ignoreLiveFollowTargetsForManualEntry)
+                manualDestinations)
             ?? SelectPraetoriumMountedCombatBypassManualDestination(
                 context,
                 observation,
                 playerPosition,
-                manualDestinations,
-                ignoreLiveFollowTargetsForManualEntry);
+                manualDestinations);
         if (noFrontierBlockingLiveObjects
             || manualDestinationCanBeatLiveProgression
             || selectedCombatBypassManualDestination is not null)
@@ -407,7 +325,7 @@ public sealed class DungeonFrontierService
                     treasureRoutePoints,
                     playerPosition,
                     previousTarget,
-                    EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower))
+                    TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower))
                 return;
         }
 
@@ -472,7 +390,6 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
         LiveTreasureDoorCandidateCount = 0;
-        treasureFollowerEntryMapOpenerRoleActive = false;
         ResetTreasureFollowerProgress();
         loggedCombatBypassManualSelections.Clear();
     }
@@ -480,20 +397,9 @@ public sealed class DungeonFrontierService
     private void ResetTreasureFollowerProgress()
     {
         ClearTreasureFollowerStartGate();
-        treasureFollowerEntryProofDutyKey = 0;
-        treasureFollowerEntryStartVisited = false;
-        treasureFollowerEntryTransitionConsumed = false;
-        treasureFollowerEntryTransitionHoldActive = false;
-        treasureFollowerStartGateConsumedTargetKey = string.Empty;
-        treasureFollowerStartGateConsumedTargetName = string.Empty;
-        treasureFollowerStartGateConsumedTargetSource = "None";
-        treasureFollowerStartGateConsumedReason = string.Empty;
-        treasureFollowerStartGateConsumedAtUtc = null;
         heldTreasureFollowerCandidateKey = null;
         heldTreasureFollowerCandidatePoint = null;
         heldTreasureFollowerCandidateTransitObserved = false;
-        treasureFollowerLastFailedCandidateKey = string.Empty;
-        treasureFollowerLastFailedCandidateReason = string.Empty;
         treasureFollowerTransitConsumedRoomIndex = 0;
         highestTreasureFollowerRoomReached = 0;
         TreasureFollowerRetryCycle = 0;
@@ -508,8 +414,6 @@ public sealed class DungeonFrontierService
             return;
 
         TreasureFollowerStartGateActive = true;
-        treasureFollowerStartGateTargetPoint = point;
-        treasureFollowerStartGateDutyKey = activeDutyKey;
         treasureFollowerStartGateTargetKey = point.Key;
         treasureFollowerStartGateTargetName = point.Name;
         treasureFollowerStartGateTargetSource = point.TreasureRouteSource;
@@ -520,9 +424,8 @@ public sealed class DungeonFrontierService
         if (!TreasureFollowerStartGateActive)
             return;
 
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
             || treasureFollowerStartGateTargetKey is null
-            || HasCurrentDutyTreasureFollowerEntryProof()
             || visitedFrontierKeys.Contains(treasureFollowerStartGateTargetKey)
             || GetTreasureFollowerReachedFloor() > 0)
         {
@@ -533,32 +436,16 @@ public sealed class DungeonFrontierService
     private void ClearTreasureFollowerStartGate()
     {
         TreasureFollowerStartGateActive = false;
-        treasureFollowerStartGateTargetPoint = null;
-        treasureFollowerStartGateDutyKey = 0;
         treasureFollowerStartGateTargetKey = null;
         treasureFollowerStartGateTargetName = string.Empty;
         treasureFollowerStartGateTargetSource = "None";
     }
 
-    private void UpdateTreasureFollowerEntryMapOpenerRole(IReadOnlyList<DungeonFrontierPoint> manualXyzDestinations)
-    {
-        treasureFollowerEntryMapOpenerRoleActive =
-            TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-            && !HasTreasureFollowerPassedEntry()
-            && manualXyzDestinations.Any(point => !visitedFrontierKeys.Contains(point.Key));
-
-        if (!treasureFollowerEntryMapOpenerRoleActive)
-            return;
-
-        ClearTreasureFollowerStartGate();
-        ClearTreasureFollowerCandidateHold("entry XYZ effective map-opener role");
-    }
-
     private bool IsEligibleTreasureFollowerStartGateTarget(DungeonFrontierPoint point)
-        => EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
            && GetTreasureFollowerReachedFloor() == 0
            && !visitedFrontierKeys.Contains(point.Key)
-           && IsStaticTreasureRouteStartPoint(point);
+           && (point.IsManualXyzDestination || IsStaticTreasureRouteStartPoint(point));
 
     private static bool IsStaticTreasureRouteStartPoint(DungeonFrontierPoint point)
         => point.IsTreasureRoutePoint
@@ -567,7 +454,7 @@ public sealed class DungeonFrontierService
 
     public void HoldTreasureFollowerCandidate(DungeonFrontierPoint point)
     {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
             return;
 
         heldTreasureFollowerCandidateKey = point.Key;
@@ -586,13 +473,13 @@ public sealed class DungeonFrontierService
     }
 
     private bool ShouldPreserveTreasureFollowerCandidateHoldForTransit(DutyContextSnapshot context)
-        => EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
            && context.IsTreasureRouteTransitHold
            && heldTreasureFollowerCandidateKey is not null;
 
     private void ObserveTreasureFollowerCandidateTransit(DutyContextSnapshot context)
     {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
             || !context.IsTreasureRouteTransitHold
             || heldTreasureFollowerCandidateKey is null)
         {
@@ -601,100 +488,6 @@ public sealed class DungeonFrontierService
 
         heldTreasureFollowerCandidateTransitObserved = true;
     }
-
-    private void ObserveTreasureFollowerStartGateTransit(DutyContextSnapshot context, DungeonFrontierPoint? previousTarget, Vector3? playerPosition)
-    {
-        if (!context.IsTreasureRouteTransitHold)
-        {
-            treasureFollowerEntryTransitionHoldActive = false;
-            return;
-        }
-
-        if (treasureFollowerEntryMapOpenerRoleActive
-            || IsUnpassedTreasureFollowerManualXyzTarget(previousTarget))
-        {
-            return;
-        }
-
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || !TryGetActiveTreasureFollowerStartGateTarget(previousTarget, out var startGateTarget)
-            || !ShouldConsumeTreasureFollowerStartGateTransit(context, startGateTarget, previousTarget, playerPosition))
-        {
-            return;
-        }
-
-        var reason = FormatTreasureRouteTransitFlags(context);
-        visitedFrontierKeys.Add(startGateTarget.Key);
-        treasureFollowerEntryProofDutyKey = activeDutyKey;
-        treasureFollowerEntryStartVisited = false;
-        treasureFollowerEntryTransitionConsumed = true;
-        treasureFollowerEntryTransitionHoldActive = true;
-        treasureFollowerStartGateConsumedTargetKey = startGateTarget.Key;
-        treasureFollowerStartGateConsumedTargetName = startGateTarget.Name;
-        treasureFollowerStartGateConsumedTargetSource = startGateTarget.TreasureRouteSource;
-        treasureFollowerStartGateConsumedReason = reason;
-        treasureFollowerStartGateConsumedAtUtc = DateTime.UtcNow;
-        ClearRememberedManualDestination(startGateTarget);
-        ClearTreasureFollowerStartGate();
-        log.Information(
-            $"[ADS] Treasure follower start gate consumed by route transit ({reason}); marked {startGateTarget.Name} ({startGateTarget.TreasureRouteSource}, key {startGateTarget.Key}) visited and cleared the entry gate so ADS will not route back to the entry/start point after the transition.");
-    }
-
-    private bool TryGetActiveTreasureFollowerStartGateTarget(DungeonFrontierPoint? previousTarget, out DungeonFrontierPoint startGateTarget)
-    {
-        if (TreasureFollowerStartGateActive
-            && treasureFollowerStartGateDutyKey != 0
-            && treasureFollowerStartGateDutyKey == activeDutyKey)
-        {
-            if (treasureFollowerStartGateTargetPoint is not null)
-            {
-                startGateTarget = treasureFollowerStartGateTargetPoint;
-                return true;
-            }
-
-            if (previousTarget is not null && IsTreasureFollowerStartGateTarget(previousTarget))
-            {
-                startGateTarget = previousTarget;
-                return true;
-            }
-        }
-
-        startGateTarget = null!;
-        return false;
-    }
-
-    private static bool ShouldConsumeTreasureFollowerStartGateTransit(
-        DutyContextSnapshot context,
-        DungeonFrontierPoint startGateTarget,
-        DungeonFrontierPoint? previousTarget,
-        Vector3? playerPosition)
-    {
-        if (context.BetweenAreas || context.BetweenAreas51)
-            return true;
-
-        var targetMatches = previousTarget is not null
-            && string.Equals(previousTarget.Key, startGateTarget.Key, StringComparison.Ordinal);
-        if (!targetMatches)
-            return false;
-
-        if (context.Occupied33 || context.OccupiedInCutSceneEvent)
-            return true;
-
-        if (!context.Jumping && !context.Jumping61)
-            return false;
-
-        if (!playerPosition.HasValue)
-            return false;
-
-        return GetHorizontalDistance(playerPosition.Value, startGateTarget.Position) <= TreasureFollowerStartGateTransitRadius
-               && MathF.Abs(playerPosition.Value.Y - startGateTarget.Position.Y) <= TreasureFollowerCandidateVerticalCap;
-    }
-
-    private bool IsUnpassedTreasureFollowerManualXyzTarget(DungeonFrontierPoint? point)
-        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-           && !HasTreasureFollowerPassedEntry()
-           && point is { IsManualXyzDestination: true }
-           && !visitedFrontierKeys.Contains(point.Key);
 
     private void ConsumeHeldTreasureFollowerCandidateAfterObservedTransit(IReadOnlyList<DungeonFrontierPoint> points)
     {
@@ -727,38 +520,14 @@ public sealed class DungeonFrontierService
         ClearTreasureFollowerCandidateHold("held candidate consumed after observed transit");
     }
 
-    public void ConsumeTreasureFollowerCandidate(DungeonFrontierPoint point, string reason, string detail)
-    {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || !point.IsTreasurePassageCandidate
-            || point.TreasureRoomIndex <= 0)
-        {
-            return;
-        }
-
-        if (visitedFrontierKeys.Contains(point.Key)
-            && treasureFollowerTransitConsumedRoomIndex >= point.TreasureRoomIndex)
-        {
-            return;
-        }
-
-        visitedFrontierKeys.Add(point.Key);
-        treasureFollowerTransitConsumedRoomIndex = Math.Max(treasureFollowerTransitConsumedRoomIndex, point.TreasureRoomIndex);
-        AdvanceTreasureFollowerRoomReached(point.TreasureRoomIndex);
-        ClearTreasureFollowerCandidateHold($"candidate consumed after {reason}");
-        log.Information(
-            $"[ADS] Treasure follower consumed passage candidate {point.Name} ({point.TreasurePassageGroup}, room {point.TreasureRoomIndex}) after {reason}; ADS will not retarget this room. {detail}");
-    }
-
     public void MarkVisited(DungeonFrontierPoint point, Vector3 playerPosition)
     {
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
-        RecordTreasureFollowerStartGateVisited(point);
         ClearTreasureFollowerStartGateIfComplete();
         ClearRememberedManualDestination(point);
-        if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && point.IsTreasurePassageCandidate)
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && point.IsTreasurePassageCandidate)
         {
             log.Information(
                 $"[ADS] Treasure follower reached passage candidate {point.Name} ({point.TreasurePassageGroup}, room {point.TreasureRoomIndex}) without a transition on this tick; ADS will try another current-room candidate.");
@@ -777,14 +546,12 @@ public sealed class DungeonFrontierService
 
     public void MarkTreasureFollowerCandidateFailed(DungeonFrontierPoint point, string reason, string detail)
     {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
             return;
 
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
-        treasureFollowerLastFailedCandidateKey = point.Key;
-        treasureFollowerLastFailedCandidateReason = reason;
         log.Information(
             $"[ADS] Treasure follower marked passage candidate {point.Name} ({point.TreasurePassageGroup}, room {point.TreasureRoomIndex}) failed after {reason}. {detail}");
     }
@@ -1036,8 +803,8 @@ public sealed class DungeonFrontierService
         }
 
         var staticRoutePoints = TreasureDungeonData.BuildRoutePoints(context.TerritoryTypeId, map.RowId);
-        var liveDoorCandidates = EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-            ? BuildLiveTreasureDoorRoutePoints(context, map, observation, staticRoutePoints, playerPosition)
+        var liveDoorCandidates = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+            ? BuildLiveTreasureDoorRoutePoints(context, map, observation, staticRoutePoints)
             : [];
         LiveTreasureDoorCandidateCount = liveDoorCandidates.Count;
 
@@ -1062,8 +829,7 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         Map map,
         ObservationSnapshot observation,
-        IReadOnlyList<DungeonFrontierPoint> staticRoutePoints,
-        Vector3? playerPosition)
+        IReadOnlyList<DungeonFrontierPoint> staticRoutePoints)
     {
         if (staticRoutePoints.Count == 0)
             return [];
@@ -1078,7 +844,6 @@ public sealed class DungeonFrontierService
         return observation.LiveInteractables
             .Where(interactable => interactable.Classification == InteractableClass.TreasureDoor)
             .Where(interactable => MatchesCurrentMap(map.RowId, interactable.MapId))
-            .Where(interactable => !playerPosition.HasValue || MathF.Abs(interactable.Position.Y - playerPosition.Value.Y) <= TreasureFollowerCandidateVerticalCap)
             .Select(interactable => new
             {
                 Interactable = interactable,
@@ -1114,7 +879,7 @@ public sealed class DungeonFrontierService
         DungeonFrontierPoint metadata)
         => new()
         {
-            Key = BuildLiveTreasureDoorRouteKey(context, map, interactable, metadata),
+            Key = $"live-treasure-door:{context.TerritoryTypeId}:{map.RowId}:{interactable.Key}",
             Name = $"{interactable.Name} ({metadata.Name})",
             Position = interactable.Position,
             LevelRowId = metadata.LevelRowId,
@@ -1127,13 +892,6 @@ public sealed class DungeonFrontierService
             TreasurePassageGroup = metadata.TreasurePassageGroup,
             IsLiveTreasureDoorCandidate = true,
         };
-
-    private static string BuildLiveTreasureDoorRouteKey(
-        DutyContextSnapshot context,
-        Map map,
-        ObservedInteractable interactable,
-        DungeonFrontierPoint metadata)
-        => $"live-treasure-door:{context.TerritoryTypeId}:{map.RowId}:{metadata.TreasureRouteIndex}:{metadata.TreasureRoomIndex}:{metadata.TreasurePassageGroup}:{Quantize(interactable.Position)}";
 
     private bool TryApplyTreasureRouteTarget(
         DutyContextSnapshot context,
@@ -1152,6 +910,7 @@ public sealed class DungeonFrontierService
         if (playerPosition.HasValue && !treasureFollowerTransitHold)
         {
             MarkVisitedPoints(treasureRoutePoints, playerPosition.Value, FrontierVisitRadius, FrontierVisitVerticalCap);
+            MarkTreasureFollowerHighestRoomReached(treasureRoutePoints, playerPosition.Value);
             MarkTreasureRouteCatchUp(treasureRoutePoints, playerPosition.Value);
         }
 
@@ -1184,16 +943,24 @@ public sealed class DungeonFrontierService
         IReadOnlyList<DungeonFrontierPoint> manualXyzDestinations,
         Vector3? playerPosition)
     {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || HasCurrentDutyTreasureFollowerEntryProof())
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+            || GetTreasureFollowerReachedFloor() != 0)
         {
             return false;
         }
 
-        if (manualXyzDestinations.Any(point => !visitedFrontierKeys.Contains(point.Key)))
-            return false;
+        CurrentTarget = SelectCurrentManualDestination(manualXyzDestinations, playerPosition);
+        if (CurrentTarget is not null)
+        {
+            CurrentMode = FrontierMode.XyzDestination;
+            ActivateTreasureFollowerStartGate(CurrentTarget);
+            ClearTreasureFollowerCandidateHold("entry XYZ destination selected");
+            RememberManualDestination(CurrentTarget);
+            return true;
+        }
 
-        if (!hasActiveMap
+        if (VisitedManualXyzDestinations > 0
+            || !hasActiveMap
             || !TreasureDungeonData.HasRoute(context.TerritoryTypeId))
         {
             return false;
@@ -1498,7 +1265,7 @@ public sealed class DungeonFrontierService
     {
         foreach (var point in points)
         {
-            if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+            if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
                 && point.IsTreasurePassageCandidate)
             {
                 continue;
@@ -1519,7 +1286,7 @@ public sealed class DungeonFrontierService
         if (points.Count < 2)
             return;
 
-        var verticalCap = EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        var verticalCap = TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             ? TreasureFollowerCandidateVerticalCap
             : FrontierVisitVerticalCap;
 
@@ -1539,12 +1306,18 @@ public sealed class DungeonFrontierService
         if (nearest is null || nearest.Index <= 0)
             return;
 
-        if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             && nearest.Point.TreasureRoomIndex > 0
             && IsTreasureFollowerRoomBehindReachedFloor(nearest.Point.TreasureRoomIndex))
         {
             RetireTreasureFollowerBacktrackTarget(nearest.Point);
             return;
+        }
+
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+            && nearest.Point.IsTreasurePassageCandidate)
+        {
+            AdvanceTreasureFollowerRoomReached(nearest.Point.TreasureRoomIndex);
         }
 
         var furthestVisitedIndex = -1;
@@ -1560,8 +1333,10 @@ public sealed class DungeonFrontierService
         var markedCount = 0;
         for (var index = 0; index < nearest.Index; index++)
         {
-            if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-                && points[index].IsTreasurePassageCandidate)
+            if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+                && points[index].IsTreasurePassageCandidate
+                && (points[index].TreasureRoomIndex == nearest.Point.TreasureRoomIndex
+                    || IsHeldTreasureFollowerCandidate(points[index])))
             {
                 continue;
             }
@@ -1627,6 +1402,41 @@ public sealed class DungeonFrontierService
             $"[ADS] Treasure follower catch-up marked {markedCount} stale entry/start route point(s) visited because {proof}. ADS will not backtrack to the landing platform after entry.");
     }
 
+    private void MarkTreasureFollowerHighestRoomReached(IReadOnlyList<DungeonFrontierPoint> points, Vector3 playerPosition)
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || points.Count == 0)
+            return;
+
+        var nearest = points
+            .Select((point, index) => new
+            {
+                Point = point,
+                Index = index,
+                HorizontalDistance = GetHorizontalDistance(playerPosition, point.Position),
+                VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Y),
+            })
+            .Where(x => x.Point.IsTreasurePassageCandidate
+                        && x.HorizontalDistance <= TreasureFollowerRoomReachRadius
+                        && x.VerticalDelta <= TreasureFollowerCandidateVerticalCap)
+            .OrderBy(x => x.HorizontalDistance)
+            .ThenBy(x => x.VerticalDelta)
+            .ThenBy(x => x.Index)
+            .FirstOrDefault();
+        if (nearest is null)
+            return;
+
+        if (IsTreasureFollowerRoomBehindReachedFloor(nearest.Point.TreasureRoomIndex))
+        {
+            RetireTreasureFollowerBacktrackTarget(nearest.Point);
+            return;
+        }
+
+        if (nearest.Point.TreasureRoomIndex <= highestTreasureFollowerRoomReached)
+            return;
+
+        AdvanceTreasureFollowerRoomReached(nearest.Point.TreasureRoomIndex);
+    }
+
     private int GetTreasureFollowerReachedFloor()
         => Math.Max(highestTreasureFollowerRoomReached, treasureFollowerTransitConsumedRoomIndex);
 
@@ -1652,30 +1462,11 @@ public sealed class DungeonFrontierService
 
     private bool HasTreasureFollowerPassedEntry()
         => GetTreasureFollowerReachedFloor() > 0
-           || HasCurrentDutyTreasureFollowerEntryProof();
-
-    private bool HasCurrentDutyTreasureFollowerEntryProof()
-        => treasureFollowerEntryProofDutyKey != 0
-           && treasureFollowerEntryProofDutyKey == activeDutyKey
-           && (treasureFollowerEntryStartVisited || treasureFollowerEntryTransitionConsumed);
-
-    private void RecordTreasureFollowerStartGateVisited(DungeonFrontierPoint point)
-    {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || !IsTreasureFollowerStartGateTarget(point)
-            || treasureFollowerStartGateDutyKey == 0
-            || treasureFollowerStartGateDutyKey != activeDutyKey)
-        {
-            return;
-        }
-
-        treasureFollowerEntryProofDutyKey = activeDutyKey;
-        treasureFollowerEntryStartVisited = true;
-    }
+           || VisitedManualXyzDestinations > 0;
 
     private void RetireTreasureFollowerBacktrackTarget(DungeonFrontierPoint point)
     {
-        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
             || point.TreasureRoomIndex <= 0)
         {
             return;
@@ -1796,7 +1587,7 @@ public sealed class DungeonFrontierService
                 continue;
             }
 
-            var roomCandidates = GetTreasureFollowerPreferredRoomCandidates(group, playerPosition);
+            var roomCandidates = GetTreasureFollowerPreferredRoomCandidates(group);
             var eligibleCandidates = GetTreasureFollowerVerticalEligibleCandidates(roomCandidates, playerPosition);
             if (eligibleCandidates.Count == 0)
                 continue;
@@ -1813,7 +1604,7 @@ public sealed class DungeonFrontierService
             var laterRoomHasUnvisitedEligibleCandidate = candidateGroups
                 .Where(laterGroup => laterGroup[0].TreasureRoomIndex > roomIndex)
                 .Where(laterGroup => !IsTreasureFollowerRoomDisallowed(laterGroup[0].TreasureRoomIndex))
-                .SelectMany(laterGroup => GetTreasureFollowerVerticalEligibleCandidates(GetTreasureFollowerPreferredRoomCandidates(laterGroup, playerPosition), playerPosition))
+                .SelectMany(laterGroup => GetTreasureFollowerVerticalEligibleCandidates(GetTreasureFollowerPreferredRoomCandidates(laterGroup), playerPosition))
                 .Any(point => !visitedFrontierKeys.Contains(point.Key));
             if (laterRoomHasUnvisitedEligibleCandidate)
                 continue;
@@ -1848,7 +1639,7 @@ public sealed class DungeonFrontierService
         Vector3? playerPosition,
         DungeonFrontierPoint? previousTarget)
     {
-        candidates = GetTreasureFollowerPreferredRoomCandidates(candidates, playerPosition);
+        candidates = GetTreasureFollowerPreferredRoomCandidates(candidates);
         if (previousTarget is not null)
         {
             var matchingPrevious = candidates.FirstOrDefault(point => string.Equals(point.Key, previousTarget.Key, StringComparison.Ordinal));
@@ -1882,12 +1673,10 @@ public sealed class DungeonFrontierService
     }
 
     private static IReadOnlyList<DungeonFrontierPoint> GetTreasureFollowerPreferredRoomCandidates(
-        IReadOnlyList<DungeonFrontierPoint> candidates,
-        Vector3? playerPosition)
+        IReadOnlyList<DungeonFrontierPoint> candidates)
     {
         var liveCandidates = candidates
             .Where(point => point.IsLiveTreasureDoorCandidate)
-            .Where(point => !playerPosition.HasValue || IsWithinTreasureFollowerCandidateVerticalCap(point, playerPosition.Value))
             .ToList();
 
         return liveCandidates.Count > 0
@@ -2063,25 +1852,6 @@ public sealed class DungeonFrontierService
         return "BetweenAreas";
     }
 
-    private static string FormatTreasureRouteTransitFlags(DutyContextSnapshot context)
-    {
-        var flags = new List<string>();
-        if (context.BetweenAreas)
-            flags.Add("BetweenAreas");
-        if (context.BetweenAreas51)
-            flags.Add("BetweenAreas51");
-        if (context.Jumping)
-            flags.Add("Jumping");
-        if (context.Jumping61)
-            flags.Add("Jumping61");
-        if (context.Occupied33)
-            flags.Add("Occupied33");
-        if (context.OccupiedInCutSceneEvent)
-            flags.Add("OccupiedInCutSceneEvent");
-
-        return flags.Count == 0 ? "TreasureRouteTransitHold" : string.Join("/", flags);
-    }
-
     private void RememberGhostedManualDestination(DungeonFrontierPoint point, string reason)
     {
         LastGhostedManualDestination = point;
@@ -2109,26 +1879,17 @@ public sealed class DungeonFrontierService
            && !observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
            && !observation.LiveInteractables.Any(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition));
 
-    private bool HasNoFrontierBlockingLiveObjectsIgnoringFollowTargets(
-        DutyContextSnapshot context,
-        ObservationSnapshot observation,
-        Vector3? playerPosition)
-        => !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-           && !observation.LiveInteractables.Any(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition));
-
     private bool ShouldPrioritizeManualDestinationBeforeLiveProgression(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        bool ignoreLiveFollowTargets = false)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
     {
         if (manualDestinations.Count == 0)
             return false;
 
         if (observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-            || (!ignoreLiveFollowTargets
-                && observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))))
+            || observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
         {
             return false;
         }
@@ -2179,8 +1940,7 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        bool ignoreLiveFollowTargets = false)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
     {
         var bestManualDestination = manualDestinations
             .Where(point => point.AllowCombatBypass && !visitedFrontierKeys.Contains(point.Key))
@@ -2198,8 +1958,7 @@ public sealed class DungeonFrontierService
         if (bestManualDestination is null)
             return null;
 
-        if (!ignoreLiveFollowTargets
-            && observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
             return null;
 
         var bestMonster = observation.LiveMonsters
@@ -2276,8 +2035,7 @@ public sealed class DungeonFrontierService
         ObservationSnapshot observation,
         Vector3? playerPosition,
         IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        DungeonFrontierPoint? previousTarget,
-        bool ignoreLiveFollowTargets = false)
+        DungeonFrontierPoint? previousTarget)
     {
         //if (context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
         if (context.Mounted) //because the AI was too stupid to understand
@@ -2289,8 +2047,7 @@ public sealed class DungeonFrontierService
             return null;
         }
 
-        if (!ignoreLiveFollowTargets
-            && observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
             return null;
 
         var currentForceMarchAnchor = GetCurrentAuthoredForceMarchAnchor(manualDestinations, previousTarget);
@@ -2350,8 +2107,7 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        bool ignoreLiveFollowTargets = false)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
     {
         //if (!context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
         if (!context.Mounted) //because the AI was too stupid to understand
@@ -2363,8 +2119,7 @@ public sealed class DungeonFrontierService
             return null;
         }
 
-        if (!ignoreLiveFollowTargets
-            && observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
             return null;
 
         var bestManualDestination = manualDestinations
@@ -2547,9 +2302,6 @@ public sealed class DungeonFrontierService
 
     private static uint BuildLabelSortOrder(MapLabelMarker label)
         => ((label.MapId & 0xFFFF) << 16) | label.SubrowId;
-
-    private static uint GetDutyKey(DutyContextSnapshot context)
-        => context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
 
     private static DungeonFrontierPoint BuildNavigationPoint(DungeonFrontierPoint point, Vector3? playerPosition)
     {
@@ -2773,7 +2525,7 @@ public sealed class DungeonFrontierService
         if (interactable.Classification is not (InteractableClass.Required or InteractableClass.CombatFriendly or InteractableClass.Expendable or InteractableClass.TreasureDoor))
             return false;
 
-        if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             && interactable.Classification == InteractableClass.TreasureDoor)
         {
             return false;

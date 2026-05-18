@@ -503,40 +503,19 @@ public sealed class Plugin : IDalamudPlugin
             {
                 pluginEnabled = Configuration.PluginEnabled,
                 processDialogRulesOutsideOwnedDuty = Configuration.ProcessDialogRulesOutsideOwnedDuty,
-                higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 version = PluginInfo.GetVersion(),
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
                 treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
-                effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
                 frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                 frontierRouteKey = DungeonFrontierService.CurrentTarget?.Key,
-                treasureFollowerEntryMapOpenerRoleActive = DungeonFrontierService.TreasureFollowerEntryMapOpenerRoleActive,
                 treasureFollowerStartGateActive = DungeonFrontierService.TreasureFollowerStartGateActive,
                 treasureFollowerStartGateTarget = DungeonFrontierService.TreasureFollowerStartGateTarget,
                 treasureFollowerStartGateSource = DungeonFrontierService.TreasureFollowerStartGateSource,
                 treasureFollowerStartGateTargetKey = DungeonFrontierService.TreasureFollowerStartGateTargetKey,
-                treasureFollowerStartGateDutyKey = DungeonFrontierService.TreasureFollowerStartGateDutyKey,
-                treasureFollowerEntryProofDutyKey = DungeonFrontierService.TreasureFollowerEntryProofDutyKey,
-                treasureFollowerEntryTransitionConsumed = DungeonFrontierService.TreasureFollowerEntryTransitionConsumed,
-                treasureFollowerEntryTransitionHoldActive = DungeonFrontierService.TreasureFollowerEntryTransitionHoldActive,
-                treasureFollowerStartGateConsumedTargetKey = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetKey,
-                treasureFollowerStartGateConsumedTargetName = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetName,
-                treasureFollowerStartGateConsumedTargetSource = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetSource,
-                treasureFollowerStartGateConsumedReason = DungeonFrontierService.TreasureFollowerStartGateConsumedReason,
-                treasureFollowerStartGateConsumedAtUtc = DungeonFrontierService.TreasureFollowerStartGateConsumedAtUtc?.ToString("O"),
-                treasureFollowerHeldCandidateKey = DungeonFrontierService.TreasureFollowerHeldCandidateKey,
-                treasureFollowerHeldCandidateName = DungeonFrontierService.TreasureFollowerHeldCandidateName,
-                treasureFollowerHeldCandidateTransitObserved = DungeonFrontierService.TreasureFollowerHeldCandidateTransitObserved,
-                treasureFollowerLastFailedCandidateKey = DungeonFrontierService.TreasureFollowerLastFailedCandidateKey,
-                treasureFollowerLastFailedCandidateReason = DungeonFrontierService.TreasureFollowerLastFailedCandidateReason,
-                treasureFollowerDoorFollowThroughActive = ExecutionService.TreasureFollowerDoorFollowThroughActive,
-                treasureFollowerDoorFollowThroughCandidateKey = ExecutionService.TreasureFollowerDoorFollowThroughCandidateKey,
-                treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
-                treasureFollowerDoorFollowThroughTarget = ExecutionService.TreasureFollowerDoorFollowThroughTarget,
                 liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
@@ -592,7 +571,6 @@ public sealed class Plugin : IDalamudPlugin
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
                 dialogStatus = DialogAutomationService.DialogStatus,
-                higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 higherLowerAutomation = HigherLowerAutomationService.CaptureDebugState(),
                 mounted = DutyContextService.Current.Mounted,
                 targetName = ObjectivePlannerService.Current.TargetName,
@@ -604,33 +582,13 @@ public sealed class Plugin : IDalamudPlugin
                 {
                     mode = DungeonFrontierService.CurrentMode.ToString(),
                     treasureDungeonRole = DungeonFrontierService.TreasureDungeonRole.ToString(),
-                    effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                     treasureDungeonRoleSource = DungeonFrontierService.TreasureDungeonRoleSource,
                     treasureDungeonRoleDetail = DungeonFrontierService.TreasureDungeonRoleDetail,
                     treasureFollowerRetryCycle = DungeonFrontierService.TreasureFollowerRetryCycle,
-                    treasureFollowerEntryMapOpenerRoleActive = DungeonFrontierService.TreasureFollowerEntryMapOpenerRoleActive,
                     treasureFollowerStartGateActive = DungeonFrontierService.TreasureFollowerStartGateActive,
                     treasureFollowerStartGateTarget = DungeonFrontierService.TreasureFollowerStartGateTarget,
                     treasureFollowerStartGateSource = DungeonFrontierService.TreasureFollowerStartGateSource,
                     treasureFollowerStartGateTargetKey = DungeonFrontierService.TreasureFollowerStartGateTargetKey,
-                    treasureFollowerStartGateDutyKey = DungeonFrontierService.TreasureFollowerStartGateDutyKey,
-                    treasureFollowerEntryProofDutyKey = DungeonFrontierService.TreasureFollowerEntryProofDutyKey,
-                    treasureFollowerEntryTransitionConsumed = DungeonFrontierService.TreasureFollowerEntryTransitionConsumed,
-                    treasureFollowerEntryTransitionHoldActive = DungeonFrontierService.TreasureFollowerEntryTransitionHoldActive,
-                    treasureFollowerStartGateConsumedTargetKey = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetKey,
-                    treasureFollowerStartGateConsumedTargetName = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetName,
-                    treasureFollowerStartGateConsumedTargetSource = DungeonFrontierService.TreasureFollowerStartGateConsumedTargetSource,
-                    treasureFollowerStartGateConsumedReason = DungeonFrontierService.TreasureFollowerStartGateConsumedReason,
-                    treasureFollowerStartGateConsumedAtUtc = DungeonFrontierService.TreasureFollowerStartGateConsumedAtUtc?.ToString("O"),
-                    treasureFollowerHeldCandidateKey = DungeonFrontierService.TreasureFollowerHeldCandidateKey,
-                    treasureFollowerHeldCandidateName = DungeonFrontierService.TreasureFollowerHeldCandidateName,
-                    treasureFollowerHeldCandidateTransitObserved = DungeonFrontierService.TreasureFollowerHeldCandidateTransitObserved,
-                    treasureFollowerLastFailedCandidateKey = DungeonFrontierService.TreasureFollowerLastFailedCandidateKey,
-                    treasureFollowerLastFailedCandidateReason = DungeonFrontierService.TreasureFollowerLastFailedCandidateReason,
-                    treasureFollowerDoorFollowThroughActive = ExecutionService.TreasureFollowerDoorFollowThroughActive,
-                    treasureFollowerDoorFollowThroughCandidateKey = ExecutionService.TreasureFollowerDoorFollowThroughCandidateKey,
-                    treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
-                    treasureFollowerDoorFollowThroughTarget = ExecutionService.TreasureFollowerDoorFollowThroughTarget,
                     liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
                     currentTreasureRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                     activeMapId = DungeonFrontierService.ActiveMapId,
@@ -681,7 +639,6 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 liveProbe = TreasureHighLowDiagnosticService.CaptureLiveProbe(),
-                vfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 automation = HigherLowerAutomationService.CaptureDebugState(),
             },
             JsonOptions);
@@ -1135,8 +1092,6 @@ public sealed class Plugin : IDalamudPlugin
             var path = TreasureHighLowDiagnosticService.CurrentLogPath;
             PrintStatus(
                 $"Higher/Lower diagnostics enabled={TreasureHighLowDiagnosticService.Enabled}; " +
-                $"vfxDatamine={TreasureHighLowDiagnosticService.VfxDataminingEnabled}; " +
-                $"datamineSession={(string.IsNullOrWhiteSpace(TreasureHighLowDiagnosticService.CurrentDatamineSessionDirectory) ? "(not opened yet)" : TreasureHighLowDiagnosticService.CurrentDatamineSessionDirectory)}; " +
                 $"file={(string.IsNullOrWhiteSpace(path) ? "(not opened yet)" : path)}");
             return;
         }
@@ -1395,13 +1350,6 @@ public sealed class Plugin : IDalamudPlugin
             configuration.HigherLowerDiagnosticsEnabled = true;
             configuration.HigherLowerAutomationEnabled = true;
             configuration.Version = 11;
-            changed = true;
-        }
-
-        if (configuration.Version < 12)
-        {
-            configuration.HigherLowerVfxDataminingEnabled = false;
-            configuration.Version = 12;
             changed = true;
         }
 

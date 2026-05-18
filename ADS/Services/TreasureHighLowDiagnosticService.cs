@@ -126,6 +126,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     public bool Enabled
         => configuration.HigherLowerDiagnosticsEnabled;
 
+    public bool VfxDataminingEnabled
+        => configuration.HigherLowerVfxDataminingEnabled;
+
     public string DiagnosticDirectory
         => diagnosticDirectory;
 
@@ -214,6 +217,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             SafetyWarnings: warnings,
             DiagnosticDirectory: diagnosticDirectory,
             CurrentLogPath: CurrentLogPath,
+            DatamineDirectory: datamineDirectory,
+            CurrentDatamineSessionDirectory: CurrentDatamineSessionDirectory,
+            VfxDataminingEnabled: VfxDataminingEnabled,
             CardMapPath: cardMapPath);
     }
 
@@ -267,6 +273,27 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             ResetRuntimeState();
             log.Information($"{Prefix} diagnostics disabled.");
         }
+    }
+
+    public void SetVfxDataminingEnabled(bool enabled)
+    {
+        if (configuration.HigherLowerVfxDataminingEnabled == enabled)
+        {
+            log.Information($"{Prefix} vfx datamining already {(enabled ? "enabled" : "disabled")} path='{currentDatamineSessionDirectory ?? string.Empty}'");
+            return;
+        }
+
+        configuration.HigherLowerVfxDataminingEnabled = enabled;
+        configuration.Save();
+        if (enabled)
+        {
+            log.Information($"{Prefix} vfx datamining enabled.");
+            return;
+        }
+
+        CloseDatamineWritersIfOpen();
+        ResetDatamineCooldown();
+        log.Information($"{Prefix} vfx datamining disabled.");
     }
 
     public void ForceDump()
@@ -835,6 +862,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
         var traceActive = IsTraceActive(now);
+        if (!configuration.HigherLowerVfxDataminingEnabled)
+            CloseDatamineWritersIfOpen();
 
         if (!configuration.HigherLowerDiagnosticsEnabled && !forceNextSnapshot && !traceActive)
             return;
@@ -1773,7 +1802,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private bool ShouldRecordDatamine()
-        => configuration.HigherLowerDiagnosticsEnabled || IsTraceActive(DateTime.UtcNow);
+        => configuration.HigherLowerVfxDataminingEnabled;
 
     private uint ResolveDatamineTerritory(uint territoryId)
         => territoryId != 0 ? territoryId : clientState.TerritoryType;
@@ -1913,6 +1942,24 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             currentDatamineJsonlPath = null;
             currentDatamineTerritoryId = 0;
         }
+    }
+
+    private void CloseDatamineWritersIfOpen()
+    {
+        if (datamineLogWriter != null
+            || datamineJsonlWriter != null
+            || currentDatamineSessionDirectory != null
+            || currentDatamineLogPath != null
+            || currentDatamineJsonlPath != null)
+        {
+            CloseDatamineWriters();
+        }
+    }
+
+    private void ResetDatamineCooldown()
+    {
+        lastDatamineSurfaceKey = string.Empty;
+        lastDatamineSurfaceUtc = DateTime.MinValue;
     }
 
     private void CloseWriter()
@@ -3507,6 +3554,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         IReadOnlyList<string> SafetyWarnings,
         string DiagnosticDirectory,
         string CurrentLogPath,
+        string DatamineDirectory,
+        string CurrentDatamineSessionDirectory,
+        bool VfxDataminingEnabled,
         string CardMapPath);
 
     public sealed record HigherLowerBoardCandidate(
