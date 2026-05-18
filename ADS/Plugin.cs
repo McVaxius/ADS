@@ -115,7 +115,7 @@ public sealed class Plugin : IDalamudPlugin
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
         HigherLowerVfxTraceService = new HigherLowerVfxTraceService(ObjectTable, ClientState, TreasureHighLowDiagnosticService, Log);
-        HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, DataManager, Log);
+        HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, HigherLowerServerEventTraceService, DataManager, Log);
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);

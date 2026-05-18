@@ -15,12 +15,18 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     public const string StaticAvfxMetadataSource = "static-avfx-metadata";
     public const string VisualGraphicKeySource = "visual-graphic-key";
     public const string AddonAtkValueSource = "addon-atk-value[4]";
+    public const string ServerEObjAnimSource = "server-eobjanim-card-state";
+    private const uint TreasureHighLowCardBaseId = 2007457;
+    private const uint HighBaseId = 2012422;
+    private const uint LowBaseId = 2012423;
     private static readonly TimeSpan ActiveProbeTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ServerCardTtl = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan SolverLogCooldown = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan SuggestionLogCooldown = TimeSpan.FromSeconds(4);
 
     private readonly TreasureHighLowDiagnosticService diagnostics;
     private readonly HigherLowerVfxTraceService vfxTraceService;
+    private readonly HigherLowerServerEventTraceService serverEventTraceService;
     private readonly IDataManager dataManager;
     private readonly IPluginLog log;
     private readonly object gate = new();
@@ -36,11 +42,13 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     public HigherLowerCardVfxSolverService(
         TreasureHighLowDiagnosticService diagnostics,
         HigherLowerVfxTraceService vfxTraceService,
+        HigherLowerServerEventTraceService serverEventTraceService,
         IDataManager dataManager,
         IPluginLog log)
     {
         this.diagnostics = diagnostics;
         this.vfxTraceService = vfxTraceService;
+        this.serverEventTraceService = serverEventTraceService;
         this.dataManager = dataManager;
         this.log = log;
     }
@@ -276,6 +284,9 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         var runtime = diagnostics.CaptureRuntimeState();
         var now = DateTime.UtcNow;
         IReadOnlyList<HigherLowerVfxTraceService.TrackedVfxRow> trackedRows = [];
+        IReadOnlyList<ServerCardStateRow> serverCardRows = [];
+        ServerCardStateRow? serverCard = null;
+        bool serverPhaseBlocksFallback = false;
         if (runtime.Active)
         {
             try
@@ -287,6 +298,19 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             catch (Exception ex)
             {
                 log.Warning(ex, "[ADS][HLSOLVER] Failed to snapshot tracked VFX rows.");
+            }
+
+            try
+            {
+                serverCardRows = EvaluateServerCardRows(serverEventTraceService.GetRowsSnapshot(), diagnostics.CaptureBoardSlots(), context, now);
+                serverCard = serverCardRows.FirstOrDefault(static x => x.Accepted && x.DecodedCard.HasValue);
+                serverPhaseBlocksFallback = serverCard == null && serverCardRows.Any(static x => x.DecodedCard.HasValue && IsServerPhaseBlockReason(x.Reason));
+                foreach (var row in serverCardRows)
+                    diagnostics.RecordDatamineServerCard(row);
+            }
+            catch (Exception ex)
+            {
+                log.Warning(ex, "[ADS][HLSOLVER] Failed to decode server card rows.");
             }
         }
 
@@ -301,32 +325,48 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             }
             else
             {
-                var trackedCurrent = trackedRows
-                    .Where(static x => x.Slot == "left")
-                    .Where(static x => x.DecodedCard.HasValue)
-                    .OrderBy(static x => x.AgeSeconds)
-                    .FirstOrDefault();
-                if (trackedCurrent != null)
+                var vfxState = BuildVfxState(runtime, trackedRows, now);
+                if (serverCard is { DecodedCard: { } })
                 {
-                    next = BuildState(runtime, trackedCurrent);
+                    var serverCardIsPostSelectionReveal = IsPostSelectionReveal(serverCard);
+                    if (!serverCardIsPostSelectionReveal
+                        && vfxState.Confidence == SolverConfidence.High
+                        && vfxState.CurrentCard.HasValue
+                        && vfxState.CurrentCard.Value != serverCard.DecodedCard.Value)
+                    {
+                        next = BuildServerMismatchState(
+                            runtime,
+                            serverCard,
+                            $"trusted server/vfx card mismatch; serverCard={serverCard.DecodedCard.Value}; vfxCard={vfxState.CurrentCard.Value}; vfxSource='{Escape(vfxState.CardSource)}'");
+                    }
+                    else if (!serverCardIsPostSelectionReveal
+                             && runtime.CardSourceSafe
+                             && runtime.CurrentCard is >= 1 and <= 9
+                             && runtime.CurrentCard.Value != serverCard.DecodedCard.Value)
+                    {
+                        next = BuildServerMismatchState(
+                            runtime,
+                            serverCard,
+                            $"trusted server/visual card mismatch; serverCard={serverCard.DecodedCard.Value}; visualCard={runtime.CurrentCard.Value}; currentGraphicKey='{Escape(runtime.CurrentGraphicKey)}'");
+                    }
+                    else
+                    {
+                        next = BuildServerState(runtime, serverCard);
+                    }
+                }
+                else if (serverPhaseBlocksFallback)
+                {
+                    next = BuildServerBlockedState(runtime, "waiting for next server current-card state after High/Low transition");
                 }
                 else
                 {
-                    var currentProbe = recentProbes.Values
-                        .Where(static x => x.Slot == "left")
-                        .Where(x => now - x.TimestampUtc <= ActiveProbeTtl)
-                        .OrderByDescending(static x => x.Confidence == SolverConfidence.High)
-                        .ThenByDescending(static x => x.TimestampUtc)
-                        .FirstOrDefault();
-
-                    next = BuildState(runtime, currentProbe);
-                }
-
-                if (next.Confidence != SolverConfidence.High
-                    && runtime.CardSourceSafe
-                    && runtime.CurrentCard is >= 1 and <= 9)
-                {
-                    next = BuildVisualState(runtime);
+                    next = vfxState;
+                    if (next.Confidence != SolverConfidence.High
+                        && runtime.CardSourceSafe
+                        && runtime.CurrentCard is >= 1 and <= 9)
+                    {
+                        next = BuildVisualState(runtime);
+                    }
                 }
             }
 
@@ -341,7 +381,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     {
         lock (gate)
         {
-            return $"Higher/Lower solver active={currentState.Active} card={currentState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} choice={currentState.RecommendedChoice} confidence={currentState.Confidence} reason='{currentState.Reason}' source='{currentState.CardSource}' textureIndexSource={currentState.TextureIndexSource} cachedAvfx={avfxMetadataCache.Count} recentProbes={recentProbes.Count}";
+            return $"Higher/Lower solver active={currentState.Active} card={currentState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} choice={currentState.RecommendedChoice} confidence={currentState.Confidence} reason='{currentState.Reason}' source='{currentState.CardSource}' sourceRowSeq={currentState.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none"} sourceState={currentState.SourceStateData} textureIndexSource={currentState.TextureIndexSource} cachedAvfx={avfxMetadataCache.Count} recentProbes={recentProbes.Count}";
         }
     }
 
@@ -384,6 +424,83 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             TextureIndex: null,
             TextureIndexSource: "none");
     }
+
+    private SolverState BuildVfxState(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
+        IReadOnlyList<HigherLowerVfxTraceService.TrackedVfxRow> trackedRows,
+        DateTime now)
+    {
+        var trackedCurrent = trackedRows
+            .Where(static x => x.Slot == "left")
+            .Where(static x => x.DecodedCard.HasValue)
+            .OrderBy(static x => x.AgeSeconds)
+            .FirstOrDefault();
+        if (trackedCurrent != null)
+            return BuildState(runtime, trackedCurrent);
+
+        var currentProbe = recentProbes.Values
+            .Where(static x => x.Slot == "left")
+            .Where(x => now - x.TimestampUtc <= ActiveProbeTtl)
+            .OrderByDescending(static x => x.Confidence == SolverConfidence.High)
+            .ThenByDescending(static x => x.TimestampUtc)
+            .FirstOrDefault();
+
+        return BuildState(runtime, currentProbe);
+    }
+
+    private static SolverState BuildServerState(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
+        ServerCardStateRow serverCard)
+    {
+        var card = serverCard.DecodedCard!.Value;
+        var decision = BuildDecision(card);
+        var reason = IsPostSelectionReveal(serverCard)
+            ? serverCard.Reason
+            : "trusted server EObjAnim card state";
+        return new SolverState(
+            Active: runtime.Active,
+            CurrentCard: card,
+            RecommendedChoice: decision.Choice,
+            Confidence: SolverConfidence.High,
+            Reason: reason,
+            CardSource: ServerEObjAnimSource,
+            Slot: string.IsNullOrWhiteSpace(serverCard.Slot) ? "server-current" : serverCard.Slot,
+            TextureIndex: null,
+            TextureIndexSource: "none",
+            SourceRowSequence: serverCard.RowSequence,
+            SourceStateData: serverCard.State);
+    }
+
+    private static SolverState BuildServerMismatchState(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
+        ServerCardStateRow serverCard,
+        string reason)
+        => new(
+            Active: runtime.Active,
+            CurrentCard: null,
+            RecommendedChoice: "Blocked",
+            Confidence: SolverConfidence.Blocked,
+            Reason: reason,
+            CardSource: ServerEObjAnimSource,
+            Slot: string.IsNullOrWhiteSpace(serverCard.Slot) ? "server-current" : serverCard.Slot,
+            TextureIndex: null,
+            TextureIndexSource: "none",
+            SourceRowSequence: serverCard.RowSequence,
+            SourceStateData: serverCard.State);
+
+    private static SolverState BuildServerBlockedState(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
+        string reason)
+        => new(
+            Active: runtime.Active,
+            CurrentCard: null,
+            RecommendedChoice: "Blocked",
+            Confidence: SolverConfidence.Blocked,
+            Reason: reason,
+            CardSource: ServerEObjAnimSource,
+            Slot: "left",
+            TextureIndex: null,
+            TextureIndexSource: "none");
 
     private SolverState BuildState(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
@@ -472,6 +589,221 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         return (LowerChoice, "card >= 6");
     }
 
+    private static IReadOnlyList<ServerCardStateRow> EvaluateServerCardRows(
+        IReadOnlyList<HigherLowerServerEventTraceService.ServerEventRow> serverRows,
+        IReadOnlyList<TreasureHighLowDiagnosticService.BoardSlotSnapshot> boardSlots,
+        DutyContextSnapshot context,
+        DateTime now)
+    {
+        var recentRows = serverRows
+            .Where(row => IsSameTerritory(row, context))
+            .Where(row => row.TimestampUtc <= now && now - row.TimestampUtc <= ServerCardTtl)
+            .OrderByDescending(static row => row.Sequence)
+            .ToList();
+        var latestSelection = recentRows.FirstOrDefault(IsHighLowSelectionRow);
+        var latestFinish = recentRows.FirstOrDefault(IsPuzzleFinishedRow);
+        var cardRows = recentRows
+            .Where(static row => row.Kind == HigherLowerServerEventTraceService.ServerEventKind.EObjAnim && row.BaseId == TreasureHighLowCardBaseId)
+            .Select(row =>
+            {
+                var slot = row.Position.HasValue ? ResolveSlot(row.Position.Value, boardSlots) : "unknown";
+                var decoded = TryDecodeServerCard(row, out var card, out var reason);
+                return new ServerCardCandidate(row, slot, decoded ? card : null, reason);
+            })
+            .ToList();
+
+        var acceptedCurrent = cardRows.FirstOrDefault(candidate =>
+            candidate.DecodedCard.HasValue
+            && string.Equals(candidate.Slot, "left", StringComparison.OrdinalIgnoreCase)
+            && !IsOlderThanPuzzleFinish(candidate.Row, latestFinish)
+            && !IsOlderThanHighLowSelection(candidate.Row, latestSelection));
+
+        var acceptedReveal = acceptedCurrent == null
+            ? cardRows.FirstOrDefault(candidate => IsAcceptablePostSelectionReveal(candidate, cardRows, latestSelection, latestFinish))
+            : null;
+
+        var result = new List<ServerCardStateRow>();
+        foreach (var candidate in cardRows)
+        {
+            var row = candidate.Row;
+            if (!candidate.DecodedCard.HasValue)
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, null, accepted: false, candidate.Reason));
+                continue;
+            }
+
+            var card = candidate.DecodedCard.Value;
+            if (IsSameServerCardRow(candidate, acceptedCurrent))
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: true, "accepted-current-card"));
+                continue;
+            }
+
+            if (IsSameServerCardRow(candidate, acceptedReveal))
+            {
+                result.Add(BuildServerCardStateRow(row, "right-reveal", card, accepted: true, "trusted server post-selection reveal"));
+                continue;
+            }
+
+            if (IsOlderThanPuzzleFinish(row, latestFinish))
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-than-puzzle-finish"));
+                continue;
+            }
+
+            if (IsOlderThanHighLowSelection(row, latestSelection))
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-than-last-high-low-selection"));
+                continue;
+            }
+
+            if (string.Equals(candidate.Slot, "left", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-current-card-state"));
+                continue;
+            }
+
+            if (string.Equals(candidate.Slot, "right", StringComparison.OrdinalIgnoreCase)
+                && latestSelection != null
+                && IsAfter(row, latestSelection)
+                && HasNewerDecodedCurrentCard(candidate, cardRows, latestFinish))
+            {
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "newer-current-card-state"));
+                continue;
+            }
+
+            result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "not-current-slot"));
+        }
+
+        return result;
+    }
+
+    private static bool IsAcceptablePostSelectionReveal(
+        ServerCardCandidate candidate,
+        IReadOnlyList<ServerCardCandidate> cardRows,
+        HigherLowerServerEventTraceService.ServerEventRow? latestSelection,
+        HigherLowerServerEventTraceService.ServerEventRow? latestFinish)
+        => candidate.DecodedCard.HasValue
+           && string.Equals(candidate.Slot, "right", StringComparison.OrdinalIgnoreCase)
+           && latestSelection != null
+           && IsAfter(candidate.Row, latestSelection)
+           && !IsOlderThanPuzzleFinish(candidate.Row, latestFinish)
+           && !HasNewerDecodedCurrentCard(candidate, cardRows, latestFinish);
+
+    private static bool HasNewerDecodedCurrentCard(
+        ServerCardCandidate candidate,
+        IReadOnlyList<ServerCardCandidate> cardRows,
+        HigherLowerServerEventTraceService.ServerEventRow? latestFinish)
+        => cardRows.Any(other =>
+            other.DecodedCard.HasValue
+            && string.Equals(other.Slot, "left", StringComparison.OrdinalIgnoreCase)
+            && IsAfter(other.Row, candidate.Row)
+            && !IsOlderThanPuzzleFinish(other.Row, latestFinish));
+
+    private static bool IsOlderThanPuzzleFinish(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        HigherLowerServerEventTraceService.ServerEventRow? latestFinish)
+        => latestFinish != null && IsAfter(latestFinish, row);
+
+    private static bool IsOlderThanHighLowSelection(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        HigherLowerServerEventTraceService.ServerEventRow? latestSelection)
+        => latestSelection != null && IsAfter(latestSelection, row);
+
+    private static bool IsSameServerCardRow(
+        ServerCardCandidate candidate,
+        ServerCardCandidate? other)
+        => other != null && candidate.Row.Sequence == other.Row.Sequence;
+
+    private static bool TryDecodeServerCard(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        out int card,
+        out string reason)
+    {
+        card = 0;
+        if (row.P1 != row.P2)
+        {
+            reason = "not-equal-card-face-state";
+            return false;
+        }
+
+        if (row.P1 == 0 || (row.P1 & (row.P1 - 1)) != 0)
+        {
+            reason = "not-single-card-face-bit";
+            return false;
+        }
+
+        card = BitOperations.TrailingZeroCount(row.P1) - 3;
+        if (card is < 1 or > 9)
+        {
+            reason = "card-face-bit-out-of-range";
+            return false;
+        }
+
+        reason = "decoded";
+        return true;
+    }
+
+    private static ServerCardStateRow BuildServerCardStateRow(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        string slot,
+        int? decodedCard,
+        bool accepted,
+        string reason)
+        => new(
+            TimestampUtc: row.TimestampUtc,
+            RowSequence: row.Sequence,
+            TerritoryId: row.TerritoryId,
+            ActorId: row.ActorId,
+            GameObjectId: row.GameObjectId,
+            EntityId: row.EntityId,
+            BaseId: row.BaseId,
+            LayoutId: row.LayoutId,
+            GimmickId: row.GimmickId,
+            ObjectName: row.ObjectName,
+            Position: row.Position,
+            Slot: string.IsNullOrWhiteSpace(slot) ? "unknown" : slot,
+            P1: row.P1,
+            P2: row.P2,
+            State: FormatServerCardState(row),
+            DecodedCard: decodedCard,
+            Accepted: accepted,
+            Reason: reason);
+
+    private static bool IsSameTerritory(HigherLowerServerEventTraceService.ServerEventRow row, DutyContextSnapshot context)
+    {
+        var territoryId = context.TerritoryTypeId != 0 ? context.TerritoryTypeId : row.TerritoryId;
+        return row.TerritoryId == 0 || territoryId == 0 || row.TerritoryId == territoryId;
+    }
+
+    private static bool IsHighLowSelectionRow(HigherLowerServerEventTraceService.ServerEventRow row)
+        => row.Kind == HigherLowerServerEventTraceService.ServerEventKind.EObjAnim
+           && row.BaseId is HighBaseId or LowBaseId
+           && row.P1 == 0x0010
+           && row.P2 == 0x0020;
+
+    private static bool IsPuzzleFinishedRow(HigherLowerServerEventTraceService.ServerEventRow row)
+        => row.Kind == HigherLowerServerEventTraceService.ServerEventKind.LegacyMapEffect
+           && row.DataHex.StartsWith("0406", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsServerPhaseBlockReason(string reason)
+        => string.Equals(reason, "older-than-last-high-low-selection", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(reason, "older-than-puzzle-finish", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(reason, "not-current-slot", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPostSelectionReveal(ServerCardStateRow row)
+        => string.Equals(row.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(row.Reason, "trusted server post-selection reveal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAfter(
+        HigherLowerServerEventTraceService.ServerEventRow left,
+        HigherLowerServerEventTraceService.ServerEventRow right)
+        => left.TimestampUtc > right.TimestampUtc
+           || (left.TimestampUtc == right.TimestampUtc && left.Sequence > right.Sequence);
+
+    private static string FormatServerCardState(HigherLowerServerEventTraceService.ServerEventRow row)
+        => string.Create(CultureInfo.InvariantCulture, $"{row.P1:X4}{row.P2:X4}");
+
     private void LogProbe(CardProbeRow probe, TreasureHighLowDiagnosticService.KnownBoardSnapshot? knownBoard)
     {
         if (!probe.IsCatalogCard)
@@ -520,7 +852,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         var addonCurrentCard = runtime.AddonCurrentCard?.ToString(CultureInfo.InvariantCulture) ?? runtime.AddonCurrentCardText;
         var addonOtherCard = runtime.AddonOtherCard?.ToString(CultureInfo.InvariantCulture) ?? runtime.AddonOtherCardText;
         var decodedCard = state.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
-        var logKey = $"{addonCurrentCard}:{addonOtherCard}:{decodedCard}:{state.RecommendedChoice}:{state.Confidence}:{state.Reason}:{state.CardSource}:{state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}";
+        var logKey = $"{addonCurrentCard}:{addonOtherCard}:{decodedCard}:{state.RecommendedChoice}:{state.Confidence}:{state.Reason}:{state.CardSource}:{state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}:{state.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{state.SourceStateData}";
         var now = DateTime.UtcNow;
         var shouldLog = logKey != lastSolverLogKey || now - lastSolverLogUtc >= SolverLogCooldown;
         if (!shouldLog)
@@ -534,7 +866,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             : string.Equals(state.RecommendedChoice, OpenChestChoice, StringComparison.OrdinalIgnoreCase)
                 ? "open-chest"
                 : "blocked";
-        var line = $"higher-lower-solver addonCurrentCard={addonCurrentCard} addonOtherCard={addonOtherCard} decodedCard={decodedCard} action={action} confidence={state.Confidence.ToString().ToLowerInvariant()} reason='{Escape(state.Reason)}' source='{Escape(state.CardSource)}' slot={state.Slot} textureIndex={state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} textureIndexSource={Escape(state.TextureIndexSource)}";
+        var line = $"higher-lower-solver addonCurrentCard={addonCurrentCard} addonOtherCard={addonOtherCard} decodedCard={decodedCard} action={action} confidence={state.Confidence.ToString().ToLowerInvariant()} reason='{Escape(state.Reason)}' source='{Escape(state.CardSource)}' slot={state.Slot} sourceRowSeq={state.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none"} sourceState={Escape(state.SourceStateData)} textureIndex={state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} textureIndexSource={Escape(state.TextureIndexSource)}";
         diagnostics.RecordSolverLine(context.TerritoryTypeId, line);
     }
 
@@ -799,7 +1131,9 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         string CardSource,
         string Slot,
         int? TextureIndex,
-        string TextureIndexSource)
+        string TextureIndexSource,
+        ulong? SourceRowSequence = null,
+        string SourceStateData = "")
     {
         public static SolverState Inactive { get; } = new(
             Active: false,
@@ -812,6 +1146,32 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             TextureIndex: null,
             TextureIndexSource: "none");
     }
+
+    private sealed record ServerCardCandidate(
+        HigherLowerServerEventTraceService.ServerEventRow Row,
+        string Slot,
+        int? DecodedCard,
+        string Reason);
+
+    public sealed record ServerCardStateRow(
+        DateTime TimestampUtc,
+        ulong RowSequence,
+        uint TerritoryId,
+        uint ActorId,
+        ulong GameObjectId,
+        uint EntityId,
+        uint BaseId,
+        uint LayoutId,
+        uint GimmickId,
+        string ObjectName,
+        Vector3? Position,
+        string Slot,
+        uint P1,
+        uint P2,
+        string State,
+        int? DecodedCard,
+        bool Accepted,
+        string Reason);
 
     public sealed record CardProbeRow(
         DateTime TimestampUtc,

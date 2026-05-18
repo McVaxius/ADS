@@ -11,14 +11,16 @@ namespace ADS.Services;
 public sealed class HigherLowerAutomationService
 {
     private const string AddonName = "TreasureHighLow";
-    private const uint TryLuckNodeId = 46;
-    private const uint OpenChestNodeId = 47;
+    private const int TryLuckCallbackArg = 0;
+    private const int OpenChestCallbackArg = 1;
+    private const int SubmitCallbackArg = -2;
     private const string HigherChoice = HigherLowerCardVfxSolverService.HigherChoice;
     private const string LowerChoice = HigherLowerCardVfxSolverService.LowerChoice;
     private const string OpenChestChoice = HigherLowerCardVfxSolverService.OpenChestChoice;
     private const string StartPlayChoice = "StartPlay";
     private const float DirectionInteractRange = 2.0f;
     private static readonly TimeSpan ActionCooldown = TimeSpan.FromMilliseconds(900);
+    private static readonly TimeSpan PendingCallbackTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PendingDirectionTransitionSettleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DutyExitQuietGrace = TimeSpan.FromSeconds(15);
 
@@ -43,6 +45,7 @@ public sealed class HigherLowerAutomationService
     private int completedPlayCount;
     private AutomationDecision? retainedDecision;
     private AutomationDecision? pendingDirectionDecision;
+    private AutomationDecision? pendingCallbackDecision;
     private AutomationDecision? lastDecision;
     private string lastBlockedReason = string.Empty;
     private string lastSurfaceSource = "none";
@@ -52,6 +55,15 @@ public sealed class HigherLowerAutomationService
     private string pendingDirectionName = string.Empty;
     private ulong pendingDirectionGameObjectId;
     private DateTime pendingDirectionInteractUtc = DateTime.MinValue;
+    private PendingCallbackAction pendingCallbackAction = PendingCallbackAction.None;
+    private PendingCallbackPhase pendingCallbackPhase = PendingCallbackPhase.None;
+    private PendingCallbackPhase pendingCallbackTimedOutPhase = PendingCallbackPhase.None;
+    private DateTime pendingCallbackSentUtc = DateTime.MinValue;
+    private DateTime pendingCallbackPhaseStartedUtc = DateTime.MinValue;
+    private ulong pendingCallbackBaselineServerRowSequence;
+    private bool pendingCallbackHasBaselineServerRowSequence;
+    private bool pendingCallbackConfirmVisibleLogged;
+    private bool pendingCallbackTimeoutLogged;
     private DateTime lastHigherLowerActivityUtc = DateTime.MinValue;
     private string lastHigherLowerActivitySource = "none";
     private OwnershipMode lastOwnershipMode = OwnershipMode.Idle;
@@ -92,6 +104,7 @@ public sealed class HigherLowerAutomationService
     {
         var decision = lastDecision;
         var retained = retainedDecision;
+        var now = DateTime.UtcNow;
         return new HigherLowerAutomationDebugState(
             Enabled: configuration.HigherLowerAutomationEnabled,
             HoldMovement: HoldMovement,
@@ -112,11 +125,14 @@ public sealed class HigherLowerAutomationService
             DirectionTargetName: lastDirectionTargetName,
             DirectionTargetDistance: lastDirectionTargetDistance,
             PendingDirectionTarget: pendingDirectionDecision is null ? "none" : pendingDirectionName,
-            PendingDirectionInteractAgeSeconds: GetPendingDirectionInteractAgeSeconds(DateTime.UtcNow),
+            PendingDirectionInteractAgeSeconds: GetPendingDirectionInteractAgeSeconds(now),
+            PendingCallbackAction: FormatPendingCallbackAction(pendingCallbackAction),
+            PendingCallbackPhase: FormatPendingCallbackPhase(pendingCallbackPhase),
+            PendingCallbackAgeSeconds: GetPendingCallbackAgeSeconds(now),
             BlocksDutyExit: BlocksDutyExit,
             LastHigherLowerActivityUtc: lastHigherLowerActivityUtc,
             LastHigherLowerActivitySource: lastHigherLowerActivitySource,
-            DutyExitGraceRemainingSeconds: GetDutyExitGraceRemainingSeconds(DateTime.UtcNow));
+            DutyExitGraceRemainingSeconds: GetDutyExitGraceRemainingSeconds(now));
     }
 
     public void SetEnabled(bool enabled)
@@ -137,6 +153,7 @@ public sealed class HigherLowerAutomationService
             BlocksDutyExit = false;
             ClearHigherLowerActivitySession();
             ClearDirectionState(clearTarget: true);
+            ClearPendingCallbackState();
             lastMovementHoldLogKey = string.Empty;
             Status = "Higher/Lower automation disabled.";
             log.Information("[ADS][HLAUTO] disabled.");
@@ -174,6 +191,7 @@ public sealed class HigherLowerAutomationService
         RecordDatamineSurface(context, state, solverState, surface, currentDecision, cardBlockedReason);
 
         var modeAllowed = IsAutomationModeAllowed(ownershipMode, surface.Present)
+                          || HasPendingCallback()
                           || (ownershipMode == OwnershipMode.Leaving
                               && (pendingDirectionDecision is not null || BlocksDutyExit));
         if (!pluginEnabled || !context.InInstancedDuty || !modeAllowed)
@@ -260,6 +278,13 @@ public sealed class HigherLowerAutomationService
             return;
         }
 
+        if (HasPendingCallback())
+        {
+            ApplyMovementHold(ownershipMode, surface);
+            if (TryHandlePendingCallback(state, solverState, surface, now))
+                return;
+        }
+
         if (state.SelectYesnoVisible && IsHigherLowerPrompt(state.SelectYesnoPrompt))
         {
             var promptDecision = ResolveCurrentDirectionDecision(currentDecision, out var promptDecisionSource);
@@ -286,15 +311,26 @@ public sealed class HigherLowerAutomationService
             {
                 if (currentDecision.Action == HigherLowerAction.CashOut)
                 {
-                    TryClickTreasureHighLowButton(state, OpenChestNodeId, "Open Chest", currentDecision, currentDecision.Reason);
+                    TrySendTreasureHighLowCallbackSequence(
+                        state,
+                        solverState,
+                        PendingCallbackAction.OpenChest,
+                        OpenChestCallbackArg,
+                        currentDecision,
+                        currentDecision.Reason);
                     return;
                 }
 
                 if (IsPlayAction(currentDecision.Action))
                 {
                     lastDirectionDecisionSource = "current";
-                    if (TryClickTreasureHighLowButton(state, TryLuckNodeId, "Try Luck", currentDecision, currentDecision.Reason))
-                        retainedDecision = currentDecision with { Retained = true, ObservedUtc = DateTime.UtcNow };
+                    TrySendTreasureHighLowCallbackSequence(
+                        state,
+                        solverState,
+                        PendingCallbackAction.TryLuck,
+                        TryLuckCallbackArg,
+                        currentDecision,
+                        currentDecision.Reason);
                     return;
                 }
             }
@@ -304,7 +340,13 @@ public sealed class HigherLowerAutomationService
                 var openingDecision = BuildOpeningStartDecision(state, now);
                 lastDecision = openingDecision;
                 LogDecisionIfNeeded(state, openingDecision, surface);
-                TryClickTreasureHighLowButton(state, TryLuckNodeId, "Try Luck", openingDecision, openingDecision.Reason);
+                TrySendTreasureHighLowCallbackSequence(
+                    state,
+                    solverState,
+                    PendingCallbackAction.TryLuck,
+                    TryLuckCallbackArg,
+                    openingDecision,
+                    openingDecision.Reason);
                 return;
             }
 
@@ -382,6 +424,7 @@ public sealed class HigherLowerAutomationService
         completedPlayCount = 0;
         retainedDecision = null;
         ClearDirectionState(clearTarget: true);
+        ClearPendingCallbackState();
         lastDecision = null;
         lastBlockedReason = string.Empty;
         lastDirectionDecisionSource = "none";
@@ -505,15 +548,11 @@ public sealed class HigherLowerAutomationService
         source = "none";
         blockedReason = string.Empty;
 
-        if (state.TreasureHighLowVisible && IsBlankAddonCard(state))
-        {
-            blockedReason = "addon current card is blank";
-            return false;
-        }
-
         var hasSolverCard = TryGetTrustedSolverCard(solverState, out var solverCard, out var solverSource);
         var hasVisualCard = state.CardSourceSafe && state.CurrentCard is >= 1 and <= 9;
-        if (hasSolverCard
+        var solverIsPostSelectionReveal = hasSolverCard && IsPostSelectionRevealSolverState(solverState);
+        if (!solverIsPostSelectionReveal
+            && hasSolverCard
             && hasVisualCard
             && state.CurrentCard.HasValue
             && solverCard != state.CurrentCard.Value)
@@ -542,6 +581,12 @@ public sealed class HigherLowerAutomationService
             card = trustedCard.Value;
             source = trustedSource;
             return true;
+        }
+
+        if (state.TreasureHighLowVisible && IsBlankAddonCard(state))
+        {
+            blockedReason = "addon current card is blank";
+            return false;
         }
 
         if (state.AddonCurrentCard is >= 1 and <= 9)
@@ -582,6 +627,10 @@ public sealed class HigherLowerAutomationService
            || source.StartsWith($"{HigherLowerCardVfxSolverService.AddonAtkValueSource}+", StringComparison.OrdinalIgnoreCase)
            || string.Equals(source, HigherLowerCardVfxSolverService.StaticAvfxMetadataSource, StringComparison.OrdinalIgnoreCase)
            || source.StartsWith($"{HigherLowerCardVfxSolverService.StaticAvfxMetadataSource}+", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPostSelectionRevealSolverState(HigherLowerCardVfxSolverService.SolverState solverState)
+        => string.Equals(solverState.CardSource, HigherLowerCardVfxSolverService.ServerEObjAnimSource, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(solverState.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase);
 
     private static AutomationDecision BuildPolicyDecision(
         int step,
@@ -714,33 +763,242 @@ public sealed class HigherLowerAutomationService
         LogWarning($"hlauto answer-failed {EscapeToken(promptLabel)} {answerText} {BuildAddonLogFields(state)} {decisionFields} reason='{Escape(decision.Reason)}'");
     }
 
-    private bool TryClickTreasureHighLowButton(
+    private bool TrySendTreasureHighLowCallbackSequence(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
-        uint nodeId,
-        string label,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        PendingCallbackAction action,
+        int actionArg,
         AutomationDecision decision,
         string reason)
     {
+        var actionName = FormatPendingCallbackAction(action);
         if (DateTime.UtcNow < nextActionUtc)
         {
-            Status = BuildStatus(state, $"waiting: {label} cooldown");
+            Status = BuildStatus(state, $"waiting: {actionName} callback cooldown");
             return false;
         }
 
-        nextActionUtc = DateTime.UtcNow + ActionCooldown;
-        var decisionFields = BuildDecisionLogFields(decision, DateTime.UtcNow, decision.Retained ? "retained" : "current");
-        TryStopVnav($"addon-{label}", force: true);
-        if (GameInteractionHelper.TryClickAddonNodeButton(AddonName, nodeId, gameGui, log))
+        var now = DateTime.UtcNow;
+        nextActionUtc = now + ActionCooldown;
+        var decisionFields = BuildDecisionLogFields(decision, now, decision.Retained ? "retained" : "current");
+        TryStopVnav($"callback-{actionName}", force: true);
+        var actionSent = GameInteractionHelper.TryFireAddonCallback(AddonName, true, actionArg);
+        var submitSent = GameInteractionHelper.TryFireAddonCallback(AddonName, true, SubmitCallbackArg);
+        var sequence = $"{actionArg.ToString(CultureInfo.InvariantCulture)},{SubmitCallbackArg.ToString(CultureInfo.InvariantCulture)}";
+        if (actionSent && submitSent)
         {
-            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-click:{label}");
-            Status = BuildStatus(state, $"click {label}: {reason}");
-            LogAction($"hlauto click {EscapeToken(label)} addon={AddonName} nodeId={nodeId} reason='{Escape(reason)}' {BuildAddonLogFields(state)} {decisionFields}");
+            BeginPendingCallback(action, decision, now, solverState);
+            MarkHigherLowerActivity(now, $"hlauto-callback:{actionName}");
+            Status = BuildStatus(state, $"callback-sent {actionName}; waiting SelectYesno");
+            LogAction($"hlauto callback-sent action={actionName} sequence='{sequence}' reason='{Escape(reason)}' {BuildAddonLogFields(state)} {decisionFields} {BuildPendingCallbackLogFields()}");
             return true;
         }
 
-        Status = BuildStatus(state, $"blocked: {label} node {nodeId} click failed");
-        LogWarning($"hlauto click-failed {EscapeToken(label)} addon={AddonName} nodeId={nodeId} reason='{Escape(reason)}' {BuildAddonLogFields(state)} {decisionFields}");
+        Status = BuildStatus(state, $"blocked: {actionName} callback send failed");
+        LogWarning($"hlauto callback-send-failed action={actionName} sequence='{sequence}' actionSent={actionSent.ToString().ToLowerInvariant()} submitSent={submitSent.ToString().ToLowerInvariant()} reason='{Escape(reason)}' {BuildAddonLogFields(state)} {decisionFields}");
         return false;
+    }
+
+    private void BeginPendingCallback(
+        PendingCallbackAction action,
+        AutomationDecision decision,
+        DateTime now,
+        HigherLowerCardVfxSolverService.SolverState solverState)
+    {
+        pendingCallbackAction = action;
+        pendingCallbackPhase = PendingCallbackPhase.WaitingSelectYesno;
+        pendingCallbackTimedOutPhase = PendingCallbackPhase.None;
+        pendingCallbackDecision = decision;
+        pendingCallbackSentUtc = now;
+        pendingCallbackPhaseStartedUtc = now;
+        pendingCallbackConfirmVisibleLogged = false;
+        pendingCallbackTimeoutLogged = false;
+        retainedDecision = null;
+        if (TryGetServerRowSequence(solverState, out var rowSequence))
+        {
+            pendingCallbackBaselineServerRowSequence = rowSequence;
+            pendingCallbackHasBaselineServerRowSequence = true;
+        }
+        else
+        {
+            pendingCallbackBaselineServerRowSequence = 0;
+            pendingCallbackHasBaselineServerRowSequence = false;
+        }
+    }
+
+    private bool TryHandlePendingCallback(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        DateTime now)
+    {
+        if (!HasPendingCallback())
+            return false;
+
+        var decision = pendingCallbackDecision;
+        if (decision is null)
+        {
+            TimeoutPendingCallback(state, solverState, surface, now, "missing-decision");
+            return true;
+        }
+
+        if (pendingCallbackPhase == PendingCallbackPhase.TimedOut)
+        {
+            Block(
+                state,
+                solverState,
+                surface,
+                "blocked: callback timeout",
+                BuildPendingCallbackTimeoutReason(),
+                incompleteAddon: true);
+            return true;
+        }
+
+        if (pendingCallbackPhase == PendingCallbackPhase.WaitingSelectYesno)
+            return TryHandlePendingCallbackSelectYesno(state, solverState, surface, now, decision);
+
+        if (pendingCallbackPhase == PendingCallbackPhase.WaitingProof)
+            return TryHandlePendingCallbackProof(state, solverState, surface, now, decision);
+
+        return false;
+    }
+
+    private bool TryHandlePendingCallbackSelectYesno(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        DateTime now,
+        AutomationDecision decision)
+    {
+        if (!state.SelectYesnoVisible)
+        {
+            if (IsPendingCallbackTimedOut(now))
+                TimeoutPendingCallback(state, solverState, surface, now);
+            else
+                Status = BuildStatus(state, $"waiting: callback confirm {FormatPendingCallbackAction(pendingCallbackAction)}");
+
+            return true;
+        }
+
+        if (!pendingCallbackConfirmVisibleLogged)
+        {
+            pendingCallbackConfirmVisibleLogged = true;
+            LogAction($"hlauto callback-confirm-visible action={FormatPendingCallbackAction(pendingCallbackAction)} prompt='{Escape(state.SelectYesnoPrompt)}' {BuildAddonLogFields(state)} {BuildPendingCallbackLogFields()}");
+        }
+
+        if (now < nextActionUtc)
+        {
+            Status = BuildStatus(state, $"waiting: callback confirm cooldown {FormatPendingCallbackAction(pendingCallbackAction)}");
+            return true;
+        }
+
+        nextActionUtc = now + ActionCooldown;
+        TryStopVnav("callback-confirm", force: true);
+        if (GameInteractionHelper.TrySelectYesNo(true, gameGui, log))
+        {
+            pendingCallbackPhase = PendingCallbackPhase.WaitingProof;
+            pendingCallbackPhaseStartedUtc = now;
+            MarkHigherLowerActivity(now, "hlauto-callback-confirm");
+            Status = BuildStatus(state, $"callback confirm answered {FormatPendingCallbackAction(pendingCallbackAction)}; waiting proof");
+            LogAction($"hlauto callback-confirm-answered action={FormatPendingCallbackAction(pendingCallbackAction)} answer=Yes prompt='{Escape(state.SelectYesnoPrompt)}' {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "callback-confirm")} {BuildPendingCallbackLogFields()}");
+            return true;
+        }
+
+        Status = BuildStatus(state, $"blocked: callback confirm Yes failed {FormatPendingCallbackAction(pendingCallbackAction)}");
+        LogWarning($"hlauto callback-confirm-answer-failed action={FormatPendingCallbackAction(pendingCallbackAction)} answer=Yes prompt='{Escape(state.SelectYesnoPrompt)}' {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "callback-confirm")} {BuildPendingCallbackLogFields()}");
+        return true;
+    }
+
+    private bool TryHandlePendingCallbackProof(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        DateTime now,
+        AutomationDecision decision)
+    {
+        if (TryGetPendingCallbackProof(state, solverState, out var proof, out var serverRowSequence))
+        {
+            ConfirmPendingCallback(state, decision, now, proof, serverRowSequence);
+            return true;
+        }
+
+        if (IsPendingCallbackTimedOut(now))
+        {
+            TimeoutPendingCallback(state, solverState, surface, now);
+            return true;
+        }
+
+        Status = BuildStatus(state, $"waiting: callback proof {FormatPendingCallbackAction(pendingCallbackAction)}");
+        return true;
+    }
+
+    private void ConfirmPendingCallback(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        AutomationDecision decision,
+        DateTime now,
+        string proof,
+        ulong? serverRowSequence)
+    {
+        var action = pendingCallbackAction;
+        var actionName = FormatPendingCallbackAction(action);
+        var proofFields = serverRowSequence.HasValue
+            ? $"proof={EscapeToken(proof)} sourceRowSeq={serverRowSequence.Value.ToString(CultureInfo.InvariantCulture)}"
+            : $"proof={EscapeToken(proof)}";
+        LogAction($"hlauto callback-confirmed action={actionName} {proofFields} {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "callback-proof")} {BuildPendingCallbackLogFields()}");
+
+        var shouldRetainDirection = action == PendingCallbackAction.TryLuck
+                                    && IsPlayAction(decision.Action)
+                                    && IsDirectionProof(proof);
+        var shouldCommitPlay = action == PendingCallbackAction.TryLuck
+                               && IsPlayAction(decision.Action)
+                               && string.Equals(proof, "trusted-server-card-state", StringComparison.OrdinalIgnoreCase);
+
+        ClearPendingCallbackState();
+        lastBlockedReason = string.Empty;
+        if (shouldRetainDirection)
+        {
+            retainedDecision = decision with { Retained = true, ObservedUtc = now };
+            lastDirectionDecisionSource = "retained";
+        }
+        else if (shouldCommitPlay)
+        {
+            CommitPlay(decision, "callback-proof");
+        }
+        else if (action == PendingCallbackAction.OpenChest)
+        {
+            retainedDecision = null;
+            ClearDirectionState(clearTarget: true);
+            lastDirectionDecisionSource = "none";
+        }
+
+        Status = BuildStatus(state, $"callback-confirmed {actionName} proof={proof}");
+    }
+
+    private void TimeoutPendingCallback(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        DateTime now,
+        string reason = "")
+    {
+        var timeoutPhase = pendingCallbackPhase;
+        pendingCallbackTimedOutPhase = timeoutPhase;
+        pendingCallbackPhase = PendingCallbackPhase.TimedOut;
+        var actionName = FormatPendingCallbackAction(pendingCallbackAction);
+        var reasonField = string.IsNullOrWhiteSpace(reason) ? string.Empty : $" reason={EscapeToken(reason)}";
+        if (!pendingCallbackTimeoutLogged)
+        {
+            pendingCallbackTimeoutLogged = true;
+            LogWarning($"hlauto callback-timeout action={actionName} phase={FormatPendingCallbackPhase(timeoutPhase)}{reasonField} age={FormatPendingCallbackAgeSeconds(now)} {BuildAddonLogFields(state)} {BuildPendingCallbackLogFields()}");
+        }
+
+        Block(
+            state,
+            solverState,
+            surface,
+            "blocked: callback timeout",
+            BuildPendingCallbackTimeoutReason(),
+            incompleteAddon: true);
     }
 
     private void TrySelectDirection(
@@ -1037,6 +1295,121 @@ public sealed class HigherLowerAutomationService
         lastDirectionTargetDistance = null;
     }
 
+    private void ClearPendingCallbackState()
+    {
+        pendingCallbackAction = PendingCallbackAction.None;
+        pendingCallbackPhase = PendingCallbackPhase.None;
+        pendingCallbackTimedOutPhase = PendingCallbackPhase.None;
+        pendingCallbackDecision = null;
+        pendingCallbackSentUtc = DateTime.MinValue;
+        pendingCallbackPhaseStartedUtc = DateTime.MinValue;
+        pendingCallbackBaselineServerRowSequence = 0;
+        pendingCallbackHasBaselineServerRowSequence = false;
+        pendingCallbackConfirmVisibleLogged = false;
+        pendingCallbackTimeoutLogged = false;
+    }
+
+    private bool HasPendingCallback()
+        => pendingCallbackAction != PendingCallbackAction.None
+           && pendingCallbackPhase != PendingCallbackPhase.None;
+
+    private bool IsPendingCallbackTimedOut(DateTime now)
+        => pendingCallbackPhaseStartedUtc != DateTime.MinValue
+           && now - pendingCallbackPhaseStartedUtc >= PendingCallbackTimeout;
+
+    private bool TryGetPendingCallbackProof(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        out string proof,
+        out ulong? serverRowSequence)
+    {
+        proof = string.Empty;
+        serverRowSequence = null;
+        if (pendingCallbackAction == PendingCallbackAction.TryLuck)
+        {
+            if (state.SelectYesnoVisible && IsHigherLowerPrompt(state.SelectYesnoPrompt))
+            {
+                proof = "selectyesno-highlow-prompt";
+                return true;
+            }
+
+            if (state.HighTargetable || state.LowTargetable)
+            {
+                proof = "targetable-highlow";
+                return true;
+            }
+
+            if (TryGetTrustedNewServerCardState(solverState, out var rowSequence))
+            {
+                proof = "trusted-server-card-state";
+                serverRowSequence = rowSequence;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (pendingCallbackAction == PendingCallbackAction.OpenChest)
+        {
+            if (!state.TreasureHighLowVisible
+                && !state.NotificationChallengeVisible
+                && !state.HighTargetable
+                && !state.LowTargetable
+                && !state.SelectYesnoVisible)
+            {
+                proof = "higherlower-surface-cleared";
+                return true;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private bool TryGetTrustedNewServerCardState(
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        out ulong rowSequence)
+    {
+        rowSequence = 0;
+        if (solverState.Confidence != HigherLowerCardVfxSolverService.SolverConfidence.High
+            || !solverState.CurrentCard.HasValue
+            || solverState.CurrentCard.Value is < 1 or > 9
+            || !TryGetServerRowSequence(solverState, out rowSequence))
+        {
+            return false;
+        }
+
+        return !pendingCallbackHasBaselineServerRowSequence || rowSequence > pendingCallbackBaselineServerRowSequence;
+    }
+
+    private static bool TryGetServerRowSequence(
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        out ulong rowSequence)
+    {
+        rowSequence = 0;
+        if (!string.Equals(solverState.CardSource, HigherLowerCardVfxSolverService.ServerEObjAnimSource, StringComparison.OrdinalIgnoreCase)
+            || !solverState.SourceRowSequence.HasValue)
+        {
+            return false;
+        }
+
+        rowSequence = solverState.SourceRowSequence.Value;
+        return true;
+    }
+
+    private static bool IsDirectionProof(string proof)
+        => string.Equals(proof, "selectyesno-highlow-prompt", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(proof, "targetable-highlow", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildPendingCallbackTimeoutReason()
+    {
+        var phase = pendingCallbackTimedOutPhase == PendingCallbackPhase.None
+            ? pendingCallbackPhase
+            : pendingCallbackTimedOutPhase;
+        return $"callback {FormatPendingCallbackAction(pendingCallbackAction)} timed out while {FormatPendingCallbackPhase(phase)}";
+    }
+
     private void TryStopVnav(string source, bool force = false)
     {
         var now = DateTime.UtcNow;
@@ -1102,17 +1475,17 @@ public sealed class HigherLowerAutomationService
         };
 
     private string BuildStatus(TreasureHighLowDiagnosticService.HigherLowerRuntimeState state, string suffix)
-        => $"Higher/Lower automation {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} card={FormatCard(lastDecision?.Card)} action={lastDecision?.Action.ToString() ?? "None"} source='{lastDecision?.Source ?? "none"}' directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingAge={FormatPendingAgeSeconds()} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{lastBlockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} knownCards={state.KnownCardCount}.";
+        => $"Higher/Lower automation {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} card={FormatCard(lastDecision?.Card)} action={lastDecision?.Action.ToString() ?? "None"} source='{lastDecision?.Source ?? "none"}' directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingAge={FormatPendingAgeSeconds()} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{lastBlockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} knownCards={state.KnownCardCount}.";
 
     private string BuildBlockedStatus(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
         HigherLowerCardVfxSolverService.SolverState solverState,
         string suffix,
         string blockedReason)
-        => $"Higher/Lower solver {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingAge={FormatPendingAgeSeconds()} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{blockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} decodedCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} solverChoice={solverState.RecommendedChoice} confidence={solverState.Confidence.ToString().ToLowerInvariant()} reason='{solverState.Reason}' source='{solverState.CardSource}' slot={solverState.Slot} textureIndex={(solverState.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}.";
+        => $"Higher/Lower solver {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingAge={FormatPendingAgeSeconds()} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{blockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} decodedCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} solverChoice={solverState.RecommendedChoice} confidence={solverState.Confidence.ToString().ToLowerInvariant()} reason='{solverState.Reason}' source='{solverState.CardSource}' slot={solverState.Slot} textureIndex={(solverState.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}.";
 
     private string BuildSessionLogFields()
-        => $"dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={EscapeToken(lastDirectionDecisionSource)} directionTarget={EscapeToken(lastDirectionTargetName)} directionDistance={FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : EscapeToken(pendingDirectionName))} pendingAge={FormatPendingAgeSeconds()} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} retained={(retainedDecision is not null).ToString().ToLowerInvariant()} retainedStep={(retainedDecision?.Step.ToString(CultureInfo.InvariantCulture) ?? "none")} retainedCard={FormatCard(retainedDecision?.Card)} retainedAction={(retainedDecision?.Action.ToString() ?? "None")}";
+        => $"dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={EscapeToken(lastDirectionDecisionSource)} directionTarget={EscapeToken(lastDirectionTargetName)} directionDistance={FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : EscapeToken(pendingDirectionName))} pendingAge={FormatPendingAgeSeconds()} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} retained={(retainedDecision is not null).ToString().ToLowerInvariant()} retainedStep={(retainedDecision?.Step.ToString(CultureInfo.InvariantCulture) ?? "none")} retainedCard={FormatCard(retainedDecision?.Card)} retainedAction={(retainedDecision?.Action.ToString() ?? "None")}";
 
     private static string BuildAddonLogFields(TreasureHighLowDiagnosticService.HigherLowerRuntimeState state)
         => $"addonCurrentCard={EscapeToken(state.AddonCurrentCardText)} addonOtherCard={EscapeToken(state.AddonOtherCardText)}";
@@ -1148,6 +1521,11 @@ public sealed class HigherLowerAutomationService
             ? null
             : Math.Max(0, (now - pendingDirectionInteractUtc).TotalSeconds);
 
+    private double? GetPendingCallbackAgeSeconds(DateTime now)
+        => !HasPendingCallback() || pendingCallbackPhaseStartedUtc == DateTime.MinValue
+            ? null
+            : Math.Max(0, (now - pendingCallbackPhaseStartedUtc).TotalSeconds);
+
     private bool IsDutyExitGraceActive(DateTime now)
         => lastHigherLowerActivityUtc != DateTime.MinValue
            && now - lastHigherLowerActivityUtc <= DutyExitQuietGrace;
@@ -1168,6 +1546,42 @@ public sealed class HigherLowerAutomationService
             ? age.Value.ToString("0.0", CultureInfo.InvariantCulture)
             : "none";
     }
+
+    private string FormatPendingCallbackAgeSeconds(DateTime now)
+    {
+        var age = GetPendingCallbackAgeSeconds(now);
+        return age.HasValue
+            ? age.Value.ToString("0.0", CultureInfo.InvariantCulture)
+            : "none";
+    }
+
+    private string BuildPendingCallbackLogFields()
+        => $"callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} callbackSentAge={FormatPendingCallbackSentAgeSeconds(DateTime.UtcNow)} callbackBaselineServerRowSeq={(pendingCallbackHasBaselineServerRowSequence ? pendingCallbackBaselineServerRowSequence.ToString(CultureInfo.InvariantCulture) : "none")}";
+
+    private string FormatPendingCallbackSentAgeSeconds(DateTime now)
+    {
+        if (!HasPendingCallback() || pendingCallbackSentUtc == DateTime.MinValue)
+            return "none";
+
+        return Math.Max(0, (now - pendingCallbackSentUtc).TotalSeconds).ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatPendingCallbackAction(PendingCallbackAction action)
+        => action switch
+        {
+            PendingCallbackAction.TryLuck => "TryLuck",
+            PendingCallbackAction.OpenChest => "OpenChest",
+            _ => "none",
+        };
+
+    private static string FormatPendingCallbackPhase(PendingCallbackPhase phase)
+        => phase switch
+        {
+            PendingCallbackPhase.WaitingSelectYesno => "waiting-selectyesno",
+            PendingCallbackPhase.WaitingProof => "waiting-proof",
+            PendingCallbackPhase.TimedOut => "timed-out",
+            _ => "none",
+        };
 
     private string FormatDutyExitGraceRemainingSeconds()
     {
@@ -1203,6 +1617,21 @@ public sealed class HigherLowerAutomationService
         StartPlay = 3,
     }
 
+    private enum PendingCallbackAction
+    {
+        None = 0,
+        TryLuck = 1,
+        OpenChest = 2,
+    }
+
+    private enum PendingCallbackPhase
+    {
+        None = 0,
+        WaitingSelectYesno = 1,
+        WaitingProof = 2,
+        TimedOut = 3,
+    }
+
     private sealed record AutomationDecision(
         int Step,
         int? Card,
@@ -1234,6 +1663,9 @@ public sealed class HigherLowerAutomationService
         float? DirectionTargetDistance,
         string PendingDirectionTarget,
         double? PendingDirectionInteractAgeSeconds,
+        string PendingCallbackAction,
+        string PendingCallbackPhase,
+        double? PendingCallbackAgeSeconds,
         bool BlocksDutyExit,
         DateTime LastHigherLowerActivityUtc,
         string LastHigherLowerActivitySource,

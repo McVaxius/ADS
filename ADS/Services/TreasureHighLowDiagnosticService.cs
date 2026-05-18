@@ -88,6 +88,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private string lastDatamineSignalLogKey = string.Empty;
     private DateTime lastDatamineSignalLogUtc = DateTime.MinValue;
     private readonly Dictionary<string, DateTime> datamineTrackedVfxLogUtc = new(StringComparer.Ordinal);
+    private readonly HashSet<string> datamineServerCardLogKeys = new(StringComparer.Ordinal);
     private HigherLowerCardMap cardMap = new();
     private bool cardMapLoaded;
     private bool cardMapDirty;
@@ -472,7 +473,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             $"{Prefix} datamine-solver addonCurrentCard={EscapeToken(addonCurrentCard)} addonOtherCard={EscapeToken(addonOtherCard)} " +
             $"graphicKey='{Escape(runtime.CurrentGraphicKey)}' visualCard={(runtime.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} " +
             $"decodedCard={decodedCard} action={EscapeToken(state.RecommendedChoice)} confidence={state.Confidence.ToString().ToLowerInvariant()} " +
-            $"source='{Escape(state.CardSource)}' slot={EscapeToken(state.Slot)} textureIndex={(state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} reason='{Escape(state.Reason)}'");
+            $"source='{Escape(state.CardSource)}' slot={EscapeToken(state.Slot)} sourceRowSeq={(state.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none")} " +
+            $"sourceState={EscapeToken(state.SourceStateData)} textureIndex={(state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} reason='{Escape(state.Reason)}'");
         WriteDatamineJsonRow(
             territoryId,
             "solver",
@@ -493,6 +495,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 Reason = state.Reason,
                 Source = state.CardSource,
                 state.Slot,
+                state.SourceRowSequence,
+                state.SourceStateData,
                 state.TextureIndex,
                 state.TextureIndexSource,
             });
@@ -529,6 +533,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             runtime.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "none",
             solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "none",
             solverState.Confidence.ToString(),
+            solverState.CardSource,
+            solverState.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none",
+            solverState.SourceStateData,
             solverState.Reason,
             decisionCard?.ToString(CultureInfo.InvariantCulture) ?? "none",
             decisionAction,
@@ -552,7 +559,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             $"graphicKey='{Escape(runtime.CurrentGraphicKey)}' visualCard={(runtime.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} " +
             $"decodedCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} decision={EscapeToken(decisionAction)} " +
             $"decisionCard={(decisionCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} retained={retained.ToString().ToLowerInvariant()} " +
-            $"retainedCard={(retainedCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} blockedReason='{Escape(blockedReason)}'");
+            $"retainedCard={(retainedCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} solverSourceRowSeq={(solverState.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none")} blockedReason='{Escape(blockedReason)}'");
         WriteDatamineJsonRow(
             territoryId,
             "surface",
@@ -582,6 +589,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 SolverReason = solverState.Reason,
                 SolverSource = solverState.CardSource,
                 solverState.Slot,
+                solverState.SourceRowSequence,
+                solverState.SourceStateData,
                 solverState.TextureIndex,
                 solverState.TextureIndexSource,
                 DecisionCard = decisionCard,
@@ -649,6 +658,53 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 probe.DecodedCard,
                 Confidence = probe.Confidence.ToString().ToLowerInvariant(),
                 probe.Reason,
+            });
+    }
+
+    public void RecordDatamineServerCard(HigherLowerCardVfxSolverService.ServerCardStateRow row)
+    {
+        TouchDatamineSession(row.TimestampUtc, $"server-card:{row.RowSequence}", row.TerritoryId, allowStart: false);
+        if (!ShouldRecordDatamine())
+            return;
+
+        var key = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{row.RowSequence}:{row.Accepted}:{row.DecodedCard?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{row.Slot}:{row.Reason}");
+        if (!datamineServerCardLogKeys.Add(key))
+            return;
+
+        var territoryId = ResolveDatamineTerritory(row.TerritoryId);
+        if (!EnsureDatamineWriters(territoryId))
+            return;
+
+        WriteDatamineLogLine(
+            $"{Prefix} datamine-server-card rowSeq={row.RowSequence} rowTsUtc={row.TimestampUtc:O} " +
+            $"actor=0x{row.ActorId:X8} objectId=0x{row.GameObjectId:X} baseId={row.BaseId} layoutId={row.LayoutId} gimmickId={row.GimmickId} " +
+            $"slot={EscapeToken(row.Slot)} p1=0x{row.P1:X4} p2=0x{row.P2:X4} state={EscapeToken(row.State)} " +
+            $"decodedCard={(row.DecodedCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} accepted={row.Accepted.ToString().ToLowerInvariant()} " +
+            $"reason='{Escape(row.Reason)}' pos={HigherLowerCardVfxSolverService.FormatPosition(row.Position ?? Vector3.Zero)}");
+        WriteDatamineJsonRow(
+            territoryId,
+            "server_card",
+            new
+            {
+                row.RowSequence,
+                row.TimestampUtc,
+                row.ActorId,
+                GameObjectId = $"0x{row.GameObjectId:X}",
+                row.EntityId,
+                row.BaseId,
+                row.LayoutId,
+                row.GimmickId,
+                row.ObjectName,
+                Position = HigherLowerCardVfxSolverService.FormatPosition(row.Position ?? Vector3.Zero),
+                row.Slot,
+                row.P1,
+                row.P2,
+                row.State,
+                row.DecodedCard,
+                row.Accepted,
+                row.Reason,
             });
     }
 
@@ -1845,6 +1901,16 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 row.BossModKind,
                 row.ActorId,
                 TargetId = $"0x{row.TargetId:X}",
+                row.Category,
+                row.P1,
+                row.P2,
+                row.P3,
+                row.P4,
+                row.P5,
+                row.P6,
+                row.P7,
+                row.P8,
+                row.Replaying,
                 row.ObjectName,
                 row.ObjectKind,
                 GameObjectId = $"0x{row.GameObjectId:X}",
@@ -2247,6 +2313,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         lastDatamineSurfaceKey = string.Empty;
         lastDatamineSurfaceUtc = DateTime.MinValue;
         datamineTrackedVfxLogUtc.Clear();
+        datamineServerCardLogKeys.Clear();
     }
 
     private void ResetDatamineSessionGate()
