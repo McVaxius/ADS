@@ -12,6 +12,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     public const string LowerChoice = "Lower";
     public const string OpenChestChoice = "OpenChest";
     public const string AvfxTexturePathSource = "avfx-texture-path";
+    public const string StaticAvfxMetadataSource = "static-avfx-metadata";
     public const string VisualGraphicKeySource = "visual-graphic-key";
     public const string AddonAtkValueSource = "addon-atk-value[4]";
     private static readonly TimeSpan ActiveProbeTtl = TimeSpan.FromSeconds(60);
@@ -64,7 +65,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         var slots = diagnostics.CaptureBoardSlots();
         var slot = ResolveSlot(position, slots);
         var slotCandidates = FormatSlotCandidates(position, slots);
-        var source = AvfxTexturePathSource;
+        var source = StaticAvfxMetadataSource;
         var territoryId = context.TerritoryTypeId != 0 ? context.TerritoryTypeId : 0;
 
         if (string.IsNullOrWhiteSpace(normalizedPath))
@@ -139,7 +140,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             .ToList();
 
         if (txNoCardMatches.Count == 1
-            && HigherLowerCardVfxCatalog.TryDecode(catalog.Path, txNoCardMatches[0].CardTexturePath.TexturePath, slot, out var decodedCard, out var pairText))
+            && HigherLowerCardVfxCatalog.TryDecode(catalog.Path, txNoCardMatches[0].CardTexturePath.TexturePath, slot, out _, out var pairText))
         {
             return new CardProbeRow(
                 TimestampUtc: timestampUtc,
@@ -155,9 +156,9 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                 CardTexturePaths: inputs.CardTexturePaths,
                 SlotCandidates: slotCandidates,
                 Pair: pairText,
-                DecodedCard: decodedCard,
-                Confidence: SolverConfidence.High,
-                Reason: "texture-path-decoded");
+                DecodedCard: null,
+                Confidence: SolverConfidence.Blocked,
+                Reason: "static-avfx-texture-index-not-runtime-evidence");
         }
 
         if (txNoCardMatches.Count > 1)
@@ -183,7 +184,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
 
         var distinctCardTexturePaths = DeduplicateCardTexturePaths(inputs.CardTexturePaths);
         if (distinctCardTexturePaths.Count == 1
-            && HigherLowerCardVfxCatalog.TryDecode(catalog.Path, distinctCardTexturePaths[0].TexturePath, slot, out decodedCard, out pairText))
+            && HigherLowerCardVfxCatalog.TryDecode(catalog.Path, distinctCardTexturePaths[0].TexturePath, slot, out _, out pairText))
         {
             return new CardProbeRow(
                 TimestampUtc: timestampUtc,
@@ -199,9 +200,9 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                 CardTexturePaths: inputs.CardTexturePaths,
                 SlotCandidates: slotCandidates,
                 Pair: pairText,
-                DecodedCard: decodedCard,
-                Confidence: SolverConfidence.High,
-                Reason: "single-card-texture-path-decoded");
+                DecodedCard: null,
+                Confidence: SolverConfidence.Blocked,
+                Reason: "static-avfx-texture-path-not-runtime-evidence");
         }
 
         return new CardProbeRow(
@@ -280,6 +281,8 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             try
             {
                 trackedRows = vfxTraceService.GetTrackedSnapshot(context);
+                foreach (var row in trackedRows)
+                    diagnostics.RecordDatamineTrackedVfx(row);
             }
             catch (Exception ex)
             {
@@ -325,8 +328,6 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                 {
                     next = BuildVisualState(runtime);
                 }
-
-                next = ApplyAddonAgreement(runtime, next);
             }
 
             currentState = next;
@@ -460,43 +461,6 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             Slot: row.Slot,
             TextureIndex: row.TextureIndex,
             TextureIndexSource: NormalizeSource(row.CardSource));
-    }
-
-    private static SolverState ApplyAddonAgreement(
-        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
-        SolverState state)
-    {
-        if (state.Confidence != SolverConfidence.High
-            || !state.CurrentCard.HasValue
-            || state.CurrentCard.Value is < 1 or > 9
-            || !runtime.AddonCurrentCard.HasValue
-            || runtime.AddonCurrentCard.Value is < 1 or > 9)
-        {
-            return state;
-        }
-
-        var addonCard = runtime.AddonCurrentCard.Value;
-        var decodedCard = state.CurrentCard.Value;
-        if (addonCard != decodedCard)
-        {
-            return state with
-            {
-                CurrentCard = null,
-                RecommendedChoice = "Blocked",
-                Confidence = SolverConfidence.Blocked,
-                Reason = $"addon-card-mismatch addonCard={addonCard} decodedCard={decodedCard} decodedSource='{Escape(state.CardSource)}'",
-                CardSource = $"{NormalizeSource(state.CardSource)}+addon-mismatch",
-            };
-        }
-
-        if (state.CardSource.Contains("addon-atk-match", StringComparison.OrdinalIgnoreCase))
-            return state;
-
-        return state with
-        {
-            CardSource = $"{NormalizeSource(state.CardSource)}+addon-atk-match",
-            Reason = $"{state.Reason}; addon atk-value[4] matched",
-        };
     }
 
     private static (string Choice, string Reason) BuildDecision(int card)

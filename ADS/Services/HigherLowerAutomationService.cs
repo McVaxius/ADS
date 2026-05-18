@@ -54,7 +54,7 @@ public sealed class HigherLowerAutomationService
     private DateTime pendingDirectionInteractUtc = DateTime.MinValue;
     private DateTime lastHigherLowerActivityUtc = DateTime.MinValue;
     private string lastHigherLowerActivitySource = "none";
-    private bool higherLowerActivitySessionArmed;
+    private OwnershipMode lastOwnershipMode = OwnershipMode.Idle;
 
     public HigherLowerAutomationService(
         TreasureHighLowDiagnosticService diagnostics,
@@ -156,10 +156,15 @@ public sealed class HigherLowerAutomationService
         var solverState = solver.CurrentState;
         ResetSessionForContext(context);
 
+        var enteredLeaving = ownershipMode == OwnershipMode.Leaving && lastOwnershipMode != OwnershipMode.Leaving;
+        lastOwnershipMode = ownershipMode;
+        if (enteredLeaving)
+            ClearHigherLowerActivitySession();
+
         var surface = DetectSurface(state);
         lastSurfaceSource = surface.Source;
-        UpdateHigherLowerActivity(now, context, state, solverState, surface);
-        BlocksDutyExit = context.InInstancedDuty && IsDutyExitGraceActive(now);
+        UpdateHigherLowerActivity(now, context, ownershipMode, surface);
+        BlocksDutyExit = ownershipMode == OwnershipMode.Leaving && context.InInstancedDuty && IsDutyExitGraceActive(now);
         var currentDecision = TryBuildCurrentDecision(state, solverState, now, out var cardBlockedReason);
         if (currentDecision is not null)
         {
@@ -430,11 +435,10 @@ public sealed class HigherLowerAutomationService
     private void UpdateHigherLowerActivity(
         DateTime now,
         DutyContextSnapshot context,
-        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
-        HigherLowerCardVfxSolverService.SolverState solverState,
+        OwnershipMode ownershipMode,
         HigherLowerSurface surface)
     {
-        if (!context.InInstancedDuty)
+        if (!context.InInstancedDuty || ownershipMode != OwnershipMode.Leaving)
         {
             ClearHigherLowerActivitySession();
             return;
@@ -442,34 +446,18 @@ public sealed class HigherLowerAutomationService
 
         if (surface.Present)
         {
-            MarkHigherLowerActivity(now, surface.Source, armSession: true);
+            MarkHigherLowerActivity(now, surface.Source);
             return;
         }
 
-        if (!IsDutyExitGraceActive(now) && pendingDirectionDecision is null && retainedDecision is null)
+        if (!IsDutyExitGraceActive(now))
             ClearHigherLowerActivitySession();
-
-        if (!higherLowerActivitySessionArmed)
-            return;
-
-        if (solverState.Active)
-        {
-            MarkHigherLowerActivity(now, "solver");
-            return;
-        }
-
-        var signalUtc = diagnostics.LastHigherLowerSignalUtc;
-        if (signalUtc > lastHigherLowerActivityUtc)
-            MarkHigherLowerActivity(signalUtc, diagnostics.LastHigherLowerSignalSource);
     }
 
-    private void MarkHigherLowerActivity(DateTime timestampUtc, string source, bool armSession = false)
+    private void MarkHigherLowerActivity(DateTime timestampUtc, string source)
     {
         if (timestampUtc < lastHigherLowerActivityUtc)
             return;
-
-        if (armSession)
-            higherLowerActivitySessionArmed = true;
 
         lastHigherLowerActivityUtc = timestampUtc;
         lastHigherLowerActivitySource = string.IsNullOrWhiteSpace(source) ? "unknown" : source;
@@ -477,7 +465,6 @@ public sealed class HigherLowerAutomationService
 
     private void ClearHigherLowerActivitySession()
     {
-        higherLowerActivitySessionArmed = false;
         lastHigherLowerActivityUtc = DateTime.MinValue;
         lastHigherLowerActivitySource = "none";
     }
@@ -552,19 +539,8 @@ public sealed class HigherLowerAutomationService
 
         if (trustedCard.HasValue)
         {
-            if (state.AddonCurrentCard is >= 1 and <= 9
-                && state.AddonCurrentCard.Value != trustedCard.Value)
-            {
-                blockedReason = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"addon-card-mismatch addonCard={state.AddonCurrentCard.Value}; decodedCard={trustedCard.Value}; decodedSource='{Escape(trustedSource)}'; currentGraphicKey='{Escape(state.CurrentGraphicKey)}'");
-                return false;
-            }
-
             card = trustedCard.Value;
-            source = state.AddonCurrentCard == trustedCard && !trustedSource.Contains("addon-atk-match", StringComparison.OrdinalIgnoreCase)
-                ? $"{trustedSource}+addon-atk-match"
-                : trustedSource;
+            source = trustedSource;
             return true;
         }
 
@@ -572,13 +548,13 @@ public sealed class HigherLowerAutomationService
         {
             blockedReason = string.Create(
                 CultureInfo.InvariantCulture,
-                $"addon-only card blocked; addonCard={state.AddonCurrentCard.Value}; currentGraphicKey='{Escape(state.CurrentGraphicKey)}'; solverCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}; solverConfidence={solverState.Confidence.ToString().ToLowerInvariant()}; solverReason='{Escape(solverState.Reason)}'");
+                $"no trusted runtime card decode; addon atk ignored; addonCard={state.AddonCurrentCard.Value}; currentGraphicKey='{Escape(state.CurrentGraphicKey)}'; solverCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}; solverConfidence={solverState.Confidence.ToString().ToLowerInvariant()}; solverReason='{Escape(solverState.Reason)}'");
             return false;
         }
 
         blockedReason = string.Create(
             CultureInfo.InvariantCulture,
-            $"no reliable card; addonCurrentCard={state.AddonCurrentCardText}; solverCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}; solverConfidence={solverState.Confidence.ToString().ToLowerInvariant()}; solverReason='{Escape(solverState.Reason)}'");
+            $"no trusted runtime card decode; addonCurrentCard={state.AddonCurrentCardText}; solverCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}; solverConfidence={solverState.Confidence.ToString().ToLowerInvariant()}; solverReason='{Escape(solverState.Reason)}'");
         return false;
     }
 
@@ -592,7 +568,7 @@ public sealed class HigherLowerAutomationService
         if (solverState.Confidence != HigherLowerCardVfxSolverService.SolverConfidence.High
             || !solverState.CurrentCard.HasValue
             || solverState.CurrentCard.Value is < 1 or > 9
-            || IsAddonOnlyCardSource(source))
+            || IsUntrustedSolverCardSource(source))
         {
             return false;
         }
@@ -601,9 +577,11 @@ public sealed class HigherLowerAutomationService
         return true;
     }
 
-    private static bool IsAddonOnlyCardSource(string source)
+    private static bool IsUntrustedSolverCardSource(string source)
         => string.Equals(source, HigherLowerCardVfxSolverService.AddonAtkValueSource, StringComparison.OrdinalIgnoreCase)
-           || source.StartsWith($"{HigherLowerCardVfxSolverService.AddonAtkValueSource}+", StringComparison.OrdinalIgnoreCase);
+           || source.StartsWith($"{HigherLowerCardVfxSolverService.AddonAtkValueSource}+", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(source, HigherLowerCardVfxSolverService.StaticAvfxMetadataSource, StringComparison.OrdinalIgnoreCase)
+           || source.StartsWith($"{HigherLowerCardVfxSolverService.StaticAvfxMetadataSource}+", StringComparison.OrdinalIgnoreCase);
 
     private static AutomationDecision BuildPolicyDecision(
         int step,
@@ -724,7 +702,7 @@ public sealed class HigherLowerAutomationService
         TryStopVnav("selectyesno", force: true);
         if (GameInteractionHelper.TrySelectYesNo(yes, gameGui, log))
         {
-            MarkHigherLowerActivity(DateTime.UtcNow, "hlauto-answer", armSession: true);
+            MarkHigherLowerActivity(DateTime.UtcNow, "hlauto-answer");
             Status = BuildStatus(state, $"answer {promptLabel} {answerText}: sent {(yes ? "Yes" : "No")}");
             LogAction($"hlauto answer {EscapeToken(promptLabel)} {answerText} {BuildAddonLogFields(state)} {decisionFields} reason='{Escape(decision.Reason)}'");
             LogDirectionConfirmed(state, decision, "selectyesno", "prompt-answered");
@@ -754,7 +732,7 @@ public sealed class HigherLowerAutomationService
         TryStopVnav($"addon-{label}", force: true);
         if (GameInteractionHelper.TryClickAddonNodeButton(AddonName, nodeId, gameGui, log))
         {
-            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-click:{label}", armSession: true);
+            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-click:{label}");
             Status = BuildStatus(state, $"click {label}: {reason}");
             LogAction($"hlauto click {EscapeToken(label)} addon={AddonName} nodeId={nodeId} reason='{Escape(reason)}' {BuildAddonLogFields(state)} {decisionFields}");
             return true;
@@ -814,7 +792,6 @@ public sealed class HigherLowerAutomationService
                 target.Position.Z);
             if (GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
             {
-                MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-nav:{direction}", armSession: true);
                 Status = BuildStatus(state, $"navigating-to-direction {direction} at {FormatDistance(distance)}");
                 LogAction($"hlauto direction-nav target={EscapeToken(direction)} {targetFields} {BuildAddonLogFields(state)} {decisionFields}");
                 return;
@@ -828,7 +805,7 @@ public sealed class HigherLowerAutomationService
         TryStopVnav($"direction-{direction}", force: true);
         if (GameInteractionHelper.TryInteractWithObject(targetManager, target, log))
         {
-            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-interact:{direction}", armSession: true);
+            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-interact:{direction}");
             SetPendingDirectionInteract(decision, direction, target);
             Status = BuildStatus(state, $"direction-interact-sent {direction} for card {FormatCard(decision.Card)}");
             LogAction($"hlauto direction-interact-sent target={EscapeToken(direction)} {targetFields} {BuildAddonLogFields(state)} {decisionFields}");
@@ -889,7 +866,6 @@ public sealed class HigherLowerAutomationService
     {
         if (IsPlayAction(decision.Action))
         {
-            MarkHigherLowerActivity(DateTime.UtcNow, $"hlauto-commit:{source}", armSession: true);
             completedPlayCount = Math.Max(0, completedPlayCount) + 1;
             currentGambleStep = completedPlayCount + 1;
             LogAction($"hlauto step-advance source={EscapeToken(source)} fromStep={decision.Step} nextStep={currentGambleStep} playsCompleted={completedPlayCount} card={FormatCard(decision.Card)} action={decision.Action}");

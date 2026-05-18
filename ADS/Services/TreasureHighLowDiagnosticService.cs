@@ -82,6 +82,12 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private bool datamineFileErrorLogged;
     private string lastDatamineSurfaceKey = string.Empty;
     private DateTime lastDatamineSurfaceUtc = DateTime.MinValue;
+    private DateTime datamineSessionLastSignalUtc = DateTime.MinValue;
+    private DateTime datamineSessionGraceUntilUtc = DateTime.MinValue;
+    private string datamineSessionLastSignalSource = "none";
+    private string lastDatamineSignalLogKey = string.Empty;
+    private DateTime lastDatamineSignalLogUtc = DateTime.MinValue;
+    private readonly Dictionary<string, DateTime> datamineTrackedVfxLogUtc = new(StringComparer.Ordinal);
     private HigherLowerCardMap cardMap = new();
     private bool cardMapLoaded;
     private bool cardMapDirty;
@@ -97,7 +103,10 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private bool traceVfxTruncationLogged;
     private DateTime lastHigherLowerSignalUtc = DateTime.MinValue;
     private string lastHigherLowerSignalSource = "none";
+    private static readonly TimeSpan DatamineSessionGrace = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan DatamineSignalLogCooldown = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DatamineSurfaceCooldown = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan DatamineTrackedVfxCooldown = TimeSpan.FromSeconds(1);
     private const int KnownCardTagMaxSnapshots = 6;
     private static readonly TimeSpan KnownCardTagTtl = TimeSpan.FromSeconds(15);
     private const int KnownBoardTagMaxSnapshots = 12;
@@ -292,6 +301,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
 
         CloseDatamineWritersIfOpen();
+        ResetDatamineSessionGate();
         ResetDatamineCooldown();
         log.Information($"{Prefix} vfx datamining disabled.");
     }
@@ -359,6 +369,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     {
         if (row.HigherLowerRelevant)
             MarkHigherLowerSignal(row.TimestampUtc, $"server:{row.Kind}");
+        RecordDatamineServerEvent(row);
 
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
@@ -587,7 +598,11 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     public void RecordDatamineCardProbe(HigherLowerCardVfxSolverService.CardProbeRow probe)
     {
-        if (!ShouldRecordDatamine() || string.IsNullOrWhiteSpace(probe.Path) || !IsDatamineCardPath(probe.Path, probe.NormalizedPath))
+        if (string.IsNullOrWhiteSpace(probe.Path) || !IsKnownCardAvfxPath(probe.Path, probe.NormalizedPath))
+            return;
+
+        TouchDatamineSession(DateTime.UtcNow, $"vfx-card:{probe.NormalizedPath}", probe.TerritoryId, allowStart: false);
+        if (!ShouldRecordDatamine())
             return;
 
         var territoryId = ResolveDatamineTerritory(probe.TerritoryId);
@@ -637,6 +652,60 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             });
     }
 
+    public void RecordDatamineTrackedVfx(HigherLowerVfxTraceService.TrackedVfxRow row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Path) || !IsKnownCardAvfxPath(row.Path, string.Empty))
+            return;
+
+        TouchDatamineSession(DateTime.UtcNow, $"tracked-vfx:{HigherLowerCardVfxCatalog.NormalizePath(row.Path)}", row.TerritoryId, allowStart: false);
+        if (!ShouldRecordDatamine())
+            return;
+
+        var now = DateTime.UtcNow;
+        var key = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{row.VfxId:X}:{HigherLowerCardVfxCatalog.NormalizePath(row.Path)}:{row.HasRun}:{row.PositionText}:{row.TextureIndexText}:{row.DecodedCardText}:{row.SolverReason}");
+        if (datamineTrackedVfxLogUtc.TryGetValue(key, out var last) && now - last < DatamineTrackedVfxCooldown)
+            return;
+
+        datamineTrackedVfxLogUtc[key] = now;
+        PruneDatamineTrackedVfxLog(now);
+
+        var territoryId = ResolveDatamineTerritory(row.TerritoryId);
+        if (!EnsureDatamineWriters(territoryId))
+            return;
+
+        WriteDatamineLogLine(
+            $"{Prefix} datamine-tracked-vfx path='{Escape(row.Path)}' vfxId=0x{row.VfxId:X} caster=0x{row.CasterId:X} target=0x{row.TargetId:X} " +
+            $"territory={territoryId} map={row.MapId} slot={EscapeToken(row.Slot)} textureIndex={row.TextureIndexText} decodedCard={row.DecodedCardText} " +
+            $"source='{Escape(row.CardSource)}' reason='{Escape(row.SolverReason)}' pos={row.PositionText} distance={row.DistanceText} ageSeconds={row.AgeSeconds.ToString("0.###", CultureInfo.InvariantCulture)} " +
+            $"isStatic={row.IsStatic} hasRun={row.HasRun}");
+        WriteDatamineJsonRow(
+            territoryId,
+            "tracked_vfx",
+            new
+            {
+                row.Path,
+                VfxId = $"0x{row.VfxId:X}",
+                CasterId = $"0x{row.CasterId:X}",
+                TargetId = $"0x{row.TargetId:X}",
+                row.CasterLabel,
+                row.TargetLabel,
+                row.MapId,
+                Position = row.PositionText,
+                row.DistanceText,
+                row.AgeSeconds,
+                row.IsStatic,
+                row.HasRun,
+                row.HigherLowerRelevant,
+                row.CardSource,
+                row.Slot,
+                row.TextureIndex,
+                row.DecodedCard,
+                row.SolverReason,
+            });
+    }
+
     public void RecordAutomationLine(string line)
     {
         var now = DateTime.UtcNow;
@@ -661,6 +730,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     public HigherLowerRuntimeState CaptureRuntimeState()
     {
         var runtime = CaptureLiveProbe().Runtime;
+        UpdateDatamineSessionFromRuntime(runtime, clientState.TerritoryType);
         StartLazyTraceIfAddonAppeared(runtime.TreasureHighLowVisible);
         return runtime;
     }
@@ -851,6 +921,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     {
         CloseWriter();
         CloseDatamineWriters();
+        ResetDatamineSessionGate();
     }
 
     public unsafe void Update(
@@ -863,7 +934,14 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         FinishTraceIfExpired(now);
         var traceActive = IsTraceActive(now);
         if (!configuration.HigherLowerVfxDataminingEnabled)
+        {
             CloseDatamineWritersIfOpen();
+            ResetDatamineSessionGate();
+        }
+        else
+        {
+            CloseDatamineSessionIfExpired(now);
+        }
 
         if (!configuration.HigherLowerDiagnosticsEnabled && !forceNextSnapshot && !traceActive)
             return;
@@ -1743,8 +1821,55 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
     }
 
+    private void RecordDatamineServerEvent(HigherLowerServerEventTraceService.ServerEventRow row)
+    {
+        if (row.HigherLowerRelevant)
+            TouchDatamineSession(DateTime.UtcNow, $"server:{row.KindLabel}", row.TerritoryId, allowStart: false);
+        if (!ShouldRecordDatamine())
+            return;
+
+        var territoryId = ResolveDatamineTerritory(row.TerritoryId);
+        if (!EnsureDatamineWriters(territoryId))
+            return;
+
+        WriteDatamineLogLine(
+            $"{Prefix} datamine-server rowSeq={row.Sequence} rowTsUtc={row.TimestampUtc:O} {row.ToBossModLogLine()} dataHex='{Escape(row.DataHex)}'");
+        WriteDatamineJsonRow(
+            territoryId,
+            "server",
+            new
+            {
+                row.Sequence,
+                row.TimestampUtc,
+                Kind = row.KindLabel,
+                row.BossModKind,
+                row.ActorId,
+                TargetId = $"0x{row.TargetId:X}",
+                row.ObjectName,
+                row.ObjectKind,
+                GameObjectId = $"0x{row.GameObjectId:X}",
+                row.EntityId,
+                row.BaseId,
+                row.LayoutId,
+                row.GimmickId,
+                row.EventState,
+                row.EventId,
+                row.Targetable,
+                Position = row.PositionText,
+                row.DistanceText,
+                row.StateData,
+                row.SourceParams,
+                row.DataHex,
+                row.HigherLowerRelevant,
+                BossModLine = row.ToBossModLogLine(),
+            });
+    }
+
     private void RecordDatamineVfxEvent(HigherLowerVfxTraceService.VfxEventRow row)
     {
+        if (IsKnownCardAvfxPath(row.Path, string.Empty))
+            TouchDatamineSession(DateTime.UtcNow, $"vfx:{HigherLowerCardVfxCatalog.NormalizePath(row.Path)}", row.TerritoryId, allowStart: false);
+
         if (!ShouldRecordDatamine())
             return;
 
@@ -1802,7 +1927,150 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private bool ShouldRecordDatamine()
-        => configuration.HigherLowerVfxDataminingEnabled;
+    {
+        if (!configuration.HigherLowerVfxDataminingEnabled)
+        {
+            CloseDatamineWritersIfOpen();
+            ResetDatamineSessionGate();
+            return false;
+        }
+
+        CloseDatamineSessionIfExpired(DateTime.UtcNow);
+        return IsDatamineSessionActive(DateTime.UtcNow);
+    }
+
+    private void UpdateDatamineSessionFromRuntime(HigherLowerRuntimeState runtime, uint territoryId)
+    {
+        if (!configuration.HigherLowerVfxDataminingEnabled)
+        {
+            CloseDatamineWritersIfOpen();
+            ResetDatamineSessionGate();
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        CloseDatamineSessionIfExpired(now);
+        if (runtime.TreasureHighLowVisible)
+        {
+            TouchDatamineSession(
+                now,
+                $"addon:{AddonName}",
+                territoryId,
+                allowStart: true,
+                new
+                {
+                    runtime.TreasureHighLowVisible,
+                    runtime.HighTargetable,
+                    runtime.LowTargetable,
+                    runtime.NotificationChallengeVisible,
+                    runtime.SelectYesnoVisible,
+                });
+            return;
+        }
+
+        if (runtime.HighTargetable || runtime.LowTargetable)
+        {
+            TouchDatamineSession(
+                now,
+                "targetable:HighLow",
+                territoryId,
+                allowStart: true,
+                new
+                {
+                    runtime.HighTargetable,
+                    runtime.LowTargetable,
+                    runtime.NotificationChallengeVisible,
+                    runtime.SelectYesnoVisible,
+                });
+        }
+    }
+
+    private bool TouchDatamineSession(
+        DateTime signalUtc,
+        string source,
+        uint territoryId,
+        bool allowStart,
+        object? detail = null)
+    {
+        if (!configuration.HigherLowerVfxDataminingEnabled)
+            return false;
+
+        var now = signalUtc == DateTime.MinValue ? DateTime.UtcNow : signalUtc;
+        CloseDatamineSessionIfExpired(now);
+        var wasActive = IsDatamineSessionActive(now);
+        if (!wasActive && !allowStart)
+            return false;
+
+        datamineSessionLastSignalUtc = now;
+        datamineSessionLastSignalSource = string.IsNullOrWhiteSpace(source) ? "unknown" : source;
+        datamineSessionGraceUntilUtc = now + DatamineSessionGrace;
+
+        territoryId = ResolveDatamineTerritory(territoryId);
+        if (!EnsureDatamineWriters(territoryId))
+            return false;
+
+        WriteDatamineSessionSignal(territoryId, datamineSessionLastSignalSource, started: !wasActive, now, detail);
+        return true;
+    }
+
+    private bool IsDatamineSessionActive(DateTime nowUtc)
+        => datamineSessionGraceUntilUtc != DateTime.MinValue && nowUtc <= datamineSessionGraceUntilUtc;
+
+    private void CloseDatamineSessionIfExpired(DateTime nowUtc)
+    {
+        if (datamineSessionGraceUntilUtc == DateTime.MinValue || nowUtc <= datamineSessionGraceUntilUtc)
+            return;
+
+        if (datamineLogWriter != null || datamineJsonlWriter != null)
+        {
+            var quietMs = datamineSessionLastSignalUtc == DateTime.MinValue
+                ? 0
+                : Math.Max(0, (int)(nowUtc - datamineSessionLastSignalUtc).TotalMilliseconds);
+            WriteDatamineLogLine(
+                $"{Prefix} datamine-session-end reason=quiet quietMs={quietMs} lastSignal='{Escape(datamineSessionLastSignalSource)}'");
+            WriteDatamineJsonRow(
+                ResolveDatamineTerritory(currentDatamineTerritoryId),
+                "session_end",
+                new
+                {
+                    Reason = "quiet",
+                    QuietMs = quietMs,
+                    LastSignalUtc = datamineSessionLastSignalUtc,
+                    LastSignalSource = datamineSessionLastSignalSource,
+                });
+            FlushDatamineWriters();
+        }
+
+        CloseDatamineWritersIfOpen();
+        ResetDatamineSessionGate();
+        ResetDatamineCooldown();
+    }
+
+    private void WriteDatamineSessionSignal(uint territoryId, string source, bool started, DateTime signalUtc, object? detail)
+    {
+        var now = DateTime.UtcNow;
+        var key = $"{source}:{started}:{territoryId}";
+        if (!started && key == lastDatamineSignalLogKey && now - lastDatamineSignalLogUtc < DatamineSignalLogCooldown)
+            return;
+
+        lastDatamineSignalLogKey = key;
+        lastDatamineSignalLogUtc = now;
+        WriteDatamineLogLine(
+            $"{Prefix} datamine-session-signal source='{Escape(source)}' started={started.ToString().ToLowerInvariant()} " +
+            $"signalUtc={signalUtc:O} graceUntilUtc={datamineSessionGraceUntilUtc:O} graceMs={(int)DatamineSessionGrace.TotalMilliseconds}");
+        WriteDatamineJsonRow(
+            territoryId,
+            "session_signal",
+            new
+            {
+                Source = source,
+                Started = started,
+                SignalUtc = signalUtc,
+                GraceUntilUtc = datamineSessionGraceUntilUtc,
+                GraceMs = (int)DatamineSessionGrace.TotalMilliseconds,
+                Detail = detail,
+            });
+    }
 
     private uint ResolveDatamineTerritory(uint territoryId)
         => territoryId != 0 ? territoryId : clientState.TerritoryType;
@@ -1894,6 +2162,24 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
     }
 
+    private void FlushDatamineWriters()
+    {
+        try
+        {
+            datamineLogWriter?.Flush();
+            datamineJsonlWriter?.Flush();
+        }
+        catch (Exception ex)
+        {
+            CloseDatamineWriters();
+            if (!datamineFileErrorLogged)
+            {
+                datamineFileErrorLogged = true;
+                log.Warning(ex, $"{Prefix} datamine file flush failed.");
+            }
+        }
+    }
+
     private void WriteDatamineJsonRow(uint territoryId, string type, object payload)
     {
         if (datamineJsonlWriter == null)
@@ -1960,6 +2246,27 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     {
         lastDatamineSurfaceKey = string.Empty;
         lastDatamineSurfaceUtc = DateTime.MinValue;
+        datamineTrackedVfxLogUtc.Clear();
+    }
+
+    private void ResetDatamineSessionGate()
+    {
+        datamineSessionLastSignalUtc = DateTime.MinValue;
+        datamineSessionGraceUntilUtc = DateTime.MinValue;
+        datamineSessionLastSignalSource = "none";
+        lastDatamineSignalLogKey = string.Empty;
+        lastDatamineSignalLogUtc = DateTime.MinValue;
+    }
+
+    private void PruneDatamineTrackedVfxLog(DateTime nowUtc)
+    {
+        foreach (var key in datamineTrackedVfxLogUtc
+                     .Where(x => nowUtc - x.Value > TimeSpan.FromSeconds(30))
+                     .Select(static x => x.Key)
+                     .ToList())
+        {
+            datamineTrackedVfxLogUtc.Remove(key);
+        }
     }
 
     private void CloseWriter()
@@ -3218,14 +3525,12 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             ? "none"
             : Escape(value).Replace(' ', '_');
 
-    private static bool IsDatamineCardPath(string path, string normalizedPath)
+    private static bool IsKnownCardAvfxPath(string path, string normalizedPath)
     {
         var value = string.IsNullOrWhiteSpace(normalizedPath)
             ? HigherLowerCardVfxCatalog.NormalizePath(path)
             : HigherLowerCardVfxCatalog.NormalizePath(normalizedPath);
-        return HigherLowerCardVfxCatalog.TryGetCatalog(value, out _)
-               || HigherLowerCardVfxCatalog.IsEffectOnly(value)
-               || ContainsAny(value, "card", "lure", "high", "low", "treasure");
+        return HigherLowerCardVfxCatalog.TryGetCatalog(value, out _);
     }
 
     private static string FormatDatamineCardTexturePaths(IReadOnlyList<HigherLowerCardVfxSolverService.CardTexturePathMatch> cardTexturePaths)

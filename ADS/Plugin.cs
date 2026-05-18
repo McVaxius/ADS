@@ -823,10 +823,12 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (IsTreasureDungeonDutyCompletedNoise(context, territoryId))
+        if (ShouldRunDutyCompletionTreasureSweep(context)
+            && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
         {
+            PrintStatus(ExecutionService.LastStatus);
             UpdateDtrBar();
-            Log.Information($"[ADS] DutyCompleted event for {dutyName}; ignored as treasure-dungeon chamber-complete noise while ADS keeps ownership.");
+            Log.Information($"[ADS] DutyCompleted event for {dutyName}; ADS kept ownership for the final treasure sweep.");
             return;
         }
 
@@ -838,11 +840,11 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] DutyCompleted event for {dutyName}; ownership released and observation memory cleared.");
     }
 
-    private static bool IsTreasureDungeonDutyCompletedNoise(DutyContextSnapshot context, uint territoryId)
-        => context.InInstancedDuty
+    private bool ShouldRunDutyCompletionTreasureSweep(DutyContextSnapshot context)
+        => Configuration.ConsiderTreasureCoffers
+           && context.InInstancedDuty
            && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
-               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
-               || TreasureDungeonData.IsSupportedDutyTerritory(territoryId));
+               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
 
     private void RegisterCommands()
     {
