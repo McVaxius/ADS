@@ -16,9 +16,10 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     public const string VisualGraphicKeySource = "visual-graphic-key";
     public const string AddonAtkValueSource = "addon-atk-value[4]";
     public const string ServerEObjAnimSource = "server-eobjanim-card-state";
+    public const string ServerEObjAnimAddonDecisionSource = "server-eobjanim-addon-decision-card";
     private const uint TreasureHighLowCardBaseId = 2007457;
-    private const uint HighBaseId = 2012422;
-    private const uint LowBaseId = 2012423;
+    private const uint HighBaseId = 2012418;
+    private const uint LowBaseId = 2012419;
     private static readonly TimeSpan ActiveProbeTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ServerCardTtl = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan SolverLogCooldown = TimeSpan.FromSeconds(1);
@@ -60,6 +61,15 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             lock (gate)
                 return currentState;
         }
+    }
+
+    public bool TryGetLatestServerRowSequence(out ulong rowSequence)
+    {
+        rowSequence = serverEventTraceService.GetRowsSnapshot()
+            .Select(static row => row.Sequence)
+            .DefaultIfEmpty()
+            .Max();
+        return rowSequence > 0;
     }
 
     public CardProbeRow BuildProbe(
@@ -302,7 +312,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
 
             try
             {
-                serverCardRows = EvaluateServerCardRows(serverEventTraceService.GetRowsSnapshot(), diagnostics.CaptureBoardSlots(), context, now);
+                serverCardRows = EvaluateServerCardRows(serverEventTraceService.GetRowsSnapshot(), diagnostics.CaptureBoardSlots(), runtime, context, now);
                 serverCard = serverCardRows.FirstOrDefault(static x => x.Accepted && x.DecodedCard.HasValue);
                 serverPhaseBlocksFallback = serverCard == null && serverCardRows.Any(static x => x.DecodedCard.HasValue && IsServerPhaseBlockReason(x.Reason));
                 foreach (var row in serverCardRows)
@@ -328,8 +338,8 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                 var vfxState = BuildVfxState(runtime, trackedRows, now);
                 if (serverCard is { DecodedCard: { } })
                 {
-                    var serverCardIsPostSelectionReveal = IsPostSelectionReveal(serverCard);
-                    if (!serverCardIsPostSelectionReveal
+                    var serverCardSkipsClientMismatch = IsPostSelectionReveal(serverCard);
+                    if (!serverCardSkipsClientMismatch
                         && vfxState.Confidence == SolverConfidence.High
                         && vfxState.CurrentCard.HasValue
                         && vfxState.CurrentCard.Value != serverCard.DecodedCard.Value)
@@ -339,7 +349,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                             serverCard,
                             $"trusted server/vfx card mismatch; serverCard={serverCard.DecodedCard.Value}; vfxCard={vfxState.CurrentCard.Value}; vfxSource='{Escape(vfxState.CardSource)}'");
                     }
-                    else if (!serverCardIsPostSelectionReveal
+                    else if (!serverCardSkipsClientMismatch
                              && runtime.CardSourceSafe
                              && runtime.CurrentCard is >= 1 and <= 9
                              && runtime.CurrentCard.Value != serverCard.DecodedCard.Value)
@@ -463,7 +473,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             RecommendedChoice: decision.Choice,
             Confidence: SolverConfidence.High,
             Reason: reason,
-            CardSource: ServerEObjAnimSource,
+            CardSource: string.IsNullOrWhiteSpace(serverCard.Source) ? ServerEObjAnimSource : serverCard.Source,
             Slot: string.IsNullOrWhiteSpace(serverCard.Slot) ? "server-current" : serverCard.Slot,
             TextureIndex: null,
             TextureIndexSource: "none",
@@ -481,7 +491,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             RecommendedChoice: "Blocked",
             Confidence: SolverConfidence.Blocked,
             Reason: reason,
-            CardSource: ServerEObjAnimSource,
+            CardSource: string.IsNullOrWhiteSpace(serverCard.Source) ? ServerEObjAnimSource : serverCard.Source,
             Slot: string.IsNullOrWhiteSpace(serverCard.Slot) ? "server-current" : serverCard.Slot,
             TextureIndex: null,
             TextureIndexSource: "none",
@@ -592,6 +602,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     private static IReadOnlyList<ServerCardStateRow> EvaluateServerCardRows(
         IReadOnlyList<HigherLowerServerEventTraceService.ServerEventRow> serverRows,
         IReadOnlyList<TreasureHighLowDiagnosticService.BoardSlotSnapshot> boardSlots,
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime,
         DutyContextSnapshot context,
         DateTime now)
     {
@@ -607,20 +618,19 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             .Select(row =>
             {
                 var slot = row.Position.HasValue ? ResolveSlot(row.Position.Value, boardSlots) : "unknown";
-                var decoded = TryDecodeServerCard(row, out var card, out var reason);
-                return new ServerCardCandidate(row, slot, decoded ? card : null, reason);
+                return DecodeServerCardCandidate(row, slot, runtime);
             })
             .ToList();
 
         var acceptedCurrent = cardRows.FirstOrDefault(candidate =>
             candidate.DecodedCard.HasValue
+            && candidate.Kind == ServerCardCandidateKind.CurrentCard
             && string.Equals(candidate.Slot, "left", StringComparison.OrdinalIgnoreCase)
             && !IsOlderThanPuzzleFinish(candidate.Row, latestFinish)
             && !IsOlderThanHighLowSelection(candidate.Row, latestSelection));
 
-        var acceptedReveal = acceptedCurrent == null
-            ? cardRows.FirstOrDefault(candidate => IsAcceptablePostSelectionReveal(candidate, cardRows, latestSelection, latestFinish))
-            : null;
+        var acceptedReveal = cardRows.FirstOrDefault(candidate =>
+            IsAcceptablePostSelectionReveal(candidate, cardRows, latestSelection, latestFinish));
 
         var result = new List<ServerCardStateRow>();
         foreach (var candidate in cardRows)
@@ -628,38 +638,38 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             var row = candidate.Row;
             if (!candidate.DecodedCard.HasValue)
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, null, accepted: false, candidate.Reason));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, null, accepted: false, candidate.Reason));
                 continue;
             }
 
             var card = candidate.DecodedCard.Value;
-            if (IsSameServerCardRow(candidate, acceptedCurrent))
+            if (IsSameServerCardRow(candidate, acceptedReveal))
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: true, "accepted-current-card"));
+                result.Add(BuildServerCardStateRow(row, "right-reveal", candidate.Source, card, accepted: true, "accepted-newer-right-reveal"));
                 continue;
             }
 
-            if (IsSameServerCardRow(candidate, acceptedReveal))
+            if (acceptedReveal == null && IsSameServerCardRow(candidate, acceptedCurrent))
             {
-                result.Add(BuildServerCardStateRow(row, "right-reveal", card, accepted: true, "trusted server post-selection reveal"));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: true, "accepted-current-card"));
                 continue;
             }
 
             if (IsOlderThanPuzzleFinish(row, latestFinish))
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-than-puzzle-finish"));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: false, "older-than-puzzle-finish"));
                 continue;
             }
 
             if (IsOlderThanHighLowSelection(row, latestSelection))
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-than-last-high-low-selection"));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: false, "older-than-last-high-low-selection"));
                 continue;
             }
 
             if (string.Equals(candidate.Slot, "left", StringComparison.OrdinalIgnoreCase))
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "older-current-card-state"));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: false, "older-current-card-state"));
                 continue;
             }
 
@@ -668,11 +678,11 @@ public sealed unsafe class HigherLowerCardVfxSolverService
                 && IsAfter(row, latestSelection)
                 && HasNewerDecodedCurrentCard(candidate, cardRows, latestFinish))
             {
-                result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "newer-current-card-state"));
+                result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: false, "newer-current-card-state"));
                 continue;
             }
 
-            result.Add(BuildServerCardStateRow(row, candidate.Slot, card, accepted: false, "not-current-slot"));
+            result.Add(BuildServerCardStateRow(row, candidate.Slot, candidate.Source, card, accepted: false, "not-current-slot"));
         }
 
         return result;
@@ -684,6 +694,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         HigherLowerServerEventTraceService.ServerEventRow? latestSelection,
         HigherLowerServerEventTraceService.ServerEventRow? latestFinish)
         => candidate.DecodedCard.HasValue
+           && candidate.Kind == ServerCardCandidateKind.CurrentCard
            && string.Equals(candidate.Slot, "right", StringComparison.OrdinalIgnoreCase)
            && latestSelection != null
            && IsAfter(candidate.Row, latestSelection)
@@ -696,6 +707,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         HigherLowerServerEventTraceService.ServerEventRow? latestFinish)
         => cardRows.Any(other =>
             other.DecodedCard.HasValue
+            && other.Kind == ServerCardCandidateKind.CurrentCard
             && string.Equals(other.Slot, "left", StringComparison.OrdinalIgnoreCase)
             && IsAfter(other.Row, candidate.Row)
             && !IsOlderThanPuzzleFinish(other.Row, latestFinish));
@@ -714,6 +726,24 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         ServerCardCandidate candidate,
         ServerCardCandidate? other)
         => other != null && candidate.Row.Sequence == other.Row.Sequence;
+
+    private static ServerCardCandidate DecodeServerCardCandidate(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        string slot,
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState runtime)
+    {
+        if (TryDecodeServerCard(row, out var currentCard, out var currentReason))
+            return new ServerCardCandidate(row, slot, currentCard, currentReason, ServerEObjAnimSource, ServerCardCandidateKind.CurrentCard);
+
+        TryDecodeServerAddonDecisionCard(row, out var decisionReason);
+
+        var potentialAddonDecision = IsPotentialAddonDecisionCardRow(row);
+        var source = potentialAddonDecision
+            ? ServerEObjAnimAddonDecisionSource
+            : ServerEObjAnimSource;
+        var reason = potentialAddonDecision ? decisionReason : currentReason;
+        return new ServerCardCandidate(row, slot, null, reason, source, ServerCardCandidateKind.None);
+    }
 
     private static bool TryDecodeServerCard(
         HigherLowerServerEventTraceService.ServerEventRow row,
@@ -744,9 +774,33 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         return true;
     }
 
+    private static bool TryDecodeServerAddonDecisionCard(
+        HigherLowerServerEventTraceService.ServerEventRow row,
+        out string reason)
+    {
+        if (!IsPotentialAddonDecisionCardRow(row))
+        {
+            reason = "not-addon-decision-card-state";
+            return false;
+        }
+
+        if (row.P2 == 0 || (row.P2 & (row.P2 - 1)) != 0)
+        {
+            reason = "p2-not-single-card-face-bit";
+            return false;
+        }
+
+        reason = "p2-card-state-diagnostic-only";
+        return false;
+    }
+
+    private static bool IsPotentialAddonDecisionCardRow(HigherLowerServerEventTraceService.ServerEventRow row)
+        => row.P1 != row.P2;
+
     private static ServerCardStateRow BuildServerCardStateRow(
         HigherLowerServerEventTraceService.ServerEventRow row,
         string slot,
+        string source,
         int? decodedCard,
         bool accepted,
         string reason)
@@ -763,6 +817,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
             ObjectName: row.ObjectName,
             Position: row.Position,
             Slot: string.IsNullOrWhiteSpace(slot) ? "unknown" : slot,
+            Source: string.IsNullOrWhiteSpace(source) ? ServerEObjAnimSource : source,
             P1: row.P1,
             P2: row.P2,
             State: FormatServerCardState(row),
@@ -793,7 +848,8 @@ public sealed unsafe class HigherLowerCardVfxSolverService
 
     private static bool IsPostSelectionReveal(ServerCardStateRow row)
         => string.Equals(row.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(row.Reason, "trusted server post-selection reveal", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(row.Reason, "trusted server post-selection reveal", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(row.Reason, "accepted-newer-right-reveal", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAfter(
         HigherLowerServerEventTraceService.ServerEventRow left,
@@ -1151,7 +1207,15 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         HigherLowerServerEventTraceService.ServerEventRow Row,
         string Slot,
         int? DecodedCard,
-        string Reason);
+        string Reason,
+        string Source,
+        ServerCardCandidateKind Kind);
+
+    private enum ServerCardCandidateKind
+    {
+        None = 0,
+        CurrentCard = 1,
+    }
 
     public sealed record ServerCardStateRow(
         DateTime TimestampUtc,
@@ -1166,6 +1230,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
         string ObjectName,
         Vector3? Position,
         string Slot,
+        string Source,
         uint P1,
         uint P2,
         string State,

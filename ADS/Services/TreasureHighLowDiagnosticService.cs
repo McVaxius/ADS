@@ -680,7 +680,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         WriteDatamineLogLine(
             $"{Prefix} datamine-server-card rowSeq={row.RowSequence} rowTsUtc={row.TimestampUtc:O} " +
             $"actor=0x{row.ActorId:X8} objectId=0x{row.GameObjectId:X} baseId={row.BaseId} layoutId={row.LayoutId} gimmickId={row.GimmickId} " +
-            $"slot={EscapeToken(row.Slot)} p1=0x{row.P1:X4} p2=0x{row.P2:X4} state={EscapeToken(row.State)} " +
+            $"slot={EscapeToken(row.Slot)} source='{Escape(row.Source)}' p1=0x{row.P1:X4} p2=0x{row.P2:X4} state={EscapeToken(row.State)} " +
             $"decodedCard={(row.DecodedCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} accepted={row.Accepted.ToString().ToLowerInvariant()} " +
             $"reason='{Escape(row.Reason)}' pos={HigherLowerCardVfxSolverService.FormatPosition(row.Position ?? Vector3.Zero)}");
         WriteDatamineJsonRow(
@@ -699,6 +699,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 row.ObjectName,
                 Position = HigherLowerCardVfxSolverService.FormatPosition(row.Position ?? Vector3.Zero),
                 row.Slot,
+                row.Source,
                 row.P1,
                 row.P2,
                 row.State,

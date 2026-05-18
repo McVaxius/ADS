@@ -806,7 +806,11 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private void OnChatMessage(IHandleableChatMessage message)
-        => ExecutionService.HandleChatMessage(message.Message.TextValue);
+    {
+        var text = message.Message.TextValue;
+        HigherLowerAutomationService.HandleChatMessage(text);
+        ExecutionService.HandleChatMessage(text);
+    }
 
     private void OnDutyCompleted(IDutyStateEventArgs args)
         => OnDutyCompleted(args.TerritoryType.RowId);
