@@ -668,7 +668,8 @@ public sealed class HigherLowerAutomationService
 
     private static bool IsPostSelectionRevealSolverState(HigherLowerCardVfxSolverService.SolverState solverState)
         => string.Equals(solverState.CardSource, HigherLowerCardVfxSolverService.ServerEObjAnimSource, StringComparison.OrdinalIgnoreCase)
-           && string.Equals(solverState.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase);
+           && string.Equals(solverState.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase)
+           && string.Equals(solverState.Reason, "accepted-newer-right-reveal", StringComparison.OrdinalIgnoreCase);
 
     private static AutomationDecision BuildPolicyDecision(
         int step,

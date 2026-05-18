@@ -18,8 +18,6 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     public const string ServerEObjAnimSource = "server-eobjanim-card-state";
     public const string ServerEObjAnimAddonDecisionSource = "server-eobjanim-addon-decision-card";
     private const uint TreasureHighLowCardBaseId = 2007457;
-    private const uint HighBaseId = 2012418;
-    private const uint LowBaseId = 2012419;
     private static readonly TimeSpan ActiveProbeTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ServerCardTtl = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan SolverLogCooldown = TimeSpan.FromSeconds(1);
@@ -833,9 +831,13 @@ public sealed unsafe class HigherLowerCardVfxSolverService
 
     private static bool IsHighLowSelectionRow(HigherLowerServerEventTraceService.ServerEventRow row)
         => row.Kind == HigherLowerServerEventTraceService.ServerEventKind.EObjAnim
-           && row.BaseId is HighBaseId or LowBaseId
+           && IsHighLowSelectionObjectName(row.ObjectName)
            && row.P1 == 0x0010
            && row.P2 == 0x0020;
+
+    private static bool IsHighLowSelectionObjectName(string objectName)
+        => string.Equals(objectName, "High", StringComparison.Ordinal)
+           || string.Equals(objectName, "Low", StringComparison.Ordinal);
 
     private static bool IsPuzzleFinishedRow(HigherLowerServerEventTraceService.ServerEventRow row)
         => row.Kind == HigherLowerServerEventTraceService.ServerEventKind.LegacyMapEffect
@@ -848,7 +850,6 @@ public sealed unsafe class HigherLowerCardVfxSolverService
 
     private static bool IsPostSelectionReveal(ServerCardStateRow row)
         => string.Equals(row.Slot, "right-reveal", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(row.Reason, "trusted server post-selection reveal", StringComparison.OrdinalIgnoreCase)
            || string.Equals(row.Reason, "accepted-newer-right-reveal", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAfter(
