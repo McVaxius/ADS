@@ -1608,7 +1608,6 @@ public sealed class ExecutionService
         var isManualXyzDestination = wantsXyzDestination
             || frontierPoint.IsManualXyzDestination;
         if (frontierPoint.AllowCombatBypass
-            && !dungeonFrontierService.IsTreasureFollowerStartGateTarget(frontierPoint)
             && planner.ObjectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination)
         {
             RefreshCommittedForceMarchManualDestination(frontierPoint, "planner selected the authored force-march handoff");
@@ -1813,9 +1812,7 @@ public sealed class ExecutionService
             return false;
         }
 
-        if (HasPendingTreasureFollowerDoorFollowThrough()
-            || dungeonFrontierService.TreasureFollowerStartGateActive
-            || dungeonFrontierService.TreasureFollowerEntryTransitionHoldActive)
+        if (HasPendingTreasureFollowerDoorFollowThrough())
         {
             return true;
         }
@@ -1921,7 +1918,6 @@ public sealed class ExecutionService
         var isTreasureRoutePoint = IsTreasureRouteFrontierPoint();
         var isTreasureFollowerRoutePoint = isTreasureRoutePoint && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
         var isTreasureFollowerPassageCandidate = isTreasureFollowerRoutePoint && frontierPoint.IsTreasurePassageCandidate;
-        var isTreasureFollowerStartGateTarget = dungeonFrontierService.IsTreasureFollowerStartGateTarget(frontierPoint);
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
@@ -2003,7 +1999,6 @@ public sealed class ExecutionService
         {
             if (isManualDestination
                 && !isTreasureRoutePoint
-                && !isTreasureFollowerStartGateTarget
                 && TryRetireManualDestinationForNoProgress(
                     frontierPoint,
                     playerPosition.Value,
