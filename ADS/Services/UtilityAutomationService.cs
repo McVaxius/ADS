@@ -46,6 +46,8 @@ public sealed unsafe class UtilityAutomationService
     private const int SelfRepairGeneralAction = 6;
     private const int DismountGeneralAction = 23;
     private const int MaterializeGeneralAction = 14;
+    private const float NoInnRepairAetheryteRadius = 50.0f;
+    private const float NoInnRepairAetheryteRadiusSquared = NoInnRepairAetheryteRadius * NoInnRepairAetheryteRadius;
     private const int LastMaterializeCategory = 6;
     private const int FullyRepairedConditionPercent = 100;
     private static readonly AgentSalvage.SalvageItemCategory[] DesynthInventoryCategories =
@@ -281,6 +283,17 @@ public sealed unsafe class UtilityAutomationService
 
     private bool StartNpcRepair(NpcRepairMode mode)
     {
+        if (mode == NpcRepairMode.NoInn
+            && clientState.IsLoggedIn
+            && objectTable.LocalPlayer != null
+            && !condition[ConditionFlag.BetweenAreas]
+            && !CanStartNpcRepairNoInnHere())
+        {
+            StatusMessage = "NPC repair without inn fallback can only start from a sanctuary or nearby Aetheryte/Aethernet. Move to a sanctuary, stand near an Aetheryte/Aethernet, or use /ads npcrepair for inn fallback.";
+            log.Warning($"[ADS][Utility] {StatusMessage}");
+            return false;
+        }
+
         var statusMessage = mode == NpcRepairMode.NoInn
             ? "Starting NPC repair without inn fallback."
             : "Starting NPC repair.";
@@ -305,6 +318,62 @@ public sealed unsafe class UtilityAutomationService
         }
 
         return true;
+    }
+
+    private bool CanStartNpcRepairNoInnHere()
+        => IsInSanctuary() || IsNearAetheryteOrAethernet();
+
+    private static bool IsInSanctuary()
+    {
+        try
+        {
+            var actionManager = ActionManager.Instance();
+            if (actionManager == null)
+                return false;
+
+            return actionManager->GetActionStatus(ActionType.GeneralAction, 9) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsNearAetheryteOrAethernet()
+    {
+        try
+        {
+            var player = objectTable.LocalPlayer;
+            if (player == null)
+                return false;
+
+            var playerPosition = player.Position;
+            foreach (var obj in objectTable)
+            {
+                if (obj == null || !IsAetheryteOrAethernet(obj))
+                    continue;
+
+                if (Vector3.DistanceSquared(playerPosition, obj.Position) <= NoInnRepairAetheryteRadiusSquared)
+                    return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsAetheryteOrAethernet(IGameObject obj)
+    {
+        if (obj.ObjectKind == ObjectKind.Aetheryte)
+            return true;
+
+        var name = obj.Name.TextValue;
+        return !string.IsNullOrEmpty(name)
+            && (name.Contains("Aetheryte", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Aethernet", StringComparison.OrdinalIgnoreCase));
     }
 
     public bool StartExtractMateria()

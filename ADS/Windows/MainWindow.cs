@@ -79,9 +79,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Dialogs"))
             plugin.ToggleDialogRuleEditorUi();
         ImGui.SameLine();
-        //if (ImGui.SmallButton("Higher/Lower"))
-        ///    plugin.ToggleHigherLowerUi();
-        //ImGui.SameLine();
+        if (ImGui.SmallButton("Higher/Lower"))
+            plugin.ToggleHigherLowerUi();
+        ImGui.SameLine();
         if (ImGui.SmallButton("Events"))
             plugin.ToggleServerEventExplorerUi();
         ImGui.SameLine();
