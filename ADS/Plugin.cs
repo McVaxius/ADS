@@ -61,6 +61,8 @@ public sealed class Plugin : IDalamudPlugin
     public ExecutionService ExecutionService { get; }
     public DialogAutomationService DialogAutomationService { get; }
     public AdsIpcService AdsIpcService { get; }
+    public BmrReflectionService BmrReflectionService { get; }
+    public ReflectionIpcService ReflectionIpcService { get; }
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
@@ -83,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly HigherLowerWindow higherLowerWindow;
     private readonly ServerEventExplorerWindow serverEventExplorerWindow;
     private readonly VfxExplorerWindow vfxExplorerWindow;
+    private readonly ReflectionWindow reflectionWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
 
@@ -120,6 +123,7 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
+        BmrReflectionService = new BmrReflectionService(PluginInterface, Configuration, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
             StartDutyFromOutside,
@@ -129,6 +133,7 @@ public sealed class Plugin : IDalamudPlugin
             StartRepair,
             GetStatusJson,
             GetCurrentAnalysisJson);
+        ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
         configWindow = new ConfigWindow(this);
@@ -141,6 +146,7 @@ public sealed class Plugin : IDalamudPlugin
         higherLowerWindow = new HigherLowerWindow(this);
         serverEventExplorerWindow = new ServerEventExplorerWindow(this);
         vfxExplorerWindow = new VfxExplorerWindow(this);
+        reflectionWindow = new ReflectionWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
@@ -152,6 +158,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(higherLowerWindow);
         WindowSystem.AddWindow(serverEventExplorerWindow);
         WindowSystem.AddWindow(vfxExplorerWindow);
+        WindowSystem.AddWindow(reflectionWindow);
 
         RegisterCommands();
 
@@ -193,6 +200,8 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerVfxTraceService.Dispose();
         TreasureHighLowDiagnosticService.Dispose();
         AdsIpcService.Dispose();
+        ReflectionIpcService.Dispose();
+        BmrReflectionService.Dispose();
         RemoteJsonUpdateService.Dispose();
         WindowSystem.RemoveAllWindows();
         dtrEntry?.Remove();
@@ -207,6 +216,7 @@ public sealed class Plugin : IDalamudPlugin
         higherLowerWindow.Dispose();
         serverEventExplorerWindow.Dispose();
         vfxExplorerWindow.Dispose();
+        reflectionWindow.Dispose();
         ECommonsMain.Dispose();
     }
 
@@ -267,6 +277,12 @@ public sealed class Plugin : IDalamudPlugin
     public void OpenVfxExplorerUi()
         => vfxExplorerWindow.IsOpen = true;
 
+    public void ToggleReflectionUi()
+        => reflectionWindow.IsOpen = !reflectionWindow.IsOpen;
+
+    public void OpenReflectionUi()
+        => reflectionWindow.IsOpen = true;
+
     public void SaveConfiguration()
     {
         Configuration.Save();
@@ -289,6 +305,7 @@ public sealed class Plugin : IDalamudPlugin
         higherLowerWindow.QueueResetToOrigin();
         serverEventExplorerWindow.QueueResetToOrigin();
         vfxExplorerWindow.QueueResetToOrigin();
+        reflectionWindow.QueueResetToOrigin();
     }
 
     public void JumpWindows()
@@ -304,6 +321,7 @@ public sealed class Plugin : IDalamudPlugin
         higherLowerWindow.QueueRandomVisibleJump();
         serverEventExplorerWindow.QueueRandomVisibleJump();
         vfxExplorerWindow.QueueRandomVisibleJump();
+        reflectionWindow.QueueRandomVisibleJump();
     }
 
     public string ObjectExplorerStatus
@@ -504,6 +522,7 @@ public sealed class Plugin : IDalamudPlugin
                 pluginEnabled = Configuration.PluginEnabled,
                 processDialogRulesOutsideOwnedDuty = Configuration.ProcessDialogRulesOutsideOwnedDuty,
                 higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
+                reflection = BmrReflectionService.CaptureStatusPayload(),
                 version = PluginInfo.GetVersion(),
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
@@ -738,6 +757,7 @@ public sealed class Plugin : IDalamudPlugin
             DutyCatalogService.ReloadMaturity();
         }
 
+        BmrReflectionService.Update();
         DutyContextService.Update(Configuration.PluginEnabled);
         HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
@@ -866,6 +886,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads hl - toggle the Higher/Lower calibration window\n" +
                 "/ads events - toggle the server event explorer\n" +
                 "/ads vfx - toggle the VFX explorer\n" +
+                "/ads reflection - toggle BMR reflection controls\n" +
                 "/ads mapeffects - alias for /ads events\n" +
                 "/ads ws - reset windows to 1,1\n" +
                 "/ads j - jump windows to visible random positions\n" +
@@ -967,6 +988,12 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("vfx", StringComparison.OrdinalIgnoreCase))
         {
             ToggleVfxExplorerUi();
+            return;
+        }
+
+        if (trimmed.Equals("reflection", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleReflectionUi();
             return;
         }
 
@@ -1387,6 +1414,26 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (configuration.Version < 13)
+        {
+            configuration.ReflectionToolsEnabled = true;
+            configuration.ReflectionQueenLunatenderDisabled = false;
+            configuration.ReflectionHuntsDisabled = false;
+            configuration.ReflectionMaxLoadDistanceMinimized = false;
+            configuration.ReflectionMinimizedMaxLoadDistance = BmrReflectionService.DefaultMinimizedMaxLoadDistance;
+            configuration.ReflectionHasOriginalMaxLoadDistance = false;
+            configuration.ReflectionOriginalMaxLoadDistance = BmrReflectionService.DefaultFallbackMaxLoadDistance;
+            configuration.Version = 13;
+            changed = true;
+        }
+
+        if (configuration.Version < 14)
+        {
+            configuration.ReflectionToolsEnabled = true;
+            configuration.Version = 14;
+            changed = true;
+        }
+
         var clampedDtrBarMode = Math.Clamp(configuration.DtrBarMode, 0, 2);
         if (configuration.DtrBarMode != clampedDtrBarMode)
         {
@@ -1403,6 +1450,31 @@ public sealed class Plugin : IDalamudPlugin
         if (string.IsNullOrWhiteSpace(configuration.DtrIconDisabled))
         {
             configuration.DtrIconDisabled = Configuration.DefaultDtrIconDisabled;
+            changed = true;
+        }
+
+        if (!float.IsFinite(configuration.ReflectionMinimizedMaxLoadDistance) || configuration.ReflectionMinimizedMaxLoadDistance <= 0f)
+        {
+            configuration.ReflectionMinimizedMaxLoadDistance = BmrReflectionService.DefaultMinimizedMaxLoadDistance;
+            changed = true;
+        }
+        else
+        {
+            var clampedMinimizedMaxLoadDistance = Math.Clamp(
+                configuration.ReflectionMinimizedMaxLoadDistance,
+                0.1f,
+                BmrReflectionService.DefaultFallbackMaxLoadDistance);
+            if (Math.Abs(configuration.ReflectionMinimizedMaxLoadDistance - clampedMinimizedMaxLoadDistance) > 0.001f)
+            {
+                configuration.ReflectionMinimizedMaxLoadDistance = clampedMinimizedMaxLoadDistance;
+                changed = true;
+            }
+        }
+
+        if (!float.IsFinite(configuration.ReflectionOriginalMaxLoadDistance) || configuration.ReflectionOriginalMaxLoadDistance <= 0f)
+        {
+            configuration.ReflectionOriginalMaxLoadDistance = BmrReflectionService.DefaultFallbackMaxLoadDistance;
+            configuration.ReflectionHasOriginalMaxLoadDistance = false;
             changed = true;
         }
 

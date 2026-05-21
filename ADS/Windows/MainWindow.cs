@@ -88,6 +88,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("VFX"))
             plugin.ToggleVfxExplorerUi();
         ImGui.SameLine();
+        if (ImGui.SmallButton("Reflection"))
+            plugin.ToggleReflectionUi();
+        ImGui.SameLine();
         using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
         {
             if (ImGui.SmallButton("Update"))

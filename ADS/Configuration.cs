@@ -7,7 +7,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 12;
+    public int Version { get; set; } = 14;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = true;
@@ -23,6 +23,13 @@ public sealed class Configuration : IPluginConfiguration
     public bool HigherLowerDiagnosticsEnabled { get; set; } = true;
     public bool HigherLowerAutomationEnabled { get; set; } = true;
     public bool HigherLowerVfxDataminingEnabled { get; set; } = false;
+    public bool ReflectionToolsEnabled { get; set; } = true;
+    public bool ReflectionQueenLunatenderDisabled { get; set; } = false;
+    public bool ReflectionHuntsDisabled { get; set; } = false;
+    public bool ReflectionMaxLoadDistanceMinimized { get; set; } = false;
+    public float ReflectionMinimizedMaxLoadDistance { get; set; } = 100f;
+    public bool ReflectionHasOriginalMaxLoadDistance { get; set; } = false;
+    public float ReflectionOriginalMaxLoadDistance { get; set; } = 500f;
 
     public void Save()
         => Plugin.PluginInterface.SavePluginConfig(this);
