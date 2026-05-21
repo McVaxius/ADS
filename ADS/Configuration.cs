@@ -7,10 +7,10 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 14;
+    public int Version { get; set; } = 15;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
-    public bool OpenQuickControlsOnLoad { get; set; } = true;
+    public bool OpenQuickControlsOnLoad { get; set; } = false;
     public bool DtrBarEnabled { get; set; } = true;
     public int DtrBarMode { get; set; } = 1;
     public string DtrIconEnabled { get; set; } = DefaultDtrIconEnabled;
