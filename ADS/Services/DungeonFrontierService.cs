@@ -55,6 +55,7 @@ public sealed class DungeonFrontierService
     private DateTime nextTreasureFollowerCatchUpLogUtc;
     private DateTime nextTreasureFollowerRetryCycleLogUtc;
     private readonly HashSet<string> loggedTreasureFollowerBacktrackSkips = new(StringComparer.Ordinal);
+    private readonly HashSet<string> loggedTreasureFollowerHeldCandidatePreserves = new(StringComparer.Ordinal);
     private int headingScoutSequence;
 
     public DungeonFrontierService(
@@ -417,6 +418,7 @@ public sealed class DungeonFrontierService
         nextTreasureFollowerCatchUpLogUtc = DateTime.MinValue;
         nextTreasureFollowerRetryCycleLogUtc = DateTime.MinValue;
         loggedTreasureFollowerBacktrackSkips.Clear();
+        loggedTreasureFollowerHeldCandidatePreserves.Clear();
     }
 
     private void UpdateTreasureFollowerEntryMapOpenerRole()
@@ -535,6 +537,9 @@ public sealed class DungeonFrontierService
             return;
 
         ClearRememberedManualDestination(point);
+        if (IsHeldTreasureFollowerCandidate(point))
+            ClearTreasureFollowerCandidateHold("held candidate visited");
+
         if (EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower && point.IsTreasurePassageCandidate)
         {
             log.Information(
@@ -557,7 +562,11 @@ public sealed class DungeonFrontierService
         if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower || !point.IsTreasurePassageCandidate)
             return;
 
-        if (!visitedFrontierKeys.Add(point.Key))
+        var markedVisited = visitedFrontierKeys.Add(point.Key);
+        if (IsHeldTreasureFollowerCandidate(point))
+            ClearTreasureFollowerCandidateHold($"held candidate failed after {reason}");
+
+        if (!markedVisited)
             return;
 
         treasureFollowerLastFailedCandidateKey = point.Key;
@@ -1495,14 +1504,15 @@ public sealed class DungeonFrontierService
         if (heldCandidate is not null)
         {
             var heldCandidateOutsideVerticalCap = !heldTreasureFollowerCandidateTransitObserved
-                && (!playerPosition.HasValue || !IsWithinTreasureFollowerCandidateVerticalCap(heldCandidate, playerPosition.Value));
+                && playerPosition.HasValue
+                && !IsWithinTreasureFollowerCandidateVerticalCap(heldCandidate, playerPosition.Value);
             if ((highestTreasureFollowerRoomReached > 0
                  && heldCandidate.TreasureRoomIndex > 0
                  && heldCandidate.TreasureRoomIndex < highestTreasureFollowerRoomReached)
                 || (treasureFollowerTransitConsumedRoomIndex > 0
                     && heldCandidate.TreasureRoomIndex > 0
                     && heldCandidate.TreasureRoomIndex <= treasureFollowerTransitConsumedRoomIndex)
-                || visitedFrontierKeys.Contains(heldCandidate.Key)
+                || IsTreasureFollowerPassageCandidateVisited(heldCandidate, points)
                 || heldCandidateOutsideVerticalCap)
             {
                 RetireTreasureFollowerBacktrackTarget(heldCandidate);
@@ -2526,14 +2536,76 @@ public sealed class DungeonFrontierService
 
         var heldCandidate = points.FirstOrDefault(point => string.Equals(point.Key, heldTreasureFollowerCandidateKey, StringComparison.Ordinal));
         if (heldCandidate is null)
+        {
+            var storedHeldCandidate = heldTreasureFollowerCandidatePoint;
+            if (storedHeldCandidate is not null
+                && IsStoredHeldTreasureFollowerCandidateStillValid(storedHeldCandidate, points))
+            {
+                LogTreasureFollowerHeldCandidatePreserved(storedHeldCandidate, points);
+                return storedHeldCandidate;
+            }
+
             ClearTreasureFollowerCandidateHold("held candidate left active route");
+        }
 
         return heldCandidate;
     }
 
     private bool IsHeldTreasureFollowerCandidate(DungeonFrontierPoint point)
         => heldTreasureFollowerCandidateKey is not null
-           && string.Equals(point.Key, heldTreasureFollowerCandidateKey, StringComparison.Ordinal);
+           && (string.Equals(point.Key, heldTreasureFollowerCandidateKey, StringComparison.Ordinal)
+               || (heldTreasureFollowerCandidatePoint is not null
+                   && IsSameTreasureFollowerPassageGroup(point, heldTreasureFollowerCandidatePoint)));
+
+    private bool IsStoredHeldTreasureFollowerCandidateStillValid(
+        DungeonFrontierPoint candidate,
+        IReadOnlyList<DungeonFrontierPoint> points)
+    {
+        if (!candidate.IsTreasurePassageCandidate
+            || candidate.TreasureRoomIndex <= 0
+            || IsTreasureFollowerRoomBehindReachedFloor(candidate.TreasureRoomIndex)
+            || (treasureFollowerTransitConsumedRoomIndex > 0 && candidate.TreasureRoomIndex <= treasureFollowerTransitConsumedRoomIndex)
+            || IsTreasureFollowerPassageCandidateVisited(candidate, points))
+        {
+            return false;
+        }
+
+        return points.Any(point => IsSameTreasureFollowerPassageGroup(point, candidate));
+    }
+
+    private bool IsTreasureFollowerPassageCandidateVisited(
+        DungeonFrontierPoint candidate,
+        IReadOnlyList<DungeonFrontierPoint> points)
+    {
+        if (visitedFrontierKeys.Contains(candidate.Key))
+            return true;
+
+        return points.Any(point => IsSameTreasureFollowerPassageGroup(point, candidate)
+                                   && visitedFrontierKeys.Contains(point.Key));
+    }
+
+    private void LogTreasureFollowerHeldCandidatePreserved(
+        DungeonFrontierPoint candidate,
+        IReadOnlyList<DungeonFrontierPoint> points)
+    {
+        var logKey = $"{activeDutyKey}:{candidate.Key}:{candidate.TreasureRoomIndex}:{candidate.TreasurePassageGroup}";
+        if (!loggedTreasureFollowerHeldCandidatePreserves.Add(logKey))
+            return;
+
+        var replacement = points.FirstOrDefault(point => IsSameTreasureFollowerPassageGroup(point, candidate));
+        var replacementText = replacement is null
+            ? "no same-group route point"
+            : $"{replacement.Name} ({replacement.TreasureRouteSource}, key {replacement.Key})";
+        var candidateLabel = candidate.IsLiveTreasureDoorCandidate ? "held live" : "held";
+        log.Information(
+            $"[ADS] Treasure follower preserved {candidateLabel} passage candidate {candidate.Name} ({candidate.TreasurePassageGroup}, room {candidate.TreasureRoomIndex}) across live route refresh; active route replacement is {replacementText}.");
+    }
+
+    private static bool IsSameTreasureFollowerPassageGroup(DungeonFrontierPoint left, DungeonFrontierPoint right)
+        => left.TreasureRoomIndex > 0
+           && right.TreasureRoomIndex > 0
+           && left.TreasureRoomIndex == right.TreasureRoomIndex
+           && string.Equals(left.TreasurePassageGroup, right.TreasurePassageGroup, StringComparison.Ordinal);
 
     private static float GetManualDestinationDistance(Vector3 playerPosition, DungeonFrontierPoint point)
         => point.IsManualXyzDestination
