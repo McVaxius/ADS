@@ -463,7 +463,7 @@ public sealed class ExecutionService
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateUnsafeTransitionNavigationStop(context);
-        UpdateTreasureDungeonCombatNavigationStop(context);
+        ResetTreasureDungeonCombatNavigationStopLatchIfClear(context, planner);
         if (!context.InCombat)
             ClearBossFightCombatGhost("combat cleared");
 
@@ -634,6 +634,9 @@ public sealed class ExecutionService
         }
 
         if (TryAdvanceCommittedForceMarchManualDestination(context, planner, prefix))
+            return;
+
+        if (TryHoldTreasureFollowerCombatYield(context, planner, observation, prefix))
             return;
 
         if ((context.InCombat || planner.Mode == PlannerMode.Combat)
@@ -5046,28 +5049,65 @@ public sealed class ExecutionService
         log?.Information("[ADS] Unsafe transition cleared; objective handling can resume.");
     }
 
-    private void UpdateTreasureDungeonCombatNavigationStop(DutyContextSnapshot context)
+    private void ResetTreasureDungeonCombatNavigationStopLatchIfClear(DutyContextSnapshot context, PlannerSnapshot planner)
     {
-        var inTreasureDuty = context.InInstancedDuty
-            && TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId);
-
-        if (!inTreasureDuty || !context.InCombat)
-        {
-            treasureDungeonCombatStopLatched = false;
+        if (IsTreasureFollowerCombatSignal(context, planner))
             return;
+
+        treasureDungeonCombatStopLatched = false;
+    }
+
+    private bool TryHoldTreasureFollowerCombatYield(
+        DutyContextSnapshot context,
+        PlannerSnapshot planner,
+        ObservationSnapshot observation,
+        string prefix)
+    {
+        if (!IsTreasureFollowerCombatSignal(context, planner)
+            || !IsTreasureFollowerDuty(context)
+            || ShouldBypassCombatHold(context, planner, observation))
+        {
+            return false;
         }
 
-        if (treasureDungeonCombatStopLatched)
-            return;
+        ResetRecoveryHold();
+        StopMovementAssistsForTreasureFollowerCombatYield(planner);
+        SetPhase(ExecutionPhase.CombatHold, BuildCombatHoldStatus(prefix, planner, observation));
+        return true;
+    }
 
-        TrySendCommand("/vnav stop");
+    private static bool IsTreasureFollowerCombatSignal(DutyContextSnapshot context, PlannerSnapshot planner)
+        => context.InCombat || planner.Mode == PlannerMode.Combat;
+
+    private bool IsTreasureFollowerDuty(DutyContextSnapshot context)
+        => context.InInstancedDuty
+           && TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
+           && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
+
+    private void StopMovementAssistsForTreasureFollowerCombatYield(PlannerSnapshot planner)
+    {
+        var recordedFreshMovement = navigationActive || mapFlagNavigationActive || movementTargetGameObjectId != 0;
+        var hadPendingDoorFollowThrough = HasPendingTreasureFollowerDoorFollowThrough();
+        var shouldSendStop = !treasureDungeonCombatStopLatched || recordedFreshMovement;
+
+        if (shouldSendStop)
+            TrySendCommand("/vnav stop");
+
         navigationActive = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
+        ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
         treasureDungeonCombatStopLatched = true;
 
-        log?.Information("[ADS] Treasure-dungeon combat entered; forced one /vnav stop so combat owns movement.");
+        if (shouldSendStop || hadPendingDoorFollowThrough)
+        {
+            log?.Information(
+                $"[ADS] Treasure-dungeon follower combat yield active ({planner.Mode}/{planner.ObjectiveKind}); " +
+                "ADS stopped vnav and cleared follower door follow-through so combat owns movement.");
+        }
     }
 
     private void StopNavigationForUnsafeTransition(DutyContextSnapshot context)

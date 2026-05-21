@@ -150,6 +150,12 @@ public sealed unsafe class UtilityAutomationService
         220,
     ];
 
+    private static readonly HashSet<uint> PreferredFieldRepairAetheryteIds =
+    [
+        100, // Ala Gannha - Independent Mender observed near the aetheryte.
+        108, // The House of the Fierce - Independent Mender observed near the aetheryte.
+    ];
+
     private static readonly string[] FieldRepairDeniedNameTerms =
     [
         "limsa lominsa",
@@ -212,6 +218,7 @@ public sealed unsafe class UtilityAutomationService
     private DateTime npcRepairTravelCommandUtc = DateTime.MinValue;
     private ResolvedInnRepairRoute? activeNpcRepairInnRoute;
     private ResolvedFieldRepairRoute? activeNpcRepairFieldRoute;
+    private readonly HashSet<uint> failedNpcRepairFieldAetheryteIds = [];
     private int npcRepairInnPathIndex;
     private bool repairSubmissionSent;
     private DateTime lastRepairConfirmClickUtc = DateTime.MinValue;
@@ -301,6 +308,7 @@ public sealed unsafe class UtilityAutomationService
             return false;
 
         activeNpcRepairMode = mode;
+        failedNpcRepairFieldAetheryteIds.Clear();
         if (TryFindNearbyRepairNpc(out var targetNpc))
         {
             BeginNpcRepairWithCandidate(targetNpc, "Starting NPC repair with");
@@ -1309,8 +1317,7 @@ public sealed unsafe class UtilityAutomationService
         if (aetheryteSheet == null)
             return false;
 
-        ResolvedFieldRepairRoute? sameTerritoryRoute = null;
-        ResolvedFieldRepairRoute? bestUnlockedRoute = null;
+        var candidates = new List<ResolvedFieldRepairRoute>();
         try
         {
             for (var index = 0; index < Plugin.AetheryteList.Length; index++)
@@ -1334,6 +1341,9 @@ public sealed unsafe class UtilityAutomationService
                 if (!IsEligibleFieldRepairAetheryte(aetheryte.RowId, aetheryteName, territoryName))
                     continue;
 
+                if (failedNpcRepairFieldAetheryteIds.Contains(aetheryte.RowId))
+                    continue;
+
                 var candidate = new ResolvedFieldRepairRoute(
                     territoryTypeId,
                     territoryName,
@@ -1341,15 +1351,7 @@ public sealed unsafe class UtilityAutomationService
                     aetheryteName,
                     (int)entry.GilCost);
 
-                if (territoryTypeId == clientState.TerritoryType)
-                {
-                    if (sameTerritoryRoute is null || candidate.GilCost < sameTerritoryRoute.Value.GilCost)
-                        sameTerritoryRoute = candidate;
-                    continue;
-                }
-
-                if (bestUnlockedRoute is null || candidate.GilCost < bestUnlockedRoute.Value.GilCost)
-                    bestUnlockedRoute = candidate;
+                candidates.Add(candidate);
             }
         }
         catch (Exception ex)
@@ -1357,19 +1359,19 @@ public sealed unsafe class UtilityAutomationService
             log.Warning(ex, "[ADS][Utility] Failed to inspect unlocked aetherytes for NPC repair field travel.");
         }
 
-        if (sameTerritoryRoute is not null)
-        {
-            route = sameTerritoryRoute.Value;
-            return true;
-        }
+        var selectedRoute = candidates
+            .OrderBy(candidate => candidate.TerritoryTypeId == clientState.TerritoryType ? 0 : 1)
+            .ThenBy(candidate => PreferredFieldRepairAetheryteIds.Contains(candidate.AetheryteId) ? 0 : 1)
+            .ThenBy(candidate => candidate.GilCost)
+            .ThenBy(candidate => candidate.TerritoryName, StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.AetheryteName, StringComparer.Ordinal)
+            .FirstOrDefault();
 
-        if (bestUnlockedRoute is not null)
-        {
-            route = bestUnlockedRoute.Value;
-            return true;
-        }
+        if (selectedRoute.AetheryteId == 0)
+            return false;
 
-        return false;
+        route = selectedRoute;
+        return true;
     }
 
     private static bool IsEligibleFieldRepairAetheryte(uint aetheryteId, string aetheryteName, string territoryName)
@@ -1581,7 +1583,36 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
+        if (TryRetryNpcRepairFieldTravelAfterMissingNpc(route))
+            return;
+
         Fail($"Reached field aetheryte {route.AetheryteName} in {route.TerritoryName}, but no repair NPC was found within {RepairNpcSearchRadius:0}y.");
+    }
+
+    private bool TryRetryNpcRepairFieldTravelAfterMissingNpc(ResolvedFieldRepairRoute failedRoute)
+    {
+        failedNpcRepairFieldAetheryteIds.Add(failedRoute.AetheryteId);
+
+        if (!TryResolveFieldRepairRoute(out var nextRoute))
+            return false;
+
+        activeNpcRepairFieldRoute = nextRoute;
+        npcRepairInnPathIndex = 0;
+        ResetRepairSubmission();
+
+        if (!TrySendNpcRepairFieldTeleport(nextRoute))
+        {
+            log.Warning(
+                $"[ADS][Utility] Field repair route {failedRoute.AetheryteName} had no repair NPC, and ADS could not start retry teleport to {nextRoute.AetheryteName}.");
+            return false;
+        }
+
+        log.Information(
+            $"[ADS][Utility] Field repair route {failedRoute.AetheryteName} in {failedRoute.TerritoryName} had no repair NPC within {RepairNpcSearchRadius:0}y; trying {nextRoute.AetheryteName} in {nextRoute.TerritoryName} instead.");
+        SetNpcRepairTravelStage(
+            NpcRepairTravelStage.TeleportingToFieldAetheryte,
+            $"No repair NPC was found near {failedRoute.AetheryteName}; trying {nextRoute.AetheryteName} in {nextRoute.TerritoryName}.");
+        return true;
     }
 
     private void SetNpcRepairTravelStage(NpcRepairTravelStage nextStage, string statusMessage)
@@ -1598,6 +1629,7 @@ public sealed unsafe class UtilityAutomationService
         npcRepairTravelCommandUtc = DateTime.MinValue;
         activeNpcRepairInnRoute = null;
         activeNpcRepairFieldRoute = null;
+        failedNpcRepairFieldAetheryteIds.Clear();
         npcRepairInnPathIndex = 0;
     }
 
