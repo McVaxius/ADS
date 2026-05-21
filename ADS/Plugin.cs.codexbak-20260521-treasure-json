@@ -83,7 +83,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private readonly HigherLowerWindow higherLowerWindow;
-    private readonly TreasureRouteEditorWindow treasureRouteEditorWindow;
     private readonly ServerEventExplorerWindow serverEventExplorerWindow;
     private readonly VfxExplorerWindow vfxExplorerWindow;
     private readonly ReflectionWindow reflectionWindow;
@@ -102,7 +101,6 @@ public sealed class Plugin : IDalamudPlugin
         VfxManager.LoggingFilter = string.Empty;
 
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
-        TreasureDungeonData.Configure(configDirectory, Log);
         TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
@@ -146,7 +144,6 @@ public sealed class Plugin : IDalamudPlugin
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
-        treasureRouteEditorWindow = new TreasureRouteEditorWindow(this);
         serverEventExplorerWindow = new ServerEventExplorerWindow(this);
         vfxExplorerWindow = new VfxExplorerWindow(this);
         reflectionWindow = new ReflectionWindow(this);
@@ -159,7 +156,6 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
         WindowSystem.AddWindow(higherLowerWindow);
-        WindowSystem.AddWindow(treasureRouteEditorWindow);
         WindowSystem.AddWindow(serverEventExplorerWindow);
         WindowSystem.AddWindow(vfxExplorerWindow);
         WindowSystem.AddWindow(reflectionWindow);
@@ -218,7 +214,6 @@ public sealed class Plugin : IDalamudPlugin
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
         higherLowerWindow.Dispose();
-        treasureRouteEditorWindow.Dispose();
         serverEventExplorerWindow.Dispose();
         vfxExplorerWindow.Dispose();
         reflectionWindow.Dispose();
@@ -270,12 +265,6 @@ public sealed class Plugin : IDalamudPlugin
     public void OpenHigherLowerUi()
         => higherLowerWindow.IsOpen = true;
 
-    public void ToggleTreasureRouteEditorUi()
-        => treasureRouteEditorWindow.IsOpen = !treasureRouteEditorWindow.IsOpen;
-
-    public void OpenTreasureRouteEditorUi()
-        => treasureRouteEditorWindow.OpenForCurrentTerritory();
-
     public void ToggleServerEventExplorerUi()
         => serverEventExplorerWindow.IsOpen = !serverEventExplorerWindow.IsOpen;
 
@@ -314,7 +303,6 @@ public sealed class Plugin : IDalamudPlugin
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
         higherLowerWindow.QueueResetToOrigin();
-        treasureRouteEditorWindow.QueueResetToOrigin();
         serverEventExplorerWindow.QueueResetToOrigin();
         vfxExplorerWindow.QueueResetToOrigin();
         reflectionWindow.QueueResetToOrigin();
@@ -331,7 +319,6 @@ public sealed class Plugin : IDalamudPlugin
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
         higherLowerWindow.QueueRandomVisibleJump();
-        treasureRouteEditorWindow.QueueRandomVisibleJump();
         serverEventExplorerWindow.QueueRandomVisibleJump();
         vfxExplorerWindow.QueueRandomVisibleJump();
         reflectionWindow.QueueRandomVisibleJump();
@@ -768,7 +755,6 @@ public sealed class Plugin : IDalamudPlugin
             ObjectPriorityRuleService.Reload();
             DialogYesNoRuleService.Reload();
             DutyCatalogService.ReloadMaturity();
-            TreasureDungeonData.Reload();
         }
 
         BmrReflectionService.Update();
@@ -778,7 +764,6 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
         ObjectPriorityRuleService.ReloadIfChanged();
         DialogYesNoRuleService.ReloadIfChanged();
-        TreasureDungeonData.ReloadIfChanged();
         DialogAutomationService.Update(
             DutyContextService.Current,
             ExecutionService.CurrentMode,
@@ -899,7 +884,6 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
                 "/ads hl - toggle the Higher/Lower calibration window\n" +
-                "/ads treasure - open treasure route editor\n" +
                 "/ads events - toggle the server event explorer\n" +
                 "/ads vfx - toggle the VFX explorer\n" +
                 "/ads reflection - toggle BMR reflection controls\n" +
@@ -991,12 +975,6 @@ public sealed class Plugin : IDalamudPlugin
             || trimmed.Equals("higher-lower", StringComparison.OrdinalIgnoreCase))
         {
             ToggleHigherLowerUi();
-            return;
-        }
-
-        if (trimmed.Equals("treasure", StringComparison.OrdinalIgnoreCase))
-        {
-            OpenTreasureRouteEditorUi();
             return;
         }
 

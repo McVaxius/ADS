@@ -11,7 +11,6 @@ public sealed class RemoteJsonUpdateService : IDisposable
     public const string ObjectRulesFileName = "duty-object-rules.json";
     public const string DialogRulesFileName = "dialog-yesno-rules.json";
     public const string DutyMaturityFileName = "duty-maturity.json";
-    public const string TreasureRoutesFileName = TreasureDungeonData.FileName;
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(24);
 
     private const string RemoteBaseUrl = "https://raw.githubusercontent.com/McVaxius/botologyupdates/main/ads/";
@@ -21,7 +20,6 @@ public sealed class RemoteJsonUpdateService : IDisposable
         new(ObjectRulesFileName, RemoteJsonKind.ObjectRules),
         new(DialogRulesFileName, RemoteJsonKind.DialogRules),
         new(DutyMaturityFileName, RemoteJsonKind.DutyMaturity),
-        new(TreasureRoutesFileName, RemoteJsonKind.TreasureRoutes),
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -250,9 +248,6 @@ public sealed class RemoteJsonUpdateService : IDisposable
                     ?? throw new InvalidDataException($"{source} did not contain a duty-maturity manifest.");
                 maturity.Duties ??= [];
                 break;
-            case RemoteJsonKind.TreasureRoutes:
-                TreasureDungeonData.ValidateJson(json, source);
-                break;
             default:
                 throw new InvalidDataException($"Unsupported remote JSON kind {kind}.");
         }
@@ -292,6 +287,5 @@ public sealed class RemoteJsonUpdateService : IDisposable
         ObjectRules,
         DialogRules,
         DutyMaturity,
-        TreasureRoutes,
     }
 }
