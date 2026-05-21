@@ -12,26 +12,29 @@ public sealed class TreasureRouteDefinition
     public bool Enabled { get; set; } = true;
     public uint TerritoryTypeId { get; set; }
     public string DutyName { get; set; } = string.Empty;
-    public TreasureRoutePointDefinition? EntryPoint { get; set; }
-    public List<TreasureRoutePointDefinition> Doors { get; set; } = [];
+    public TreasureRouteKind RouteKind { get; set; }
+    public TreasureRouteCoordinate? EntryPoint { get; set; }
+    public List<TreasureRouteRoomDefinition> Rooms { get; set; } = [];
 }
 
-public sealed class TreasureRoutePointDefinition
+public sealed class TreasureRouteRoomDefinition
 {
-    public string Label { get; set; } = string.Empty;
     public int Room { get; set; }
-    public TreasureRoutePointSlot Slot { get; set; }
+    public TreasureRouteCoordinate? Left { get; set; }
+    public TreasureRouteCoordinate? Middle { get; set; }
+    public TreasureRouteCoordinate? Right { get; set; }
+}
+
+public sealed class TreasureRouteCoordinate
+{
     public float? X { get; set; }
     public float? Y { get; set; }
     public float? Z { get; set; }
 }
 
-public enum TreasureRoutePointSlot
+public enum TreasureRouteKind
 {
     Unknown = 0,
-    Start,
-    Left,
-    Centre,
-    Right,
-    Single,
+    Treasure,
+    Thief,
 }

@@ -21,7 +21,7 @@ public static class TreasureDungeonData
         WriteIndented = true,
         Converters =
         {
-            new JsonStringEnumConverter<TreasureRoutePointSlot>(),
+            new JsonStringEnumConverter<TreasureRouteKind>(),
         },
     };
 
@@ -33,8 +33,25 @@ public static class TreasureDungeonData
         bool Enabled,
         uint TerritoryTypeId,
         string DutyName,
+        TreasureRouteKind RouteKind,
         RoutePoint Start,
         RoutePoint[] Doors);
+
+    private readonly record struct BuiltInRouteRoom(
+        int Room,
+        RoutePoint? Left,
+        RoutePoint? Middle,
+        RoutePoint? Right);
+
+    private enum TreasureRoutePointSlot
+    {
+        Unknown = 0,
+        Start,
+        Left,
+        Centre,
+        Right,
+        Single,
+    }
 
     private static readonly Dictionary<uint, TreasureRoute> BuiltInRoutes = new()
     {
@@ -44,6 +61,7 @@ public static class TreasureDungeonData
                 true,
                 712,
                 "the Lost Canals of Uznair",
+                TreasureRouteKind.Treasure,
                 Point(0.018579919f, 149.79604f, 388.26758f, "Dungeon Start", 0, TreasureRoutePointSlot.Start),
                 [
                     Point(-22.346756f, 99.705315f, 277.46317f, "Room 1 Left Door", 1, TreasureRoutePointSlot.Left),
@@ -66,6 +84,7 @@ public static class TreasureDungeonData
                 true,
                 725,
                 "the Hidden Canals of Uznair",
+                TreasureRouteKind.Thief,
                 Point(0.018579919f, 149.79604f, 388.26758f, "Dungeon Start", 0, TreasureRoutePointSlot.Start),
                 [
                     Point(-22.346756f, 99.705315f, 277.46317f, "Room 1 Left Door", 1, TreasureRoutePointSlot.Left),
@@ -94,6 +113,7 @@ public static class TreasureDungeonData
                 true,
                 558,
                 "the Aquapolis",
+                TreasureRouteKind.Unknown,
                 Point(1.0083783f, 0.19999814f, 340.36688f, "Room 1 Start", 1, TreasureRoutePointSlot.Start),
                 [
                     Point(-0.016964452f, -7.800004f, 217.08427f, "Room 2", 2, TreasureRoutePointSlot.Single),
@@ -110,6 +130,7 @@ public static class TreasureDungeonData
                 true,
                 879,
                 "The Dungeons of Lyhe Ghiah",
+                TreasureRouteKind.Treasure,
                 Point(0.3018191f, -39.97151f, 142.62704f, "Room 1 Start", 1, TreasureRoutePointSlot.Start),
                 [
                     Point(-28.071524f, -39.235474f, 101.0369f, "Room 2 Left Door", 2, TreasureRoutePointSlot.Left),
@@ -128,6 +149,7 @@ public static class TreasureDungeonData
                 true,
                 1000,
                 "the Excitatron 6000",
+                TreasureRouteKind.Treasure,
                 Point(0.03230051f, 20.000008f, 254.26851f, "Room 1 Start", 1, TreasureRoutePointSlot.Start),
                 [
                     Point(80.953316f, -10.038639f, 101.36717f, "Room 2 Left Door", 2, TreasureRoutePointSlot.Left),
@@ -146,6 +168,7 @@ public static class TreasureDungeonData
                 true,
                 1209,
                 "Cenote Ja Ja Gural",
+                TreasureRouteKind.Treasure,
                 Point(0.1223174f, -400.0f, 377.30017f, "Room 1 Start", 1, TreasureRoutePointSlot.Start),
                 [
                     Point(-35.06371f, -400.00003f, 341.5195f, "Room 2 Left Door", 2, TreasureRoutePointSlot.Left),
@@ -256,10 +279,10 @@ public static class TreasureDungeonData
                         continue;
                     }
 
-                    nextRoutes[route.TerritoryTypeId] = ConvertRoute(route);
+                    nextRoutes[route.TerritoryTypeId] = ConvertRoute(route, configPath);
                 }
 
-                foreach (var territoryId in BuiltInRoutes.Keys.OrderBy(x => x).Where(x => !manifestTerritories.Contains(x)))
+                foreach (var territoryId in GetEditableBuiltInRouteTerritoryIds().Where(x => !manifestTerritories.Contains(x)))
                     warnings.Add($"Territory {territoryId} omitted by {FileName}; using built-in route fallback.");
 
                 routes = nextRoutes;
@@ -321,6 +344,9 @@ public static class TreasureDungeonData
         if (!BuiltInRoutes.TryGetValue(territoryId, out var builtInRoute))
             return false;
 
+        if (!IsEditableRouteShape(builtInRoute))
+            return false;
+
         route = ConvertRoute(builtInRoute);
         return true;
     }
@@ -332,7 +358,7 @@ public static class TreasureDungeonData
     }
 
     public static IReadOnlyList<uint> GetBuiltInRouteTerritoryIds()
-        => BuiltInRoutes.Keys.OrderBy(x => x).ToList();
+        => GetEditableBuiltInRouteTerritoryIds().ToList();
 
     public static bool SaveManifest(TreasureRouteManifest manifest)
     {
@@ -454,15 +480,26 @@ public static class TreasureDungeonData
         return false;
     }
 
-    private static TreasureRoute ConvertRoute(TreasureRouteDefinition route)
+    private static TreasureRoute ConvertRoute(TreasureRouteDefinition route, string source)
     {
-        ValidateRoute(route, FileName);
-        return new TreasureRoute(
-            route.Enabled,
-            route.TerritoryTypeId,
-            route.DutyName,
-            ConvertPoint(route.EntryPoint!),
-            route.Doors.Select(ConvertPoint).ToArray());
+        ValidateRoute(route, source);
+        var builtInRoute = BuiltInRoutes[route.TerritoryTypeId];
+        var roomByNumber = route.Rooms.ToDictionary(x => x.Room);
+        var doors = builtInRoute.Doors
+            .Select(door =>
+            {
+                var room = roomByNumber[door.Room];
+                var coordinate = GetRoomCoordinate(room, door.Slot);
+                return door with { Position = ConvertCoordinate(coordinate) };
+            })
+            .ToArray();
+
+        return builtInRoute with
+        {
+            Enabled = route.Enabled,
+            Start = builtInRoute.Start with { Position = ConvertCoordinate(route.EntryPoint!) },
+            Doors = doors,
+        };
     }
 
     private static TreasureRouteDefinition ConvertRoute(TreasureRoute route)
@@ -471,35 +508,40 @@ public static class TreasureDungeonData
             Enabled = route.Enabled,
             TerritoryTypeId = route.TerritoryTypeId,
             DutyName = route.DutyName,
-            EntryPoint = ConvertPoint(route.Start),
-            Doors = route.Doors.Select(ConvertPoint).ToList(),
+            RouteKind = route.RouteKind,
+            EntryPoint = ConvertCoordinate(route.Start.Position),
+            Rooms = BuildRouteRooms(route)
+                .Select(room => new TreasureRouteRoomDefinition
+                {
+                    Room = room.Room,
+                    Left = ConvertCoordinate(room.Left!.Value.Position),
+                    Middle = route.RouteKind == TreasureRouteKind.Thief
+                        ? ConvertCoordinate(room.Middle!.Value.Position)
+                        : null,
+                    Right = ConvertCoordinate(room.Right!.Value.Position),
+                })
+                .ToList(),
         };
 
-    private static RoutePoint ConvertPoint(TreasureRoutePointDefinition point)
-        => new(
-            new Vector3(point.X!.Value, point.Y!.Value, point.Z!.Value),
-            point.Label,
-            point.Room,
-            point.Slot);
+    private static Vector3 ConvertCoordinate(TreasureRouteCoordinate coordinate)
+        => new(coordinate.X!.Value, coordinate.Y!.Value, coordinate.Z!.Value);
 
-    private static TreasureRoutePointDefinition ConvertPoint(RoutePoint point)
+    private static TreasureRouteCoordinate ConvertCoordinate(Vector3 position)
         => new()
         {
-            Label = point.Label,
-            Room = point.Room,
-            Slot = point.Slot,
-            X = point.Position.X,
-            Y = point.Position.Y,
-            Z = point.Position.Z,
+            X = position.X,
+            Y = position.Y,
+            Z = position.Z,
         };
 
     private static TreasureRouteManifest CreateManifest(IReadOnlyDictionary<uint, TreasureRoute> sourceRoutes)
         => new()
         {
             SchemaVersion = 1,
-            Description = "ADS treasure dungeon route geometry. Edit only entryPoint and door XYZ values unless changing schema intentionally; object names and route behavior stay compiled in ADS.",
+            Description = "ADS treasure dungeon route geometry. Edit only entryPoint and room door XYZ values; object names, labels, room metadata, and route behavior stay compiled in ADS.",
             Routes = sourceRoutes
                 .OrderBy(x => x.Key)
+                .Where(x => IsEditableRouteShape(x.Value))
                 .Select(x => ConvertRoute(x.Value))
                 .ToList(),
         };
@@ -551,33 +593,68 @@ public static class TreasureDungeonData
 
     private static void ValidateRoute(TreasureRouteDefinition route, string source)
     {
+        if (!BuiltInRoutes.TryGetValue(route.TerritoryTypeId, out var builtInRoute))
+            throw new InvalidDataException($"{source} route {route.TerritoryTypeId} is not a compiled ADS treasure route.");
+
+        if (!IsEditableRouteShape(builtInRoute))
+            throw new InvalidDataException($"{source} route {route.TerritoryTypeId} is compiled-only and cannot be edited through JSON.");
+
+        if (route.RouteKind == TreasureRouteKind.Unknown)
+            throw new InvalidDataException($"{source} route {route.TerritoryTypeId} is missing routeKind.");
+
+        if (route.RouteKind != builtInRoute.RouteKind)
+            throw new InvalidDataException($"{source} route {route.TerritoryTypeId} routeKind {route.RouteKind} does not match compiled routeKind {builtInRoute.RouteKind}.");
+
         if (route.EntryPoint is null)
             throw new InvalidDataException($"{source} route {route.TerritoryTypeId} is missing entryPoint.");
 
-        route.Doors ??= [];
-        ValidatePoint(route.EntryPoint, source, route.TerritoryTypeId, "entryPoint", allowStartSlot: true);
-        for (var i = 0; i < route.Doors.Count; i++)
-            ValidatePoint(route.Doors[i], source, route.TerritoryTypeId, $"doors[{i}]", allowStartSlot: false);
+        route.Rooms ??= [];
+        ValidateCoordinate(route.EntryPoint, source, route.TerritoryTypeId, "entryPoint");
+
+        var expectedRooms = BuildRouteRooms(builtInRoute);
+        if (route.Rooms.Count != expectedRooms.Count)
+            throw new InvalidDataException($"{source} route {route.TerritoryTypeId} has {route.Rooms.Count} room row(s); expected {expectedRooms.Count}.");
+
+        var seenRooms = new HashSet<int>();
+        var roomByNumber = new Dictionary<int, TreasureRouteRoomDefinition>();
+        foreach (var room in route.Rooms)
+        {
+            if (room.Room <= 0)
+                throw new InvalidDataException($"{source} route {route.TerritoryTypeId} has invalid room {room.Room}.");
+
+            if (!seenRooms.Add(room.Room))
+                throw new InvalidDataException($"{source} route {route.TerritoryTypeId} has duplicate room {room.Room}.");
+
+            roomByNumber[room.Room] = room;
+        }
+
+        foreach (var expectedRoom in expectedRooms)
+        {
+            if (!roomByNumber.TryGetValue(expectedRoom.Room, out var room))
+                throw new InvalidDataException($"{source} route {route.TerritoryTypeId} is missing room {expectedRoom.Room}.");
+
+            ValidateCoordinate(room.Left, source, route.TerritoryTypeId, $"rooms[{expectedRoom.Room}].left");
+            if (route.RouteKind == TreasureRouteKind.Thief)
+            {
+                ValidateCoordinate(room.Middle, source, route.TerritoryTypeId, $"rooms[{expectedRoom.Room}].middle");
+            }
+            else if (room.Middle is not null)
+            {
+                throw new InvalidDataException($"{source} route {route.TerritoryTypeId} room {expectedRoom.Room} includes middle coordinates but routeKind is {route.RouteKind}.");
+            }
+
+            ValidateCoordinate(room.Right, source, route.TerritoryTypeId, $"rooms[{expectedRoom.Room}].right");
+        }
     }
 
-    private static void ValidatePoint(
-        TreasureRoutePointDefinition point,
+    private static void ValidateCoordinate(
+        TreasureRouteCoordinate? point,
         string source,
         uint territoryTypeId,
-        string pointPath,
-        bool allowStartSlot)
+        string pointPath)
     {
-        if (string.IsNullOrWhiteSpace(point.Label))
-            throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} is missing label.");
-
-        if (point.Room < 0)
-            throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} has negative room.");
-
-        if (point.Slot == TreasureRoutePointSlot.Unknown)
-            throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} is missing slot.");
-
-        if (!allowStartSlot && point.Slot == TreasureRoutePointSlot.Start)
-            throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} uses Start slot outside entryPoint.");
+        if (point is null)
+            throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} is missing coordinates.");
 
         if (!point.X.HasValue || !point.Y.HasValue || !point.Z.HasValue
             || !float.IsFinite(point.X.Value)
@@ -586,6 +663,62 @@ public static class TreasureDungeonData
         {
             throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} has malformed coordinates.");
         }
+    }
+
+    private static TreasureRouteCoordinate GetRoomCoordinate(TreasureRouteRoomDefinition room, TreasureRoutePointSlot slot)
+        => slot switch
+        {
+            TreasureRoutePointSlot.Left => room.Left ?? throw new InvalidDataException($"Room {room.Room} is missing left coordinates."),
+            TreasureRoutePointSlot.Centre => room.Middle ?? throw new InvalidDataException($"Room {room.Room} is missing middle coordinates."),
+            TreasureRoutePointSlot.Right => room.Right ?? throw new InvalidDataException($"Room {room.Room} is missing right coordinates."),
+            _ => throw new InvalidDataException($"Room {room.Room} cannot map slot {slot} from editable treasure route JSON."),
+        };
+
+    private static IReadOnlyList<uint> GetEditableBuiltInRouteTerritoryIds()
+        => BuiltInRoutes
+            .Where(x => IsEditableRouteShape(x.Value))
+            .Select(x => x.Key)
+            .OrderBy(x => x)
+            .ToList();
+
+    private static bool IsEditableRouteShape(TreasureRoute route)
+    {
+        var rooms = BuildRouteRooms(route);
+        return route.RouteKind switch
+        {
+            TreasureRouteKind.Treasure => route.Doors.Length == rooms.Count * 2
+                && rooms.Count > 0
+                && rooms.All(x => x.Left.HasValue && !x.Middle.HasValue && x.Right.HasValue),
+            TreasureRouteKind.Thief => route.Doors.Length == rooms.Count * 3
+                && rooms.Count > 0
+                && rooms.All(x => x.Left.HasValue && x.Middle.HasValue && x.Right.HasValue),
+            _ => false,
+        };
+    }
+
+    private static IReadOnlyList<BuiltInRouteRoom> BuildRouteRooms(TreasureRoute route)
+    {
+        var rooms = new List<BuiltInRouteRoom>();
+        foreach (var door in route.Doors)
+        {
+            var index = rooms.FindIndex(x => x.Room == door.Room);
+            if (index < 0)
+            {
+                rooms.Add(new BuiltInRouteRoom(door.Room, null, null, null));
+                index = rooms.Count - 1;
+            }
+
+            var room = rooms[index];
+            rooms[index] = door.Slot switch
+            {
+                TreasureRoutePointSlot.Left => room with { Left = door },
+                TreasureRoutePointSlot.Centre => room with { Middle = door },
+                TreasureRoutePointSlot.Right => room with { Right = door },
+                _ => room,
+            };
+        }
+
+        return rooms;
     }
 
     private static RoutePoint Point(float x, float y, float z, string label, int room, TreasureRoutePointSlot slot)

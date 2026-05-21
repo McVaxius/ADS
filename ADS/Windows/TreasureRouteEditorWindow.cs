@@ -66,9 +66,9 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
 
         DrawToolbar(context.TerritoryTypeId, visibleRoutes);
         ImGui.Spacing();
-        DrawLiveSummary(selectedRoute, playerPosition);
+        DrawLiveSummary(playerPosition);
         ImGui.Spacing();
-        DrawRouteTable(selectedRoute, playerPosition);
+        DrawRouteTable(selectedRoute);
     }
 
     private void EnsureDraftLoaded()
@@ -150,7 +150,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         ImGui.TextDisabled(plugin.RemoteJsonUpdateService.LastUpdateStatus);
     }
 
-    private void DrawLiveSummary(TreasureRouteDefinition? route, Vector3? playerPosition)
+    private void DrawLiveSummary(Vector3? playerPosition)
     {
         if (!playerPosition.HasValue)
         {
@@ -161,35 +161,18 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         var player = playerPosition.Value;
         ImGui.TextUnformatted($"Player XYZ: {FormatVector(player)}");
 
-        var nearestStatic = route is null
-            ? null
-            : EnumerateRoutePoints(route)
-                .Select(point => new
-                {
-                    Point = point,
-                    Position = GetPosition(point),
-                    Distance = Vector3.Distance(player, GetPosition(point)),
-                })
-                .OrderBy(x => x.Distance)
-                .FirstOrDefault();
-        if (nearestStatic is not null)
-            ImGui.TextUnformatted($"Nearest static: {nearestStatic.Point.Label} | {FormatDelta(player, nearestStatic.Position)} | {nearestStatic.Distance:0.00}y");
-        else
-            ImGui.TextUnformatted("Nearest static: none");
-
         var nearestLiveDoor = plugin.ObservationMemoryService.Current.LiveInteractables
             .Where(x => x.Classification == InteractableClass.TreasureDoor)
-            .Select(x => new
+            .OrderBy(x =>
             {
-                Door = x,
-                Distance = Vector3.Distance(player, x.Position),
+                var delta = x.Position - player;
+                return Vector3.Dot(delta, delta);
             })
-            .OrderBy(x => x.Distance)
             .FirstOrDefault();
         if (nearestLiveDoor is not null)
         {
             ImGui.TextUnformatted(
-                $"Nearest live door: {nearestLiveDoor.Door.Name} | {FormatVector(nearestLiveDoor.Door.Position)} | {FormatDelta(player, nearestLiveDoor.Door.Position)} | {nearestLiveDoor.Distance:0.00}y");
+                $"Nearest live door: {nearestLiveDoor.Name} | {FormatVector(nearestLiveDoor.Position)}");
         }
         else
         {
@@ -197,7 +180,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         }
     }
 
-    private void DrawRouteTable(TreasureRouteDefinition? route, Vector3? playerPosition)
+    private void DrawRouteTable(TreasureRouteDefinition? route)
     {
         if (route is null)
         {
@@ -206,6 +189,62 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.TextUnformatted(GetRouteLabel(route));
+        DrawEntrySection(route);
+        ImGui.Spacing();
+        DrawRoomRows(route);
+    }
+
+    private void DrawEntrySection(TreasureRouteDefinition route)
+    {
+        ImGui.TextUnformatted("Entry XYZ");
+        if (route.EntryPoint is null)
+        {
+            ImGui.TextUnformatted("Entry point missing.");
+            return;
+        }
+
+        const ImGuiTableFlags tableFlags =
+            ImGuiTableFlags.Borders
+            | ImGuiTableFlags.RowBg
+            | ImGuiTableFlags.SizingFixedFit;
+
+        if (!ImGui.BeginTable("ADSTreasureRouteEntry", 3, tableFlags))
+            return;
+
+        ImGui.TableSetupColumn("X", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn("Z", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableHeadersRow();
+
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        if (EditFloatCell("##EntryX", route.EntryPoint.X, out var x))
+        {
+            route.EntryPoint.X = x;
+            dirty = true;
+        }
+
+        ImGui.TableSetColumnIndex(1);
+        if (EditFloatCell("##EntryY", route.EntryPoint.Y, out var y))
+        {
+            route.EntryPoint.Y = y;
+            dirty = true;
+        }
+
+        ImGui.TableSetColumnIndex(2);
+        if (EditFloatCell("##EntryZ", route.EntryPoint.Z, out var z))
+        {
+            route.EntryPoint.Z = z;
+            dirty = true;
+        }
+
+        ImGui.EndTable();
+    }
+
+    private void DrawRoomRows(TreasureRouteDefinition route)
+    {
+        var isThief = route.RouteKind == TreasureRouteKind.Thief;
+        var columnCount = isThief ? 4 : 3;
         const ImGuiTableFlags tableFlags =
             ImGuiTableFlags.Borders
             | ImGuiTableFlags.RowBg
@@ -213,82 +252,82 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
             | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.SizingFixedFit;
 
-        if (!ImGui.BeginTable("ADSTreasureRouteTable", 11, tableFlags, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSTreasureRouteRooms", columnCount, tableFlags, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Label", ImGuiTableColumnFlags.WidthFixed, 220f);
-        ImGui.TableSetupColumn("Room", ImGuiTableColumnFlags.WidthFixed, 60f);
-        ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("X", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Z", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("dX", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("dY", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("dZ", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 80f);
+        ImGui.TableSetupColumn("Room", ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn("Left XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
+        if (isThief)
+            ImGui.TableSetupColumn("Middle XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
+        ImGui.TableSetupColumn("Right XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
         ImGui.TableHeadersRow();
 
-        if (route.EntryPoint is not null)
-            DrawPointRow("Entry", route.EntryPoint, playerPosition);
-
-        for (var i = 0; i < route.Doors.Count; i++)
+        foreach (var room in route.Rooms.OrderBy(x => x.Room))
         {
-            ImGui.PushID(i);
-            DrawPointRow("Door", route.Doors[i], playerPosition);
+            ImGui.PushID(room.Room);
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.TextUnformatted(room.Room.ToString());
+
+            ImGui.TableSetColumnIndex(1);
+            DrawCoordinateCell("Left", room.Left);
+
+            var rightColumn = 2;
+            if (isThief)
+            {
+                ImGui.TableSetColumnIndex(2);
+                DrawCoordinateCell("Middle", room.Middle);
+                rightColumn = 3;
+            }
+
+            ImGui.TableSetColumnIndex(rightColumn);
+            DrawCoordinateCell("Right", room.Right);
             ImGui.PopID();
         }
 
         ImGui.EndTable();
     }
 
-    private void DrawPointRow(string kind, TreasureRoutePointDefinition point, Vector3? playerPosition)
+    private void DrawCoordinateCell(string id, TreasureRouteCoordinate? coordinate)
     {
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        ImGui.TextUnformatted(kind);
-        ImGui.TableSetColumnIndex(1);
-        ImGui.TextUnformatted(point.Label);
-        ImGui.TableSetColumnIndex(2);
-        ImGui.TextUnformatted(point.Room.ToString());
-        ImGui.TableSetColumnIndex(3);
-        ImGui.TextUnformatted(point.Slot.ToString());
-
-        ImGui.TableSetColumnIndex(4);
-        if (EditFloatCell("##X", point.X, out var x))
+        if (coordinate is null)
         {
-            point.X = x;
+            ImGui.TextDisabled("-");
+            return;
+        }
+
+        const float componentWidth = 88f;
+        ImGui.PushID(id);
+        if (EditFloatCell("##X", coordinate.X, out var x, componentWidth))
+        {
+            coordinate.X = x;
             dirty = true;
         }
 
-        ImGui.TableSetColumnIndex(5);
-        if (EditFloatCell("##Y", point.Y, out var y))
+        ImGui.SameLine();
+        if (EditFloatCell("##Y", coordinate.Y, out var y, componentWidth))
         {
-            point.Y = y;
+            coordinate.Y = y;
             dirty = true;
         }
 
-        ImGui.TableSetColumnIndex(6);
-        if (EditFloatCell("##Z", point.Z, out var z))
+        ImGui.SameLine();
+        if (EditFloatCell("##Z", coordinate.Z, out var z, componentWidth))
         {
-            point.Z = z;
+            coordinate.Z = z;
             dirty = true;
         }
 
-        var position = GetPosition(point);
-        var delta = playerPosition.HasValue ? position - playerPosition.Value : Vector3.Zero;
-        ImGui.TableSetColumnIndex(7);
-        ImGui.TextUnformatted(playerPosition.HasValue ? delta.X.ToString("0.00") : "-");
-        ImGui.TableSetColumnIndex(8);
-        ImGui.TextUnformatted(playerPosition.HasValue ? delta.Y.ToString("0.00") : "-");
-        ImGui.TableSetColumnIndex(9);
-        ImGui.TextUnformatted(playerPosition.HasValue ? delta.Z.ToString("0.00") : "-");
-        ImGui.TableSetColumnIndex(10);
-        ImGui.TextUnformatted(playerPosition.HasValue ? Vector3.Distance(position, playerPosition.Value).ToString("0.00") : "-");
+        ImGui.PopID();
     }
 
     private void SaveDraft()
     {
+        foreach (var route in draft.Routes)
+            route.Rooms = route.Rooms
+                .OrderBy(x => x.Room)
+                .ToList();
+
         draft.Routes = draft.Routes
             .OrderBy(x => x.TerritoryTypeId)
             .ToList();
@@ -347,18 +386,6 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         selectedTerritoryId = visibleRoutes.FirstOrDefault()?.TerritoryTypeId ?? 0;
     }
 
-    private static IEnumerable<TreasureRoutePointDefinition> EnumerateRoutePoints(TreasureRouteDefinition route)
-    {
-        if (route.EntryPoint is not null)
-            yield return route.EntryPoint;
-
-        foreach (var door in route.Doors)
-            yield return door;
-    }
-
-    private static Vector3 GetPosition(TreasureRoutePointDefinition point)
-        => new(point.X ?? 0f, point.Y ?? 0f, point.Z ?? 0f);
-
     private static string GetRouteLabel(TreasureRouteDefinition? route)
         => route is null
             ? "(no route)"
@@ -367,15 +394,9 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
     private static string FormatVector(Vector3 value)
         => $"{value.X:0.00}, {value.Y:0.00}, {value.Z:0.00}";
 
-    private static string FormatDelta(Vector3 from, Vector3 to)
+    private static bool EditFloatCell(string id, float? value, out float editedValue, float width = -1f)
     {
-        var delta = to - from;
-        return $"dXYZ {delta.X:0.00}, {delta.Y:0.00}, {delta.Z:0.00}";
-    }
-
-    private static bool EditFloatCell(string id, float? value, out float editedValue)
-    {
-        ImGui.SetNextItemWidth(-1f);
+        ImGui.SetNextItemWidth(width);
         var local = value ?? 0f;
         editedValue = local;
         if (!ImGui.InputFloat(id, ref local, 0f, 0f, "%.3f"))
