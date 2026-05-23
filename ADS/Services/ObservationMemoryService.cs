@@ -589,6 +589,9 @@ public sealed class ObservationMemoryService
             return treasureClassification;
         }
 
+        if (ShouldIgnoreTreasureDungeonShortcut(context, loweredName))
+            return InteractableClass.Ignored;
+
         if (considerTreasureCoffers && LooksLikeTreasureCofferOrChestName(name))
             return InteractableClass.TreasureCoffer;
 
@@ -641,6 +644,10 @@ public sealed class ObservationMemoryService
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool ShouldIgnoreTreasureDungeonShortcut(DutyContextSnapshot context, string loweredName)
+        => TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
+           && loweredName.Contains("shortcut");
 
     // Keep the BattleNpc direct-interact seam intentionally narrow so
     // existing Required/BossFight kill-priority rules continue to behave as monsters.
