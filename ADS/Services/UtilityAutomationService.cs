@@ -275,6 +275,9 @@ public sealed unsafe class UtilityAutomationService
 
     public bool StartSelfRepair()
     {
+        if (IsRepairBlockedByMountedState(UtilityTask.SelfRepair))
+            return false;
+
         if (!TryStartTask(UtilityTask.SelfRepair, "Starting self-repair."))
             return false;
 
@@ -290,6 +293,9 @@ public sealed unsafe class UtilityAutomationService
 
     private bool StartNpcRepair(NpcRepairMode mode)
     {
+        if (IsRepairBlockedByMountedState(UtilityTask.NpcRepair))
+            return false;
+
         if (mode == NpcRepairMode.NoInn
             && clientState.IsLoggedIn
             && objectTable.LocalPlayer != null
@@ -330,6 +336,40 @@ public sealed unsafe class UtilityAutomationService
 
     private bool CanStartNpcRepairNoInnHere()
         => IsInSanctuary() || IsNearAetheryteOrAethernet();
+
+    private bool IsRepairBlockedByMountedState(UtilityTask task)
+    {
+        if (!TryGetMountedOrRidingOrMountingBlocker(out var blocker))
+            return false;
+
+        StatusMessage = $"Cannot start {GetTaskLabel(task)} while {blocker}.";
+        log.Warning($"[ADS][Utility] {StatusMessage}");
+        return true;
+    }
+
+    private bool TryGetMountedOrRidingOrMountingBlocker(out string blocker)
+    {
+        if (condition[ConditionFlag.Mounting71])
+        {
+            blocker = "mounting";
+            return true;
+        }
+
+        if (condition[ConditionFlag.RidingPillion])
+        {
+            blocker = "riding pillion";
+            return true;
+        }
+
+        if (condition[ConditionFlag.Mounted])
+        {
+            blocker = "mounted";
+            return true;
+        }
+
+        blocker = string.Empty;
+        return false;
+    }
 
     private static bool IsInSanctuary()
     {
@@ -480,7 +520,7 @@ public sealed unsafe class UtilityAutomationService
         if (TryCompleteRepairIfFinished("Self-repair finished; equipped gear is fully repaired."))
             return;
 
-        if (!PrepareForUiWork("self-repair"))
+        if (!PrepareForUiWork("self-repair", allowDismount: false))
             return;
 
         var now = DateTime.UtcNow;
@@ -555,7 +595,7 @@ public sealed unsafe class UtilityAutomationService
         if (TryCompleteRepairIfFinished("NPC repair finished; equipped gear is fully repaired."))
             return;
 
-        if (!PrepareForUiWork("NPC repair"))
+        if (!PrepareForUiWork("NPC repair", allowDismount: false))
             return;
 
         var now = DateTime.UtcNow;
@@ -970,7 +1010,7 @@ public sealed unsafe class UtilityAutomationService
         }
     }
 
-    private bool PrepareForUiWork(string actionLabel)
+    private bool PrepareForUiWork(string actionLabel, bool allowDismount = true)
     {
         if (condition[ConditionFlag.BetweenAreas])
         {
@@ -978,8 +1018,14 @@ public sealed unsafe class UtilityAutomationService
             return false;
         }
 
-        if (!condition[ConditionFlag.Mounted])
+        if (!TryGetMountedOrRidingOrMountingBlocker(out var blocker))
             return true;
+
+        if (!allowDismount || condition[ConditionFlag.RidingPillion] || condition[ConditionFlag.Mounting71])
+        {
+            StatusMessage = $"Waiting for {blocker} to clear before {actionLabel}.";
+            return false;
+        }
 
         var now = DateTime.UtcNow;
         if (now - lastActionUtc >= UiRetryCooldown
