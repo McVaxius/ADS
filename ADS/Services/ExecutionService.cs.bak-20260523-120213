@@ -48,7 +48,6 @@ public sealed class ExecutionService
     private const float TreasureCofferProgressMargin = 2.0f;
     private const float TreasureRouteStuckProgressDistance = 0.5f;
     private const float TreasureRouteStuckNudgeXOffset = 0.5f;
-    private const int TreasureFollowerDoorFollowThroughNudgeAttemptLimit = 2;
     private const float TreasureDoorNudgeProgressDistance = 0.5f;
     private const float TreasureDoorNudgeSideOffset = 1.25f;
     private const float TreasureDoorNudgeForwardOffset = 1.5f;
@@ -220,7 +219,7 @@ public sealed class ExecutionService
     private readonly record struct MountedCombatClusterTarget(ObservedMonster Observed, IGameObject GameObject, float HorizontalDistance, float Distance3d, float VerticalDelta, int ClusterCount);
     private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
     private readonly record struct TreasureRouteNavigationDecision(Vector3 Destination, bool ForceNavigationRestart, bool NudgeApplied, int NudgeAttempt, bool CandidateFailed);
-    private readonly record struct TreasureDoorNavigationDecision(Vector3 Destination, ulong NavigationTargetId, string StatusText, bool StuckRecoveryExhausted);
+    private readonly record struct TreasureDoorNavigationDecision(Vector3 Destination, ulong NavigationTargetId, string StatusText);
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
@@ -259,21 +258,6 @@ public sealed class ExecutionService
         => treasureFollowerDoorFollowThroughPoint is { } point
             ? $"{point.Name} @ {FormatVector(point.Position)}"
             : string.Empty;
-
-    public string TreasureFollowerDoorFollowThroughStage
-    {
-        get
-        {
-            if (HasPendingTreasureFollowerDoorFollowThrough())
-                return "ClearThrough";
-
-            return EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-                   && dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
-                   && dungeonFrontierService.CurrentTarget is { IsTreasurePassageCandidate: true }
-                ? "DoorThroat"
-                : string.Empty;
-        }
-    }
 
     public bool IsOwned
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving;
@@ -815,16 +799,6 @@ public sealed class ExecutionService
                 TryAdvanceInteractableObjective(context, selectedInteractable, $"{prefix}");
                 return;
             }
-        }
-
-        if (dungeonFrontierService.TreasureFollowerDoorChaseHoldActive)
-        {
-            StopMovementAssists();
-            var holdStatus = string.IsNullOrWhiteSpace(dungeonFrontierService.CurrentLabelStatus)
-                ? "Waiting for opener door-choice cutscene to finish before chasing treasure follower passage doors."
-                : dungeonFrontierService.CurrentLabelStatus;
-            SetPhase(ExecutionPhase.WaitingForTruth, $"{prefix} {holdStatus}");
-            return;
         }
 
         StopMovementAssists();
@@ -2082,7 +2056,7 @@ public sealed class ExecutionService
                     ResetTreasureRouteStuckTracking();
                     SetPhase(
                         ExecutionPhase.FrontierHint,
-                        $"{prefix} Treasure follower passage candidate {frontierPoint.Name} exhausted door-throat stuck recovery without transition; ADS is entering the room retry cooldown.");
+                        $"{prefix} Treasure follower passage candidate {frontierPoint.Name} exhausted stuck recovery without transition; ADS is trying another current-room candidate.");
                     return;
                 }
 
@@ -2285,10 +2259,8 @@ public sealed class ExecutionService
                 "after reaching the movement-only passage candidate",
                 pauseForSelectYesno: false,
                 stopMovementOnReach: false,
-                maxNudgeAttempts: TreasureFollowerDoorFollowThroughNudgeAttemptLimit,
                 out var reachedFollowThrough,
-                out var staleCrossFloorTarget,
-                out var stuckRecoveryExhausted))
+                out var staleCrossFloorTarget))
         {
             if (reachedFollowThrough)
             {
@@ -2301,22 +2273,9 @@ public sealed class ExecutionService
                 ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
                 SetPhase(
                     ExecutionPhase.FrontierHint,
-                    $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} reached {FormatVector(followThroughPoint.Position)} (follow-through XZ {followThroughHorizontalDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y). No transition or live duty truth appeared, so ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
+                    $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} reached {FormatVector(followThroughPoint.Position)} (follow-through XZ {followThroughHorizontalDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y). No transition or live duty truth appeared, so ADS is trying another current-room candidate.{treasureRouteRadiusStatus}");
             }
 
-            return true;
-        }
-
-        if (stuckRecoveryExhausted)
-        {
-            StopNavigationForTreasureRouteNudge();
-            var failureDetail =
-                $"Clear-through target {FormatVector(followThroughPoint.Position)} made no progress after {TreasureDoorNudgeStuckTimeout.TotalSeconds:0}s windows and {TreasureFollowerDoorFollowThroughNudgeAttemptLimit} side-nudge attempt(s). Player {FormatVector(playerPosition)}, candidate {FormatVector(candidate.Position)}, candidate XZ {candidateHorizontalDistance:0.0}y, 3D {candidateDistance:0.0}y, Y {candidateVerticalDelta:0.0}y.";
-            dungeonFrontierService.MarkTreasureFollowerCandidateFailed(candidate, "DoorFollowThroughStuckRecoveryExhausted", failureDetail);
-            ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
-            SetPhase(
-                ExecutionPhase.FrontierHint,
-                $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} exhausted clear-through side-nudge recovery; ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
             return true;
         }
 
@@ -3633,10 +3592,8 @@ public sealed class ExecutionService
             "after the interact",
             pauseForSelectYesno: true,
             stopMovementOnReach: true,
-            maxNudgeAttempts: null,
             out reachedTransitionPoint,
-            out staleCrossFloorTarget,
-            out _);
+            out staleCrossFloorTarget);
 
     private bool TryAdvanceTreasureDoorFollowThroughPoint(
         DungeonFrontierPoint? frontierPoint,
@@ -3645,14 +3602,11 @@ public sealed class ExecutionService
         string contextText,
         bool pauseForSelectYesno,
         bool stopMovementOnReach,
-        int? maxNudgeAttempts,
         out bool reachedTransitionPoint,
-        out bool staleCrossFloorTarget,
-        out bool stuckRecoveryExhausted)
+        out bool staleCrossFloorTarget)
     {
         reachedTransitionPoint = false;
         staleCrossFloorTarget = false;
-        stuckRecoveryExhausted = false;
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (frontierPoint is null || !playerPosition.HasValue)
         {
@@ -3684,14 +3638,7 @@ public sealed class ExecutionService
             : PreferredFrontierArrivalRange;
         if (targetHorizontalDistance > arrivalRange)
         {
-            var navigationDecision = ResolveTreasureDoorFollowThroughNavigation(frontierPoint, playerPosition.Value, maxNudgeAttempts);
-            if (navigationDecision.StuckRecoveryExhausted)
-            {
-                stuckRecoveryExhausted = true;
-                ResetTreasureDoorJiggleTracking(releaseKeys: true);
-                return false;
-            }
-
+            var navigationDecision = ResolveTreasureDoorFollowThroughNavigation(frontierPoint, playerPosition.Value);
             TryBeginNavigation(navigationDecision.NavigationTargetId, navigationDecision.Destination);
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
@@ -3711,16 +3658,13 @@ public sealed class ExecutionService
         return true;
     }
 
-    private TreasureDoorNavigationDecision ResolveTreasureDoorFollowThroughNavigation(
-        DungeonFrontierPoint frontierPoint,
-        Vector3 playerPosition,
-        int? maxNudgeAttempts)
+    private TreasureDoorNavigationDecision ResolveTreasureDoorFollowThroughNavigation(DungeonFrontierPoint frontierPoint, Vector3 playerPosition)
     {
         var originalTargetId = BuildFrontierTargetId(frontierPoint);
         if (!configuration.TreasureDoorJiggleRecoveryEnabled)
         {
             ResetTreasureDoorJiggleTracking(releaseKeys: true);
-            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
+            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty);
         }
 
         var now = DateTime.UtcNow;
@@ -3728,7 +3672,7 @@ public sealed class ExecutionService
             || !treasureDoorNudgeBaselinePosition.HasValue)
         {
             StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
-            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
+            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty);
         }
 
         if (now < treasureDoorNudgeUntilUtc)
@@ -3736,33 +3680,23 @@ public sealed class ExecutionService
             return new TreasureDoorNavigationDecision(
                 treasureDoorNudgeDestination,
                 BuildTreasureDoorNudgeTargetId(frontierPoint),
-                $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.",
-                StuckRecoveryExhausted: false);
+                $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.");
         }
 
         if (treasureDoorNudgeUntilUtc != DateTime.MinValue)
         {
-            ResumeTreasureDoorJiggleTrackingAfterNudge(frontierPoint, playerPosition, now);
-            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
+            StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
+            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty);
         }
 
         if (GetHorizontalDistance(treasureDoorNudgeBaselinePosition.Value, playerPosition) > TreasureDoorNudgeProgressDistance)
         {
             StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
-            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
+            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty);
         }
 
         if (now - treasureDoorNudgeLastProgressUtc < TreasureDoorNudgeStuckTimeout)
-            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
-
-        if (maxNudgeAttempts.HasValue && treasureDoorNudgeAttempt >= maxNudgeAttempts.Value)
-        {
-            return new TreasureDoorNavigationDecision(
-                frontierPoint.Position,
-                originalTargetId,
-                string.Empty,
-                StuckRecoveryExhausted: true);
-        }
+            return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty);
 
         treasureDoorNudgeAttempt = treasureDoorNudgeAttempt >= 2 ? 1 : treasureDoorNudgeAttempt + 1;
         treasureDoorNudgeDestination = BuildTreasureDoorSideNudgeDestination(frontierPoint.Position, playerPosition, treasureDoorNudgeAttempt);
@@ -3775,8 +3709,7 @@ public sealed class ExecutionService
         return new TreasureDoorNavigationDecision(
             treasureDoorNudgeDestination,
             BuildTreasureDoorNudgeTargetId(frontierPoint),
-            $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.",
-            StuckRecoveryExhausted: false);
+            $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.");
     }
 
     private void StartTreasureDoorJiggleTracking(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
@@ -3785,15 +3718,6 @@ public sealed class ExecutionService
         treasureDoorNudgeTargetKey = frontierPoint.Key;
         treasureDoorNudgeBaselinePosition = playerPosition;
         treasureDoorNudgeLastProgressUtc = now;
-    }
-
-    private void ResumeTreasureDoorJiggleTrackingAfterNudge(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
-    {
-        treasureDoorNudgeTargetKey = frontierPoint.Key;
-        treasureDoorNudgeBaselinePosition = playerPosition;
-        treasureDoorNudgeLastProgressUtc = now;
-        treasureDoorNudgeUntilUtc = DateTime.MinValue;
-        treasureDoorNudgeDestination = Vector3.Zero;
     }
 
     private ulong BuildTreasureDoorNudgeTargetId(DungeonFrontierPoint frontierPoint)
