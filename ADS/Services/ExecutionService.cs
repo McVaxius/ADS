@@ -29,6 +29,7 @@ public sealed class ExecutionService
     private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
     private const float TreasureDoorFollowThroughStaleVerticalDelta = 20.0f;
     private const float TreasureDoorPlannerSameFloorVerticalDelta = 6.0f;
+    private const uint AquapolisTerritoryTypeId = 558;
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const uint BigCheekedCakeMonsters = 6942069; // Hello adventurer, are you enjoying my ai slop today :D
     private const uint PraetoriumMagitekCannonActionId = 1128;
@@ -48,6 +49,7 @@ public sealed class ExecutionService
     private const float TreasureCofferProgressMargin = 2.0f;
     private const float TreasureRouteStuckProgressDistance = 0.5f;
     private const float TreasureRouteStuckNudgeXOffset = 0.5f;
+    private const float AquapolisRouteWiggleSideOffset = 1.25f;
     private const int TreasureFollowerDoorFollowThroughNudgeAttemptLimit = 2;
     private const float TreasureDoorNudgeProgressDistance = 0.5f;
     private const float TreasureDoorNudgeSideOffset = 1.25f;
@@ -71,6 +73,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
     private static readonly TimeSpan TreasureCofferLockedRetryDelay = TimeSpan.FromSeconds(15.0);
     private static readonly TimeSpan TreasureRouteStuckTimeout = TimeSpan.FromSeconds(10.0);
+    private static readonly TimeSpan AquapolisRouteWiggleHoldDuration = TimeSpan.FromSeconds(1.0);
     private static readonly TimeSpan ManualDestinationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
@@ -131,6 +134,12 @@ public sealed class ExecutionService
     private Vector3? treasureRouteStuckBaselinePosition;
     private DateTime treasureRouteStuckLastProgressUtc;
     private int treasureRouteStuckOffsetAttempt;
+    private string? aquapolisRouteWiggleTargetKey;
+    private Vector3? aquapolisRouteWiggleBaselinePosition;
+    private DateTime aquapolisRouteWiggleLastProgressUtc;
+    private int aquapolisRouteWiggleAttempt;
+    private DateTime aquapolisRouteWiggleUntilUtc = DateTime.MinValue;
+    private Vector3 aquapolisRouteWiggleDestination;
     private string? treasureFollowerDoorFollowThroughCandidateKey;
     private DungeonFrontierPoint? treasureFollowerDoorFollowThroughCandidatePoint;
     private DungeonFrontierPoint? treasureFollowerDoorFollowThroughPoint;
@@ -314,11 +323,14 @@ public sealed class ExecutionService
     public void ReleaseHeldMovementKeys(string reason)
     {
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
+        var hadAquapolisWiggle = aquapolisRouteWiggleTargetKey != null || aquapolisRouteWiggleUntilUtc != DateTime.MinValue;
         ClearBossFightCombatGhost(reason);
         ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         if (hadNudge)
             log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
+        if (hadAquapolisWiggle)
+            log?.Information($"[ADS] Cleared Aquapolis passage vnav side-step recovery during {reason}.");
     }
 
     private bool IsActiveOwnedDutyMode()
@@ -1963,6 +1975,7 @@ public sealed class ExecutionService
         var isTreasureRoutePoint = IsTreasureRouteFrontierPoint();
         var isTreasureFollowerRoutePoint = isTreasureRoutePoint && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
         var isTreasureFollowerPassageCandidate = isTreasureFollowerRoutePoint && frontierPoint.IsTreasurePassageCandidate;
+        var isAquapolisRouteWiggleTarget = IsAquapolisRouteWiggleTarget(context, frontierPoint);
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
@@ -2070,6 +2083,7 @@ public sealed class ExecutionService
                     ? frontierPoint.Position
                     : BuildPreferredApproachPoint(playerPosition.Value, frontierPoint.Position, PreferredFrontierArrivalRange);
                 var navigationDecision = ResolveTreasureRouteNavigationDecision(
+                    context,
                     frontierPoint,
                     playerPosition.Value,
                     originalNavigationDestination);
@@ -2091,12 +2105,17 @@ public sealed class ExecutionService
 
                 if (navigationDecision.NudgeApplied)
                 {
-                    CommitTreasureRouteStuckNudge(frontierPoint, playerPosition.Value, navigationDecision.NudgeAttempt);
+                    if (!isAquapolisRouteWiggleTarget)
+                        CommitTreasureRouteStuckNudge(frontierPoint, playerPosition.Value, navigationDecision.NudgeAttempt);
+
                     treasureRouteNudgeApplied = true;
                     treasureRouteNudgeAttempt = navigationDecision.NudgeAttempt;
                     treasureRouteNudgeDestination = navigationDecision.Destination;
-                    log?.Information(
-                        $"[ADS] Treasure route stuck nudge attempt {treasureRouteNudgeAttempt} for {frontierPoint.Name}: original {FormatVector(frontierPoint.Position)}, adjusted {FormatVector(treasureRouteNudgeDestination)} after XYZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s.");
+                    if (!isAquapolisRouteWiggleTarget)
+                    {
+                        log?.Information(
+                            $"[ADS] Treasure route stuck nudge attempt {treasureRouteNudgeAttempt} for {frontierPoint.Name}: original {FormatVector(frontierPoint.Position)}, adjusted {FormatVector(treasureRouteNudgeDestination)} after XYZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s.");
+                    }
                 }
 
                 TryBeginNavigation(frontierTargetId, navigationDecision.Destination);
@@ -2106,7 +2125,9 @@ public sealed class ExecutionService
                 ? "via map flag and /vnav moveflag"
                 : "via direct /vnav moveto";
             var treasureRouteNudgeStatus = treasureRouteNudgeApplied
-                ? $"; applied stuck nudge attempt {treasureRouteNudgeAttempt} from {FormatVector(frontierPoint.Position)} to {FormatVector(treasureRouteNudgeDestination)}"
+                ? isAquapolisRouteWiggleTarget
+                    ? $"; Aquapolis passage recovery side-step {FormatAquapolisRouteWiggleSide(treasureRouteNudgeAttempt)} to {FormatVector(treasureRouteNudgeDestination)}"
+                    : $"; applied stuck nudge attempt {treasureRouteNudgeAttempt} from {FormatVector(frontierPoint.Position)} to {FormatVector(treasureRouteNudgeDestination)}"
                 : string.Empty;
             SetPhase(
                 GetFrontierNavigatingPhase(isMapXzDestination, isXyzDestination),
@@ -2384,6 +2405,7 @@ public sealed class ExecutionService
            && string.Equals(left.TreasurePassageGroup, right.TreasurePassageGroup, StringComparison.Ordinal);
 
     private TreasureRouteNavigationDecision ResolveTreasureRouteNavigationDecision(
+        DutyContextSnapshot context,
         DungeonFrontierPoint frontierPoint,
         Vector3 playerPosition,
         Vector3 originalDestination,
@@ -2392,6 +2414,19 @@ public sealed class ExecutionService
         if (!IsTreasureRouteFrontierPoint())
             return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0, CandidateFailed: false);
 
+        if (IsAquapolisRoutePassageTarget(context, frontierPoint))
+        {
+            ResetStandardTreasureRouteStuckTracking();
+            if (IsAquapolisRouteWiggleHoldActive(context))
+            {
+                ResetAquapolisRouteWiggleTracking();
+                return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0, CandidateFailed: false);
+            }
+
+            return ResolveAquapolisRouteWiggleNavigationDecision(frontierPoint, playerPosition, originalDestination);
+        }
+
+        ResetAquapolisRouteWiggleTracking();
         var now = DateTime.UtcNow;
         if (!string.Equals(treasureRouteStuckTargetKey, frontierPoint.Key, StringComparison.Ordinal)
             || !treasureRouteStuckBaselinePosition.HasValue)
@@ -2446,6 +2481,78 @@ public sealed class ExecutionService
             CandidateFailed: false);
     }
 
+    private static bool IsAquapolisRouteWiggleTarget(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint)
+        => IsAquapolisRoutePassageTarget(context, frontierPoint)
+           && !IsAquapolisRouteWiggleHoldActive(context);
+
+    private static bool IsAquapolisRoutePassageTarget(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint)
+        => context.TerritoryTypeId == AquapolisTerritoryTypeId
+           && frontierPoint.IsTreasurePassageCandidate
+           && frontierPoint.TreasureRoomIndex is >= 2 and <= 7;
+
+    private static bool IsAquapolisRouteWiggleHoldActive(DutyContextSnapshot context)
+        => context.BetweenAreas
+           || context.BetweenAreas51
+           || context.OccupiedInCutSceneEvent
+           || context.WatchingCutscene;
+
+    private TreasureRouteNavigationDecision ResolveAquapolisRouteWiggleNavigationDecision(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        Vector3 originalDestination)
+    {
+        var now = DateTime.UtcNow;
+        if (!string.Equals(aquapolisRouteWiggleTargetKey, frontierPoint.Key, StringComparison.Ordinal)
+            || !aquapolisRouteWiggleBaselinePosition.HasValue)
+        {
+            StartAquapolisRouteWiggleTracking(frontierPoint, playerPosition, now, resetNextSide: true);
+            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0, CandidateFailed: false);
+        }
+
+        if (now < aquapolisRouteWiggleUntilUtc)
+        {
+            return new TreasureRouteNavigationDecision(
+                aquapolisRouteWiggleDestination,
+                ForceNavigationRestart: false,
+                NudgeApplied: true,
+                NudgeAttempt: aquapolisRouteWiggleAttempt,
+                CandidateFailed: false);
+        }
+
+        if (aquapolisRouteWiggleUntilUtc != DateTime.MinValue)
+        {
+            ResumeAquapolisRouteWiggleTrackingAfterSideStep(frontierPoint, playerPosition, now);
+            return new TreasureRouteNavigationDecision(
+                originalDestination,
+                ForceNavigationRestart: true,
+                NudgeApplied: false,
+                NudgeAttempt: aquapolisRouteWiggleAttempt,
+                CandidateFailed: false);
+        }
+
+        if (GetHorizontalDistance(aquapolisRouteWiggleBaselinePosition.Value, playerPosition) >= TreasureRouteStuckProgressDistance)
+        {
+            StartAquapolisRouteWiggleTracking(frontierPoint, playerPosition, now, resetNextSide: true);
+            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: 0, CandidateFailed: false);
+        }
+
+        if (now - aquapolisRouteWiggleLastProgressUtc < TreasureRouteStuckTimeout)
+            return new TreasureRouteNavigationDecision(originalDestination, ForceNavigationRestart: false, NudgeApplied: false, NudgeAttempt: aquapolisRouteWiggleAttempt, CandidateFailed: false);
+
+        aquapolisRouteWiggleAttempt = aquapolisRouteWiggleAttempt >= 2 ? 1 : aquapolisRouteWiggleAttempt + 1;
+        aquapolisRouteWiggleDestination = BuildAquapolisRouteWiggleDestination(frontierPoint.Position, playerPosition, aquapolisRouteWiggleAttempt);
+        aquapolisRouteWiggleUntilUtc = now + AquapolisRouteWiggleHoldDuration;
+        log?.Information(
+            $"[ADS] Aquapolis passage recovery side-step {FormatAquapolisRouteWiggleSide(aquapolisRouteWiggleAttempt)} started for {frontierPoint.Name}; XZ movement stayed under {TreasureRouteStuckProgressDistance:0.0}y for {TreasureRouteStuckTimeout.TotalSeconds:0}s. Destination {FormatVector(aquapolisRouteWiggleDestination)}.");
+
+        return new TreasureRouteNavigationDecision(
+            aquapolisRouteWiggleDestination,
+            ForceNavigationRestart: true,
+            NudgeApplied: true,
+            NudgeAttempt: aquapolisRouteWiggleAttempt,
+            CandidateFailed: false);
+    }
+
     private void StartTreasureRouteStuckTracking(DungeonFrontierPoint frontierPoint, Vector3 playerPosition, DateTime now)
     {
         treasureRouteStuckTargetKey = frontierPoint.Key;
@@ -2464,10 +2571,53 @@ public sealed class ExecutionService
 
     private void ResetTreasureRouteStuckTracking()
     {
+        ResetStandardTreasureRouteStuckTracking();
+        ResetAquapolisRouteWiggleTracking();
+    }
+
+    private void ResetStandardTreasureRouteStuckTracking()
+    {
         treasureRouteStuckTargetKey = null;
         treasureRouteStuckBaselinePosition = null;
         treasureRouteStuckLastProgressUtc = DateTime.MinValue;
         treasureRouteStuckOffsetAttempt = 0;
+    }
+
+    private void StartAquapolisRouteWiggleTracking(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        DateTime now,
+        bool resetNextSide)
+    {
+        aquapolisRouteWiggleTargetKey = frontierPoint.Key;
+        aquapolisRouteWiggleBaselinePosition = playerPosition;
+        aquapolisRouteWiggleLastProgressUtc = now;
+        aquapolisRouteWiggleUntilUtc = DateTime.MinValue;
+        aquapolisRouteWiggleDestination = Vector3.Zero;
+        if (resetNextSide)
+            aquapolisRouteWiggleAttempt = 0;
+    }
+
+    private void ResumeAquapolisRouteWiggleTrackingAfterSideStep(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        DateTime now)
+    {
+        aquapolisRouteWiggleTargetKey = frontierPoint.Key;
+        aquapolisRouteWiggleBaselinePosition = playerPosition;
+        aquapolisRouteWiggleLastProgressUtc = now;
+        aquapolisRouteWiggleUntilUtc = DateTime.MinValue;
+        aquapolisRouteWiggleDestination = Vector3.Zero;
+    }
+
+    private void ResetAquapolisRouteWiggleTracking()
+    {
+        aquapolisRouteWiggleTargetKey = null;
+        aquapolisRouteWiggleBaselinePosition = null;
+        aquapolisRouteWiggleLastProgressUtc = DateTime.MinValue;
+        aquapolisRouteWiggleAttempt = 0;
+        aquapolisRouteWiggleUntilUtc = DateTime.MinValue;
+        aquapolisRouteWiggleDestination = Vector3.Zero;
     }
 
     private void PauseTreasureFollowerDoorFollowThrough()
@@ -2563,6 +2713,25 @@ public sealed class ExecutionService
             2 => new Vector3(originalDestination.X - TreasureRouteStuckNudgeXOffset, originalDestination.Y, originalDestination.Z),
             _ => originalDestination,
         };
+
+    private static Vector3 BuildAquapolisRouteWiggleDestination(Vector3 targetPosition, Vector3 playerPosition, int attempt)
+    {
+        var flatDelta = new Vector3(targetPosition.X - playerPosition.X, 0f, targetPosition.Z - playerPosition.Z);
+        var flatDistance = flatDelta.Length();
+        var forward = flatDistance <= float.Epsilon
+            ? Vector3.UnitZ
+            : Vector3.Normalize(flatDelta);
+        var side = new Vector3(-forward.Z, 0f, forward.X);
+        var sideSign = attempt % 2 == 1 ? 1f : -1f;
+
+        return new Vector3(
+            playerPosition.X + (side.X * AquapolisRouteWiggleSideOffset * sideSign),
+            playerPosition.Y,
+            playerPosition.Z + (side.Z * AquapolisRouteWiggleSideOffset * sideSign));
+    }
+
+    private static string FormatAquapolisRouteWiggleSide(int attempt)
+        => attempt % 2 == 1 ? "left" : "right";
 
     private static DungeonFrontierPoint BuildTreasureFollowerDoorFollowThroughPoint(
         DungeonFrontierPoint candidate,
@@ -5105,6 +5274,7 @@ public sealed class ExecutionService
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
         PauseTreasureFollowerDoorFollowThrough();
+        ResetAquapolisRouteWiggleTracking();
         ResetManualDestinationNoProgressTracking(clearStatus: true);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
@@ -5208,6 +5378,7 @@ public sealed class ExecutionService
             PauseTreasureFollowerDoorFollowThrough();
         }
         ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetAquapolisRouteWiggleTracking();
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         unsafeTransitionNavigationStopLatched = true;
 

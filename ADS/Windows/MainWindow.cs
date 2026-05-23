@@ -461,6 +461,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             Jumping61 = false,
             Occupied33 = false,
             OccupiedInCutSceneEvent = false,
+            WatchingCutscene = false,
             InCombat = false,
             Mounted = false,
             TerritoryTypeId = entry.TerritoryTypeId,

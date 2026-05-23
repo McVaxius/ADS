@@ -532,6 +532,7 @@ public sealed class DungeonFrontierService
     private static bool IsTreasureFollowerDoorChaseGateTransitionActive(DutyContextSnapshot context)
         => context.Occupied33
            || context.OccupiedInCutSceneEvent
+           || context.WatchingCutscene
            || context.BetweenAreas
            || context.BetweenAreas51;
 
@@ -2029,6 +2030,8 @@ public sealed class DungeonFrontierService
             flags.Add("Occupied33");
         if (context.OccupiedInCutSceneEvent)
             flags.Add("OccupiedInCutSceneEvent");
+        if (context.WatchingCutscene)
+            flags.Add("WatchingCutscene");
 
         return flags.Count == 0 ? "TreasureRouteTransitHold" : string.Join("/", flags);
     }
