@@ -669,9 +669,6 @@ public sealed class ExecutionService
         if (TryAdvanceCommittedForceMarchManualDestination(context, planner, prefix))
             return;
 
-        if (TryAdvanceTreasureFollowerCofferSeekCombatBypass(context, planner, prefix))
-            return;
-
         if (TryHoldTreasureFollowerCombatYield(context, planner, observation, prefix))
             return;
 
@@ -2158,9 +2155,6 @@ public sealed class ExecutionService
         }
 
         StopMovementAssists();
-        if (frontierPoint.IsTreasureFollowerStagingPoint)
-            dungeonFrontierService.MarkTreasureFollowerCofferSeekReached(frontierPoint, playerPosition.Value, "ExecutionArrival");
-
         if (isMapXzDestination || isXyzDestination)
             dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
 
@@ -5420,28 +5414,6 @@ public sealed class ExecutionService
         treasureDungeonCombatStopLatched = false;
     }
 
-    private bool TryAdvanceTreasureFollowerCofferSeekCombatBypass(
-        DutyContextSnapshot context,
-        PlannerSnapshot planner,
-        string prefix)
-    {
-        if (!IsTreasureFollowerCombatSignal(context, planner)
-            || !dungeonFrontierService.TreasureFollowerCofferSeekActive
-            || dungeonFrontierService.CurrentTarget is not { IsTreasureFollowerStagingPoint: true } stagingTarget)
-        {
-            return false;
-        }
-
-        ResetRecoveryHold();
-        TryAdvanceFrontierPoint(
-            context,
-            stagingTarget,
-            isMapXzDestination: false,
-            isXyzDestination: false,
-            $"{prefix} Treasure follower coffer seek is active during combat; ADS is bypassing combat yield until staging reach or timeout.");
-        return true;
-    }
-
     private bool TryHoldTreasureFollowerCombatYield(
         DutyContextSnapshot context,
         PlannerSnapshot planner,
@@ -5450,7 +5422,6 @@ public sealed class ExecutionService
     {
         if (!IsTreasureFollowerCombatSignal(context, planner)
             || !IsTreasureFollowerDuty(context)
-            || dungeonFrontierService.TreasureFollowerCofferSeekActive
             || ShouldBypassCombatHold(context, planner, observation))
         {
             return false;

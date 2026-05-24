@@ -559,16 +559,6 @@ public sealed class Plugin : IDalamudPlugin
                 treasureFollowerDoorChaseGateSettleRemainingSeconds = DungeonFrontierService.TreasureFollowerDoorChaseGateSettleRemainingSeconds,
                 treasureFollowerDoorChaseHoldActive = DungeonFrontierService.TreasureFollowerDoorChaseHoldActive,
                 treasureFollowerRoomRetryCooldownRemainingSeconds = DungeonFrontierService.TreasureFollowerRoomRetryCooldownRemainingSeconds,
-                treasureFollowerCofferSeekRoomIndex = DungeonFrontierService.TreasureFollowerCofferSeekRoomIndex,
-                treasureFollowerCofferSeekState = DungeonFrontierService.TreasureFollowerCofferSeekStateName,
-                treasureFollowerCofferSeekTargetKey = DungeonFrontierService.TreasureFollowerCofferSeekTargetKey,
-                treasureFollowerCofferSeekTargetName = DungeonFrontierService.TreasureFollowerCofferSeekTargetName,
-                treasureFollowerCofferSeekTargetPosition = DungeonFrontierService.TreasureFollowerCofferSeekTargetPosition is { } cofferSeekPosition
-                    ? BuildPositionPayload(cofferSeekPosition)
-                    : null,
-                treasureFollowerCofferSeekReached = DungeonFrontierService.TreasureFollowerCofferSeekReached,
-                treasureFollowerCofferSeekAttempted = DungeonFrontierService.TreasureFollowerCofferSeekAttempted,
-                treasureFollowerCofferSeekLastReason = DungeonFrontierService.TreasureFollowerCofferSeekLastReason,
                 treasureFollowerDoorFollowThroughActive = ExecutionService.TreasureFollowerDoorFollowThroughActive,
                 treasureFollowerDoorFollowThroughCandidateKey = ExecutionService.TreasureFollowerDoorFollowThroughCandidateKey,
                 treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
@@ -658,16 +648,6 @@ public sealed class Plugin : IDalamudPlugin
                     treasureFollowerDoorChaseGateSettleRemainingSeconds = DungeonFrontierService.TreasureFollowerDoorChaseGateSettleRemainingSeconds,
                     treasureFollowerDoorChaseHoldActive = DungeonFrontierService.TreasureFollowerDoorChaseHoldActive,
                     treasureFollowerRoomRetryCooldownRemainingSeconds = DungeonFrontierService.TreasureFollowerRoomRetryCooldownRemainingSeconds,
-                    treasureFollowerCofferSeekRoomIndex = DungeonFrontierService.TreasureFollowerCofferSeekRoomIndex,
-                    treasureFollowerCofferSeekState = DungeonFrontierService.TreasureFollowerCofferSeekStateName,
-                    treasureFollowerCofferSeekTargetKey = DungeonFrontierService.TreasureFollowerCofferSeekTargetKey,
-                    treasureFollowerCofferSeekTargetName = DungeonFrontierService.TreasureFollowerCofferSeekTargetName,
-                    treasureFollowerCofferSeekTargetPosition = DungeonFrontierService.TreasureFollowerCofferSeekTargetPosition is { } frontierCofferSeekPosition
-                        ? BuildPositionPayload(frontierCofferSeekPosition)
-                        : null,
-                    treasureFollowerCofferSeekReached = DungeonFrontierService.TreasureFollowerCofferSeekReached,
-                    treasureFollowerCofferSeekAttempted = DungeonFrontierService.TreasureFollowerCofferSeekAttempted,
-                    treasureFollowerCofferSeekLastReason = DungeonFrontierService.TreasureFollowerCofferSeekLastReason,
                     treasureFollowerDoorFollowThroughActive = ExecutionService.TreasureFollowerDoorFollowThroughActive,
                     treasureFollowerDoorFollowThroughCandidateKey = ExecutionService.TreasureFollowerDoorFollowThroughCandidateKey,
                     treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
