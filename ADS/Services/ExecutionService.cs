@@ -77,6 +77,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan ManualDestinationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan TreasureFollowerDoorFollowThroughTruthTimeout = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
@@ -144,6 +145,9 @@ public sealed class ExecutionService
     private DungeonFrontierPoint? treasureFollowerDoorFollowThroughCandidatePoint;
     private DungeonFrontierPoint? treasureFollowerDoorFollowThroughPoint;
     private bool treasureFollowerDoorFollowThroughTransitObserved;
+    private bool treasureFollowerDoorFollowThroughReached;
+    private DateTime treasureFollowerDoorFollowThroughReachedUtc = DateTime.MinValue;
+    private bool treasureFollowerRouteTransitHoldLatched;
     private string? treasureDoorNudgeTargetKey;
     private Vector3? treasureDoorNudgeBaselinePosition;
     private DateTime treasureDoorNudgeLastProgressUtc;
@@ -274,7 +278,7 @@ public sealed class ExecutionService
         get
         {
             if (HasPendingTreasureFollowerDoorFollowThrough())
-                return "ClearThrough";
+                return treasureFollowerDoorFollowThroughReached ? "ClearThroughReached" : "ClearThrough";
 
             return EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
                    && dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
@@ -491,6 +495,7 @@ public sealed class ExecutionService
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateUnsafeTransitionNavigationStop(context);
+        UpdateTreasureFollowerRouteTransitClearStop(context, planner);
         ResetTreasureDungeonCombatNavigationStopLatchIfClear(context, planner);
         if (!context.InCombat)
             ClearBossFightCombatGhost("combat cleared");
@@ -607,7 +612,7 @@ public sealed class ExecutionService
     {
         if (context.IsUnsafeTransition || planner.Mode == PlannerMode.UnsafeTransition)
         {
-            ObserveTreasureFollowerDoorFollowThroughTransit(context);
+            ObserveTreasureFollowerRouteTransit(context, "unsafe transition hold");
             if (pendingProgressionInteractable is not null)
             {
                 observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
@@ -625,7 +630,7 @@ public sealed class ExecutionService
 
         if (ShouldHoldTreasureFollowerRouteTransit(context, planner))
         {
-            ObserveTreasureFollowerDoorFollowThroughTransit(context);
+            ObserveTreasureFollowerRouteTransit(context, "treasure route transit hold");
             StopNavigationForTreasureRouteTransit();
             SetPhase(
                 ExecutionPhase.TransitionHold,
@@ -676,6 +681,9 @@ public sealed class ExecutionService
             return;
         }
 
+        if (TryAdvancePendingTreasureFollowerDoorFollowThrough(context, planner, prefix))
+            return;
+
         var lockedRetryInteractable = ResolveCommittedInteractable(context, observation);
         if (lockedRetryInteractable is not null
             && TryAdvanceCommittedTreasureCofferLockedRetry(context, lockedRetryInteractable, prefix))
@@ -684,9 +692,6 @@ public sealed class ExecutionService
         }
 
         if (TryAdvancePraetoriumMountedCombat(context, planner, observation, prefix))
-            return;
-
-        if (TryAdvancePendingTreasureFollowerDoorFollowThrough(context, planner, prefix))
             return;
 
         if ((planner.Mode != PlannerMode.Progression || !IsFrontierLikePlannerObjective(planner.ObjectiveKind))
@@ -833,7 +838,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             var holdStatus = string.IsNullOrWhiteSpace(dungeonFrontierService.CurrentLabelStatus)
-                ? "Waiting for opener door-choice cutscene to finish before chasing treasure follower passage doors."
+                ? "Waiting for treasure follower door-chase gate before chasing passage doors."
                 : dungeonFrontierService.CurrentLabelStatus;
             SetPhase(ExecutionPhase.WaitingForTruth, $"{prefix} {holdStatus}");
             return;
@@ -845,7 +850,7 @@ public sealed class ExecutionService
 
     private void UpdateUnsafeTransitionHold(DutyContextSnapshot context)
     {
-        ObserveTreasureFollowerDoorFollowThroughTransit(context);
+        ObserveTreasureFollowerRouteTransit(context, "unsafe transition hold");
         if (pendingProgressionInteractable is not null)
         {
             observationMemoryService.MarkProgressionInteractionSent(context, pendingProgressionInteractable);
@@ -1856,25 +1861,17 @@ public sealed class ExecutionService
     private bool ShouldHoldTreasureFollowerRouteTransit(DutyContextSnapshot context, PlannerSnapshot planner)
     {
         if (!context.IsTreasureRouteTransitHold
-            || EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+            || TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
         {
             return false;
         }
 
-        if (HasPendingTreasureFollowerDoorFollowThrough())
-        {
-            return true;
-        }
-
-        return planner.Mode == PlannerMode.Progression
-               && planner.ObjectiveKind == PlannerObjectiveKind.Frontier
-               && dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
-               && dungeonFrontierService.CurrentTarget is { IsTreasureRoutePoint: true };
+        return true;
     }
 
     private bool ShouldPreserveTreasureFollowerDoorFollowThroughForTransit(DutyContextSnapshot context)
         => context.IsTreasureRouteTransitHold
-           && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+           && TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
            && HasPendingTreasureFollowerDoorFollowThrough();
 
     private bool HasPendingTreasureFollowerDoorFollowThrough()
@@ -1886,6 +1883,18 @@ public sealed class ExecutionService
             return;
 
         treasureFollowerDoorFollowThroughTransitObserved = true;
+    }
+
+    private void ObserveTreasureFollowerRouteTransit(DutyContextSnapshot context, string reason)
+    {
+        if (!context.IsTreasureRouteTransitHold
+            || TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+        {
+            return;
+        }
+
+        dungeonFrontierService.LatchTreasureFollowerCandidateForRouteTransit(reason);
+        ObserveTreasureFollowerDoorFollowThroughTransit(context);
     }
 
     private static DungeonFrontierPoint RebuildCommittedForceMarchManualDestination(DungeonFrontierPoint point, Vector3? playerPosition)
@@ -1910,7 +1919,9 @@ public sealed class ExecutionService
             TreasureRouteIndex = point.TreasureRouteIndex,
             TreasureRoomIndex = point.TreasureRoomIndex,
             TreasurePassageGroup = point.TreasurePassageGroup,
+            TreasureClearThroughPosition = point.TreasureClearThroughPosition,
             IsLiveTreasureDoorCandidate = point.IsLiveTreasureDoorCandidate,
+            IsTreasureFollowerStagingPoint = point.IsTreasureFollowerStagingPoint,
         };
     }
 
@@ -1979,7 +1990,9 @@ public sealed class ExecutionService
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
-                ? isTreasureFollowerPassageCandidate ? "treasure-dungeon follower passage candidate" : "treasure-dungeon route point"
+                ? frontierPoint.IsTreasureFollowerStagingPoint
+                    ? "treasure-dungeon follower staging point"
+                    : isTreasureFollowerPassageCandidate ? "treasure-dungeon follower passage candidate" : "treasure-dungeon route point"
             : isMapXzDestination
                 ? "map XZ destination"
                 : isXyzDestination
@@ -1990,7 +2003,11 @@ public sealed class ExecutionService
             : isXyzDestination
                 ? "because a human-authored XYZ destination is configured for this no-live-object gap."
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
-                ? isTreasureFollowerPassageCandidate
+                ? frontierPoint.IsTreasureFollowerStagingPoint
+                    ? frontierPoint.TreasurePassageGroup == "StagingCoffer"
+                        ? "because ADS inferred this client is a treasure-dungeon follower and is staging near the live coffer before room combat."
+                        : "because ADS inferred this client is a treasure-dungeon follower and is staging before room combat."
+                    : isTreasureFollowerPassageCandidate
                     ? "because ADS inferred this client is a treasure-dungeon follower and is sweeping current-room passage candidates after live blockers are gone."
                     : isTreasureFollowerRoutePoint
                         ? "because ADS inferred this client is a treasure-dungeon follower and is using the authored static treasure route."
@@ -2205,8 +2222,10 @@ public sealed class ExecutionService
         treasureFollowerDoorFollowThroughCandidatePoint = frontierPoint;
         treasureFollowerDoorFollowThroughPoint = newFollowThroughPoint;
         treasureFollowerDoorFollowThroughTransitObserved = false;
+        treasureFollowerDoorFollowThroughReached = false;
+        treasureFollowerDoorFollowThroughReachedUtc = DateTime.MinValue;
         lastTreasureFollowerDoorFollowThroughRetargetLogKey = string.Empty;
-        dungeonFrontierService.HoldTreasureFollowerCandidate(frontierPoint);
+        dungeonFrontierService.MarkTreasureFollowerCandidateReached(frontierPoint);
         ResetTreasureRouteStuckTracking();
         StopNavigationForTreasureRouteNudge();
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
@@ -2269,6 +2288,14 @@ public sealed class ExecutionService
             return false;
         }
 
+        if (ShouldReleaseTreasureFollowerDoorFollowThroughForCofferTruth(planner))
+        {
+            log?.Information(
+                $"[ADS] Treasure follower door follow-through released for {candidate.Name} because next-room coffer/staging truth appeared.");
+            ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+            return false;
+        }
+
         var playerPosition = objectTable.LocalPlayer?.Position;
         if (!playerPosition.HasValue)
         {
@@ -2299,6 +2326,9 @@ public sealed class ExecutionService
         var candidateDistance = Vector3.Distance(candidate.Position, playerPosition);
         var candidateVerticalDelta = MathF.Abs(candidate.Position.Y - playerPosition.Y);
 
+        if (treasureFollowerDoorFollowThroughReached)
+            return HoldReachedTreasureFollowerDoorFollowThrough(candidate, followThroughPoint, playerPosition, candidateHorizontalDistance, candidateDistance, candidateVerticalDelta, treasureRouteRadiusStatus, prefix);
+
         if (TryAdvanceTreasureDoorFollowThroughPoint(
                 followThroughPoint,
                 prefix,
@@ -2316,13 +2346,11 @@ public sealed class ExecutionService
                 var followThroughHorizontalDistance = GetHorizontalDistance(followThroughPoint.Position, playerPosition);
                 var followThroughDistance = Vector3.Distance(followThroughPoint.Position, playerPosition);
                 var followThroughVerticalDelta = MathF.Abs(followThroughPoint.Position.Y - playerPosition.Y);
-                var completionDetail =
-                    $"Door follow-through target {FormatVector(followThroughPoint.Position)} reached at XZ {followThroughHorizontalDistance:0.0}y, 3D {followThroughDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y after candidate reach XZ {candidateHorizontalDistance:0.0}y, 3D {candidateDistance:0.0}y, Y {candidateVerticalDelta:0.0}y.";
-                dungeonFrontierService.MarkTreasureFollowerCandidateFailed(candidate, "DoorFollowThroughCompleted", completionDetail);
-                ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+                treasureFollowerDoorFollowThroughReached = true;
+                treasureFollowerDoorFollowThroughReachedUtc = DateTime.UtcNow;
                 SetPhase(
                     ExecutionPhase.FrontierHint,
-                    $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} reached {FormatVector(followThroughPoint.Position)} (follow-through XZ {followThroughHorizontalDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y). No transition or live duty truth appeared, so ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
+                    $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} reached {FormatVector(followThroughPoint.Position)} (follow-through XZ {followThroughHorizontalDistance:0.0}y, 3D {followThroughDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y). ADS is holding this committed clear-through until transition, combat, coffer truth, stale-floor evidence, or timeout.{treasureRouteRadiusStatus}");
             }
 
             return true;
@@ -2356,6 +2384,57 @@ public sealed class ExecutionService
 
         ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
         return false;
+    }
+
+    private bool HoldReachedTreasureFollowerDoorFollowThrough(
+        DungeonFrontierPoint candidate,
+        DungeonFrontierPoint followThroughPoint,
+        Vector3 playerPosition,
+        float candidateHorizontalDistance,
+        float candidateDistance,
+        float candidateVerticalDelta,
+        string treasureRouteRadiusStatus,
+        string prefix)
+    {
+        var now = DateTime.UtcNow;
+        var reachedUtc = treasureFollowerDoorFollowThroughReachedUtc == DateTime.MinValue
+            ? now
+            : treasureFollowerDoorFollowThroughReachedUtc;
+        treasureFollowerDoorFollowThroughReachedUtc = reachedUtc;
+        var elapsed = now - reachedUtc;
+        if (elapsed >= TreasureFollowerDoorFollowThroughTruthTimeout)
+        {
+            var followThroughHorizontalDistance = GetHorizontalDistance(followThroughPoint.Position, playerPosition);
+            var followThroughDistance = Vector3.Distance(followThroughPoint.Position, playerPosition);
+            var followThroughVerticalDelta = MathF.Abs(followThroughPoint.Position.Y - playerPosition.Y);
+            var failureDetail =
+                $"Clear-through target {FormatVector(followThroughPoint.Position)} stayed reached for {elapsed.TotalSeconds:0.0}s without transition, combat, or coffer truth. Follow-through XZ {followThroughHorizontalDistance:0.0}y, 3D {followThroughDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y; candidate XZ {candidateHorizontalDistance:0.0}y, 3D {candidateDistance:0.0}y, Y {candidateVerticalDelta:0.0}y.";
+            dungeonFrontierService.MarkTreasureFollowerCandidateFailed(candidate, "DoorFollowThroughTruthTimeout", failureDetail);
+            ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+            SetPhase(
+                ExecutionPhase.FrontierHint,
+                $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} timed out after reaching clear-through without refreshed truth; ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
+            return true;
+        }
+
+        StopNavigationForTreasureRouteNudge();
+        var remaining = Math.Max(0, (TreasureFollowerDoorFollowThroughTruthTimeout - elapsed).TotalSeconds);
+        SetPhase(
+            ExecutionPhase.FrontierHint,
+            $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} is holding after clear-through reach; waiting {remaining:0.0}s for transition, combat, or coffer truth before retrying.{treasureRouteRadiusStatus}");
+        return true;
+    }
+
+    private bool ShouldReleaseTreasureFollowerDoorFollowThroughForCofferTruth(PlannerSnapshot planner)
+    {
+        if (!HasPendingTreasureFollowerDoorFollowThrough())
+            return false;
+
+        if (planner.ObjectiveKind == PlannerObjectiveKind.TreasureCoffer)
+            return true;
+
+        return dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+               && dungeonFrontierService.CurrentTarget is { IsTreasureFollowerStagingPoint: true };
     }
 
     private void LogTreasureFollowerDoorFollowThroughRetargetHold(
@@ -2632,6 +2711,8 @@ public sealed class ExecutionService
         treasureFollowerDoorFollowThroughCandidatePoint = null;
         treasureFollowerDoorFollowThroughPoint = null;
         treasureFollowerDoorFollowThroughTransitObserved = false;
+        treasureFollowerDoorFollowThroughReached = false;
+        treasureFollowerDoorFollowThroughReachedUtc = DateTime.MinValue;
         lastTreasureFollowerDoorFollowThroughRetargetLogKey = string.Empty;
         dungeonFrontierService.ClearTreasureFollowerCandidateHold("treasure follower door follow-through cleared");
 
@@ -2740,7 +2821,8 @@ public sealed class ExecutionService
         {
             Key = $"treasure-follower-door-follow-through:{candidate.Key}",
             Name = $"{candidate.Name} follow-through",
-            Position = BuildTreasureDoorFollowThroughPosition(playerPosition, candidate.Position),
+            Position = candidate.TreasureClearThroughPosition
+                ?? BuildTreasureDoorFollowThroughPosition(playerPosition, candidate.Position),
             LevelRowId = candidate.LevelRowId,
             MapId = candidate.MapId,
             Priority = candidate.Priority,
@@ -2749,6 +2831,7 @@ public sealed class ExecutionService
             TreasureRouteIndex = candidate.TreasureRouteIndex,
             TreasureRoomIndex = candidate.TreasureRoomIndex,
             TreasurePassageGroup = candidate.TreasurePassageGroup,
+            TreasureClearThroughPosition = candidate.TreasureClearThroughPosition,
         };
 
     private bool TryAdvancePraetoriumOnFootForceMarchHandoff(
@@ -5283,7 +5366,7 @@ public sealed class ExecutionService
     {
         if (context.IsUnsafeTransition)
         {
-            ObserveTreasureFollowerDoorFollowThroughTransit(context);
+            ObserveTreasureFollowerRouteTransit(context, "unsafe transition navigation stop");
             StopNavigationForUnsafeTransition(context);
             return;
         }
@@ -5293,6 +5376,34 @@ public sealed class ExecutionService
 
         unsafeTransitionNavigationStopLatched = false;
         log?.Information("[ADS] Unsafe transition cleared; objective handling can resume.");
+    }
+
+    private void UpdateTreasureFollowerRouteTransitClearStop(DutyContextSnapshot context, PlannerSnapshot planner)
+    {
+        if (ShouldHoldTreasureFollowerRouteTransit(context, planner))
+        {
+            ObserveTreasureFollowerRouteTransit(context, "route transit latch");
+            treasureFollowerRouteTransitHoldLatched = true;
+            return;
+        }
+
+        if (!treasureFollowerRouteTransitHoldLatched)
+            return;
+
+        treasureFollowerRouteTransitHoldLatched = false;
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+            return;
+
+        TrySendCommand("/vnav stop");
+        navigationActive = false;
+        movementTargetGameObjectId = 0;
+        mapFlagNavigationActive = false;
+        nextNavigationCommandUtc = DateTime.MinValue;
+        ResetTreasureRouteStuckTracking();
+        ResetAquapolisRouteWiggleTracking();
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        dungeonFrontierService.SuppressTreasureFollowerHeadingScoutForPostTransitSettle("route transit hold clear");
+        log?.Information("[ADS] Treasure follower route transit hold cleared; sent one post-transit /vnav stop before refreshed route selection.");
     }
 
     private void ResetTreasureDungeonCombatNavigationStopLatchIfClear(DutyContextSnapshot context, PlannerSnapshot planner)

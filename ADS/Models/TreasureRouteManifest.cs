@@ -30,6 +30,7 @@ public sealed class TreasureRouteCoordinate
     public float? X { get; set; }
     public float? Y { get; set; }
     public float? Z { get; set; }
+    public TreasureRouteCoordinate? ClearThrough { get; set; }
 }
 
 public enum TreasureRouteKind

@@ -103,6 +103,7 @@ public sealed class ObjectivePlannerService
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
+        var isRawTreasureFollower = dungeonFrontierService.TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
         var nearestBossFightMonster = GetBestBossFightBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestMonster = GetBestBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestFollowTarget = GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
@@ -115,7 +116,7 @@ public sealed class ObjectivePlannerService
                 playerPosition,
                 context);
         var nearestTreasureCoffer = considerTreasureCoffers
-            && dungeonFrontierService.EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+            && !isRawTreasureFollower
             ? GetBestInteractable(
                 observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureCoffer),
                 playerPosition,
@@ -199,6 +200,12 @@ public sealed class ObjectivePlannerService
                 Explanation = "ADS stays monster-first but does not become the combat brain; it waits for combat to clear before progression decisions resume.",
                 CapturedAtUtc = now,
             };
+            return;
+        }
+
+        if (TryBuildTreasureFollowerRouteOwnershipSnapshot(context, observation, playerPosition, now, out var treasureFollowerHoldSnapshot))
+        {
+            Current = treasureFollowerHoldSnapshot;
             return;
         }
 
@@ -442,35 +449,7 @@ public sealed class ObjectivePlannerService
             && nearestRequiredInteractable is null
             && dungeonFrontierService.CurrentTarget is { } frontierPoint)
         {
-            var distance = playerPosition.HasValue
-                ? GetManualOrFrontierDistance(playerPosition.Value, frontierPoint)
-                : (float?)null;
-            var verticalDelta = playerPosition.HasValue ? MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y) : (float?)null;
-            var isMapXzDestination = dungeonFrontierService.CurrentMode == FrontierMode.MapXzDestination;
-            var isXyzDestination = dungeonFrontierService.CurrentMode == FrontierMode.XyzDestination;
-            Current = new PlannerSnapshot
-            {
-                Mode = PlannerMode.Progression,
-                ObjectiveKind = isXyzDestination
-                    ? GetManualDestinationObjectiveKind(frontierPoint)
-                    : isMapXzDestination
-                    ? GetManualDestinationObjectiveKind(frontierPoint)
-                    : PlannerObjectiveKind.Frontier,
-                Objective = isXyzDestination
-                    ? frontierPoint.AllowCombatBypass
-                        ? $"Force-march toward XYZ destination: {frontierPoint.Name}"
-                        : $"Advance toward XYZ destination: {frontierPoint.Name}"
-                    : isMapXzDestination
-                    ? frontierPoint.AllowCombatBypass
-                        ? $"Force-march toward map XZ destination: {frontierPoint.Name}"
-                        : $"Advance toward map XZ destination: {frontierPoint.Name}"
-                    : $"Advance toward map frontier: {frontierPoint.Name}",
-                Explanation = BuildFrontierExplanation(context, frontierPoint, observation),
-                TargetName = frontierPoint.Name,
-                TargetDistance = distance,
-                TargetVerticalDelta = verticalDelta,
-                CapturedAtUtc = now,
-            };
+            Current = BuildFrontierSnapshot(context, observation, frontierPoint, playerPosition, now);
             return;
         }
 
@@ -485,7 +464,7 @@ public sealed class ObjectivePlannerService
                 ObjectiveKind = PlannerObjectiveKind.None,
                 Objective = "Await treasure follower door chase gate",
                 Explanation = string.IsNullOrWhiteSpace(dungeonFrontierService.CurrentLabelStatus)
-                    ? "Treasure follower routing is waiting for the opener door-choice cutscene gate before selecting a passage door."
+                    ? "Treasure follower routing is waiting for the door-chase gate before selecting a passage door."
                     : dungeonFrontierService.CurrentLabelStatus,
                 CapturedAtUtc = now,
             };
@@ -780,7 +759,7 @@ public sealed class ObjectivePlannerService
             or InteractableClass.CombatFriendly
             or InteractableClass.Expendable
             || (interactable.Classification == InteractableClass.TreasureDoor
-                && dungeonFrontierService.EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
+                && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
 
     private static PlannerObjectiveKind GetProgressionInteractableObjectiveKind(ObservedInteractable interactable)
         => interactable.Classification switch
@@ -1103,14 +1082,117 @@ public sealed class ObjectivePlannerService
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited human-authored XYZ destination {frontierPoint.Name} ({FormatWorldCoordinates(frontierPoint)}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule.",
             FrontierMode.TreasureDungeon
                 => dungeonFrontierService.EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-                    ? frontierPoint.IsTreasurePassageCandidate
-                        ? $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is sweeping {frontierPoint.TreasureRouteSource} passage candidate {frontierPoint.Name} ({frontierPoint.TreasurePassageGroup}, room {frontierPoint.TreasureRoomIndex}). Post-entry follower passage routing prefers same-floor live TreasureDoor targets, falls back to static same-floor route points, requires Y <= 5y, reaches candidates at XZ <= 4y, then uses treasure-door follow-through/jiggle without interacting. Retry cycle: {dungeonFrontierService.TreasureFollowerRetryCycle}."
-                        : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is using static treasure route point {frontierPoint.Name} before current-room passage sweeps. Treasure route reach is XZ <= 4y, not true 3D XYZ."
+                    ? frontierPoint.IsTreasureFollowerStagingPoint
+                        ? frontierPoint.TreasurePassageGroup == "StagingCoffer"
+                            ? $"ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is staging near the live treasure coffer for room {frontierPoint.TreasureRoomIndex} without interacting with it, then waits for room combat before any passage-door chase. Non-combat live targets do not preempt follower staging."
+                            : $"ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is staging near the inferred center of room {frontierPoint.TreasureRoomIndex}, then waits for room combat before any passage-door chase. Non-combat live targets do not preempt follower staging."
+                    : frontierPoint.IsTreasurePassageCandidate
+                        ? $"ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is sweeping {frontierPoint.TreasureRouteSource} passage candidate {frontierPoint.Name} ({frontierPoint.TreasurePassageGroup}, room {frontierPoint.TreasureRoomIndex}) after staging and room-combat gates. Post-entry follower passage routing prefers same-floor live TreasureDoor targets, falls back to static same-floor route points, requires Y <= 5y, reaches candidates at XZ <= 4y, then uses treasure-door follow-through/jiggle without interacting. Retry cycle: {dungeonFrontierService.TreasureFollowerRetryCycle}."
+                        : $"ADS inferred treasure follower mode from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is using static treasure route point {frontierPoint.Name} before current-room passage sweeps. Treasure route reach is XZ <= 4y, not true 3D XYZ."
                     : $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and ADS inferred map-opener/default treasure role from {dungeonFrontierService.TreasureDungeonRoleSource}. ADS is using the authored treasure-dungeon opener route point {frontierPoint.Name}. Treasure route reach is XZ <= 4y, not true 3D XYZ; frontier pre-sweep currently uses XZ <= 6y.",
             FrontierMode.HeadingScout
                 => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({frontierPoint.Name}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable.",
             _ => $"No live monsters, follow anchors, or eligible progression interactables are currently visible in {context.CurrentDuty?.EnglishName}, so ADS is using the next unvisited map label ({frontierPoint.Name}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {observation.MonsterGhosts.Count} monster / {observation.InteractableGhosts.Count} interactable. Frontier progress: {dungeonFrontierService.VisitedPoints}/{dungeonFrontierService.TotalPoints}.",
         };
+    }
+
+    private bool TryBuildTreasureFollowerRouteOwnershipSnapshot(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        DateTime now,
+        out PlannerSnapshot snapshot)
+    {
+        snapshot = default!;
+        if (dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+            || context.InCombat)
+        {
+            return false;
+        }
+
+        if (dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
+            && dungeonFrontierService.CurrentTarget is { } frontierPoint
+            && (frontierPoint.IsTreasureRoutePoint
+                || frontierPoint.IsTreasurePassageCandidate
+                || frontierPoint.IsTreasureFollowerStagingPoint))
+        {
+            snapshot = BuildFrontierSnapshot(context, observation, frontierPoint, playerPosition, now);
+            return true;
+        }
+
+        if (!dungeonFrontierService.TreasureFollowerRouteOwnershipActive)
+            return false;
+
+        snapshot = new PlannerSnapshot
+        {
+            Mode = PlannerMode.Progression,
+            ObjectiveKind = PlannerObjectiveKind.None,
+            Objective = "Await treasure follower door chase gate",
+            Explanation = string.IsNullOrWhiteSpace(dungeonFrontierService.CurrentLabelStatus)
+                ? "Treasure follower routing owns non-combat movement and is holding before selecting a passage door."
+                : dungeonFrontierService.CurrentLabelStatus,
+            CapturedAtUtc = now,
+        };
+        return true;
+    }
+
+    private PlannerSnapshot BuildFrontierSnapshot(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        DungeonFrontierPoint frontierPoint,
+        Vector3? playerPosition,
+        DateTime now)
+    {
+        var distance = playerPosition.HasValue
+            ? GetManualOrFrontierDistance(playerPosition.Value, frontierPoint)
+            : (float?)null;
+        var verticalDelta = playerPosition.HasValue
+            ? MathF.Abs(frontierPoint.Position.Y - playerPosition.Value.Y)
+            : (float?)null;
+        var isMapXzDestination = dungeonFrontierService.CurrentMode == FrontierMode.MapXzDestination;
+        var isXyzDestination = dungeonFrontierService.CurrentMode == FrontierMode.XyzDestination;
+        return new PlannerSnapshot
+        {
+            Mode = PlannerMode.Progression,
+            ObjectiveKind = isXyzDestination
+                ? GetManualDestinationObjectiveKind(frontierPoint)
+                : isMapXzDestination
+                    ? GetManualDestinationObjectiveKind(frontierPoint)
+                    : PlannerObjectiveKind.Frontier,
+            Objective = BuildFrontierObjective(frontierPoint, isMapXzDestination, isXyzDestination),
+            Explanation = BuildFrontierExplanation(context, frontierPoint, observation),
+            TargetName = frontierPoint.Name,
+            TargetDistance = distance,
+            TargetVerticalDelta = verticalDelta,
+            CapturedAtUtc = now,
+        };
+    }
+
+    private static string BuildFrontierObjective(
+        DungeonFrontierPoint frontierPoint,
+        bool isMapXzDestination,
+        bool isXyzDestination)
+    {
+        if (frontierPoint.IsTreasureFollowerStagingPoint)
+        {
+            return $"Stage near treasure coffer: {frontierPoint.Name}";
+        }
+
+        if (isXyzDestination)
+        {
+            return frontierPoint.AllowCombatBypass
+                ? $"Force-march toward XYZ destination: {frontierPoint.Name}"
+                : $"Advance toward XYZ destination: {frontierPoint.Name}";
+        }
+
+        if (isMapXzDestination)
+        {
+            return frontierPoint.AllowCombatBypass
+                ? $"Force-march toward map XZ destination: {frontierPoint.Name}"
+                : $"Advance toward map XZ destination: {frontierPoint.Name}";
+        }
+
+        return $"Advance toward map frontier: {frontierPoint.Name}";
     }
 
     private PlannerSnapshot BuildForceMarchMonsterBypassSnapshot(

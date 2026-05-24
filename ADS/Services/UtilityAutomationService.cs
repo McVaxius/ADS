@@ -63,6 +63,7 @@ public sealed unsafe class UtilityAutomationService
     private static readonly TimeSpan RepairConfirmRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DesynthReopenCooldown = TimeSpan.FromMilliseconds(1800);
     private static readonly TimeSpan LifestreamTeleportSettleCooldown = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan NpcRepairFieldRouteLogCooldown = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan MoveRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan InteractRetryCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MenuRetryCooldown = TimeSpan.FromMilliseconds(1500);
@@ -150,7 +151,7 @@ public sealed unsafe class UtilityAutomationService
         220,
     ];
 
-    private static readonly HashSet<uint> PreferredFieldRepairAetheryteIds =
+    private static readonly uint[] PreferredFieldRepairAetheryteIds =
     [
         100, // Ala Gannha - Independent Mender observed near the aetheryte.
         108, // The House of the Fierce - Independent Mender observed near the aetheryte.
@@ -219,6 +220,12 @@ public sealed unsafe class UtilityAutomationService
     private ResolvedInnRepairRoute? activeNpcRepairInnRoute;
     private ResolvedFieldRepairRoute? activeNpcRepairFieldRoute;
     private readonly HashSet<uint> failedNpcRepairFieldAetheryteIds = [];
+    private uint npcRepairFieldRouteStartTerritoryId;
+    private bool npcRepairFieldRouteSawLoading;
+    private string lastNpcRepairFieldRouteFailure = string.Empty;
+    private int npcRepairFieldRouteFailureCount;
+    private DateTime lastNpcRepairFieldRouteScanLogUtc = DateTime.MinValue;
+    private DateTime lastNpcRepairFieldRouteWaitLogUtc = DateTime.MinValue;
     private int npcRepairInnPathIndex;
     private bool repairSubmissionSent;
     private DateTime lastRepairConfirmClickUtc = DateTime.MinValue;
@@ -449,7 +456,8 @@ public sealed unsafe class UtilityAutomationService
 
         try
         {
-            if (DateTime.UtcNow - startedAtUtc > OverallTimeout)
+            var now = DateTime.UtcNow;
+            if (now - startedAtUtc > OverallTimeout && !IsNpcRepairFieldRouteAttemptActive())
             {
                 Fail($"Timed out while running {GetTaskLabel(activeTask)}.");
                 return;
@@ -476,6 +484,13 @@ public sealed unsafe class UtilityAutomationService
             Fail($"{GetTaskLabel(activeTask)} failed: {ex.Message}");
         }
     }
+
+    private bool IsNpcRepairFieldRouteAttemptActive()
+        => activeTask == UtilityTask.NpcRepair
+            && activeNpcRepairMode == NpcRepairMode.NoInn
+            && activeNpcRepairFieldRoute.HasValue
+            && npcRepairTravelStage is NpcRepairTravelStage.TeleportingToFieldAetheryte
+                or NpcRepairTravelStage.AwaitingRepairNpc;
 
     public void Cancel(string reason)
     {
@@ -992,7 +1007,11 @@ public sealed unsafe class UtilityAutomationService
     {
         if (now - npcRepairTravelStageStartedUtc > NpcRepairTravelTimeout)
         {
-            Fail($"Timed out while travelling to {route.AetheryteName} in {route.TerritoryName} for NPC repair.");
+            var routeFailure = BuildNpcRepairFieldRouteTimeoutReason(now, route);
+            if (TryRetryNpcRepairFieldRoute(route, routeFailure, out var exhaustedMessage))
+                return;
+
+            Fail(exhaustedMessage);
             return;
         }
 
@@ -1284,8 +1303,15 @@ public sealed unsafe class UtilityAutomationService
 
         if (!TrySendNpcRepairFieldTeleport(route))
         {
+            if (TryRetryNpcRepairFieldRoute(
+                    route,
+                    $"ADS could not send the Lifestream field-aetheryte teleport command to {FormatFieldRepairRoute(route)}.",
+                    out failureMessage))
+            {
+                return true;
+            }
+
             activeNpcRepairFieldRoute = null;
-            failureMessage = $"No repair NPC found within {RepairNpcSearchRadius:0}y, and ADS could not start the Lifestream field-aetheryte teleport.";
             return false;
         }
 
@@ -1363,6 +1389,7 @@ public sealed unsafe class UtilityAutomationService
         if (aetheryteSheet == null)
             return false;
 
+        var eligibleCount = 0;
         var candidates = new List<ResolvedFieldRepairRoute>();
         try
         {
@@ -1387,6 +1414,7 @@ public sealed unsafe class UtilityAutomationService
                 if (!IsEligibleFieldRepairAetheryte(aetheryte.RowId, aetheryteName, territoryName))
                     continue;
 
+                eligibleCount++;
                 if (failedNpcRepairFieldAetheryteIds.Contains(aetheryte.RowId))
                     continue;
 
@@ -1406,18 +1434,48 @@ public sealed unsafe class UtilityAutomationService
         }
 
         var selectedRoute = candidates
-            .OrderBy(candidate => candidate.TerritoryTypeId == clientState.TerritoryType ? 0 : 1)
-            .ThenBy(candidate => PreferredFieldRepairAetheryteIds.Contains(candidate.AetheryteId) ? 0 : 1)
+            .OrderBy(candidate => GetPreferredFieldRepairRouteRank(candidate.AetheryteId))
+            .ThenBy(candidate => candidate.TerritoryTypeId == clientState.TerritoryType ? 0 : 1)
             .ThenBy(candidate => candidate.GilCost)
             .ThenBy(candidate => candidate.TerritoryName, StringComparer.Ordinal)
             .ThenBy(candidate => candidate.AetheryteName, StringComparer.Ordinal)
             .FirstOrDefault();
 
         if (selectedRoute.AetheryteId == 0)
+        {
+            LogNpcRepairFieldRouteScan(eligibleCount, candidates.Count, null);
             return false;
+        }
 
+        LogNpcRepairFieldRouteScan(eligibleCount, candidates.Count, selectedRoute);
         route = selectedRoute;
         return true;
+    }
+
+    private void LogNpcRepairFieldRouteScan(int eligibleCount, int remainingCount, ResolvedFieldRepairRoute? selectedRoute)
+    {
+        var now = DateTime.UtcNow;
+        if (now - lastNpcRepairFieldRouteScanLogUtc < NpcRepairFieldRouteLogCooldown)
+            return;
+
+        lastNpcRepairFieldRouteScanLogUtc = now;
+        var selectedText = selectedRoute is { } route
+            ? FormatFieldRepairRoute(route)
+            : "none";
+        log.Information(
+            $"[ADS][Utility] Field repair route scan: eligible={eligibleCount}, remaining={remainingCount}, " +
+            $"failed={failedNpcRepairFieldAetheryteIds.Count}, selected={selectedText}.");
+    }
+
+    private static int GetPreferredFieldRepairRouteRank(uint aetheryteId)
+    {
+        for (var index = 0; index < PreferredFieldRepairAetheryteIds.Length; index++)
+        {
+            if (PreferredFieldRepairAetheryteIds[index] == aetheryteId)
+                return index;
+        }
+
+        return PreferredFieldRepairAetheryteIds.Length;
     }
 
     private static bool IsEligibleFieldRepairAetheryte(uint aetheryteId, string aetheryteName, string territoryName)
@@ -1487,10 +1545,13 @@ public sealed unsafe class UtilityAutomationService
     {
         var command = $"/li {route.AetheryteName}";
         npcRepairTravelCommandUtc = DateTime.UtcNow;
+        npcRepairFieldRouteStartTerritoryId = clientState.TerritoryType;
+        npcRepairFieldRouteSawLoading = false;
+        lastNpcRepairFieldRouteWaitLogUtc = DateTime.MinValue;
         if (!GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
             return false;
 
-        log.Information($"[ADS][Utility] No local repair NPC was found; sending {command} to reach field aetheryte {route.AetheryteName} in {route.TerritoryName} for NPC repair.");
+        log.Information($"[ADS][Utility] No local repair NPC was found; sent {command} for field repair route {FormatFieldRepairRoute(route)}.");
         return true;
     }
 
@@ -1529,6 +1590,10 @@ public sealed unsafe class UtilityAutomationService
     {
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
         {
+            if (!npcRepairFieldRouteSawLoading)
+                log.Information($"[ADS][Utility] Field repair route {FormatFieldRepairRoute(route)} entered loading after {(now - npcRepairTravelCommandUtc).TotalSeconds:0.0}s.");
+
+            npcRepairFieldRouteSawLoading = true;
             StatusMessage = $"Waiting for the field-aetheryte teleport to {route.TerritoryName} to finish.";
             return;
         }
@@ -1538,6 +1603,10 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage = now - npcRepairTravelCommandUtc < LifestreamTeleportSettleCooldown
                 ? $"Waiting for Lifestream to route to {route.AetheryteName}."
                 : $"Waiting to arrive at {route.TerritoryName} for NPC repair.";
+            LogNpcRepairFieldRouteWait(
+                now,
+                route,
+                $"Waiting for field repair route arrival; current territory {clientState.TerritoryType}, expected {route.TerritoryTypeId}.");
             return;
         }
 
@@ -1629,37 +1698,109 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (TryRetryNpcRepairFieldTravelAfterMissingNpc(route))
+        var routeFailure = $"No repair NPC was found within {RepairNpcSearchRadius:0}y near {FormatFieldRepairRoute(route)}.";
+        if (TryRetryNpcRepairFieldRoute(route, routeFailure, out var exhaustedMessage))
             return;
 
-        Fail($"Reached field aetheryte {route.AetheryteName} in {route.TerritoryName}, but no repair NPC was found within {RepairNpcSearchRadius:0}y.");
+        Fail(exhaustedMessage);
     }
 
-    private bool TryRetryNpcRepairFieldTravelAfterMissingNpc(ResolvedFieldRepairRoute failedRoute)
+    private bool TryRetryNpcRepairFieldRoute(
+        ResolvedFieldRepairRoute failedRoute,
+        string failureReason,
+        out string exhaustedMessage)
     {
-        failedNpcRepairFieldAetheryteIds.Add(failedRoute.AetheryteId);
+        exhaustedMessage = string.Empty;
+        RecordNpcRepairFieldRouteFailure(failedRoute, failureReason);
 
-        if (!TryResolveFieldRepairRoute(out var nextRoute))
-            return false;
-
-        activeNpcRepairFieldRoute = nextRoute;
-        npcRepairInnPathIndex = 0;
-        ResetRepairSubmission();
-
-        if (!TrySendNpcRepairFieldTeleport(nextRoute))
+        while (TryResolveFieldRepairRoute(out var nextRoute))
         {
-            log.Warning(
-                $"[ADS][Utility] Field repair route {failedRoute.AetheryteName} had no repair NPC, and ADS could not start retry teleport to {nextRoute.AetheryteName}.");
-            return false;
+            npcRepairInnPathIndex = 0;
+            ResetRepairSubmission();
+
+            if (!TrySendNpcRepairFieldTeleport(nextRoute))
+            {
+                RecordNpcRepairFieldRouteFailure(
+                    nextRoute,
+                    $"ADS could not send the Lifestream field-aetheryte teleport command to {FormatFieldRepairRoute(nextRoute)}.");
+                continue;
+            }
+
+            activeNpcRepairFieldRoute = nextRoute;
+            log.Information(
+                $"[ADS][Utility] Field repair route failed: {failureReason} Trying next route {FormatFieldRepairRoute(nextRoute)}.");
+            SetNpcRepairTravelStage(
+                NpcRepairTravelStage.TeleportingToFieldAetheryte,
+                $"Field repair route failed; trying {nextRoute.AetheryteName} in {nextRoute.TerritoryName}.");
+            return true;
         }
 
-        log.Information(
-            $"[ADS][Utility] Field repair route {failedRoute.AetheryteName} in {failedRoute.TerritoryName} had no repair NPC within {RepairNpcSearchRadius:0}y; trying {nextRoute.AetheryteName} in {nextRoute.TerritoryName} instead.");
-        SetNpcRepairTravelStage(
-            NpcRepairTravelStage.TeleportingToFieldAetheryte,
-            $"No repair NPC was found near {failedRoute.AetheryteName}; trying {nextRoute.AetheryteName} in {nextRoute.TerritoryName}.");
-        return true;
+        activeNpcRepairFieldRoute = null;
+        exhaustedMessage = BuildNpcRepairFieldRoutesExhaustedMessage();
+        log.Warning($"[ADS][Utility] {exhaustedMessage}");
+        return false;
     }
+
+    private void RecordNpcRepairFieldRouteFailure(ResolvedFieldRepairRoute failedRoute, string failureReason)
+    {
+        failedNpcRepairFieldAetheryteIds.Add(failedRoute.AetheryteId);
+        npcRepairFieldRouteFailureCount++;
+        lastNpcRepairFieldRouteFailure = $"{FormatFieldRepairRoute(failedRoute)}: {failureReason}";
+        log.Warning($"[ADS][Utility] Field repair route failed ({npcRepairFieldRouteFailureCount}): {lastNpcRepairFieldRouteFailure}");
+    }
+
+    private string BuildNpcRepairFieldRouteTimeoutReason(DateTime now, ResolvedFieldRepairRoute route)
+    {
+        var elapsedSeconds = (now - npcRepairTravelStageStartedUtc).TotalSeconds;
+        if (npcRepairTravelStage == NpcRepairTravelStage.TeleportingToFieldAetheryte)
+        {
+            if (!npcRepairFieldRouteSawLoading && clientState.TerritoryType == npcRepairFieldRouteStartTerritoryId)
+            {
+                return
+                    $"Lifestream route to {FormatFieldRepairRoute(route)} produced no loading and no territory change " +
+                    $"after {elapsedSeconds:0}s; current territory {clientState.TerritoryType}.";
+            }
+
+            if (!npcRepairFieldRouteSawLoading)
+            {
+                return
+                    $"Lifestream route to {FormatFieldRepairRoute(route)} produced no loading before timeout " +
+                    $"after {elapsedSeconds:0}s; current territory {clientState.TerritoryType}, expected {route.TerritoryTypeId}.";
+            }
+
+            return
+                $"Timed out after {elapsedSeconds:0}s while travelling to {FormatFieldRepairRoute(route)}; " +
+                $"current territory {clientState.TerritoryType}, expected {route.TerritoryTypeId}.";
+        }
+
+        return $"Timed out after {elapsedSeconds:0}s while looking for a repair NPC near {FormatFieldRepairRoute(route)}.";
+    }
+
+    private string BuildNpcRepairFieldRoutesExhaustedMessage()
+    {
+        var lastFailure = string.IsNullOrWhiteSpace(lastNpcRepairFieldRouteFailure)
+            ? "No route failure detail was captured."
+            : lastNpcRepairFieldRouteFailure;
+        return
+            $"All eligible field repair routes were exhausted after {npcRepairFieldRouteFailureCount} failed route(s). " +
+            $"Last failure: {lastFailure}";
+    }
+
+    private void LogNpcRepairFieldRouteWait(DateTime now, ResolvedFieldRepairRoute route, string message)
+    {
+        if (now - lastNpcRepairFieldRouteWaitLogUtc < NpcRepairFieldRouteLogCooldown)
+            return;
+
+        lastNpcRepairFieldRouteWaitLogUtc = now;
+        var elapsedSeconds = npcRepairTravelCommandUtc == DateTime.MinValue
+            ? 0
+            : (now - npcRepairTravelCommandUtc).TotalSeconds;
+        log.Information($"[ADS][Utility] {message} route={FormatFieldRepairRoute(route)}, elapsed={elapsedSeconds:0.0}s.");
+    }
+
+    private static string FormatFieldRepairRoute(ResolvedFieldRepairRoute route)
+        => $"{route.AetheryteName} (ID {route.AetheryteId}) in {route.TerritoryName} " +
+           $"(territory {route.TerritoryTypeId}, {route.GilCost} gil)";
 
     private void SetNpcRepairTravelStage(NpcRepairTravelStage nextStage, string statusMessage)
     {
@@ -1676,6 +1817,12 @@ public sealed unsafe class UtilityAutomationService
         activeNpcRepairInnRoute = null;
         activeNpcRepairFieldRoute = null;
         failedNpcRepairFieldAetheryteIds.Clear();
+        npcRepairFieldRouteStartTerritoryId = 0;
+        npcRepairFieldRouteSawLoading = false;
+        lastNpcRepairFieldRouteFailure = string.Empty;
+        npcRepairFieldRouteFailureCount = 0;
+        lastNpcRepairFieldRouteScanLogUtc = DateTime.MinValue;
+        lastNpcRepairFieldRouteWaitLogUtc = DateTime.MinValue;
         npcRepairInnPathIndex = 0;
     }
 

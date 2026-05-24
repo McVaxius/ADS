@@ -25,9 +25,13 @@ public sealed class DungeonFrontierPoint
     public int TreasureRouteIndex { get; init; } = -1;
     public int TreasureRoomIndex { get; init; }
     public string TreasurePassageGroup { get; init; } = string.Empty;
+    public Vector3? TreasureClearThroughPosition { get; init; }
     public bool IsLiveTreasureDoorCandidate { get; init; }
+    public bool IsTreasureFollowerStagingPoint { get; init; }
     public string TreasureRouteSource
-        => IsLiveTreasureDoorCandidate
+        => IsTreasureFollowerStagingPoint
+            ? "TreasureFollowerStaging"
+            : IsLiveTreasureDoorCandidate
             ? "LiveTreasureDoor"
             : IsTreasureRoutePoint
                 ? "StaticTreasureRoute"

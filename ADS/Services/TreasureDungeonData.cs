@@ -27,7 +27,7 @@ public static class TreasureDungeonData
 
     private static readonly object Gate = new();
 
-    private readonly record struct RoutePoint(Vector3 Position, string Label, int Room, TreasureRoutePointSlot Slot);
+    private readonly record struct RoutePoint(Vector3 Position, string Label, int Room, TreasureRoutePointSlot Slot, Vector3? ClearThrough = null);
 
     private readonly record struct TreasureRoute(
         bool Enabled,
@@ -490,7 +490,11 @@ public static class TreasureDungeonData
             {
                 var room = roomByNumber[door.Room];
                 var coordinate = GetRoomCoordinate(room, door.Slot);
-                return door with { Position = ConvertCoordinate(coordinate) };
+                return door with
+                {
+                    Position = ConvertCoordinate(coordinate),
+                    ClearThrough = ConvertOptionalCoordinate(coordinate.ClearThrough),
+                };
             })
             .ToArray();
 
@@ -514,11 +518,11 @@ public static class TreasureDungeonData
                 .Select(room => new TreasureRouteRoomDefinition
                 {
                     Room = room.Room,
-                    Left = ConvertCoordinate(room.Left!.Value.Position),
+                    Left = ConvertCoordinate(room.Left!.Value.Position, room.Left.Value.ClearThrough),
                     Middle = route.RouteKind == TreasureRouteKind.Thief
-                        ? ConvertCoordinate(room.Middle!.Value.Position)
+                        ? ConvertCoordinate(room.Middle!.Value.Position, room.Middle.Value.ClearThrough)
                         : null,
-                    Right = ConvertCoordinate(room.Right!.Value.Position),
+                    Right = ConvertCoordinate(room.Right!.Value.Position, room.Right.Value.ClearThrough),
                 })
                 .ToList(),
         };
@@ -526,19 +530,27 @@ public static class TreasureDungeonData
     private static Vector3 ConvertCoordinate(TreasureRouteCoordinate coordinate)
         => new(coordinate.X!.Value, coordinate.Y!.Value, coordinate.Z!.Value);
 
-    private static TreasureRouteCoordinate ConvertCoordinate(Vector3 position)
+    private static Vector3? ConvertOptionalCoordinate(TreasureRouteCoordinate? coordinate)
+        => coordinate is null
+            ? null
+            : ConvertCoordinate(coordinate);
+
+    private static TreasureRouteCoordinate ConvertCoordinate(Vector3 position, Vector3? clearThrough = null)
         => new()
         {
             X = position.X,
             Y = position.Y,
             Z = position.Z,
+            ClearThrough = clearThrough.HasValue
+                ? ConvertCoordinate(clearThrough.Value)
+                : null,
         };
 
     private static TreasureRouteManifest CreateManifest(IReadOnlyDictionary<uint, TreasureRoute> sourceRoutes)
         => new()
         {
             SchemaVersion = 1,
-            Description = "ADS treasure dungeon route geometry. Edit only entryPoint and room door XYZ values; object names, labels, room metadata, and route behavior stay compiled in ADS.",
+            Description = "ADS treasure dungeon route geometry. Edit entryPoint and room door XYZ values; optional per-door clearThrough XYZ overrides follower-only movement-through targets. Object names, labels, room metadata, and opener behavior stay compiled in ADS.",
             Routes = sourceRoutes
                 .OrderBy(x => x.Key)
                 .Where(x => IsEditableRouteShape(x.Value))
@@ -651,7 +663,8 @@ public static class TreasureDungeonData
         TreasureRouteCoordinate? point,
         string source,
         uint territoryTypeId,
-        string pointPath)
+        string pointPath,
+        bool allowClearThrough = true)
     {
         if (point is null)
             throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} is missing coordinates.");
@@ -662,6 +675,14 @@ public static class TreasureDungeonData
             || !float.IsFinite(point.Z.Value))
         {
             throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath} has malformed coordinates.");
+        }
+
+        if (point.ClearThrough is not null)
+        {
+            if (!allowClearThrough)
+                throw new InvalidDataException($"{source} route {territoryTypeId} {pointPath}.clearThrough cannot contain another clearThrough point.");
+
+            ValidateCoordinate(point.ClearThrough, source, territoryTypeId, $"{pointPath}.clearThrough", allowClearThrough: false);
         }
     }
 
@@ -749,6 +770,7 @@ public static class TreasureDungeonData
             TreasureRouteIndex = priority,
             TreasureRoomIndex = InferRoomIndex(routePoint, priority),
             TreasurePassageGroup = InferPassageGroup(routePoint, priority),
+            TreasureClearThroughPosition = routePoint.ClearThrough,
         };
 
     private static int InferRoomIndex(RoutePoint routePoint, int priority)
