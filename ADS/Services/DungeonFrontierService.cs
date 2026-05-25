@@ -647,11 +647,18 @@ public sealed class DungeonFrontierService
         if (!IsEligibleTreasureFollowerStartGateTarget(point))
             return;
 
+        var wasSameTarget = TreasureFollowerStartGateActive
+                            && string.Equals(treasureFollowerStartGateTargetKey, point.Key, StringComparison.Ordinal);
         TreasureFollowerStartGateActive = true;
         treasureFollowerStartGateTargetKey = point.Key;
         treasureFollowerStartGateTargetName = point.Name;
         treasureFollowerStartGateTargetSource = point.TreasureRouteSource;
         treasureFollowerStartGateTransitionConsumed = false;
+        if (!wasSameTarget)
+        {
+            log.Information(
+                $"[ADS] Treasure follower start gate selected: {point.Name} ({point.TreasureRouteSource}, key {point.Key}) at {FormatVector(point.Position)}. ADS will require this entry proof before enabling follower room-door routing.");
+        }
     }
 
     private void ClearTreasureFollowerStartGateIfComplete()
@@ -660,9 +667,13 @@ public sealed class DungeonFrontierService
             return;
 
         if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || treasureFollowerStartGateTargetKey is null
-            || visitedFrontierKeys.Contains(treasureFollowerStartGateTargetKey)
-            || HasCurrentDutyTreasureFollowerEntryProof()
+            || treasureFollowerStartGateTargetKey is null)
+        {
+            ClearTreasureFollowerStartGate();
+            return;
+        }
+
+        if (HasCurrentDutyTreasureFollowerEntryProof()
             || GetTreasureFollowerReachedFloor() > 0)
         {
             ClearTreasureFollowerStartGate();
@@ -2210,23 +2221,50 @@ public sealed class DungeonFrontierService
         if (!IsTreasureFollowerEntryProofPoint(point))
             return false;
 
+        var startGateProof = IsTreasureFollowerStartGateProofPoint(point);
+        visitedFrontierKeys.Add(point.Key);
         treasureFollowerEntryProofDutyKey = activeDutyKey;
         ClearTreasureFollowerStartGate();
         ClearTreasureFollowerCandidateHold("entry proof established");
         ResetTreasureFollowerDoorChaseGate();
         ClearTreasureFollowerRoomRetryCooldown();
-        log.Information(
-            $"[ADS] Treasure follower entry proof established after {reason} at {point.Name} ({point.TreasureRouteSource}, key {point.Key}). ADS will resume follower routing without marking room progress consumed.");
+        if (startGateProof)
+        {
+            log.Information(
+                $"[ADS] Treasure follower start gate reached after {reason}: {point.Name} ({point.TreasureRouteSource}, key {point.Key}) at {FormatVector(point.Position)}. ADS marked entry proof for duty {activeDutyKey} and enabled follower room-door routing.");
+        }
+        else
+        {
+            log.Information(
+                $"[ADS] Treasure follower entry proof established after {reason} at {point.Name} ({point.TreasureRouteSource}, key {point.Key}). ADS will resume follower routing without marking room progress consumed.");
+        }
+
         return true;
     }
 
     private bool IsTreasureFollowerEntryProofPoint(DungeonFrontierPoint point)
-        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-           && !HasCurrentDutyTreasureFollowerEntryProof()
-           && activeDutyKey != 0
-           && point.IsTreasureRoutePoint
-           && point.TreasureRouteIndex > 0
-           && !point.IsLiveTreasureDoorCandidate;
+    {
+        if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
+            || HasCurrentDutyTreasureFollowerEntryProof()
+            || activeDutyKey == 0)
+        {
+            return false;
+        }
+
+        if (IsTreasureFollowerStartGateProofPoint(point))
+            return true;
+
+        if (TreasureFollowerStartGateActive || GetTreasureFollowerReachedFloor() == 0)
+            return false;
+
+        return point.IsTreasureRoutePoint
+               && point.TreasureRouteIndex > 0
+               && !point.IsLiveTreasureDoorCandidate;
+    }
+
+    private bool IsTreasureFollowerStartGateProofPoint(DungeonFrontierPoint point)
+        => (IsTreasureFollowerStartGateTarget(point) || IsEligibleTreasureFollowerStartGateTarget(point))
+           && (point.IsManualXyzDestination || IsStaticTreasureRouteStartPoint(point));
 
     private void RetireTreasureFollowerBacktrackTarget(DungeonFrontierPoint point)
     {
