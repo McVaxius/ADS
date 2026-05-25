@@ -29,7 +29,6 @@ public sealed class ExecutionService
     private const float TreasureDoorFollowThroughArrivalRange = 2.0f;
     private const float TreasureDoorFollowThroughStaleVerticalDelta = 20.0f;
     private const float TreasureDoorPlannerSameFloorVerticalDelta = 6.0f;
-    private const float TreasureDoorRouteMetadataMaxRange = 35.0f;
     private const uint AquapolisTerritoryTypeId = 558;
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const uint BigCheekedCakeMonsters = 6942069; // Hello adventurer, are you enjoying my ai slop today :D
@@ -52,7 +51,6 @@ public sealed class ExecutionService
     private const float TreasureRouteStuckNudgeXOffset = 0.5f;
     private const float AquapolisRouteWiggleSideOffset = 1.25f;
     private const int TreasureFollowerDoorFollowThroughNudgeAttemptLimit = 2;
-    private const int TreasureDoorFollowThroughNudgeAttemptLimit = 2;
     private const float TreasureDoorNudgeProgressDistance = 0.5f;
     private const float TreasureDoorNudgeSideOffset = 1.25f;
     private const float TreasureDoorNudgeForwardOffset = 1.5f;
@@ -80,7 +78,6 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
     private static readonly TimeSpan TreasureFollowerDoorFollowThroughTruthTimeout = TimeSpan.FromSeconds(8.0);
-    private static readonly TimeSpan TreasureDoorFollowThroughTruthTimeout = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
@@ -119,10 +116,6 @@ public sealed class ExecutionService
     private DateTime recoveryTargetReachedUtc;
     private ObservedInteractable? pendingProgressionInteractable;
     private DungeonFrontierPoint? pendingTreasureDoorTransitionPoint;
-    private bool pendingTreasureDoorFollowThroughReached;
-    private DateTime pendingTreasureDoorFollowThroughReachedUtc = DateTime.MinValue;
-    private string treasureDoorFollowThroughStage = string.Empty;
-    private string treasureDoorFollowThroughReason = string.Empty;
     private DungeonFrontierPoint? pendingSatisfiedManualDestination;
     private string? pendingSatisfiedManualInteractableKey;
     private DateTime pendingProgressionInteractResultUntilUtc;
@@ -265,21 +258,6 @@ public sealed class ExecutionService
         => manualDestinationNoProgressTargetKey is null || manualDestinationLastProgressUtc == DateTime.MinValue
             ? null
             : Math.Max(0, (DateTime.UtcNow - manualDestinationLastProgressUtc).TotalSeconds);
-
-    public bool TreasureDoorFollowThroughActive
-        => pendingProgressionInteractable?.Classification == InteractableClass.TreasureDoor
-           && pendingTreasureDoorTransitionPoint is not null;
-
-    public string TreasureDoorFollowThroughTarget
-        => pendingTreasureDoorTransitionPoint is { } point
-            ? $"{point.Name} @ {FormatVector(point.Position)}"
-            : string.Empty;
-
-    public string TreasureDoorFollowThroughStage
-        => TreasureDoorFollowThroughActive ? treasureDoorFollowThroughStage : string.Empty;
-
-    public string TreasureDoorFollowThroughReason
-        => TreasureDoorFollowThroughActive ? treasureDoorFollowThroughReason : string.Empty;
 
     public bool TreasureFollowerDoorFollowThroughActive
         => treasureFollowerDoorFollowThroughCandidateKey is not null;
@@ -3001,25 +2979,9 @@ public sealed class ExecutionService
                 pendingRequiredInteractionAttemptsSent = isRequiredLikeInteractable
                     ? (continuingRequiredFollowThrough ? pendingRequiredInteractionAttemptsSent + 1 : 1)
                     : 0;
-                if (observedInteractable.Classification == InteractableClass.TreasureDoor)
-                {
-                    pendingTreasureDoorTransitionPoint = BuildTreasureDoorFollowThroughPoint(
-                        context,
-                        observedInteractable,
-                        playerPosition.Value,
-                        out treasureDoorFollowThroughReason);
-                    pendingTreasureDoorFollowThroughReached = false;
-                    pendingTreasureDoorFollowThroughReachedUtc = DateTime.MinValue;
-                    treasureDoorFollowThroughStage = "InteractSent";
-                    log?.Information(
-                        $"[ADS] Treasure door follow-through armed for {observedInteractable.Name}; target {FormatVector(pendingTreasureDoorTransitionPoint.Position)} ({treasureDoorFollowThroughReason}).");
-                }
-                else
-                {
-                    ResetPendingTreasureDoorFollowThroughState();
-                    pendingTreasureDoorTransitionPoint = null;
-                }
-
+                pendingTreasureDoorTransitionPoint = observedInteractable.Classification == InteractableClass.TreasureDoor
+                    ? BuildTreasureDoorFollowThroughPoint(context, observedInteractable, playerPosition.Value)
+                    : null;
                 if (isRequiredLikeInteractable)
                 {
                     var retryIdentity = continuingRequiredFollowThrough && previousPendingProgressionInteractable is not null
@@ -3687,13 +3649,8 @@ public sealed class ExecutionService
             return false;
         }
 
-        var isExpendableFollowThrough = pendingInteractable.Classification == InteractableClass.Expendable;
-        var isTreasureDoorFollowThrough = pendingInteractable.Classification == InteractableClass.TreasureDoor;
-        var isRequiredFollowThrough = pendingInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
-            if (isTreasureDoorFollowThrough)
-                treasureDoorFollowThroughStage = "WaitingForDialog";
             StopMovementAssistsForSelectYesno(planner);
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
@@ -3727,6 +3684,9 @@ public sealed class ExecutionService
             }
         }
 
+        var isExpendableFollowThrough = pendingInteractable.Classification == InteractableClass.Expendable;
+        var isTreasureDoorFollowThrough = pendingInteractable.Classification == InteractableClass.TreasureDoor;
+        var isRequiredFollowThrough = pendingInteractable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
         if (isRequiredFollowThrough && context.IsUnsafeTransition)
         {
             ClearInteractableCommitment();
@@ -3751,20 +3711,7 @@ public sealed class ExecutionService
         }
 
         var playerPosition = objectTable.LocalPlayer?.Position;
-        if (isTreasureDoorFollowThrough
-            && (context.InCombat || planner.Mode == PlannerMode.Combat))
-        {
-            ResolveTreasureDoorFollowThrough(
-                context,
-                pendingInteractable,
-                playerPosition,
-                "CombatStarted",
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} resolved because combat started; ADS marked the opened door consumed and yielded movement to combat.");
-            return true;
-        }
-
         if (isRequiredFollowThrough
-            && !isTreasureDoorFollowThrough
             && pendingLiveInteractable is not null
             && playerPosition.HasValue)
         {
@@ -3785,11 +3732,30 @@ public sealed class ExecutionService
 
         var now = DateTime.UtcNow;
         var treasureDoorReadyForFollowThrough = isTreasureDoorFollowThrough
+            && pendingLiveInteractable is null
             && pendingProgressionInteractAfterWaitUntilUtc <= now;
         if (now < pendingProgressionInteractResultUntilUtc)
         {
             if (treasureDoorReadyForFollowThrough)
-                return TryAdvancePendingTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
+            {
+                if (TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPoint, out var staleTreasureDoorFollowThrough))
+                {
+                    if (reachedTreasureDoorTransitionPoint)
+                    {
+                        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                        TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                        ClearInteractableCommitment();
+                    }
+
+                    return true;
+                }
+
+                if (staleTreasureDoorFollowThrough)
+                {
+                    ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
+                    return true;
+                }
+            }
 
             StopMovementAssists();
             var holdReason = pendingProgressionInteractAfterWaitUntilUtc > now
@@ -3802,19 +3768,6 @@ public sealed class ExecutionService
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {holdReason}");
-            return true;
-        }
-
-        if (isTreasureDoorFollowThrough)
-        {
-            if (treasureDoorReadyForFollowThrough)
-                return TryAdvancePendingTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
-
-            treasureDoorFollowThroughStage = "WaitingForPostInteract";
-            StopMovementAssists();
-            SetPhase(
-                ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} is waiting for the configured post-interact delay before moving through.");
             return true;
         }
 
@@ -3847,6 +3800,27 @@ public sealed class ExecutionService
             return true;
         }
 
+        if (treasureDoorReadyForFollowThrough)
+        {
+            if (TryAdvanceTreasureDoorFollowThrough(prefix, out var reachedTreasureDoorTransitionPointAfterWindow, out var staleTreasureDoorFollowThroughAfterWindow))
+            {
+                if (reachedTreasureDoorTransitionPointAfterWindow)
+                {
+                    observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+                    TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
+                    ClearInteractableCommitment();
+                }
+
+                return true;
+            }
+
+            if (staleTreasureDoorFollowThroughAfterWindow)
+            {
+                ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
+                return true;
+            }
+        }
+
         observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
         TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
         ClearInteractableCommitment();
@@ -3860,140 +3834,6 @@ public sealed class ExecutionService
             ExecutionPhase.AttemptingInteractableObjective,
             $"{prefix} {completionReason}");
         return true;
-    }
-
-    private bool TryAdvancePendingTreasureDoorFollowThrough(
-        DutyContextSnapshot context,
-        ObservedInteractable pendingInteractable,
-        Vector3? playerPosition,
-        string prefix)
-    {
-        var transitionPoint = pendingTreasureDoorTransitionPoint;
-        if (transitionPoint is null)
-        {
-            ClearInteractableCommitment();
-            StopMovementAssists();
-            SetPhase(
-                ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} had no clear-through target; ADS cleared the attempt window and is replanning.");
-            return true;
-        }
-
-        if (!playerPosition.HasValue)
-        {
-            treasureDoorFollowThroughStage = "WaitingForPlayerPosition";
-            StopMovementAssists();
-            SetPhase(
-                ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} is held because local player position is unavailable.");
-            return true;
-        }
-
-        if (pendingTreasureDoorFollowThroughReached)
-            return HoldReachedTreasureDoorFollowThrough(context, pendingInteractable, transitionPoint, playerPosition.Value, prefix);
-
-        if (TryAdvanceTreasureDoorFollowThroughPoint(
-                transitionPoint,
-                prefix,
-                "Treasure door",
-                $"after {pendingInteractable.Name} was unlocked",
-                pauseForSelectYesno: true,
-                stopMovementOnReach: false,
-                maxNudgeAttempts: TreasureDoorFollowThroughNudgeAttemptLimit,
-                out var reachedTransitionPoint,
-                out var staleCrossFloorTarget,
-                out var stuckRecoveryExhausted))
-        {
-            treasureDoorFollowThroughStage = reachedTransitionPoint ? "ClearThroughReached" : "ClearThrough";
-            if (reachedTransitionPoint)
-            {
-                pendingTreasureDoorFollowThroughReached = true;
-                pendingTreasureDoorFollowThroughReachedUtc = DateTime.UtcNow;
-                return HoldReachedTreasureDoorFollowThrough(context, pendingInteractable, transitionPoint, playerPosition.Value, prefix);
-            }
-
-            return true;
-        }
-
-        if (staleCrossFloorTarget)
-        {
-            ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
-            return true;
-        }
-
-        if (stuckRecoveryExhausted)
-        {
-            ResolveTreasureDoorFollowThrough(
-                context,
-                pendingInteractable,
-                playerPosition,
-                "TimedOutNoProgress",
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} timed out after clear-through movement made no progress through {TreasureDoorFollowThroughNudgeAttemptLimit} side-nudge attempt(s); ADS marked the opened door consumed and is replanning from refreshed duty truth.");
-            return true;
-        }
-
-        ClearInteractableCommitment();
-        StopMovementAssists();
-        SetPhase(
-            ExecutionPhase.AttemptingInteractableObjective,
-            $"{prefix} Treasure door follow-through for {pendingInteractable.Name} could not advance; ADS cleared the attempt window and is replanning.");
-        return true;
-    }
-
-    private bool HoldReachedTreasureDoorFollowThrough(
-        DutyContextSnapshot context,
-        ObservedInteractable pendingInteractable,
-        DungeonFrontierPoint transitionPoint,
-        Vector3 playerPosition,
-        string prefix)
-    {
-        var targetVerticalDelta = MathF.Abs(transitionPoint.Position.Y - playerPosition.Y);
-        if (targetVerticalDelta > TreasureDoorFollowThroughStaleVerticalDelta)
-        {
-            ClearStaleTreasureDoorFollowThrough(context, pendingInteractable, playerPosition, prefix);
-            return true;
-        }
-
-        var now = DateTime.UtcNow;
-        var reachedUtc = pendingTreasureDoorFollowThroughReachedUtc == DateTime.MinValue
-            ? now
-            : pendingTreasureDoorFollowThroughReachedUtc;
-        pendingTreasureDoorFollowThroughReachedUtc = reachedUtc;
-        var elapsed = now - reachedUtc;
-        if (elapsed >= TreasureDoorFollowThroughTruthTimeout)
-        {
-            ResolveTreasureDoorFollowThrough(
-                context,
-                pendingInteractable,
-                playerPosition,
-                "ClearThroughTimeout",
-                $"{prefix} Treasure door follow-through for {pendingInteractable.Name} reached clear-through and timed out after {elapsed.TotalSeconds:0.0}s without transition or combat; ADS marked the opened door consumed and is replanning from refreshed duty truth.");
-            return true;
-        }
-
-        treasureDoorFollowThroughStage = "ClearThroughReached";
-        StopNavigationForTreasureRouteNudge();
-        var remaining = Math.Max(0, (TreasureDoorFollowThroughTruthTimeout - elapsed).TotalSeconds);
-        SetPhase(
-            ExecutionPhase.AttemptingInteractableObjective,
-            $"{prefix} Treasure door follow-through for {pendingInteractable.Name} reached {transitionPoint.Name}; holding {remaining:0.0}s for transition, combat, stale-floor evidence, or timeout before planner retargets resume.");
-        return true;
-    }
-
-    private void ResolveTreasureDoorFollowThrough(
-        DutyContextSnapshot context,
-        ObservedInteractable pendingInteractable,
-        Vector3? playerPosition,
-        string stage,
-        string status)
-    {
-        log?.Information($"[ADS] {status}");
-        treasureDoorFollowThroughStage = stage;
-        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
-        TryRetirePendingSatisfiedManualDestination(pendingInteractable, playerPosition);
-        ClearInteractableCommitment();
-        StopMovementAssists();
-        SetPhase(ExecutionPhase.AttemptingInteractableObjective, status);
     }
 
     private void ClearStaleTreasureDoorFollowThrough(
@@ -4021,7 +3861,6 @@ public sealed class ExecutionService
     {
         pendingProgressionInteractable = null;
         pendingTreasureDoorTransitionPoint = null;
-        ResetPendingTreasureDoorFollowThroughState();
         pendingSatisfiedManualDestination = null;
         pendingSatisfiedManualInteractableKey = null;
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
@@ -4030,13 +3869,18 @@ public sealed class ExecutionService
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
-    private void ResetPendingTreasureDoorFollowThroughState()
-    {
-        pendingTreasureDoorFollowThroughReached = false;
-        pendingTreasureDoorFollowThroughReachedUtc = DateTime.MinValue;
-        treasureDoorFollowThroughStage = string.Empty;
-        treasureDoorFollowThroughReason = string.Empty;
-    }
+    private bool TryAdvanceTreasureDoorFollowThrough(string prefix, out bool reachedTransitionPoint, out bool staleCrossFloorTarget)
+        => TryAdvanceTreasureDoorFollowThroughPoint(
+            pendingTreasureDoorTransitionPoint,
+            prefix,
+            "Treasure door",
+            "after the interact",
+            pauseForSelectYesno: true,
+            stopMovementOnReach: true,
+            maxNudgeAttempts: null,
+            out reachedTransitionPoint,
+            out staleCrossFloorTarget,
+            out _);
 
     private bool TryAdvanceTreasureDoorFollowThroughPoint(
         DungeonFrontierPoint? frontierPoint,
@@ -4228,187 +4072,18 @@ public sealed class ExecutionService
     private static DungeonFrontierPoint BuildTreasureDoorFollowThroughPoint(
         DutyContextSnapshot context,
         ObservedInteractable observedInteractable,
-        Vector3 playerPosition,
-        out string reason)
-    {
-        var position = BuildTreasureDoorFollowThroughPosition(playerPosition, observedInteractable.Position);
-        var levelRowId = 0u;
-        var mapId = context.MapId;
-        var priority = 0;
-        var treasureRouteIndex = -1;
-        var treasureRoomIndex = 0;
-        var treasurePassageGroup = string.Empty;
-        Vector3? treasureClearThroughPosition = null;
-        reason = "fallback player-to-door vector";
-
-        if (TryResolveTreasureDoorRouteMetadata(context, observedInteractable, out var routeMetadata, out var routePoints))
-        {
-            levelRowId = routeMetadata.LevelRowId;
-            mapId = routeMetadata.MapId == 0 ? context.MapId : routeMetadata.MapId;
-            priority = routeMetadata.Priority;
-            treasureRouteIndex = routeMetadata.TreasureRouteIndex;
-            treasureRoomIndex = routeMetadata.TreasureRoomIndex;
-            treasurePassageGroup = routeMetadata.TreasurePassageGroup;
-            treasureClearThroughPosition = routeMetadata.TreasureClearThroughPosition;
-
-            if (routeMetadata.TreasureClearThroughPosition.HasValue)
-            {
-                position = routeMetadata.TreasureClearThroughPosition.Value;
-                reason = $"route clearThrough for {routeMetadata.Name}";
-            }
-            else if (TryBuildDerivedTreasureDoorFollowThroughPosition(
-                         routeMetadata,
-                         routePoints,
-                         observedInteractable.Position,
-                         out var derivedPosition,
-                         out var derivedReason))
-            {
-                position = derivedPosition;
-                reason = derivedReason;
-            }
-            else
-            {
-                reason = $"fallback player-to-door vector; route metadata {routeMetadata.Name} had no usable forward direction";
-            }
-        }
-
-        return new DungeonFrontierPoint
+        Vector3 playerPosition)
+        => new()
         {
             Key = $"treasure-door-follow-through:{context.TerritoryTypeId}:{observedInteractable.Key}",
             Name = $"{observedInteractable.Name} follow-through",
-            Position = position,
-            LevelRowId = levelRowId,
-            MapId = mapId,
-            Priority = priority,
+            Position = BuildTreasureDoorFollowThroughPosition(playerPosition, observedInteractable.Position),
+            LevelRowId = 0,
+            MapId = context.MapId,
+            Priority = 0,
             ManualDestinationKind = ManualDestinationKind.None,
             ArrivalRadiusXz = TreasureDoorFollowThroughArrivalRange,
-            TreasureRouteIndex = treasureRouteIndex,
-            TreasureRoomIndex = treasureRoomIndex,
-            TreasurePassageGroup = treasurePassageGroup,
-            TreasureClearThroughPosition = treasureClearThroughPosition,
         };
-    }
-
-    private static bool TryResolveTreasureDoorRouteMetadata(
-        DutyContextSnapshot context,
-        ObservedInteractable observedInteractable,
-        out DungeonFrontierPoint metadata,
-        out IReadOnlyList<DungeonFrontierPoint> routePoints)
-    {
-        routePoints = TreasureDungeonData.BuildRoutePoints(context.TerritoryTypeId, context.MapId);
-        var resolved = routePoints
-            .Where(point => point.IsTreasurePassageCandidate)
-            .Select(point => new
-            {
-                Point = point,
-                HorizontalDistance = GetHorizontalDistance(point.Position, observedInteractable.Position),
-                VerticalDelta = MathF.Abs(point.Position.Y - observedInteractable.Position.Y),
-            })
-            .Where(x => x.HorizontalDistance <= TreasureDoorRouteMetadataMaxRange
-                        && x.VerticalDelta <= TreasureDoorFollowThroughStaleVerticalDelta)
-            .OrderBy(x => x.VerticalDelta <= TreasureDoorPlannerSameFloorVerticalDelta ? 0 : 1)
-            .ThenBy(x => x.HorizontalDistance)
-            .ThenBy(x => x.VerticalDelta)
-            .ThenBy(x => x.Point.Priority)
-            .FirstOrDefault();
-
-        if (resolved is null)
-        {
-            metadata = null!;
-            return false;
-        }
-
-        metadata = resolved.Point;
-        return true;
-    }
-
-    private static bool TryBuildDerivedTreasureDoorFollowThroughPosition(
-        DungeonFrontierPoint metadata,
-        IReadOnlyList<DungeonFrontierPoint> routePoints,
-        Vector3 doorPosition,
-        out Vector3 position,
-        out string reason)
-    {
-        position = default;
-        reason = string.Empty;
-        var passagePoints = routePoints
-            .Where(point => point.IsTreasurePassageCandidate)
-            .ToList();
-        var nextRoomIndex = passagePoints
-            .Where(point => point.TreasureRoomIndex > metadata.TreasureRoomIndex)
-            .Select(point => point.TreasureRoomIndex)
-            .DefaultIfEmpty(0)
-            .Min();
-        if (nextRoomIndex > 0)
-        {
-            var nextRoomPoints = passagePoints
-                .Where(point => point.TreasureRoomIndex == nextRoomIndex)
-                .ToList();
-            var samePassageNextRoomPoint = nextRoomPoints.FirstOrDefault(point =>
-                string.Equals(point.TreasurePassageGroup, metadata.TreasurePassageGroup, StringComparison.Ordinal));
-            if (samePassageNextRoomPoint is not null
-                && TryBuildTreasureDoorDirectionalFollowThroughPosition(
-                    doorPosition,
-                    samePassageNextRoomPoint.Position - metadata.Position,
-                    out position))
-            {
-                reason = $"derived toward next-room {samePassageNextRoomPoint.Name}";
-                return true;
-            }
-
-            if (TryBuildTreasureDoorDirectionalFollowThroughPosition(
-                    doorPosition,
-                    AverageTreasureDoorRoutePosition(nextRoomPoints) - metadata.Position,
-                    out position))
-            {
-                reason = $"derived toward room {nextRoomIndex} center";
-                return true;
-            }
-        }
-
-        var sameRoomPoints = passagePoints
-            .Where(point => point.TreasureRoomIndex == metadata.TreasureRoomIndex)
-            .ToList();
-        if (sameRoomPoints.Count > 1
-            && TryBuildTreasureDoorDirectionalFollowThroughPosition(
-                doorPosition,
-                metadata.Position - AverageTreasureDoorRoutePosition(sameRoomPoints),
-                out position))
-        {
-            reason = $"derived through {metadata.TreasurePassageGroup} slot from room center";
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryBuildTreasureDoorDirectionalFollowThroughPosition(
-        Vector3 doorPosition,
-        Vector3 direction,
-        out Vector3 position)
-    {
-        position = default;
-        var flatDirection = new Vector3(direction.X, 0f, direction.Z);
-        var flatDistance = flatDirection.Length();
-        if (flatDistance <= float.Epsilon)
-            return false;
-
-        flatDirection = Vector3.Normalize(flatDirection);
-        position = new Vector3(
-            doorPosition.X + (flatDirection.X * TreasureDoorFollowThroughDistance),
-            doorPosition.Y,
-            doorPosition.Z + (flatDirection.Z * TreasureDoorFollowThroughDistance));
-        return true;
-    }
-
-    private static Vector3 AverageTreasureDoorRoutePosition(IReadOnlyList<DungeonFrontierPoint> points)
-    {
-        var sum = Vector3.Zero;
-        foreach (var point in points)
-            sum += point.Position;
-
-        return points.Count == 0 ? Vector3.Zero : sum / points.Count;
-    }
 
     private static Vector3 BuildTreasureDoorFollowThroughPosition(Vector3 playerPosition, Vector3 doorPosition)
     {
