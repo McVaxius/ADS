@@ -15,11 +15,13 @@ public sealed class ObjectivePlannerService
     private const float TreasureCofferMaxHorizontalDistance = 100f;
     private const float TreasureCofferVerticalCap = 5f;
     private const float BattleNpcVerticalSanityCap = 100f;
+    private static readonly TimeSpan TreasureFollowerStartGateDeferralLogCooldown = TimeSpan.FromSeconds(10);
 
     private readonly IObjectTable objectTable;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
     private readonly DungeonFrontierService dungeonFrontierService;
     private readonly IPluginLog? log;
+    private DateTime nextTreasureFollowerStartGateDeferralLogUtc;
 
     public ObjectivePlannerService(
         IObjectTable objectTable,
@@ -122,6 +124,18 @@ public sealed class ObjectivePlannerService
                 playerPosition,
                 context)
             : null;
+        var nearestDeferredTreasureCoffer = isRawTreasureFollower
+            ? GetBestInteractable(
+                observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureCoffer),
+                playerPosition,
+                context)
+            : nearestTreasureCoffer;
+        var nearestDeferredTreasureDoor = isRawTreasureFollower
+            ? GetBestInteractable(
+                observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureDoor),
+                playerPosition,
+                context)
+            : null;
         var nearestOptionalInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(x => x.Classification == InteractableClass.Optional),
             playerPosition,
@@ -200,6 +214,22 @@ public sealed class ObjectivePlannerService
                 Explanation = "ADS stays monster-first but does not become the combat brain; it waits for combat to clear before progression decisions resume.",
                 CapturedAtUtc = now,
             };
+            return;
+        }
+
+        if (TryApplyTreasureFollowerStartGate(
+                context,
+                observation,
+                playerPosition,
+                nearestBossFightMonster,
+                nearestMonster,
+                nearestFollowTarget,
+                nearestRequiredInteractable,
+                nearestDeferredTreasureCoffer,
+                nearestDeferredTreasureDoor,
+                nearestOptionalInteractable,
+                now))
+        {
             return;
         }
 
@@ -590,6 +620,102 @@ public sealed class ObjectivePlannerService
                 : "No live monsters or interactables are currently visible. ADS is holding until the duty state changes again.",
             CapturedAtUtc = now,
         };
+    }
+
+    private bool TryApplyTreasureFollowerStartGate(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        ObservedMonster? nearestBossFightMonster,
+        ObservedMonster? nearestMonster,
+        ObservedMonster? nearestFollowTarget,
+        ObservedInteractable? nearestRequiredInteractable,
+        ObservedInteractable? nearestTreasureCoffer,
+        ObservedInteractable? nearestTreasureDoor,
+        ObservedInteractable? nearestOptionalInteractable,
+        DateTime now)
+    {
+        if (!dungeonFrontierService.TreasureFollowerStartGateActive
+            || dungeonFrontierService.CurrentTarget is not { } startGateTarget
+            || !dungeonFrontierService.IsTreasureFollowerStartGateTarget(startGateTarget))
+        {
+            return false;
+        }
+
+        var distance = playerPosition.HasValue
+            ? GetManualOrFrontierDistance(playerPosition.Value, startGateTarget)
+            : (float?)null;
+        var verticalDelta = playerPosition.HasValue
+            ? MathF.Abs(startGateTarget.Position.Y - playerPosition.Value.Y)
+            : (float?)null;
+        var isXyzDestination = startGateTarget.IsManualXyzDestination;
+        var objectiveKind = isXyzDestination
+            ? GetManualDestinationObjectiveKind(startGateTarget)
+            : PlannerObjectiveKind.Frontier;
+
+        LogTreasureFollowerStartGateDeferral(
+            startGateTarget,
+            nearestBossFightMonster,
+            nearestMonster,
+            nearestFollowTarget,
+            nearestRequiredInteractable,
+            nearestTreasureCoffer,
+            nearestTreasureDoor,
+            nearestOptionalInteractable,
+            now);
+
+        Current = new PlannerSnapshot
+        {
+            Mode = PlannerMode.Progression,
+            ObjectiveKind = objectiveKind,
+            Objective = isXyzDestination
+                ? $"Advance toward follower start XYZ: {startGateTarget.Name}"
+                : $"Advance toward treasure follower start: {startGateTarget.Name}",
+            Explanation = $"Treasure follower start gate is active from {dungeonFrontierService.TreasureDungeonRoleSource}; ADS must reach the initial {dungeonFrontierService.TreasureFollowerStartGateSource} target {startGateTarget.Name} before live monsters, coffers, doors, follow anchors, interactables, heading scouts, or passage candidates can preempt it. Live observations remain visible ({observation.LiveMonsters.Count} monster / {observation.LiveFollowTargets.Count} follow / {observation.LiveInteractables.Count} interactable), but start arrival or route transition owns progression until this target is visited or consumed.",
+            TargetName = startGateTarget.Name,
+            TargetDistance = distance,
+            TargetVerticalDelta = verticalDelta,
+            CapturedAtUtc = now,
+        };
+        return true;
+    }
+
+    private void LogTreasureFollowerStartGateDeferral(
+        DungeonFrontierPoint startGateTarget,
+        ObservedMonster? nearestBossFightMonster,
+        ObservedMonster? nearestMonster,
+        ObservedMonster? nearestFollowTarget,
+        ObservedInteractable? nearestRequiredInteractable,
+        ObservedInteractable? nearestTreasureCoffer,
+        ObservedInteractable? nearestTreasureDoor,
+        ObservedInteractable? nearestOptionalInteractable,
+        DateTime now)
+    {
+        if (log is null || now < nextTreasureFollowerStartGateDeferralLogUtc)
+            return;
+
+        var deferredObjectives = new List<string>();
+        if (nearestBossFightMonster is not null)
+            deferredObjectives.Add($"boss '{EscapeLogText(nearestBossFightMonster.Name)}'");
+        if (nearestTreasureCoffer is not null)
+            deferredObjectives.Add($"coffer '{EscapeLogText(nearestTreasureCoffer.Name)}'");
+        if (nearestTreasureDoor is not null)
+            deferredObjectives.Add($"door '{EscapeLogText(nearestTreasureDoor.Name)}'");
+        if (nearestMonster is not null)
+            deferredObjectives.Add($"monster '{EscapeLogText(nearestMonster.Name)}'");
+        if (nearestRequiredInteractable is not null)
+            deferredObjectives.Add($"{nearestRequiredInteractable.Classification} interactable '{EscapeLogText(nearestRequiredInteractable.Name)}'");
+        if (nearestFollowTarget is not null)
+            deferredObjectives.Add($"follow target '{EscapeLogText(nearestFollowTarget.Name)}'");
+        if (nearestOptionalInteractable is not null)
+            deferredObjectives.Add($"optional interactable '{EscapeLogText(nearestOptionalInteractable.Name)}'");
+
+        if (deferredObjectives.Count == 0)
+            return;
+
+        nextTreasureFollowerStartGateDeferralLogUtc = now + TreasureFollowerStartGateDeferralLogCooldown;
+        log.Information(
+            $"[ADS] Treasure follower start gate deferred live objective(s) {string.Join(", ", deferredObjectives)} while routing to {startGateTarget.Name} ({startGateTarget.TreasureRouteSource}, key {startGateTarget.Key}).");
     }
 
     private ObservedMonster? GetBestBattleNpc(
@@ -1123,14 +1249,17 @@ public sealed class ObjectivePlannerService
         if (!dungeonFrontierService.TreasureFollowerRouteOwnershipActive)
             return false;
 
+        var holdReason = string.IsNullOrWhiteSpace(dungeonFrontierService.TreasureFollowerRouteHoldReason)
+            ? "DoorChaseGate"
+            : dungeonFrontierService.TreasureFollowerRouteHoldReason;
         snapshot = new PlannerSnapshot
         {
             Mode = PlannerMode.Progression,
             ObjectiveKind = PlannerObjectiveKind.None,
-            Objective = "Await treasure follower door chase gate",
+            Objective = $"Await treasure follower route hold: {holdReason}",
             Explanation = string.IsNullOrWhiteSpace(dungeonFrontierService.CurrentLabelStatus)
-                ? "Treasure follower routing owns non-combat movement and is holding before selecting a passage door."
-                : dungeonFrontierService.CurrentLabelStatus,
+                ? $"Treasure follower routing owns non-combat movement and is holding before selecting a passage door ({holdReason})."
+                : $"{dungeonFrontierService.CurrentLabelStatus} Hold reason: {holdReason}.",
             CapturedAtUtc = now,
         };
         return true;
