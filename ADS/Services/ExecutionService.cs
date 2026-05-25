@@ -1662,7 +1662,6 @@ public sealed class ExecutionService
         var isManualXyzDestination = wantsXyzDestination
             || frontierPoint.IsManualXyzDestination;
         if (frontierPoint.AllowCombatBypass
-            && !dungeonFrontierService.IsTreasureFollowerStartGateTarget(frontierPoint)
             && planner.ObjectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination)
         {
             RefreshCommittedForceMarchManualDestination(frontierPoint, "planner selected the authored force-march handoff");
@@ -1988,8 +1987,6 @@ public sealed class ExecutionService
         var isTreasureFollowerRoutePoint = isTreasureRoutePoint && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
         var isTreasureFollowerPassageCandidate = isTreasureFollowerRoutePoint && frontierPoint.IsTreasurePassageCandidate;
         var isAquapolisRouteWiggleTarget = IsAquapolisRouteWiggleTarget(context, frontierPoint);
-        var isTreasureFollowerStartGateTarget = dungeonFrontierService.IsTreasureFollowerStartGateTarget(frontierPoint);
-        var isTreasureFollowerManualXyzStartGate = isTreasureFollowerStartGateTarget && frontierPoint.IsManualXyzDestination;
         var frontierLabel = dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
             ? "forward scout"
             : dungeonFrontierService.CurrentMode == FrontierMode.TreasureDungeon
@@ -2021,10 +2018,6 @@ public sealed class ExecutionService
         var treasureRouteRadiusStatus = BuildTreasureRouteRadiusStatus(
             frontierPoint,
             isTreasureFollowerPassageCandidate);
-        if (isTreasureFollowerManualXyzStartGate)
-        {
-            treasureRouteRadiusStatus += $" Treasure follower manual start gate arrival uses XZ <= {PreferredFrontierArrivalRange:0.0}y and Y <= {TreasureFollowerRouteVerticalCap:0.0}y.";
-        }
         if (!isTreasureRoutePoint)
             ResetTreasureRouteStuckTracking();
 
@@ -2043,9 +2036,9 @@ public sealed class ExecutionService
             playerPosition.Value,
             isMapXzDestination,
             isXyzDestination,
-            isTreasureFollowerPassageCandidate || isTreasureFollowerManualXyzStartGate,
-            isTreasureFollowerManualXyzStartGate ? PreferredFrontierArrivalRange : null,
-            isTreasureFollowerManualXyzStartGate ? TreasureFollowerRouteVerticalCap : null,
+            isTreasureFollowerPassageCandidate,
+            null,
+            null,
             out var targetHorizontalDistance,
             out var targetDistance,
             out var targetVerticalDelta,
@@ -2081,7 +2074,6 @@ public sealed class ExecutionService
         {
             if (isManualDestination
                 && !isTreasureRoutePoint
-                && !isTreasureFollowerStartGateTarget
                 && TryRetireManualDestinationForNoProgress(
                     frontierPoint,
                     playerPosition.Value,
@@ -2166,7 +2158,7 @@ public sealed class ExecutionService
         if (frontierPoint.IsTreasureFollowerStagingPoint)
             dungeonFrontierService.MarkTreasureFollowerCofferSeekReached(frontierPoint, playerPosition.Value, "ExecutionArrival");
 
-        if (isMapXzDestination || isXyzDestination || isTreasureFollowerStartGateTarget)
+        if (isMapXzDestination || isXyzDestination)
             dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
 
         if (!frontierPoint.AllowCombatBypass

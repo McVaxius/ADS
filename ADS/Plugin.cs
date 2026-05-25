@@ -89,6 +89,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ReflectionWindow reflectionWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
+    private uint lastOwnedTreasureRoleInferenceDutyKey;
+    private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
 
     public Plugin()
     {
@@ -113,7 +115,7 @@ public sealed class Plugin : IDalamudPlugin
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService);
-        ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, Log);
+        ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
@@ -401,6 +403,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromOutside()
     {
         QueueDutyOwnershipRemoteUpdate();
+        ResetOwnedTreasureRoleInferenceLatch();
         var result = ExecutionService.StartDutyFromOutside();
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -410,8 +413,10 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
-        InferAndApplyTreasureDungeonRole("inside start");
+        InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
+        if (result)
+            RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedStartInside);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -422,6 +427,8 @@ public sealed class Plugin : IDalamudPlugin
         QueueDutyOwnershipRemoteUpdate();
         InferAndApplyTreasureDungeonRole("inside resume");
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
+        if (result)
+            RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedResumeInside);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -447,6 +454,7 @@ public sealed class Plugin : IDalamudPlugin
         var stoppedInn = InnEntryService.IsRunning;
         var stoppedUtility = UtilityAutomationService.IsRunning;
         ExecutionService.Stop(DutyContextService.Current);
+        ResetOwnedTreasureRoleInferenceLatch();
         InnEntryService.Cancel("operator stop");
         UtilityAutomationService.Cancel("operator stop");
         var stoppedText = stoppedInn || stoppedUtility
@@ -546,11 +554,6 @@ public sealed class Plugin : IDalamudPlugin
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
                 frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                 frontierRouteKey = DungeonFrontierService.CurrentTarget?.Key,
-                treasureFollowerStartGateActive = DungeonFrontierService.TreasureFollowerStartGateActive,
-                treasureFollowerStartGateTarget = DungeonFrontierService.TreasureFollowerStartGateTarget,
-                treasureFollowerStartGateSource = DungeonFrontierService.TreasureFollowerStartGateSource,
-                treasureFollowerStartGateTargetKey = DungeonFrontierService.TreasureFollowerStartGateTargetKey,
-                treasureFollowerStartGateTransitionConsumed = DungeonFrontierService.TreasureFollowerStartGateTransitionConsumed,
                 treasureFollowerRouteHoldReason = DungeonFrontierService.TreasureFollowerRouteHoldReason,
                 treasureFollowerEntryMapOpenerRoleActive = DungeonFrontierService.TreasureFollowerEntryMapOpenerRoleActive,
                 treasureFollowerEntryProofDutyKey = DungeonFrontierService.TreasureFollowerEntryProofDutyKey,
@@ -655,11 +658,6 @@ public sealed class Plugin : IDalamudPlugin
                     treasureDungeonRoleSource = DungeonFrontierService.TreasureDungeonRoleSource,
                     treasureDungeonRoleDetail = DungeonFrontierService.TreasureDungeonRoleDetail,
                     treasureFollowerRetryCycle = DungeonFrontierService.TreasureFollowerRetryCycle,
-                    treasureFollowerStartGateActive = DungeonFrontierService.TreasureFollowerStartGateActive,
-                    treasureFollowerStartGateTarget = DungeonFrontierService.TreasureFollowerStartGateTarget,
-                    treasureFollowerStartGateSource = DungeonFrontierService.TreasureFollowerStartGateSource,
-                    treasureFollowerStartGateTargetKey = DungeonFrontierService.TreasureFollowerStartGateTargetKey,
-                    treasureFollowerStartGateTransitionConsumed = DungeonFrontierService.TreasureFollowerStartGateTransitionConsumed,
                     treasureFollowerRouteHoldReason = DungeonFrontierService.TreasureFollowerRouteHoldReason,
                     treasureFollowerEntryMapOpenerRoleActive = DungeonFrontierService.TreasureFollowerEntryMapOpenerRoleActive,
                     treasureFollowerEntryProofDutyKey = DungeonFrontierService.TreasureFollowerEntryProofDutyKey,
@@ -806,14 +804,59 @@ public sealed class Plugin : IDalamudPlugin
     private void QueueDutyOwnershipRemoteUpdate()
         => RemoteJsonUpdateService.TryStartStaleUpdate("duty ownership");
 
-    private void InferAndApplyTreasureDungeonRole(string reason)
+    private void InferAndApplyTreasureDungeonRole(string reason, bool resetFollowerProgressForOwnership = false)
     {
         var inference = TreasureDungeonRoleDetector.Infer();
         ExecutionService.SetTreasureDungeonRole(inference);
-        DungeonFrontierService.SetTreasureDungeonRole(inference);
+        DungeonFrontierService.SetTreasureDungeonRole(inference, resetFollowerProgressForOwnership);
         Log.Information(
             $"[ADS] Treasure role inference for {reason}: role={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
     }
+
+    private void EnsureTreasureDungeonRoleInferredForOwnedDuty()
+    {
+        var context = DutyContextService.Current;
+        var ownershipMode = ExecutionService.CurrentMode;
+        if (ownershipMode is not (OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside)
+            || !context.PluginEnabled
+            || !context.IsLoggedIn
+            || !context.InInstancedDuty)
+        {
+            if (ownershipMode is not (OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside))
+                ResetOwnedTreasureRoleInferenceLatch();
+            return;
+        }
+
+        var dutyKey = GetDutyKey(context);
+        if (dutyKey == 0
+            || (lastOwnedTreasureRoleInferenceDutyKey == dutyKey
+                && lastOwnedTreasureRoleInferenceMode == ownershipMode))
+        {
+            return;
+        }
+
+        InferAndApplyTreasureDungeonRole(
+            $"{ownershipMode} first owned duty tick",
+            resetFollowerProgressForOwnership: ownershipMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside);
+        RememberOwnedTreasureRoleInference(context, ownershipMode);
+    }
+
+    private void RememberOwnedTreasureRoleInference(DutyContextSnapshot context, OwnershipMode ownershipMode)
+    {
+        lastOwnedTreasureRoleInferenceDutyKey = GetDutyKey(context);
+        lastOwnedTreasureRoleInferenceMode = ownershipMode;
+    }
+
+    private void ResetOwnedTreasureRoleInferenceLatch()
+    {
+        lastOwnedTreasureRoleInferenceDutyKey = 0;
+        lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
+    }
+
+    private static uint GetDutyKey(DutyContextSnapshot context)
+        => context.TerritoryTypeId != 0
+            ? context.TerritoryTypeId
+            : context.ContentFinderConditionId;
 
     private void OnFrameworkUpdate(IFramework framework)
     {
@@ -827,6 +870,7 @@ public sealed class Plugin : IDalamudPlugin
 
         BmrReflectionService.Update();
         DutyContextService.Update(Configuration.PluginEnabled);
+        EnsureTreasureDungeonRoleInferredForOwnedDuty();
         HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
