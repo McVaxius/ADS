@@ -1,0 +1,41 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "ADS/0.5.0.1": {
+        "dependencies": {
+          "ECommons": "3.2.0.17"
+        },
+        "runtime": {
+          "ADS.dll": {}
+        }
+      },
+      "ECommons/3.2.0.17": {
+        "runtime": {
+          "lib/net10.0-windows7.0/ECommons.dll": {
+            "assemblyVersion": "3.2.0.17",
+            "fileVersion": "3.2.0.17"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ADS/0.5.0.1": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ECommons/3.2.0.17": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-B6l4Sb6anZh4ttLsEklx4LTE5DDxbEicZgqYNz5sgDb9y2wR5sVebYEWSrPgwSVPanx+UxQcocTtBrqBQfmN8g==",
+      "path": "ecommons/3.2.0.17",
+      "hashPath": "ecommons.3.2.0.17.nupkg.sha512"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Globalization;
 using System.Reflection;
+using ADS;
 using ADS.Models;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -11,8 +12,18 @@ public sealed class BossModMultiboxFollowService
 {
     private const string MultiboxModuleFullName = "BossMod.Autorotation.MiscAI.Multibox";
     private const string MultiboxLeaderTrack = "Leader";
+    private const string AdsTreasureFollowPresetName = "ADS Treasure Follow";
+    private const string AdsTreasureFollowPresetJson = """
+        {
+          "Name": "ADS Treasure Follow",
+          "Modules": {
+            "BossMod.Autorotation.MiscAI.Multibox": [
+              { "Track": "Leader", "Value": 0 }
+            ]
+          }
+        }
+        """;
 
-    private static readonly TimeSpan SuccessReapplyInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan FailureRetryInterval = TimeSpan.FromSeconds(2);
 
     private static readonly string[] MultiboxModuleTypeNames =
@@ -23,16 +34,25 @@ public sealed class BossModMultiboxFollowService
     ];
 
     private readonly IDalamudPluginInterface pluginInterface;
+    private readonly ICommandManager commandManager;
+    private readonly Configuration configuration;
     private readonly IPluginLog log;
 
     private DateTime nextApplyUtc = DateTime.MinValue;
-    private ulong? pendingLeaderContentId;
-    private string pendingOpenerName = string.Empty;
+    private string pendingFollowKey = string.Empty;
+    private string appliedBmraiFollowKey = string.Empty;
     private string lastLoggedSuccessKey = string.Empty;
+    private bool bmraiFollowActivated;
 
-    public BossModMultiboxFollowService(IDalamudPluginInterface pluginInterface, IPluginLog log)
+    public BossModMultiboxFollowService(
+        IDalamudPluginInterface pluginInterface,
+        ICommandManager commandManager,
+        Configuration configuration,
+        IPluginLog log)
     {
         this.pluginInterface = pluginInterface;
+        this.commandManager = commandManager;
+        this.configuration = configuration;
         this.log = log;
     }
 
@@ -44,24 +64,39 @@ public sealed class BossModMultiboxFollowService
 
     public string FollowMethod { get; private set; } = string.Empty;
 
+    public bool CleanupPending
+        => configuration.BmraiTreasureFollowCleanupPending || bmraiFollowActivated;
+
     public void Clear(string reason)
     {
-        pendingLeaderContentId = null;
-        pendingOpenerName = string.Empty;
+        var cleanupStatus = string.Empty;
+        var shouldDisableBmrai = bmraiFollowActivated || configuration.BmraiTreasureFollowCleanupPending;
+        if (CleanupPending)
+        {
+            cleanupStatus = DisableBmraiTreasureFollow(reason, shouldDisableBmrai);
+            if (configuration.BmraiTreasureFollowCleanupPending)
+            {
+                configuration.BmraiTreasureFollowCleanupPending = false;
+                configuration.Save();
+            }
+        }
+
+        pendingFollowKey = string.Empty;
+        appliedBmraiFollowKey = string.Empty;
         FollowApplied = false;
         FollowLeaderContentId = null;
         FollowMethod = string.Empty;
-        FollowStatus = $"Treasure portal follow cleared after {reason}.";
+        FollowStatus = $"Treasure portal follow cleared after {reason}.{cleanupStatus}";
         nextApplyUtc = DateTime.MinValue;
         lastLoggedSuccessKey = string.Empty;
+        bmraiFollowActivated = false;
     }
 
-    public void Update(TreasureDungeonRole role, TreasurePortalOpenerSnapshot? opener)
+    public void Update(TreasureDungeonRole role, TreasurePortalOpenerSnapshot? opener, bool followAllowed)
     {
         if (opener is null)
         {
-            pendingLeaderContentId = null;
-            pendingOpenerName = string.Empty;
+            pendingFollowKey = string.Empty;
             FollowApplied = false;
             FollowLeaderContentId = null;
             FollowMethod = string.Empty;
@@ -72,128 +107,245 @@ public sealed class BossModMultiboxFollowService
 
         if (role != TreasureDungeonRole.Follower)
         {
-            pendingLeaderContentId = null;
-            pendingOpenerName = opener.OpenerName;
+            pendingFollowKey = string.Empty;
             FollowApplied = false;
             FollowLeaderContentId = opener.ContentId;
             FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' captured; ADS role is {role}, so BMR/VBM follow is not applied.";
+            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}; ADS role is {role}, so BMRAI follow is not applied.";
+            nextApplyUtc = DateTime.MinValue;
+            return;
+        }
+
+        if (!followAllowed)
+        {
+            pendingFollowKey = string.Empty;
+            FollowApplied = false;
+            FollowLeaderContentId = opener.ContentId;
+            FollowMethod = string.Empty;
+            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}; ADS is not in owned instanced duty, so BMRAI follow is not applied.";
             nextApplyUtc = DateTime.MinValue;
             return;
         }
 
         if (opener.IsLocalOpener)
         {
-            pendingLeaderContentId = null;
-            pendingOpenerName = opener.OpenerName;
+            pendingFollowKey = string.Empty;
             FollowApplied = false;
             FollowLeaderContentId = opener.ContentId;
             FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' is local player; BMR/VBM follow target not applied.";
+            FollowStatus = $"Portal opener '{opener.OpenerName}' from {opener.Source} is local player; BMRAI follow target not applied.";
             nextApplyUtc = DateTime.MinValue;
             return;
         }
 
-        if (opener.ContentId is not { } leaderContentId)
+        if (opener.PartySlot is not { } partySlot
+            || partySlot is < 1 or > 8)
         {
-            pendingLeaderContentId = null;
-            pendingOpenerName = opener.OpenerName;
+            pendingFollowKey = string.Empty;
             FollowApplied = false;
-            FollowLeaderContentId = null;
+            FollowLeaderContentId = opener.ContentId;
             FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' captured, but content id is not resolved yet; retrying.";
+            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}, but party slot is not resolved yet; retrying.";
             nextApplyUtc = DateTime.MinValue;
             return;
         }
 
+        var followKey = BuildFollowKey(opener);
         var now = DateTime.UtcNow;
-        if (pendingLeaderContentId == leaderContentId
-            && string.Equals(pendingOpenerName, opener.OpenerName, StringComparison.Ordinal)
+        FollowLeaderContentId = opener.ContentId;
+
+        if (string.Equals(appliedBmraiFollowKey, followKey, StringComparison.Ordinal))
+        {
+            FollowApplied = true;
+            FollowMethod = "BMRAI slash";
+            return;
+        }
+
+        if (string.Equals(pendingFollowKey, followKey, StringComparison.Ordinal)
             && now < nextApplyUtc)
         {
             return;
         }
 
-        pendingLeaderContentId = leaderContentId;
-        pendingOpenerName = opener.OpenerName;
-        FollowLeaderContentId = leaderContentId;
+        pendingFollowKey = followKey;
 
-        if (TryApplyViaIpc(leaderContentId, out var ipcStatus))
+        if (!TryApplyViaBmraiSlash(partySlot, out var slashStatus))
         {
-            MarkApplied("IPC", leaderContentId, opener.OpenerName, ipcStatus);
+            FollowApplied = false;
+            FollowMethod = string.Empty;
+            FollowStatus = $"BMRAI slash follow failed for portal opener '{opener.OpenerName}' from {opener.Source} at Slot{partySlot}. {slashStatus}";
+            nextApplyUtc = now + FailureRetryInterval;
             return;
         }
 
-        if (TryApplyViaReflection(leaderContentId, out var reflectionStatus))
-        {
-            MarkApplied("Reflection", leaderContentId, opener.OpenerName, reflectionStatus);
-            return;
-        }
-
-        FollowApplied = false;
-        FollowMethod = string.Empty;
-        FollowStatus = $"{ipcStatus} Reflection fallback failed: {reflectionStatus}";
-        nextApplyUtc = now + FailureRetryInterval;
+        TryApplyMultiboxLeaderHint(opener.ContentId, out var hintMethod, out var hintStatus);
+        MarkBmraiApplied(opener, partySlot, followKey, slashStatus, hintMethod, hintStatus);
     }
 
-    private void MarkApplied(string method, ulong leaderContentId, string openerName, string detail)
+    private void MarkBmraiApplied(
+        TreasurePortalOpenerSnapshot opener,
+        int partySlot,
+        string followKey,
+        string slashStatus,
+        string hintMethod,
+        string hintStatus)
     {
         FollowApplied = true;
-        FollowMethod = method;
-        FollowLeaderContentId = leaderContentId;
-        FollowStatus = $"BMR/VBM Multibox Leader set to portal opener '{openerName}' content id {leaderContentId.ToString(CultureInfo.InvariantCulture)} via {method}. {detail}";
-        nextApplyUtc = DateTime.UtcNow + SuccessReapplyInterval;
+        FollowMethod = "BMRAI slash";
+        FollowLeaderContentId = opener.ContentId;
+        appliedBmraiFollowKey = followKey;
+        bmraiFollowActivated = true;
+        nextApplyUtc = DateTime.MaxValue;
 
-        var successKey = $"{method}:{leaderContentId}:{detail}";
+        var contentId = opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "unresolved";
+        FollowStatus = $"BMRAI follow set to portal opener '{opener.OpenerName}' from {opener.Source} at Slot{partySlot}, content id {contentId}. {slashStatus} {hintStatus}";
+
+        var successKey = $"BMRAI:{followKey}:{hintMethod}:{hintStatus}";
         if (string.Equals(successKey, lastLoggedSuccessKey, StringComparison.Ordinal))
             return;
 
         lastLoggedSuccessKey = successKey;
+        log.Information(
+            $"[ADS] BMRAI follow target slot: source={opener.Source}, opener='{opener.OpenerName}', slot=Slot{partySlot}, contentId={contentId}.");
         log.Information($"[ADS] {FollowStatus}");
     }
+
+    private bool TryApplyViaBmraiSlash(int partySlot, out string status)
+    {
+        const string followOutOfCombatCommand = "/bmrai followoutofcombat on";
+        if (!TryProcessBmraiCommand(followOutOfCombatCommand, out var followOutOfCombatStatus))
+        {
+            status = $"Could not enable BMRAI out-of-combat follow: {followOutOfCombatStatus}";
+            return false;
+        }
+
+        var followCommand = $"/bmrai follow Slot{partySlot}";
+        if (!TryProcessBmraiCommand(followCommand, out var followStatus))
+        {
+            TryProcessBmraiCommand("/bmrai followoutofcombat off", out _);
+            TryProcessBmraiCommand("/bmrai followcombat off", out _);
+            status = $"Could not set BMRAI follow target: {followStatus}";
+            return false;
+        }
+
+        if (!configuration.BmraiTreasureFollowCleanupPending)
+        {
+            configuration.BmraiTreasureFollowCleanupPending = true;
+            configuration.Save();
+        }
+
+        status = $"Sent {followOutOfCombatCommand} and {followCommand}.";
+        return true;
+    }
+
+    private string DisableBmraiTreasureFollow(string reason, bool disableBmrai)
+    {
+        var cleanupStatuses = new List<string>();
+        TryProcessBmraiCommand("/bmrai followoutofcombat off", out var followOutOfCombatStatus);
+        cleanupStatuses.Add(followOutOfCombatStatus);
+        TryProcessBmraiCommand("/bmrai followcombat off", out var followCombatStatus);
+        cleanupStatuses.Add(followCombatStatus);
+
+        if (disableBmrai)
+        {
+            TryProcessBmraiCommand("/bmrai off", out var bmraiOffStatus);
+            cleanupStatuses.Add(bmraiOffStatus);
+        }
+
+        var status = $" Sent cleanup commands: {string.Join(" ", cleanupStatuses)}";
+        log.Information($"[ADS] Clearing ADS BMRAI follow after {reason}.{status}");
+        return status;
+    }
+
+    private bool TryProcessBmraiCommand(string command, out string status)
+    {
+        try
+        {
+            if (commandManager.ProcessCommand(command))
+            {
+                status = $"{command} accepted.";
+                return true;
+            }
+
+            status = $"{command} was not handled; BMRAI may be missing or unloaded.";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            status = $"{command} failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryApplyMultiboxLeaderHint(ulong? leaderContentId, out string method, out string status)
+    {
+        method = string.Empty;
+        if (leaderContentId is not { } resolvedLeaderContentId)
+        {
+            status = "Multibox target hint skipped because content id is not resolved.";
+            return false;
+        }
+
+        if (TryApplyViaIpc(resolvedLeaderContentId, out var ipcStatus))
+        {
+            method = "Multibox IPC target hint";
+            status = $"{method}: {ipcStatus}";
+            return true;
+        }
+
+        if (TryApplyViaReflection(resolvedLeaderContentId, out var reflectionStatus))
+        {
+            method = "Multibox Reflection target hint";
+            status = $"{method}: {reflectionStatus}";
+            return true;
+        }
+
+        status = $"Multibox target hint unavailable: {ipcStatus} Reflection fallback failed: {reflectionStatus}";
+        return false;
+    }
+
+    private static string BuildFollowKey(TreasurePortalOpenerSnapshot opener)
+        => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}";
 
     private bool TryApplyViaIpc(ulong leaderContentId, out string status)
     {
         try
         {
-            var activePresets = pluginInterface.GetIpcSubscriber<List<string>>("BossMod.Presets.GetActiveList").InvokeFunc();
-            if (activePresets.Count == 0)
+            if (!TryGetActivePresetNamesViaIpc(out var activePresets, out var activeListStatus))
             {
-                status = "BossMod IPC returned no active autorotation presets.";
+                status = activeListStatus;
                 return false;
             }
 
-            var addTransientStrategy = pluginInterface.GetIpcSubscriber<string, string, string, string, bool>("BossMod.Presets.AddTransientStrategy");
             var appliedPresets = new List<string>();
             var skippedPresets = new List<string>();
-            var value = leaderContentId.ToString(CultureInfo.InvariantCulture);
             foreach (var presetName in activePresets)
             {
-                var applied = false;
-                foreach (var moduleTypeName in MultiboxModuleTypeNames)
-                {
-                    if (!addTransientStrategy.InvokeFunc(presetName, moduleTypeName, MultiboxLeaderTrack, value))
-                        continue;
-
-                    applied = true;
-                    break;
-                }
-
-                if (applied)
+                if (TryApplyTransientToPresetViaIpc(presetName, leaderContentId))
                     appliedPresets.Add(presetName);
                 else
                     skippedPresets.Add(presetName);
             }
 
-            if (appliedPresets.Count == 0)
+            if (appliedPresets.Count > 0)
             {
-                status = $"BossMod IPC found active preset(s) [{string.Join(", ", activePresets)}], but none contained {MultiboxModuleFullName}.{MultiboxLeaderTrack}.";
+                status = skippedPresets.Count == 0
+                    ? $"Applied to active preset(s): {string.Join(", ", appliedPresets)}."
+                    : $"Applied to active preset(s): {string.Join(", ", appliedPresets)}. Skipped preset(s) without Multibox: {string.Join(", ", skippedPresets)}.";
+                return true;
+            }
+
+            var activeStatus = activePresets.Count == 0
+                ? "BossMod IPC returned no active autorotation presets."
+                : $"BossMod IPC found active preset(s) [{string.Join(", ", activePresets)}], but none contained {MultiboxModuleFullName}.{MultiboxLeaderTrack}.";
+
+            if (!TryCreateActivateAndApplyAdsPresetViaIpc(leaderContentId, activePresets.Count == 0, out var fallbackStatus))
+            {
+                status = $"{activeStatus} ADS Treasure Follow IPC fallback failed: {fallbackStatus}";
                 return false;
             }
 
-            status = skippedPresets.Count == 0
-                ? $"Applied to active preset(s): {string.Join(", ", appliedPresets)}."
-                : $"Applied to active preset(s): {string.Join(", ", appliedPresets)}. Skipped preset(s) without Multibox: {string.Join(", ", skippedPresets)}.";
+            status = $"{activeStatus} {fallbackStatus}";
             return true;
         }
         catch (Exception ex)
@@ -203,84 +355,608 @@ public sealed class BossModMultiboxFollowService
         }
     }
 
+    private bool TryGetActivePresetNamesViaIpc(out List<string> activePresets, out string status)
+    {
+        activePresets = [];
+        var failures = new List<string>();
+
+        try
+        {
+            activePresets = pluginInterface.GetIpcSubscriber<List<string>>("BossMod.Presets.GetActiveList").InvokeFunc() ?? [];
+            status = "BossMod IPC active preset list resolved.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"GetActiveList failed: {ex.Message}");
+        }
+
+        try
+        {
+            var activePreset = pluginInterface.GetIpcSubscriber<string>("BossMod.Presets.GetActive").InvokeFunc();
+            if (!string.IsNullOrWhiteSpace(activePreset))
+                activePresets.Add(activePreset);
+            status = "BossMod IPC single active preset resolved.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"GetActive failed: {ex.Message}");
+        }
+
+        status = $"BossMod IPC active preset query failed. {string.Join(" ", failures)}";
+        return false;
+    }
+
+    private bool TryCreateActivateAndApplyAdsPresetViaIpc(ulong leaderContentId, bool allowExclusiveActivation, out string status)
+    {
+        if (!TryCreateAdsTreasureFollowPresetViaIpc(out var createStatus))
+        {
+            status = createStatus;
+            return false;
+        }
+
+        if (!TryActivateAdsTreasureFollowPresetViaIpc(allowExclusiveActivation, out var activateStatus))
+        {
+            status = $"{createStatus} {activateStatus}";
+            return false;
+        }
+
+        if (!TryApplyTransientToPresetViaIpc(AdsTreasureFollowPresetName, leaderContentId))
+        {
+            status = $"{createStatus} {activateStatus} Created preset did not accept transient {MultiboxLeaderTrack}.";
+            return false;
+        }
+
+        status = $"{createStatus} {activateStatus} Applied transient {MultiboxLeaderTrack} to {AdsTreasureFollowPresetName}.";
+        return true;
+    }
+
+    private bool TryCreateAdsTreasureFollowPresetViaIpc(out string status)
+    {
+        try
+        {
+            var createPreset = pluginInterface.GetIpcSubscriber<string, bool, bool>("BossMod.Presets.Create");
+            if (!createPreset.InvokeFunc(AdsTreasureFollowPresetJson, true))
+            {
+                status = $"{AdsTreasureFollowPresetName} preset create IPC returned false.";
+                return false;
+            }
+
+            status = $"{AdsTreasureFollowPresetName} preset created/updated.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Preset create IPC unavailable or failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryActivateAdsTreasureFollowPresetViaIpc(bool allowExclusiveActivation, out string status)
+    {
+        var failures = new List<string>();
+        try
+        {
+            var activatePreset = pluginInterface.GetIpcSubscriber<string, bool, bool>("BossMod.Presets.Activate");
+            if (activatePreset.InvokeFunc(AdsTreasureFollowPresetName, false))
+            {
+                status = $"{AdsTreasureFollowPresetName} activated non-exclusively.";
+                return true;
+            }
+
+            failures.Add("Activate(name, false) returned false");
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"Activate(name, false) failed: {ex.Message}");
+        }
+
+        try
+        {
+            var activatePreset = pluginInterface.GetIpcSubscriber<string, bool>("BossMod.Presets.Activate");
+            if (activatePreset.InvokeFunc(AdsTreasureFollowPresetName))
+            {
+                status = $"{AdsTreasureFollowPresetName} activated.";
+                return true;
+            }
+
+            failures.Add("Activate(name) returned false");
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"Activate(name) failed: {ex.Message}");
+        }
+
+        if (allowExclusiveActivation)
+        {
+            try
+            {
+                var setActivePreset = pluginInterface.GetIpcSubscriber<string, bool>("BossMod.Presets.SetActive");
+                if (setActivePreset.InvokeFunc(AdsTreasureFollowPresetName))
+                {
+                    status = $"{AdsTreasureFollowPresetName} set as sole active preset because no active preset was present.";
+                    return true;
+                }
+
+                failures.Add("SetActive(name) returned false");
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"SetActive(name) failed: {ex.Message}");
+            }
+        }
+
+        status = $"No non-exclusive activation IPC succeeded. {string.Join(" ", failures)}";
+        return false;
+    }
+
+    private bool TryApplyTransientToPresetViaIpc(string presetName, ulong leaderContentId)
+    {
+        var addTransientStrategy = pluginInterface.GetIpcSubscriber<string, string, string, string, bool>("BossMod.Presets.AddTransientStrategy");
+        var value = leaderContentId.ToString(CultureInfo.InvariantCulture);
+        foreach (var moduleTypeName in MultiboxModuleTypeNames)
+        {
+            if (addTransientStrategy.InvokeFunc(presetName, moduleTypeName, MultiboxLeaderTrack, value))
+                return true;
+        }
+
+        return false;
+    }
+
     private bool TryApplyViaReflection(ulong leaderContentId, out string status)
     {
         status = string.Empty;
         try
         {
-            var exposedPlugin = FindBossModPlugin();
-            if (exposedPlugin is null)
-            {
-                status = "BossMod/VBM plugin not found.";
+            if (!TryResolveReflectionContext(out var context, out status))
                 return false;
-            }
 
-            if (!exposedPlugin.IsLoaded)
-            {
-                status = "BossMod/VBM plugin is installed but not loaded.";
-                return false;
-            }
-
-            var localPlugin = GetLocalPlugin(exposedPlugin);
-            if (localPlugin is null)
-            {
-                status = "Could not reflect Dalamud LocalPlugin from BossMod/VBM.";
-                return false;
-            }
-
-            var instance = GetFieldValue(localPlugin, "instance");
-            if (instance is null)
-            {
-                status = "BossMod/VBM plugin instance not available yet.";
-                return false;
-            }
-
-            var rotation = GetFieldValue(instance, "_rotation");
-            if (rotation is null)
-            {
-                status = "BossMod/VBM _rotation manager not initialized yet.";
-                return false;
-            }
-
-            var presets = GetMemberValue(rotation, "Presets") as IEnumerable;
-            if (presets is null)
-            {
-                status = "BossMod/VBM active preset list not available.";
-                return false;
-            }
-
-            var activePresetNames = new List<string>();
+            var activePresets = GetActivePresetsByReflection(context.Rotation);
+            var activePresetNames = activePresets.Select(GetPresetName).ToList();
             var appliedPresetNames = new List<string>();
-            foreach (var preset in presets)
+            foreach (var preset in activePresets)
             {
                 if (preset is null)
                     continue;
 
-                var presetName = GetMemberValue(preset, "Name")?.ToString() ?? "<unnamed>";
-                activePresetNames.Add(presetName);
                 if (TryApplyToPresetByReflection(preset, leaderContentId))
-                    appliedPresetNames.Add(presetName);
+                    appliedPresetNames.Add(GetPresetName(preset));
             }
 
-            if (activePresetNames.Count == 0)
+            if (appliedPresetNames.Count > 0)
             {
-                status = "BossMod/VBM has no active autorotation presets.";
+                DirtyActiveModules(context.Rotation);
+                status = $"Applied to active preset(s): {string.Join(", ", appliedPresetNames)}.";
+                return true;
+            }
+
+            var activeStatus = activePresetNames.Count == 0
+                ? "BossMod/VBM has no active autorotation presets."
+                : $"BossMod/VBM active preset(s) [{string.Join(", ", activePresetNames)}] did not contain {MultiboxModuleFullName}.";
+
+            if (!TryEnsureActivateAndApplyAdsPresetByReflection(context, leaderContentId, activePresetNames.Count == 0, out var fallbackStatus))
+            {
+                status = $"{activeStatus} ADS Treasure Follow reflection fallback failed: {fallbackStatus}";
                 return false;
             }
 
-            if (appliedPresetNames.Count == 0)
-            {
-                status = $"BossMod/VBM active preset(s) [{string.Join(", ", activePresetNames)}] did not contain {MultiboxModuleFullName}.";
-                return false;
-            }
-
-            status = $"Applied to active preset(s): {string.Join(", ", appliedPresetNames)}.";
+            status = $"{activeStatus} {fallbackStatus}";
             return true;
         }
         catch (Exception ex)
         {
             status = ex.Message;
             return false;
+        }
+    }
+
+    private bool TryResolveReflectionContext(out BossModReflectionContext context, out string status)
+    {
+        context = default!;
+        var exposedPlugin = FindBossModPlugin();
+        if (exposedPlugin is null)
+        {
+            status = "BossMod/VBM plugin not found.";
+            return false;
+        }
+
+        if (!exposedPlugin.IsLoaded)
+        {
+            status = "BossMod/VBM plugin is installed but not loaded.";
+            return false;
+        }
+
+        var localPlugin = GetLocalPlugin(exposedPlugin);
+        if (localPlugin is null)
+        {
+            status = "Could not reflect Dalamud LocalPlugin from BossMod/VBM.";
+            return false;
+        }
+
+        var instance = GetFieldValue(localPlugin, "instance");
+        if (instance is null)
+        {
+            status = "BossMod/VBM plugin instance not available yet.";
+            return false;
+        }
+
+        var rotation = GetFieldValue(instance, "_rotation");
+        if (rotation is null)
+        {
+            status = "BossMod/VBM _rotation manager not initialized yet.";
+            return false;
+        }
+
+        var assembly = instance.GetType().Assembly;
+        var presetDatabase = GetPresetDatabase(rotation);
+        context = new BossModReflectionContext(exposedPlugin, instance, rotation, assembly, presetDatabase);
+        status = string.Empty;
+        return true;
+    }
+
+    private static List<object> GetActivePresetsByReflection(object rotation)
+    {
+        var presets = new List<object>();
+        AddActivePresetsFromMember(rotation, "Presets", presets);
+        AddActivePresetsFromMember(rotation, "ActivePresets", presets);
+        AddActivePresetsFromMember(rotation, "ActivePresetList", presets);
+
+        var singlePreset = GetMemberValue(rotation, "Preset");
+        if (singlePreset is not null && !ContainsPresetReferenceOrName(presets, singlePreset))
+            presets.Add(singlePreset);
+
+        return presets;
+    }
+
+    private static void AddActivePresetsFromMember(object rotation, string name, List<object> presets)
+    {
+        var member = GetMemberValue(rotation, name);
+        if (member is string || member is not IEnumerable enumerable)
+            return;
+
+        foreach (var preset in enumerable)
+        {
+            if (preset is not null && !ContainsPresetReferenceOrName(presets, preset))
+                presets.Add(preset);
+        }
+    }
+
+    private static bool TryEnsureActivateAndApplyAdsPresetByReflection(
+        BossModReflectionContext context,
+        ulong leaderContentId,
+        bool allowExclusiveActivation,
+        out string status)
+    {
+        if (!TryEnsureAdsPresetByReflection(context, out var preset, out var ensureStatus))
+        {
+            status = ensureStatus;
+            return false;
+        }
+
+        if (!TryActivateAdsPresetByReflection(context, preset, allowExclusiveActivation, out var activateStatus))
+        {
+            status = $"{ensureStatus} {activateStatus}";
+            return false;
+        }
+
+        if (!TryApplyToPresetByReflection(preset, leaderContentId))
+        {
+            status = $"{ensureStatus} {activateStatus} Could not set transient {MultiboxLeaderTrack} on {AdsTreasureFollowPresetName}.";
+            return false;
+        }
+
+        DirtyActiveModules(context.Rotation);
+        status = $"{ensureStatus} {activateStatus} Applied transient {MultiboxLeaderTrack} to {AdsTreasureFollowPresetName}.";
+        return true;
+    }
+
+    private static bool TryEnsureAdsPresetByReflection(BossModReflectionContext context, out object preset, out string status)
+    {
+        preset = null!;
+        var existing = FindPresetByName(context.PresetDatabase, AdsTreasureFollowPresetName);
+        if (existing is not null && PresetContainsModule(existing, MultiboxModuleFullName))
+        {
+            preset = existing;
+            status = $"{AdsTreasureFollowPresetName} preset already contains Multibox.";
+            return true;
+        }
+
+        if (!TryCreateAdsPresetByReflection(context.Assembly, out var replacement, out var createStatus))
+        {
+            status = createStatus;
+            return false;
+        }
+
+        if (context.PresetDatabase is null)
+        {
+            preset = replacement;
+            status = $"{createStatus} Preset database unavailable; using in-memory preset.";
+            return true;
+        }
+
+        var userPresets = GetMemberValue(context.PresetDatabase, "UserPresets") as IList;
+        var userPresetIndex = FindPresetIndex(userPresets, AdsTreasureFollowPresetName);
+        if (TryModifyPresetDatabase(context.PresetDatabase, userPresetIndex, replacement))
+        {
+            preset = FindPresetByName(context.PresetDatabase, AdsTreasureFollowPresetName) ?? replacement;
+            status = $"{createStatus} Preset database {(userPresetIndex >= 0 ? "updated" : "created")}.";
+            return true;
+        }
+
+        if (userPresets is not null)
+        {
+            if (userPresetIndex >= 0)
+                userPresets[userPresetIndex] = replacement;
+            else
+                userPresets.Add(replacement);
+
+            preset = replacement;
+            status = $"{createStatus} Preset injected into user preset list.";
+            return true;
+        }
+
+        preset = replacement;
+        status = $"{createStatus} User preset list unavailable; using in-memory preset.";
+        return true;
+    }
+
+    private static bool TryCreateAdsPresetByReflection(Assembly assembly, out object preset, out string status)
+    {
+        preset = null!;
+        var presetType = assembly.GetType("BossMod.Autorotation.Preset");
+        if (presetType is null)
+        {
+            status = "BossMod.Autorotation.Preset type not found.";
+            return false;
+        }
+
+        if (!TryResolveMultiboxRegistryEntry(assembly, out var moduleType, out var definition, out var builder, out status))
+            return false;
+
+        var createdPreset = Activator.CreateInstance(presetType, AdsTreasureFollowPresetName);
+        if (createdPreset is null)
+        {
+            status = $"Could not create {AdsTreasureFollowPresetName} preset instance.";
+            return false;
+        }
+
+        var addModule = FindMethod(presetType, "AddModule", 3);
+        if (addModule is null)
+        {
+            status = "Preset.AddModule method not found.";
+            return false;
+        }
+
+        addModule.Invoke(createdPreset, [moduleType, definition, builder]);
+        var module = FindPresetModule(createdPreset, MultiboxModuleFullName);
+        if (module is null)
+        {
+            status = "Created preset did not receive Multibox module.";
+            return false;
+        }
+
+        var serializedSettings = GetMemberValue(module, "SerializedSettings") as IList;
+        var zeroLeaderSetting = CreateMultiboxLeaderSetting(assembly, 0);
+        if (serializedSettings is null || zeroLeaderSetting is null)
+        {
+            status = "Could not add serialized Leader=0 setting to ADS Treasure Follow.";
+            return false;
+        }
+
+        serializedSettings.Add(zeroLeaderSetting);
+        preset = createdPreset;
+        status = $"{AdsTreasureFollowPresetName} preset built in memory.";
+        return true;
+    }
+
+    private static bool TryResolveMultiboxRegistryEntry(
+        Assembly assembly,
+        out Type moduleType,
+        out object definition,
+        out object builder,
+        out string status)
+    {
+        moduleType = null!;
+        definition = null!;
+        builder = null!;
+
+        var registryType = assembly.GetType("BossMod.Autorotation.RotationModuleRegistry");
+        var modules = registryType is null ? null : GetStaticFieldValue(registryType, "Modules") as IDictionary;
+        if (modules is null)
+        {
+            status = "RotationModuleRegistry.Modules not available.";
+            return false;
+        }
+
+        foreach (DictionaryEntry entry in modules)
+        {
+            if (entry.Key is not Type type
+                || !string.Equals(type.FullName, MultiboxModuleFullName, StringComparison.Ordinal)
+                || entry.Value is null)
+            {
+                continue;
+            }
+
+            var resolvedDefinition = GetMemberValue(entry.Value, "Definition");
+            var resolvedBuilder = GetMemberValue(entry.Value, "Builder");
+            if (resolvedDefinition is null || resolvedBuilder is null)
+            {
+                status = "Multibox registry entry is missing Definition or Builder.";
+                return false;
+            }
+
+            moduleType = type;
+            definition = resolvedDefinition;
+            builder = resolvedBuilder;
+            status = string.Empty;
+            return true;
+        }
+
+        status = $"{MultiboxModuleFullName} registry entry not found.";
+        return false;
+    }
+
+    private static bool TryActivateAdsPresetByReflection(
+        BossModReflectionContext context,
+        object preset,
+        bool allowExclusiveActivation,
+        out string status)
+    {
+        if (TryGetActivePresetList(context.Rotation, out var activePresetList, out var listName))
+        {
+            if (!ContainsPresetReferenceOrName(activePresetList.Cast<object?>().Where(x => x is not null).Cast<object>(), preset))
+                activePresetList.Add(preset);
+            status = $"{AdsTreasureFollowPresetName} activated through {listName}.";
+            return true;
+        }
+
+        var currentPreset = GetMemberValue(context.Rotation, "Preset");
+        if (currentPreset is null)
+        {
+            if (!TrySetMember(context.Rotation, "Preset", preset))
+            {
+                status = "Single active Preset member is not writable.";
+                return false;
+            }
+
+            status = $"{AdsTreasureFollowPresetName} set as sole active preset because no active preset was present.";
+            return true;
+        }
+
+        if (NamesMatch(GetPresetName(currentPreset), AdsTreasureFollowPresetName))
+        {
+            status = $"{AdsTreasureFollowPresetName} is already the active preset.";
+            return true;
+        }
+
+        if (!allowExclusiveActivation)
+        {
+            status = $"No non-exclusive active preset collection was found; preserving active preset '{GetPresetName(currentPreset)}'.";
+            return false;
+        }
+
+        if (!TrySetMember(context.Rotation, "Preset", preset))
+        {
+            status = "Single active Preset member is not writable.";
+            return false;
+        }
+
+        status = $"{AdsTreasureFollowPresetName} set as sole active preset because no active preset was present.";
+        return true;
+    }
+
+    private static bool TryGetActivePresetList(object rotation, out IList activePresetList, out string memberName)
+    {
+        foreach (var name in new[] { "Presets", "ActivePresets", "ActivePresetList" })
+        {
+            if (GetMemberValue(rotation, name) is IList list)
+            {
+                activePresetList = list;
+                memberName = name;
+                return true;
+            }
+        }
+
+        activePresetList = null!;
+        memberName = string.Empty;
+        return false;
+    }
+
+    private static object? GetPresetDatabase(object rotation)
+    {
+        var database = GetMemberValue(rotation, "Database");
+        return database is null ? null : GetMemberValue(database, "Presets");
+    }
+
+    private static object? FindPresetByName(object? presetDatabase, string presetName)
+    {
+        if (presetDatabase is null)
+            return null;
+
+        foreach (var memberName in new[] { "AllPresets", "UserPresets", "DefaultPresets" })
+        {
+            if (GetMemberValue(presetDatabase, memberName) is not IEnumerable presets)
+                continue;
+
+            foreach (var preset in presets)
+            {
+                if (preset is not null && NamesMatch(GetPresetName(preset), presetName))
+                    return preset;
+            }
+        }
+
+        return null;
+    }
+
+    private static int FindPresetIndex(IList? presets, string presetName)
+    {
+        if (presets is null)
+            return -1;
+
+        for (var i = 0; i < presets.Count; i++)
+        {
+            var preset = presets[i];
+            if (preset is not null && NamesMatch(GetPresetName(preset), presetName))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static bool TryModifyPresetDatabase(object presetDatabase, int index, object preset)
+    {
+        var modify = FindMethod(presetDatabase.GetType(), "Modify", 2);
+        if (modify is null)
+            return false;
+
+        try
+        {
+            modify.Invoke(presetDatabase, [index, preset]);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool PresetContainsModule(object preset, string moduleFullName)
+        => FindPresetModule(preset, moduleFullName) is not null;
+
+    private static object? FindPresetModule(object preset, string moduleFullName)
+    {
+        if (GetMemberValue(preset, "Modules") is not IEnumerable modules)
+            return null;
+
+        foreach (var moduleSettings in modules)
+        {
+            if (moduleSettings is null)
+                continue;
+
+            var moduleType = GetMemberValue(moduleSettings, "Type") as Type;
+            if (moduleType is not null && string.Equals(moduleType.FullName, moduleFullName, StringComparison.Ordinal))
+                return moduleSettings;
+        }
+
+        return null;
+    }
+
+    private static string GetPresetName(object preset)
+        => GetMemberValue(preset, "Name")?.ToString() ?? "<unnamed>";
+
+    private static bool ContainsPresetReferenceOrName(IEnumerable<object> presets, object preset)
+        => presets.Any(existing => ReferenceEquals(existing, preset) || NamesMatch(GetPresetName(existing), GetPresetName(preset)));
+
+    private static void DirtyActiveModules(object rotation)
+    {
+        try
+        {
+            FindMethod(rotation.GetType(), "DirtyActiveModules", 1)?.Invoke(rotation, [true]);
+        }
+        catch
+        {
+            // Best-effort only; current BMR builds read transient preset values without a rebuild.
         }
     }
 
@@ -389,6 +1065,9 @@ public sealed class BossModMultiboxFollowService
     private static object? GetFieldValue(object instance, string name)
         => FindField(instance.GetType(), name)?.GetValue(instance);
 
+    private static object? GetStaticFieldValue(Type type, string name)
+        => FindField(type, name)?.GetValue(null);
+
     private static object? GetMemberValue(object instance, string name)
     {
         var type = instance.GetType();
@@ -420,6 +1099,9 @@ public sealed class BossModMultiboxFollowService
         return false;
     }
 
+    private static bool NamesMatch(string left, string right)
+        => string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
+
     private static FieldInfo? FindField(Type type, string name)
         => FindFields(type).FirstOrDefault(field => string.Equals(field.Name, name, StringComparison.Ordinal));
 
@@ -443,4 +1125,28 @@ public sealed class BossModMultiboxFollowService
 
         return null;
     }
+
+    private static MethodInfo? FindMethod(Type type, string name, int parameterCount)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var method in current.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (string.Equals(method.Name, name, StringComparison.Ordinal)
+                    && method.GetParameters().Length == parameterCount)
+                {
+                    return method;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private sealed record BossModReflectionContext(
+        IExposedPlugin ExposedPlugin,
+        object Instance,
+        object Rotation,
+        Assembly Assembly,
+        object? PresetDatabase);
 }

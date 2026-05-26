@@ -146,6 +146,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Dialog rules: {plugin.DialogYesNoRuleService.ActiveRuleCount}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Layer: {activeLayer}");
+        DrawTreasurePortalFollowState();
         ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
         ImGui.TextUnformatted($"Objective kind: {planner.ObjectiveKind}");
         ImGui.TextUnformatted($"Frontier mode: {plugin.DungeonFrontierService.CurrentMode}");
@@ -182,6 +183,19 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
         if (context.InInstancedDuty && !context.HasCatalogMetadata)
             ImGui.TextWrapped("This instanced duty has no ADS catalog row yet. Runtime still keys off live instanced-duty truth, but family/readiness metadata is uncatalogued.");
+    }
+
+    private void DrawTreasurePortalFollowState()
+    {
+        var opener = plugin.TreasurePortalOpenerTracker.Current;
+        var follow = plugin.BossModMultiboxFollowService;
+        var openerAge = plugin.TreasurePortalOpenerTracker.CurrentAgeSeconds?.ToString("0") ?? "-";
+        var fallbackIn = plugin.TreasurePortalOpenerTracker.FallbackRemainingSeconds?.ToString("0") ?? "-";
+        ImGui.TextUnformatted($"Treasure role: {plugin.ExecutionService.TreasureDungeonRole} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"Portal opener: {opener?.Source ?? "None"} {opener?.OpenerName ?? string.Empty} slot {opener?.PartySlot?.ToString() ?? "-"} cid {opener?.ContentId?.ToString() ?? "-"} age {openerAge}s");
+        ImGui.TextWrapped($"Relay: {plugin.TreasurePortalOpenerTracker.RelayStatus} | fallback in {fallbackIn}s: {plugin.TreasurePortalOpenerTracker.FallbackReason}");
+        ImGui.TextWrapped($"BMRAI follow: {(follow.FollowApplied ? "applied" : "not applied")} {follow.FollowMethod} {follow.FollowStatus}");
     }
 
     private void DrawActionRow()

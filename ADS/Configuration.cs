@@ -7,7 +7,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 15;
+    public int Version { get; set; } = 16;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
@@ -30,6 +30,10 @@ public sealed class Configuration : IPluginConfiguration
     public float ReflectionMinimizedMaxLoadDistance { get; set; } = 100f;
     public bool ReflectionHasOriginalMaxLoadDistance { get; set; } = false;
     public float ReflectionOriginalMaxLoadDistance { get; set; } = 500f;
+    public string TreasureDutyRecoveryKey { get; set; } = string.Empty;
+    public DateTime TreasureDutyRecoveryUtc { get; set; } = DateTime.MinValue;
+    public string TreasureDutyRecoveryRole { get; set; } = string.Empty;
+    public bool BmraiTreasureFollowCleanupPending { get; set; } = false;
 
     public void Save()
         => Plugin.PluginInterface.SavePluginConfig(this);

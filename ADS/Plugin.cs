@@ -10,6 +10,7 @@ using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.DutyState;
 using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.IoC;
@@ -23,12 +24,16 @@ namespace ADS;
 
 public sealed class Plugin : IDalamudPlugin
 {
+    private static readonly TimeSpan TreasureDutyRecoveryTtl = TimeSpan.FromHours(8);
+    private static readonly TimeSpan TreasureDutyRecoveryRefreshInterval = TimeSpan.FromMinutes(1);
+
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IToastGui ToastGui { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
@@ -69,6 +74,7 @@ public sealed class Plugin : IDalamudPlugin
     public UtilityAutomationService UtilityAutomationService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
     public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
+    public TreasurePortalOpenerRelayService TreasurePortalOpenerRelayService { get; }
     public TreasurePortalOpenerTracker TreasurePortalOpenerTracker { get; }
     public BossModMultiboxFollowService BossModMultiboxFollowService { get; }
     public TreasureHighLowDiagnosticService TreasureHighLowDiagnosticService { get; }
@@ -94,6 +100,7 @@ public sealed class Plugin : IDalamudPlugin
     private string objectExplorerStatus = "Ready.";
     private uint lastOwnedTreasureRoleInferenceDutyKey;
     private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
+    private bool treasureDutyRecoveryAttemptedThisLoad;
 
     public Plugin()
     {
@@ -109,8 +116,9 @@ public sealed class Plugin : IDalamudPlugin
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
         TreasureDungeonData.Configure(configDirectory, Log);
         TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
-        TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, Log);
-        BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, Log);
+        TreasurePortalOpenerRelayService = new TreasurePortalOpenerRelayService(Log);
+        TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, ChatGui, ToastGui, TreasurePortalOpenerRelayService, Log);
+        BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
 
@@ -213,6 +221,7 @@ public sealed class Plugin : IDalamudPlugin
         AdsIpcService.Dispose();
         ReflectionIpcService.Dispose();
         BmrReflectionService.Dispose();
+        TreasurePortalOpenerRelayService.Dispose();
         RemoteJsonUpdateService.Dispose();
         WindowSystem.RemoveAllWindows();
         dtrEntry?.Remove();
@@ -409,6 +418,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         QueueDutyOwnershipRemoteUpdate();
         ResetOwnedTreasureRoleInferenceLatch();
+        TreasurePortalOpenerTracker.ClearPendingOpener("new treasure cycle");
+        TreasurePortalOpenerRelayService.Clear("new treasure cycle");
         var result = ExecutionService.StartDutyFromOutside();
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
@@ -421,7 +432,10 @@ public sealed class Plugin : IDalamudPlugin
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         if (result)
+        {
             RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedStartInside);
+            WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "inside start", force: true);
+        }
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -433,7 +447,10 @@ public sealed class Plugin : IDalamudPlugin
         InferAndApplyTreasureDungeonRole("inside resume");
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         if (result)
+        {
             RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedResumeInside);
+            WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "inside resume", force: true);
+        }
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -460,7 +477,9 @@ public sealed class Plugin : IDalamudPlugin
         var stoppedUtility = UtilityAutomationService.IsRunning;
         ExecutionService.Stop(DutyContextService.Current);
         ResetOwnedTreasureRoleInferenceLatch();
+        ClearTreasureDutyRecoveryMarker("ownership stop");
         TreasurePortalOpenerTracker.ClearPendingOpener("ownership stop");
+        TreasurePortalOpenerRelayService.Clear("ownership stop");
         BossModMultiboxFollowService.Clear("ownership stop");
         InnEntryService.Cancel("operator stop");
         UtilityAutomationService.Cancel("operator stop");
@@ -559,15 +578,27 @@ public sealed class Plugin : IDalamudPlugin
                 effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
+                treasurePortalOpenerSource = TreasurePortalOpenerTracker.Current?.Source ?? string.Empty,
                 treasurePortalOpenerName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
                 treasurePortalOpenerPartySlot = TreasurePortalOpenerTracker.Current?.PartySlot,
                 treasurePortalOpenerObjectId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.GameObjectId),
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasurePortalRelayStatus = TreasurePortalOpenerTracker.RelayStatus,
+                treasurePortalFallbackEligibleAtUtc = TreasurePortalOpenerTracker.FallbackEligibleAtUtc?.ToString("O"),
+                treasurePortalFallbackRemainingSeconds = TreasurePortalOpenerTracker.FallbackRemainingSeconds,
+                treasurePortalFallbackReason = TreasurePortalOpenerTracker.FallbackReason,
                 treasurePortalFollowApplied = BossModMultiboxFollowService.FollowApplied,
                 treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
                 treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
                 treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
+                treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
+                treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
+                    ? string.Empty
+                    : Configuration.TreasureDutyRecoveryUtc.ToString("O"),
+                treasureDutyRecoveryRole = Configuration.TreasureDutyRecoveryRole,
+                bmraiTreasureFollowCleanupPending = Configuration.BmraiTreasureFollowCleanupPending,
                 frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                 frontierRouteKey = DungeonFrontierService.CurrentTarget?.Key,
                 treasureFollowerRouteHoldReason = DungeonFrontierService.TreasureFollowerRouteHoldReason,
@@ -654,15 +685,27 @@ public sealed class Plugin : IDalamudPlugin
                 treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
+                treasurePortalOpenerSource = TreasurePortalOpenerTracker.Current?.Source ?? string.Empty,
                 treasurePortalOpenerName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
                 treasurePortalOpenerPartySlot = TreasurePortalOpenerTracker.Current?.PartySlot,
                 treasurePortalOpenerObjectId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.GameObjectId),
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasurePortalRelayStatus = TreasurePortalOpenerTracker.RelayStatus,
+                treasurePortalFallbackEligibleAtUtc = TreasurePortalOpenerTracker.FallbackEligibleAtUtc?.ToString("O"),
+                treasurePortalFallbackRemainingSeconds = TreasurePortalOpenerTracker.FallbackRemainingSeconds,
+                treasurePortalFallbackReason = TreasurePortalOpenerTracker.FallbackReason,
                 treasurePortalFollowApplied = BossModMultiboxFollowService.FollowApplied,
                 treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
                 treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
                 treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
+                treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
+                treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
+                    ? string.Empty
+                    : Configuration.TreasureDutyRecoveryUtc.ToString("O"),
+                treasureDutyRecoveryRole = Configuration.TreasureDutyRecoveryRole,
+                bmraiTreasureFollowCleanupPending = Configuration.BmraiTreasureFollowCleanupPending,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -894,6 +937,167 @@ public sealed class Plugin : IDalamudPlugin
             ? context.TerritoryTypeId
             : context.ContentFinderConditionId;
 
+    private static string BuildTreasureDutyRecoveryKey(DutyContextSnapshot context)
+        => $"{context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}:{context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}";
+
+    private static bool IsSupportedTreasureDutyContext(DutyContextSnapshot context)
+        => context.InInstancedDuty
+           && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
+               || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
+
+    private bool IsActiveTreasureDutyOwnershipMode()
+        => ExecutionService.CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside;
+
+    private bool HasTreasureDutyRecoveryMarker()
+        => !string.IsNullOrWhiteSpace(Configuration.TreasureDutyRecoveryKey);
+
+    private bool IsTreasureDutyRecoveryStale()
+    {
+        if (Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue)
+            return true;
+
+        var age = DateTime.UtcNow - Configuration.TreasureDutyRecoveryUtc;
+        return age > TreasureDutyRecoveryTtl || age < -TimeSpan.FromMinutes(5);
+    }
+
+    private bool TreasureDutyRecoveryMatchesCurrentContext(DutyContextSnapshot context)
+    {
+        var currentKey = BuildTreasureDutyRecoveryKey(context);
+        if (string.Equals(Configuration.TreasureDutyRecoveryKey, currentKey, StringComparison.Ordinal))
+            return true;
+
+        var parts = Configuration.TreasureDutyRecoveryKey.Split(':', 2);
+        if (parts.Length != 2
+            || !uint.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var territoryTypeId)
+            || !uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var contentFinderConditionId))
+        {
+            return false;
+        }
+
+        return territoryTypeId == context.TerritoryTypeId
+               && (contentFinderConditionId == 0
+                   || context.ContentFinderConditionId == 0
+                   || contentFinderConditionId == context.ContentFinderConditionId);
+    }
+
+    private void WriteTreasureDutyRecoveryMarker(DutyContextSnapshot context, string reason, bool force = false)
+    {
+        if (!IsActiveTreasureDutyOwnershipMode()
+            || !context.PluginEnabled
+            || !context.IsLoggedIn
+            || !IsSupportedTreasureDutyContext(context))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var key = BuildTreasureDutyRecoveryKey(context);
+        var role = ExecutionService.TreasureDungeonRole.ToString();
+        var keyChanged = !string.Equals(Configuration.TreasureDutyRecoveryKey, key, StringComparison.Ordinal);
+        var roleChanged = !string.Equals(Configuration.TreasureDutyRecoveryRole, role, StringComparison.Ordinal);
+        var shouldRefreshTime = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
+                                || now - Configuration.TreasureDutyRecoveryUtc >= TreasureDutyRecoveryRefreshInterval;
+        if (!force && !keyChanged && !roleChanged && !shouldRefreshTime)
+            return;
+
+        Configuration.TreasureDutyRecoveryKey = key;
+        Configuration.TreasureDutyRecoveryUtc = now;
+        Configuration.TreasureDutyRecoveryRole = role;
+        Configuration.Save();
+
+        if (force || keyChanged || roleChanged)
+        {
+            Log.Information(
+                $"[ADS] Wrote treasure duty recovery marker after {reason}: key={key}, role={role}.");
+        }
+    }
+
+    private void ClearTreasureDutyRecoveryMarker(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(Configuration.TreasureDutyRecoveryKey)
+            && Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
+            && string.IsNullOrWhiteSpace(Configuration.TreasureDutyRecoveryRole))
+        {
+            return;
+        }
+
+        var previousKey = Configuration.TreasureDutyRecoveryKey;
+        Configuration.TreasureDutyRecoveryKey = string.Empty;
+        Configuration.TreasureDutyRecoveryUtc = DateTime.MinValue;
+        Configuration.TreasureDutyRecoveryRole = string.Empty;
+        Configuration.Save();
+        Log.Information($"[ADS] Cleared treasure duty recovery marker after {reason}. Previous key={previousKey}.");
+    }
+
+    private void TryRecoverTreasureDutyOwnership()
+    {
+        if (treasureDutyRecoveryAttemptedThisLoad || !HasTreasureDutyRecoveryMarker())
+            return;
+
+        var context = DutyContextService.Current;
+        if (!context.PluginEnabled || !context.IsLoggedIn || context.IsUnsafeTransition)
+            return;
+
+        if (IsTreasureDutyRecoveryStale())
+        {
+            treasureDutyRecoveryAttemptedThisLoad = true;
+            ClearTreasureDutyRecoveryMarker("stale reload recovery marker");
+            return;
+        }
+
+        if (!context.InInstancedDuty)
+        {
+            treasureDutyRecoveryAttemptedThisLoad = true;
+            ClearTreasureDutyRecoveryMarker("outside-duty reload cleanup");
+            return;
+        }
+
+        if (!IsSupportedTreasureDutyContext(context))
+        {
+            treasureDutyRecoveryAttemptedThisLoad = true;
+            ClearTreasureDutyRecoveryMarker("unsupported-duty reload recovery");
+            return;
+        }
+
+        if (!TreasureDutyRecoveryMatchesCurrentContext(context))
+        {
+            treasureDutyRecoveryAttemptedThisLoad = true;
+            ClearTreasureDutyRecoveryMarker("different-duty reload recovery");
+            return;
+        }
+
+        treasureDutyRecoveryAttemptedThisLoad = true;
+        if (IsActiveTreasureDutyOwnershipMode())
+        {
+            WriteTreasureDutyRecoveryMarker(context, "already-owned reload recovery", force: true);
+            return;
+        }
+
+        Log.Information(
+            $"[ADS] Recovering owned treasure duty from marker key={Configuration.TreasureDutyRecoveryKey}, storedRole={Configuration.TreasureDutyRecoveryRole}.");
+        if (!ResumeDutyFromInside())
+            ClearTreasureDutyRecoveryMarker("failed reload recovery");
+    }
+
+    private void CleanupTreasureDutyRuntimeOutsideDuty()
+    {
+        if (DutyContextService.Current.InInstancedDuty)
+            return;
+
+        ClearTreasureDutyRecoveryMarker("outside duty");
+        BossModMultiboxFollowService.Clear("outside duty cleanup");
+    }
+
+    private bool ShouldUsePartySlot2PortalOpenerFallback()
+    {
+        var context = DutyContextService.Current;
+        return ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower
+               && IsActiveTreasureDutyOwnershipMode()
+               && context.PluginEnabled
+               && context.IsLoggedIn
+               && context.InInstancedDuty;
+    }
+
     private void OnFrameworkUpdate(IFramework framework)
     {
         if (RemoteJsonUpdateService.TryConsumeCompletedUpdate())
@@ -906,9 +1110,16 @@ public sealed class Plugin : IDalamudPlugin
 
         BmrReflectionService.Update();
         DutyContextService.Update(Configuration.PluginEnabled);
+        CleanupTreasureDutyRuntimeOutsideDuty();
+        TryRecoverTreasureDutyOwnership();
         EnsureTreasureDungeonRoleInferredForOwnedDuty();
-        TreasurePortalOpenerTracker.Update();
-        BossModMultiboxFollowService.Update(ExecutionService.TreasureDungeonRole, TreasurePortalOpenerTracker.Current);
+        WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
+        var shouldUseTreasureFollowerFollow = ShouldUsePartySlot2PortalOpenerFallback();
+        TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerFollow);
+        BossModMultiboxFollowService.Update(
+            ExecutionService.TreasureDungeonRole,
+            TreasurePortalOpenerTracker.Current,
+            shouldUseTreasureFollowerFollow);
         HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
@@ -991,7 +1202,9 @@ public sealed class Plugin : IDalamudPlugin
     {
         var context = DutyContextService.Current;
         var dutyName = context.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
+        ClearTreasureDutyRecoveryMarker("duty completion");
         TreasurePortalOpenerTracker.ClearPendingOpener("duty completion");
+        TreasurePortalOpenerRelayService.Clear("duty completion");
         BossModMultiboxFollowService.Clear("duty completion");
         if (!ExecutionService.IsOwned)
         {
@@ -1599,6 +1812,13 @@ public sealed class Plugin : IDalamudPlugin
         {
             configuration.OpenQuickControlsOnLoad = false;
             configuration.Version = 15;
+            changed = true;
+        }
+
+        if (configuration.Version < 16)
+        {
+            configuration.BmraiTreasureFollowCleanupPending = true;
+            configuration.Version = 16;
             changed = true;
         }
 
