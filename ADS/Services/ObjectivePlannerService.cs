@@ -104,8 +104,6 @@ public sealed class ObjectivePlannerService
         var nearestBossFightMonster = GetBestBossFightBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestMonster = GetBestBattleNpc(observation.LiveMonsters, playerPosition, context);
         var nearestFollowTarget = GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
-        if (ShouldIgnoreFollowTargetForTreasureFollowerPreEntry(context))
-            nearestFollowTarget = null;
 
         var nearestRequiredInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(IsProgressionInteractable),
@@ -591,11 +589,6 @@ public sealed class ObjectivePlannerService
             CapturedAtUtc = now,
         };
     }
-
-    private bool ShouldIgnoreFollowTargetForTreasureFollowerPreEntry(DutyContextSnapshot context)
-        => dungeonFrontierService.IsTreasureFollowerPreEntryManualDestinationActive(context)
-           && dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
-           && dungeonFrontierService.CurrentTarget is { IsManualDestination: true };
 
     private ObservedMonster? GetBestBattleNpc(
         IEnumerable<ObservedMonster> monsters,

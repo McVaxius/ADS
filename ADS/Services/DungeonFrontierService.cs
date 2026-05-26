@@ -57,7 +57,6 @@ public sealed class DungeonFrontierService
     private readonly HashSet<string> loggedInvalidXyzDestinationRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedResolvedXyzDestinationRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedCombatBypassManualSelections = new(StringComparer.Ordinal);
-    private readonly HashSet<string> loggedTreasureFollowerPreEntryXyzInjections = new(StringComparer.Ordinal);
     private uint activeDutyKey;
     private Vector3? lastProgressSamplePosition;
     private Vector3? currentHeading;
@@ -203,12 +202,6 @@ public sealed class DungeonFrontierService
 
     public string TreasureFollowerRouteHoldReason
         => treasureFollowerRouteHoldReason;
-
-    public bool IsTreasureFollowerPreEntryManualDestinationActive(DutyContextSnapshot context)
-        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-           && TreasureDungeonData.HasRoute(context.TerritoryTypeId)
-           && GetTreasureFollowerReachedFloor() == 0
-           && !HasCurrentDutyTreasureFollowerEntryProof();
 
     public string TreasureFollowerHeldCandidateKey
         => heldTreasureFollowerCandidateKey ?? string.Empty;
@@ -451,8 +444,8 @@ public sealed class DungeonFrontierService
         var manualMapXzDestinations = hasActiveMap && playerPosition.HasValue
             ? BuildMapXzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
-        var manualXyzDestinations = hasActiveMap
-            ? BuildManualXyzDestinationPoints(context, activeMap, playerPosition)
+        var manualXyzDestinations = hasActiveMap && playerPosition.HasValue
+            ? BuildXyzDestinationPoints(context, activeMap, playerPosition.Value)
             : [];
         ManualMapXzDestinationCount = manualMapXzDestinations.Count;
         VisitedManualMapXzDestinations = manualMapXzDestinations.Count(x => visitedFrontierKeys.Contains(x.Key));
@@ -461,21 +454,6 @@ public sealed class DungeonFrontierService
         var manualDestinations = manualMapXzDestinations
             .Concat(manualXyzDestinations)
             .ToList();
-
-        if (IsTreasureFollowerPreEntryManualDestinationActive(context)
-            && manualDestinations.Any(point => !visitedFrontierKeys.Contains(point.Key)))
-        {
-            CurrentTarget = SelectCurrentManualDestination(manualDestinations, playerPosition);
-            if (CurrentTarget is not null)
-            {
-                CurrentMode = CurrentTarget.IsManualXyzDestination
-                    ? FrontierMode.XyzDestination
-                    : FrontierMode.MapXzDestination;
-                ClearTreasureFollowerCandidateHold("follower pre-entry manual destination selected");
-                RememberManualDestination(CurrentTarget);
-                return;
-            }
-        }
 
         UpdateTreasureFollowerEntryMapOpenerRole();
         var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(context, observation, playerPosition);
@@ -637,7 +615,6 @@ public sealed class DungeonFrontierService
         treasureFollowerFailedPassageGroups.Clear();
         loggedTreasureFollowerBacktrackSkips.Clear();
         loggedTreasureFollowerHeldCandidatePreserves.Clear();
-        loggedTreasureFollowerPreEntryXyzInjections.Clear();
         treasureFollowerLastCofferStagingScanLogKey = string.Empty;
     }
 
@@ -1135,67 +1112,6 @@ public sealed class DungeonFrontierService
     }
 
     private IReadOnlyList<DungeonFrontierPoint> BuildXyzDestinationPoints(DutyContextSnapshot context, Map map, Vector3 playerPosition)
-        => BuildXyzDestinationPoints(
-            context,
-            map,
-            playerPosition,
-            ignoreDistanceGates: false,
-            normalXyzOnly: false);
-
-    private IReadOnlyList<DungeonFrontierPoint> BuildManualXyzDestinationPoints(
-        DutyContextSnapshot context,
-        Map map,
-        Vector3? playerPosition)
-    {
-        var normalXyzDestinations = playerPosition.HasValue
-            ? BuildXyzDestinationPoints(context, map, playerPosition.Value)
-            : [];
-        var preEntryXyzDestinations = BuildTreasureFollowerPreEntryXyzDestinationPoints(context, map, playerPosition);
-        if (preEntryXyzDestinations.Count == 0)
-            return normalXyzDestinations;
-
-        var merged = new List<DungeonFrontierPoint>(normalXyzDestinations.Count + preEntryXyzDestinations.Count);
-        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var point in normalXyzDestinations)
-        {
-            if (seenKeys.Add(point.Key))
-                merged.Add(point);
-        }
-
-        foreach (var point in preEntryXyzDestinations)
-        {
-            if (!seenKeys.Add(point.Key))
-                continue;
-
-            merged.Add(point);
-            LogTreasureFollowerPreEntryXyzInjection(point);
-        }
-
-        return merged;
-    }
-
-    private IReadOnlyList<DungeonFrontierPoint> BuildTreasureFollowerPreEntryXyzDestinationPoints(
-        DutyContextSnapshot context,
-        Map map,
-        Vector3? playerPosition)
-    {
-        if (!IsTreasureFollowerPreEntryManualDestinationActive(context))
-            return [];
-
-        return BuildXyzDestinationPoints(
-            context,
-            map,
-            playerPosition,
-            ignoreDistanceGates: true,
-            normalXyzOnly: true);
-    }
-
-    private IReadOnlyList<DungeonFrontierPoint> BuildXyzDestinationPoints(
-        DutyContextSnapshot context,
-        Map map,
-        Vector3? playerPosition,
-        bool ignoreDistanceGates,
-        bool normalXyzOnly)
     {
         var destinationRules = objectPriorityRuleService.GetXyzDestinationRules(context);
         if (destinationRules.Count == 0)
@@ -1204,9 +1120,6 @@ public sealed class DungeonFrontierService
         var points = new List<DungeonFrontierPoint>();
         foreach (var rule in destinationRules)
         {
-            if (normalXyzOnly && IsXyzForceMarchDestinationRule(rule))
-                continue;
-
             var ruleKey = BuildXyzDestinationRuleKey(context, rule);
             if (!DoesManualDestinationRuleMatchActiveMap(rule, map))
                 continue;
@@ -1222,12 +1135,8 @@ public sealed class DungeonFrontierService
             var name = string.IsNullOrWhiteSpace(rule.ObjectName)
                 ? $"XYZ {worldCoordinates.X:0.0}, {worldCoordinates.Y:0.0}, {worldCoordinates.Z:0.0}"
                 : rule.ObjectName;
-            if (!ignoreDistanceGates
-                && (!playerPosition.HasValue
-                    || !objectPriorityRuleService.DestinationRulePassesDistanceGates(rule, playerPosition.Value, worldCoordinates)))
-            {
+            if (!objectPriorityRuleService.DestinationRulePassesDistanceGates(rule, playerPosition, worldCoordinates))
                 continue;
-            }
 
             if (loggedResolvedXyzDestinationRules.Add(ruleKey))
             {
@@ -1254,10 +1163,6 @@ public sealed class DungeonFrontierService
 
         return points;
     }
-
-    private static bool IsXyzForceMarchDestinationRule(ObjectPriorityRule rule)
-        => Enum.TryParse<InteractableClass>(rule.Classification, ignoreCase: true, out var classification)
-           && classification == InteractableClass.XYZForceMarch;
 
     private IReadOnlyList<DungeonFrontierPoint> BuildTreasureRoutePoints(
         DutyContextSnapshot context,
@@ -2090,7 +1995,7 @@ public sealed class DungeonFrontierService
         nextTreasureFollowerCatchUpLogUtc = now + TreasureFollowerCatchUpLogCooldown;
         var proof = reachedRoom > 0
             ? $"room progress reached {reachedRoom}"
-            : "same-floor live/static passage truth appeared after the manual entry XYZ";
+            : "same-floor live/static passage truth appeared after entry proof";
         log.Information(
             $"[ADS] Treasure follower catch-up marked {markedCount} stale entry/start route point(s) visited because {proof}. ADS will not backtrack to the landing platform after entry.");
     }
@@ -2140,16 +2045,8 @@ public sealed class DungeonFrontierService
         ClearTreasureFollowerCandidateHold("entry proof established");
         ResetTreasureFollowerDoorChaseGate();
         ClearTreasureFollowerRoomRetryCooldown();
-        if (point.IsManualXyzDestination)
-        {
-            log.Information(
-                $"[ADS] Treasure follower manual entry XYZ reached after {reason}: {point.Name} (key {point.Key}) at {FormatVector(point.Position)}. ADS marked entry proof for duty {activeDutyKey} and enabled follower room-door routing.");
-        }
-        else
-        {
-            log.Information(
-                $"[ADS] Treasure follower entry proof established after {reason} at {point.Name} ({point.TreasureRouteSource}, key {point.Key}). ADS will resume follower routing without marking room progress consumed.");
-        }
+        log.Information(
+            $"[ADS] Treasure follower room 1 reached after {reason}: {point.Name} ({point.TreasureRouteSource}, route room {point.TreasureRoomIndex}, key {point.Key}) at {FormatVector(point.Position)}. ADS marked entry proof for duty {activeDutyKey} and enabled follower room-door routing.");
 
         return true;
     }
@@ -2163,7 +2060,8 @@ public sealed class DungeonFrontierService
             return false;
         }
 
-        return point.IsManualXyzDestination;
+        return point.IsTreasureRoutePoint
+               && point.TreasureRoomIndex >= 1;
     }
 
     private void RetireTreasureFollowerBacktrackTarget(DungeonFrontierPoint point)
@@ -3984,16 +3882,6 @@ public sealed class DungeonFrontierService
     {
         if (loggedInvalidXyzDestinationRules.Add(key))
             log.Warning(message);
-    }
-
-    private void LogTreasureFollowerPreEntryXyzInjection(DungeonFrontierPoint point)
-    {
-        var logKey = $"{activeDutyKey}:{point.Key}";
-        if (!loggedTreasureFollowerPreEntryXyzInjections.Add(logKey))
-            return;
-
-        log.Information(
-            $"[ADS] Treasure follower pre-entry XYZ injected into normal manual destinations with distance gates bypassed: {point.Name} (key {point.Key}) on map {point.MapId} at {FormatVector(point.Position)}.");
     }
 
     private static Vector3 ConvertTextureToWorld(short textureX, short textureY, Map map)

@@ -37,6 +37,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
+    [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
@@ -68,6 +69,8 @@ public sealed class Plugin : IDalamudPlugin
     public UtilityAutomationService UtilityAutomationService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
     public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
+    public TreasurePortalOpenerTracker TreasurePortalOpenerTracker { get; }
+    public BossModMultiboxFollowService BossModMultiboxFollowService { get; }
     public TreasureHighLowDiagnosticService TreasureHighLowDiagnosticService { get; }
     public HigherLowerServerEventTraceService HigherLowerServerEventTraceService { get; }
     public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
@@ -106,6 +109,8 @@ public sealed class Plugin : IDalamudPlugin
         var configDirectory = PluginInterface.GetPluginConfigDirectory();
         TreasureDungeonData.Configure(configDirectory, Log);
         TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
+        TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, Log);
+        BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
 
@@ -455,6 +460,8 @@ public sealed class Plugin : IDalamudPlugin
         var stoppedUtility = UtilityAutomationService.IsRunning;
         ExecutionService.Stop(DutyContextService.Current);
         ResetOwnedTreasureRoleInferenceLatch();
+        TreasurePortalOpenerTracker.ClearPendingOpener("ownership stop");
+        BossModMultiboxFollowService.Clear("ownership stop");
         InnEntryService.Cancel("operator stop");
         UtilityAutomationService.Cancel("operator stop");
         var stoppedText = stoppedInn || stoppedUtility
@@ -552,6 +559,15 @@ public sealed class Plugin : IDalamudPlugin
                 effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
+                treasurePortalOpenerName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
+                treasurePortalOpenerPartySlot = TreasurePortalOpenerTracker.Current?.PartySlot,
+                treasurePortalOpenerObjectId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.GameObjectId),
+                treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
+                treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasurePortalFollowApplied = BossModMultiboxFollowService.FollowApplied,
+                treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
+                treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
+                treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
                 frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                 frontierRouteKey = DungeonFrontierService.CurrentTarget?.Key,
                 treasureFollowerRouteHoldReason = DungeonFrontierService.TreasureFollowerRouteHoldReason,
@@ -638,6 +654,15 @@ public sealed class Plugin : IDalamudPlugin
                 treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
+                treasurePortalOpenerName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
+                treasurePortalOpenerPartySlot = TreasurePortalOpenerTracker.Current?.PartySlot,
+                treasurePortalOpenerObjectId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.GameObjectId),
+                treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
+                treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasurePortalFollowApplied = BossModMultiboxFollowService.FollowApplied,
+                treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
+                treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
+                treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -801,16 +826,27 @@ public sealed class Plugin : IDalamudPlugin
             z = MathF.Round(value.Z, 2),
         };
 
+    private static string FormatOptionalId(ulong? value)
+        => value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
     private void QueueDutyOwnershipRemoteUpdate()
         => RemoteJsonUpdateService.TryStartStaleUpdate("duty ownership");
+
+    private void ApplyTreasureDungeonRole(
+        TreasureDungeonRoleInference inference,
+        string reason,
+        bool resetFollowerProgressForOwnership = false)
+    {
+        ExecutionService.SetTreasureDungeonRole(inference);
+        DungeonFrontierService.SetTreasureDungeonRole(inference, resetFollowerProgressForOwnership);
+        Log.Information(
+            $"[ADS] Treasure role {reason}: role={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
+    }
 
     private void InferAndApplyTreasureDungeonRole(string reason, bool resetFollowerProgressForOwnership = false)
     {
         var inference = TreasureDungeonRoleDetector.Infer();
-        ExecutionService.SetTreasureDungeonRole(inference);
-        DungeonFrontierService.SetTreasureDungeonRole(inference, resetFollowerProgressForOwnership);
-        Log.Information(
-            $"[ADS] Treasure role inference for {reason}: role={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
+        ApplyTreasureDungeonRole(inference, $"inference for {reason}", resetFollowerProgressForOwnership);
     }
 
     private void EnsureTreasureDungeonRoleInferredForOwnedDuty()
@@ -871,6 +907,8 @@ public sealed class Plugin : IDalamudPlugin
         BmrReflectionService.Update();
         DutyContextService.Update(Configuration.PluginEnabled);
         EnsureTreasureDungeonRoleInferredForOwnedDuty();
+        TreasurePortalOpenerTracker.Update();
+        BossModMultiboxFollowService.Update(ExecutionService.TreasureDungeonRole, TreasurePortalOpenerTracker.Current);
         HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
@@ -941,6 +979,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnChatMessage(IHandleableChatMessage message)
     {
         var text = message.Message.TextValue;
+        TreasurePortalOpenerTracker.HandleChatMessage(text);
         HigherLowerAutomationService.HandleChatMessage(text);
         ExecutionService.HandleChatMessage(text);
     }
@@ -952,6 +991,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         var context = DutyContextService.Current;
         var dutyName = context.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
+        TreasurePortalOpenerTracker.ClearPendingOpener("duty completion");
+        BossModMultiboxFollowService.Clear("duty completion");
         if (!ExecutionService.IsOwned)
         {
             ObservationMemoryService.Reset();
