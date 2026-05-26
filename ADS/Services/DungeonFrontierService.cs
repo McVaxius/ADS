@@ -27,6 +27,8 @@ public sealed class DungeonFrontierService
     private const float TreasureFollowerStagingProgressDistance = 0.5f;
     private static readonly TimeSpan TreasureFollowerStagingNoProgressTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan TreasureFollowerDoorChaseSettleDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TreasureFollowerDoorInteractionWitnessTtl = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan TreasureFollowerDoorInteractionTransitionGrace = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan TreasureFollowerRoomRetryCooldown = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan TreasureFollowerCatchUpLogCooldown = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan TreasureFollowerRetryCycleLogCooldown = TimeSpan.FromSeconds(5);
@@ -90,6 +92,9 @@ public sealed class DungeonFrontierService
     private int treasureFollowerDoorChaseGateRoomIndex;
     private bool treasureFollowerDoorChaseGateTransitionSeenActive;
     private DateTime treasureFollowerDoorChaseGateSettleUntilUtc = DateTime.MinValue;
+    private DateTime treasureFollowerDoorChaseGateInteractionSeenUtc = DateTime.MinValue;
+    private string treasureFollowerDoorChaseGateInteractionSource = string.Empty;
+    private string treasureFollowerDoorChaseGateUnblockedKey = string.Empty;
     private string treasureFollowerDoorChaseGateState = "Inactive";
     private bool treasureFollowerDoorChaseHoldActive;
     private int treasureFollowerDoorSeekCombatGateRoomIndex;
@@ -109,6 +114,7 @@ public sealed class DungeonFrontierService
     private readonly HashSet<string> loggedTreasureFollowerHeldCandidatePreserves = new(StringComparer.Ordinal);
     private string treasureFollowerLastCofferStagingScanLogKey = string.Empty;
     private int headingScoutSequence;
+    private TreasureInteractionWitness? lastTreasureInteractionWitness;
 
     private readonly record struct TreasureFollowerRoomRouteFloor(int RoomIndex, Vector3 DoorCenter);
 
@@ -139,6 +145,23 @@ public sealed class DungeonFrontierService
         this.objectTable = objectTable;
         this.log = log;
         this.objectPriorityRuleService = objectPriorityRuleService;
+    }
+
+    public void RecordTreasureInteractionWitness(TreasureInteractionWitness? witness)
+    {
+        if (witness is null)
+            return;
+
+        if (DateTime.UtcNow - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
+            return;
+
+        if (lastTreasureInteractionWitness is not null
+            && lastTreasureInteractionWitness.Sequence == witness.Sequence)
+        {
+            return;
+        }
+
+        lastTreasureInteractionWitness = witness;
     }
 
     public DungeonFrontierPoint? CurrentTarget { get; private set; }
@@ -2506,6 +2529,7 @@ public sealed class DungeonFrontierService
             treasureFollowerDoorChaseGateRoomIndex = roomIndex;
             treasureFollowerDoorChaseGateTransitionSeenActive = false;
             treasureFollowerDoorChaseGateSettleUntilUtc = DateTime.MinValue;
+            ClearTreasureFollowerDoorChaseInteractionGate();
         }
 
         var now = DateTime.UtcNow;
@@ -2575,12 +2599,31 @@ public sealed class DungeonFrontierService
             return true;
         }
 
+        TryLatchTreasureFollowerDoorInteractionWitness(now);
         if (!treasureFollowerDoorChaseGateTransitionSeenActive)
         {
-            treasureFollowerDoorChaseGateState = "WaitingForDoorOpenTransitionStart";
-            treasureFollowerDoorChaseHoldActive = true;
-            status = $"Waiting for opener door-opening transition to start before chasing room {roomIndex} passage doors.";
-            return true;
+            if (treasureFollowerDoorChaseGateInteractionSeenUtc == DateTime.MinValue)
+            {
+                treasureFollowerDoorChaseGateState = "WaitingForDoorOpenerInteraction";
+                treasureFollowerDoorChaseHoldActive = true;
+                status = $"Waiting for opener interaction or door-opening transition before chasing room {roomIndex} passage doors.";
+                return true;
+            }
+
+            var interactionGraceUntilUtc = treasureFollowerDoorChaseGateInteractionSeenUtc + TreasureFollowerDoorInteractionTransitionGrace;
+            if (now < interactionGraceUntilUtc)
+            {
+                var remaining = Math.Max(0, (interactionGraceUntilUtc - now).TotalSeconds);
+                treasureFollowerDoorChaseGateState = "WaitingForDoorOpenTransitionStart";
+                treasureFollowerDoorChaseHoldActive = true;
+                status = $"Witnessed opener interaction from {treasureFollowerDoorChaseGateInteractionSource}; waiting {remaining:0.0}s for room {roomIndex} door-opening transition before chasing passage doors.";
+                return true;
+            }
+
+            LogTreasureFollowerDoorChaseUnblocked(roomIndex);
+            treasureFollowerDoorChaseGateState = "OpenAfterInteractionGrace";
+            treasureFollowerDoorChaseHoldActive = false;
+            return false;
         }
 
         if (treasureFollowerDoorChaseGateSettleUntilUtc == DateTime.MinValue)
@@ -2596,6 +2639,36 @@ public sealed class DungeonFrontierService
         }
 
         return false;
+    }
+
+    private void TryLatchTreasureFollowerDoorInteractionWitness(DateTime now)
+    {
+        if (lastTreasureInteractionWitness is not { } witness
+            || now - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
+        {
+            return;
+        }
+
+        if (treasureFollowerDoorChaseGateInteractionSeenUtc >= witness.CapturedUtc)
+            return;
+
+        treasureFollowerDoorChaseGateInteractionSeenUtc = witness.CapturedUtc;
+        treasureFollowerDoorChaseGateInteractionSource = string.IsNullOrWhiteSpace(witness.Source)
+            ? witness.EventKind
+            : witness.Source;
+    }
+
+    private void LogTreasureFollowerDoorChaseUnblocked(int roomIndex)
+    {
+        var unblockKey = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{activeDutyKey}:{roomIndex}:{treasureFollowerDoorChaseGateInteractionSeenUtc:O}:{treasureFollowerDoorChaseGateInteractionSource}");
+        if (string.Equals(unblockKey, treasureFollowerDoorChaseGateUnblockedKey, StringComparison.Ordinal))
+            return;
+
+        treasureFollowerDoorChaseGateUnblockedKey = unblockKey;
+        log.Information(
+            $"[ADS] Treasure follower door chase unblocked for room {roomIndex}: witnessed {treasureFollowerDoorChaseGateInteractionSource}, no transition started within {TreasureFollowerDoorInteractionTransitionGrace.TotalSeconds:0}s.");
     }
 
     private bool IsTreasureFollowerDoorOpenTransitionGateArmed(DateTime now)
@@ -2713,10 +2786,18 @@ public sealed class DungeonFrontierService
         treasureFollowerDoorChaseGateRoomIndex = 0;
         treasureFollowerDoorChaseGateTransitionSeenActive = transitionSeenActive;
         treasureFollowerDoorChaseGateSettleUntilUtc = DateTime.MinValue;
+        ClearTreasureFollowerDoorChaseInteractionGate();
         treasureFollowerDoorChaseGateState = transitionSeenActive ? "WaitingForDoorOpenTransitionEnd" : "Inactive";
         treasureFollowerDoorChaseHoldActive = false;
         ClearTreasureFollowerCandidateSwitchSettle();
         ResetTreasureFollowerDoorSeekCombatGate();
+    }
+
+    private void ClearTreasureFollowerDoorChaseInteractionGate()
+    {
+        treasureFollowerDoorChaseGateInteractionSeenUtc = DateTime.MinValue;
+        treasureFollowerDoorChaseGateInteractionSource = string.Empty;
+        treasureFollowerDoorChaseGateUnblockedKey = string.Empty;
     }
 
     private void EnsureTreasureFollowerDoorSeekCombatGateRoom(int roomIndex)

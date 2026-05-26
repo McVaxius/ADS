@@ -78,6 +78,8 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureDoorNudgeStuckTimeout = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan TreasureDoorNudgeHoldDuration = TimeSpan.FromSeconds(2.5);
     private static readonly TimeSpan TreasureFollowerDoorFollowThroughTruthTimeout = TimeSpan.FromSeconds(8.0);
+    private static readonly TimeSpan TreasureFollowerPostTransitSettleDelay = TimeSpan.FromSeconds(2.0);
+    private static readonly TimeSpan TreasureFollowerPostCutsceneSettleDelay = TimeSpan.FromSeconds(4.0);
     private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
@@ -148,6 +150,10 @@ public sealed class ExecutionService
     private bool treasureFollowerDoorFollowThroughReached;
     private DateTime treasureFollowerDoorFollowThroughReachedUtc = DateTime.MinValue;
     private bool treasureFollowerRouteTransitHoldLatched;
+    private bool treasureFollowerRouteTransitCutsceneSeen;
+    private DateTime treasureFollowerPostTransitSettleUntilUtc = DateTime.MinValue;
+    private string treasureFollowerPostTransitSettleReason = string.Empty;
+    private bool treasureFollowerPostTransitSettleStopSent;
     private string? treasureDoorNudgeTargetKey;
     private Vector3? treasureDoorNudgeBaselinePosition;
     private DateTime treasureDoorNudgeLastProgressUtc;
@@ -288,6 +294,9 @@ public sealed class ExecutionService
         }
     }
 
+    public double TreasureFollowerPostTransitSettleRemainingSeconds
+        => GetRemainingSeconds(treasureFollowerPostTransitSettleUntilUtc);
+
     public bool IsOwned
         => CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving;
 
@@ -297,6 +306,7 @@ public sealed class ExecutionService
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
         ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+        ClearTreasureFollowerPostTransitSettle("treasure role changed");
     }
 
     public bool HandleChatMessage(string message)
@@ -330,6 +340,7 @@ public sealed class ExecutionService
         var hadAquapolisWiggle = aquapolisRouteWiggleTargetKey != null || aquapolisRouteWiggleUntilUtc != DateTime.MinValue;
         ClearBossFightCombatGhost(reason);
         ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
+        ClearTreasureFollowerPostTransitSettle(reason);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         if (hadNudge)
             log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
@@ -362,6 +373,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("outside start");
+        ClearTreasureFollowerPostTransitSettle("outside start");
         CurrentMode = OwnershipMode.OwnedStartOutside;
         SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter instanced duty.");
         return true;
@@ -372,6 +384,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside start");
+        ClearTreasureFollowerPostTransitSettle("inside start");
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -393,6 +406,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside resume");
+        ClearTreasureFollowerPostTransitSettle("inside resume");
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -421,6 +435,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("manual leave request");
+        ClearTreasureFollowerPostTransitSettle("manual leave request");
         ResetLeaveState();
         if (considerTreasureCoffers)
             BeginLeaveTreasureSweep(DateTime.UtcNow, "manual leave request");
@@ -445,6 +460,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("duty completion treasure sweep");
+        ClearTreasureFollowerPostTransitSettle("duty completion treasure sweep");
         ResetRecoveryHold();
         ResetLeaveState();
         BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
@@ -461,6 +477,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("stop");
+        ClearTreasureFollowerPostTransitSettle("stop");
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
@@ -477,6 +494,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("duty complete");
+        ClearTreasureFollowerPostTransitSettle("duty complete");
         ResetRecoveryHold();
         ResetLeaveState();
         CurrentMode = OwnershipMode.Observing;
@@ -506,6 +524,7 @@ public sealed class ExecutionService
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
             ClearBossFightCombatGhost("plugin disabled");
+            ClearTreasureFollowerPostTransitSettle("plugin disabled");
             ResetLeaveState();
             CurrentMode = OwnershipMode.Idle;
             SetPhase(ExecutionPhase.Idle, "ADS disabled.");
@@ -528,6 +547,7 @@ public sealed class ExecutionService
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
                     ClearBossFightCombatGhost("outside start waiting outside duty");
+                    ClearTreasureFollowerPostTransitSettle("outside start waiting outside duty");
                     SetPhase(ExecutionPhase.OutsideQueue, "Waiting to enter instanced duty from outside.");
                     return;
                 }
@@ -543,6 +563,7 @@ public sealed class ExecutionService
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
                     ClearBossFightCombatGhost("duty ended");
+                    ClearTreasureFollowerPostTransitSettle("duty ended");
                     ResetLeaveState();
                     CurrentMode = OwnershipMode.Idle;
                     SetPhase(ExecutionPhase.Idle, "Duty ended; ADS ownership released.");
@@ -559,6 +580,7 @@ public sealed class ExecutionService
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
                     ClearBossFightCombatGhost("duty exit detected");
+                    ClearTreasureFollowerPostTransitSettle("duty exit detected");
                     observationMemoryService.Reset();
                     dungeonFrontierService.Reset();
                     ResetLeaveState();
@@ -593,6 +615,7 @@ public sealed class ExecutionService
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
             ClearBossFightCombatGhost("ownership observing");
+            ClearTreasureFollowerPostTransitSettle("ownership observing");
             ResetLeaveState();
             CurrentMode = OwnershipMode.Observing;
             SetPhase(ExecutionPhase.ObservingOnly, "Observing only; ADS does not currently own this duty.");
@@ -603,6 +626,7 @@ public sealed class ExecutionService
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("ownership idle");
+        ClearTreasureFollowerPostTransitSettle("ownership idle");
         ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
@@ -637,6 +661,9 @@ public sealed class ExecutionService
                 $"{prefix} Waiting for treasure entry/passage movement to settle.");
             return;
         }
+
+        if (TryHoldTreasureFollowerPostTransitSettle(prefix))
+            return;
 
         if (higherLowerAutomationHold)
         {
@@ -4647,6 +4674,12 @@ public sealed class ExecutionService
 
     private bool TryBeginNavigation(ulong gameObjectId, Vector3 destination)
     {
+        if (IsTreasureFollowerPostTransitSettleActive())
+        {
+            StopNavigationForTreasureFollowerPostTransitSettle();
+            return false;
+        }
+
         if (manualDestinationNavigationTargetId.HasValue
             && manualDestinationNavigationTargetId.Value != gameObjectId)
         {
@@ -4676,6 +4709,12 @@ public sealed class ExecutionService
 
     private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, string targetName, Vector3 destination)
     {
+        if (IsTreasureFollowerPostTransitSettleActive())
+        {
+            StopNavigationForTreasureFollowerPostTransitSettle();
+            return false;
+        }
+
         if (manualDestinationNavigationTargetId.HasValue
             && manualDestinationNavigationTargetId.Value != targetId)
         {
@@ -5368,6 +5407,8 @@ public sealed class ExecutionService
         {
             ObserveTreasureFollowerRouteTransit(context, "route transit latch");
             treasureFollowerRouteTransitHoldLatched = true;
+            if (context.OccupiedInCutSceneEvent || context.WatchingCutscene)
+                treasureFollowerRouteTransitCutsceneSeen = true;
             return;
         }
 
@@ -5376,7 +5417,10 @@ public sealed class ExecutionService
 
         treasureFollowerRouteTransitHoldLatched = false;
         if (TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+        {
+            treasureFollowerRouteTransitCutsceneSeen = false;
             return;
+        }
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
@@ -5386,8 +5430,79 @@ public sealed class ExecutionService
         ResetTreasureRouteStuckTracking();
         ResetAquapolisRouteWiggleTracking();
         ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+        PauseTreasureFollowerDoorFollowThrough();
         dungeonFrontierService.SuppressTreasureFollowerHeadingScoutForPostTransitSettle("route transit hold clear");
-        log?.Information("[ADS] Treasure follower route transit hold cleared; sent one post-transit /vnav stop before refreshed route selection.");
+        StartTreasureFollowerPostTransitSettle(
+            treasureFollowerRouteTransitCutsceneSeen ? "cutscene route transit hold clear" : "route transit hold clear",
+            treasureFollowerRouteTransitCutsceneSeen);
+        treasureFollowerRouteTransitCutsceneSeen = false;
+    }
+
+    private void StartTreasureFollowerPostTransitSettle(string reason, bool cutsceneSeen)
+    {
+        var now = DateTime.UtcNow;
+        var delay = cutsceneSeen ? TreasureFollowerPostCutsceneSettleDelay : TreasureFollowerPostTransitSettleDelay;
+        treasureFollowerPostTransitSettleUntilUtc = now + delay;
+        treasureFollowerPostTransitSettleReason = reason;
+        treasureFollowerPostTransitSettleStopSent = false;
+        StopNavigationForTreasureFollowerPostTransitSettle();
+        log?.Information(
+            $"[ADS] Treasure follower post-transit settle started for {delay.TotalSeconds:0.0}s after {reason}; vnav stopped and follower door follow-through preserved.");
+    }
+
+    private bool TryHoldTreasureFollowerPostTransitSettle(string prefix)
+    {
+        if (treasureFollowerPostTransitSettleUntilUtc == DateTime.MinValue)
+            return false;
+
+        var now = DateTime.UtcNow;
+        if (now >= treasureFollowerPostTransitSettleUntilUtc)
+        {
+            var reason = treasureFollowerPostTransitSettleReason;
+            ClearTreasureFollowerPostTransitSettle("settle complete");
+            log?.Information($"[ADS] Treasure follower post-transit settle ended after {reason}; movement may resume.");
+            return false;
+        }
+
+        StopNavigationForTreasureFollowerPostTransitSettle();
+        var remaining = Math.Max(0, (treasureFollowerPostTransitSettleUntilUtc - now).TotalSeconds);
+        SetPhase(
+            ExecutionPhase.TransitionHold,
+            $"{prefix} Waiting {remaining:0.0}s for treasure follower post-transit settle before sending new movement.");
+        return true;
+    }
+
+    private bool IsTreasureFollowerPostTransitSettleActive()
+        => treasureFollowerPostTransitSettleUntilUtc != DateTime.MinValue
+           && DateTime.UtcNow < treasureFollowerPostTransitSettleUntilUtc;
+
+    private void StopNavigationForTreasureFollowerPostTransitSettle()
+    {
+        if (!treasureFollowerPostTransitSettleStopSent || navigationActive || mapFlagNavigationActive || movementTargetGameObjectId != 0)
+            TrySendCommand("/vnav stop");
+
+        treasureFollowerPostTransitSettleStopSent = true;
+        navigationActive = false;
+        movementTargetGameObjectId = 0;
+        mapFlagNavigationActive = false;
+        nextNavigationCommandUtc = DateTime.MinValue;
+        ResetTreasureRouteStuckTracking();
+        ResetAquapolisRouteWiggleTracking();
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+        PauseTreasureFollowerDoorFollowThrough();
+    }
+
+    private void ClearTreasureFollowerPostTransitSettle(string reason)
+    {
+        if (treasureFollowerPostTransitSettleUntilUtc == DateTime.MinValue)
+            return;
+
+        treasureFollowerPostTransitSettleUntilUtc = DateTime.MinValue;
+        treasureFollowerPostTransitSettleReason = string.Empty;
+        treasureFollowerPostTransitSettleStopSent = false;
+        treasureFollowerRouteTransitCutsceneSeen = false;
     }
 
     private void ResetTreasureDungeonCombatNavigationStopLatchIfClear(DutyContextSnapshot context, PlannerSnapshot planner)
@@ -5532,6 +5647,11 @@ public sealed class ExecutionService
 
         return flags.Count == 0 ? "none" : string.Join(", ", flags);
     }
+
+    private static double GetRemainingSeconds(DateTime untilUtc)
+        => untilUtc == DateTime.MinValue
+            ? 0
+            : Math.Max(0, (untilUtc - DateTime.UtcNow).TotalSeconds);
 
     private static string FormatVector(Vector3 value)
         => string.Create(CultureInfo.InvariantCulture, $"{value.X:0.00},{value.Y:0.00},{value.Z:0.00}");

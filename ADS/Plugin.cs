@@ -133,7 +133,7 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
-        HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
+        HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
         HigherLowerVfxTraceService = new HigherLowerVfxTraceService(ObjectTable, ClientState, TreasureHighLowDiagnosticService, Log);
         HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, HigherLowerServerEventTraceService, DataManager, Log);
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
@@ -585,6 +585,10 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
                 treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasurePortalInteractionWitnessSource = TreasurePortalOpenerTracker.LastInteractionWitnessSource,
+                treasurePortalInteractionWitnessName = TreasurePortalOpenerTracker.LastInteractionWitnessName,
+                treasurePortalInteractionWitnessTarget = TreasurePortalOpenerTracker.LastInteractionWitnessTarget,
+                treasurePortalInteractionWitnessAgeSeconds = TreasurePortalOpenerTracker.LastInteractionWitnessAgeSeconds,
                 treasurePortalRelayStatus = TreasurePortalOpenerTracker.RelayStatus,
                 treasurePortalFallbackEligibleAtUtc = TreasurePortalOpenerTracker.FallbackEligibleAtUtc?.ToString("O"),
                 treasurePortalFallbackRemainingSeconds = TreasurePortalOpenerTracker.FallbackRemainingSeconds,
@@ -634,6 +638,7 @@ public sealed class Plugin : IDalamudPlugin
                 treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
                 treasureFollowerDoorFollowThroughTarget = ExecutionService.TreasureFollowerDoorFollowThroughTarget,
                 treasureFollowerDoorFollowThroughStage = ExecutionService.TreasureFollowerDoorFollowThroughStage,
+                treasureFollowerPostTransitSettleRemainingSeconds = ExecutionService.TreasureFollowerPostTransitSettleRemainingSeconds,
                 liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
@@ -692,6 +697,10 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
                 treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasurePortalInteractionWitnessSource = TreasurePortalOpenerTracker.LastInteractionWitnessSource,
+                treasurePortalInteractionWitnessName = TreasurePortalOpenerTracker.LastInteractionWitnessName,
+                treasurePortalInteractionWitnessTarget = TreasurePortalOpenerTracker.LastInteractionWitnessTarget,
+                treasurePortalInteractionWitnessAgeSeconds = TreasurePortalOpenerTracker.LastInteractionWitnessAgeSeconds,
                 treasurePortalRelayStatus = TreasurePortalOpenerTracker.RelayStatus,
                 treasurePortalFallbackEligibleAtUtc = TreasurePortalOpenerTracker.FallbackEligibleAtUtc?.ToString("O"),
                 treasurePortalFallbackRemainingSeconds = TreasurePortalOpenerTracker.FallbackRemainingSeconds,
@@ -759,6 +768,7 @@ public sealed class Plugin : IDalamudPlugin
                     treasureFollowerDoorFollowThroughCandidateName = ExecutionService.TreasureFollowerDoorFollowThroughCandidateName,
                     treasureFollowerDoorFollowThroughTarget = ExecutionService.TreasureFollowerDoorFollowThroughTarget,
                     treasureFollowerDoorFollowThroughStage = ExecutionService.TreasureFollowerDoorFollowThroughStage,
+                    treasureFollowerPostTransitSettleRemainingSeconds = ExecutionService.TreasureFollowerPostTransitSettleRemainingSeconds,
                     liveTreasureDoorCandidateCount = DungeonFrontierService.LiveTreasureDoorCandidateCount,
                     currentTreasureRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                     activeMapId = DungeonFrontierService.ActiveMapId,
@@ -1115,12 +1125,14 @@ public sealed class Plugin : IDalamudPlugin
         EnsureTreasureDungeonRoleInferredForOwnedDuty();
         WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
         var shouldUseTreasureFollowerFollow = ShouldUsePartySlot2PortalOpenerFallback();
-        TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerFollow);
+        HigherLowerServerEventTraceService.Update(DutyContextService.Current);
+        var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
+        DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
+        TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerFollow, treasureInteractionWitness);
         BossModMultiboxFollowService.Update(
             ExecutionService.TreasureDungeonRole,
             TreasurePortalOpenerTracker.Current,
             shouldUseTreasureFollowerFollow);
-        HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
         ObjectPriorityRuleService.ReloadIfChanged();

@@ -190,10 +190,13 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var opener = plugin.TreasurePortalOpenerTracker.Current;
         var follow = plugin.BossModMultiboxFollowService;
         var openerAge = plugin.TreasurePortalOpenerTracker.CurrentAgeSeconds?.ToString("0") ?? "-";
+        var witnessAge = plugin.TreasurePortalOpenerTracker.LastInteractionWitnessAgeSeconds?.ToString("0") ?? "-";
         var fallbackIn = plugin.TreasurePortalOpenerTracker.FallbackRemainingSeconds?.ToString("0") ?? "-";
+        var postTransitSettle = plugin.ExecutionService.TreasureFollowerPostTransitSettleRemainingSeconds.ToString("0.0");
         ImGui.TextUnformatted($"Treasure role: {plugin.ExecutionService.TreasureDungeonRole} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Portal opener: {opener?.Source ?? "None"} {opener?.OpenerName ?? string.Empty} slot {opener?.PartySlot?.ToString() ?? "-"} cid {opener?.ContentId?.ToString() ?? "-"} age {openerAge}s");
+        ImGui.TextWrapped($"Interaction witness: {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessSource} {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessName} -> {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessTarget} age {witnessAge}s | post-transit settle {postTransitSettle}s");
         ImGui.TextWrapped($"Relay: {plugin.TreasurePortalOpenerTracker.RelayStatus} | fallback in {fallbackIn}s: {plugin.TreasurePortalOpenerTracker.FallbackReason}");
         ImGui.TextWrapped($"BMRAI follow: {(follow.FollowApplied ? "applied" : "not applied")} {follow.FollowMethod} {follow.FollowStatus}");
     }

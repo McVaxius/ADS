@@ -17,6 +17,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     private const int MaxPendingRows = 2048;
     private const int MaxLegacyMapEffectBytes = 512;
     private const float HigherLowerNearbyRadius = 80f;
+    private static readonly TimeSpan TreasureInteractionWitnessTtl = TimeSpan.FromSeconds(15);
 
     private const string ActorControlSignature = "E8 ?? ?? ?? ?? 0F B7 0B 83 E9 64";
     private const string MapEffectSignature = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 8B FA 41 0F B7 E8";
@@ -29,6 +30,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
 
     private readonly IObjectTable objectTable;
     private readonly IClientState clientState;
+    private readonly IPartyList partyList;
     private readonly ISigScanner sigScanner;
     private readonly IGameInteropProvider gameInteropProvider;
     private readonly TreasureHighLowDiagnosticService diagnostics;
@@ -37,6 +39,8 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     private readonly Queue<RawServerEvent> pending = new();
     private readonly List<ServerEventRow> rows = new();
     private readonly List<string> hookStatus = new();
+    private TreasureInteractionWitness? lastOpenTreasureWitness;
+    private TreasureInteractionWitness? lastTimelineWitness;
 
     private Hook<ProcessPacketActorControlDelegate>? actorControlHook;
     private Hook<ProcessMapEffectDelegate>? mapEffectHook;
@@ -71,6 +75,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     public HigherLowerServerEventTraceService(
         IObjectTable objectTable,
         IClientState clientState,
+        IPartyList partyList,
         ISigScanner sigScanner,
         IGameInteropProvider gameInteropProvider,
         TreasureHighLowDiagnosticService diagnostics,
@@ -78,6 +83,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     {
         this.objectTable = objectTable;
         this.clientState = clientState;
+        this.partyList = partyList;
         this.sigScanner = sigScanner;
         this.gameInteropProvider = gameInteropProvider;
         this.diagnostics = diagnostics;
@@ -112,6 +118,29 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             return rows.ToList();
     }
 
+    public TreasureInteractionWitness? LastTreasureInteractionWitness
+    {
+        get
+        {
+            lock (gate)
+                return SelectFreshTreasureInteractionWitness(DateTime.UtcNow);
+        }
+    }
+
+    public double? LastTreasureInteractionWitnessAgeSeconds
+    {
+        get
+        {
+            lock (gate)
+            {
+                var witness = SelectFreshTreasureInteractionWitness(DateTime.UtcNow);
+                return witness is null
+                    ? null
+                    : Math.Max(0, (DateTime.UtcNow - witness.CapturedUtc).TotalSeconds);
+            }
+        }
+    }
+
     public void Clear()
     {
         lock (gate)
@@ -143,6 +172,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
                     rows.RemoveAt(0);
             }
 
+            RecordTreasureInteractionWitness(raw, row);
             diagnostics.RecordServerEvent(row);
         }
     }
@@ -447,7 +477,167 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             HigherLowerRelevant: relevant);
     }
 
-    private ObjectInfo? ResolveObject(uint actorId)
+    private TreasureInteractionWitness? SelectFreshTreasureInteractionWitness(DateTime now)
+    {
+        if (lastOpenTreasureWitness is { } openTreasure
+            && now - openTreasure.CapturedUtc <= TreasureInteractionWitnessTtl)
+        {
+            return openTreasure;
+        }
+
+        if (lastTimelineWitness is { } timeline
+            && now - timeline.CapturedUtc <= TreasureInteractionWitnessTtl)
+        {
+            return timeline;
+        }
+
+        return null;
+    }
+
+    private void RecordTreasureInteractionWitness(RawServerEvent raw, ServerEventRow row)
+    {
+        if (!TryBuildTreasureInteractionWitness(raw, row, out var witness))
+            return;
+
+        lock (gate)
+        {
+            if (witness.EventKind.Equals("OpenTreasure", StringComparison.OrdinalIgnoreCase))
+                lastOpenTreasureWitness = witness;
+            else
+                lastTimelineWitness = witness;
+        }
+    }
+
+    private bool TryBuildTreasureInteractionWitness(
+        RawServerEvent raw,
+        ServerEventRow row,
+        out TreasureInteractionWitness witness)
+    {
+        witness = null!;
+        switch (raw.Kind)
+        {
+            case ServerEventKind.OpenTreasure:
+            {
+                if (!TryResolvePartyActor(raw.PlayerId, out var actor))
+                    return false;
+
+                var target = raw.ActorId != 0 ? ResolveObject(raw.ActorId) : null;
+                witness = BuildTreasureInteractionWitness(row.Sequence, "OpenTreasure", actor, target, raw.ActorId);
+                return true;
+            }
+            case ServerEventKind.Timeline:
+            {
+                if (!TryResolvePartyActor(raw.ActorId, out var actor))
+                    return false;
+
+                var target = raw.TargetId != 0 ? ResolveObject(raw.TargetId) : null;
+                if (target is null || !IsTreasureInteractionTarget(target))
+                    return false;
+
+                witness = BuildTreasureInteractionWitness(row.Sequence, "PlayActionTimeline", actor, target, raw.TargetId);
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private static TreasureInteractionWitness BuildTreasureInteractionWitness(
+        ulong sequence,
+        string eventKind,
+        PartyActorInfo actor,
+        ObjectInfo? target,
+        ulong rawTargetId)
+        => new(
+            sequence,
+            eventKind,
+            $"InteractionWitness:{eventKind}",
+            actor.DisplayName,
+            actor.ContentId,
+            actor.GameObjectId,
+            actor.EntityId,
+            AllowActorNameResolution: true,
+            string.IsNullOrWhiteSpace(target?.Name)
+                ? rawTargetId == 0 ? "Unknown target" : $"0x{rawTargetId:X}"
+                : target.Name,
+            target is { GameObjectId: not 0 } ? target.GameObjectId : null,
+            target is { EntityId: not 0 } ? (ulong)target.EntityId : null,
+            target?.BaseId ?? 0,
+            target?.ObjectKind ?? string.Empty,
+            DateTime.UtcNow);
+
+    private bool TryResolvePartyActor(ulong actorId, out PartyActorInfo actor)
+    {
+        actor = default;
+        if (actorId == 0)
+            return false;
+
+        for (var i = 0; i < partyList.Length; i++)
+        {
+            var member = partyList[i];
+            if (member is null)
+                continue;
+
+            try
+            {
+                var displayName = NormalizeDisplayName(member.Name.TextValue);
+                var contentId = member.ContentId == 0 ? null : (ulong?)member.ContentId;
+                var entityId = member.EntityId == 0 ? null : (ulong?)member.EntityId;
+                var gameObjectId = member.GameObject?.GameObjectId is { } id && id != 0 ? id : (ulong?)null;
+                if (!MatchesActorId(actorId, gameObjectId)
+                    && !MatchesActorId(actorId, entityId)
+                    && !MatchesActorId(actorId, contentId))
+                {
+                    continue;
+                }
+
+                actor = new PartyActorInfo(displayName, contentId, gameObjectId, entityId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log.Debug($"[ADS][ServerEvents] Failed to inspect party slot {i + 1} while resolving treasure interaction actor: {ex.Message}");
+            }
+        }
+
+        return false;
+    }
+
+    private static bool MatchesActorId(ulong actorId, ulong? candidate)
+    {
+        if (candidate is null)
+            return false;
+
+        return candidate.Value == actorId
+               || (candidate.Value <= uint.MaxValue && (uint)candidate.Value == actorId);
+    }
+
+    private static bool IsTreasureInteractionTarget(ObjectInfo target)
+    {
+        if (!target.ObjectKind.Equals(ObjectKind.EventObj.ToString(), StringComparison.OrdinalIgnoreCase)
+            && !target.ObjectKind.Contains("Treasure", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            target.Name,
+            "treasure",
+            "coffer",
+            "chest",
+            "door",
+            "portal",
+            "gate",
+            "passage",
+            "vault",
+            "high",
+            "low");
+    }
+
+    private static string NormalizeDisplayName(string value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+    private ObjectInfo? ResolveObject(ulong actorId)
     {
         var localPosition = objectTable.LocalPlayer?.Position;
         foreach (var obj in objectTable)
@@ -455,7 +645,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             if (obj == null)
                 continue;
 
-            if (obj.EntityId != actorId && (uint)obj.GameObjectId != actorId)
+            if ((ulong)obj.EntityId != actorId && !MatchesActorId(actorId, obj.GameObjectId))
                 continue;
 
             var native = (GameObject*)obj.Address;
@@ -612,6 +802,12 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
         Vector3 Position,
         float? Distance,
         nint NativePointer);
+
+    private readonly record struct PartyActorInfo(
+        string DisplayName,
+        ulong? ContentId,
+        ulong? GameObjectId,
+        ulong? EntityId);
 
     private sealed record RawServerEvent(
         DateTime TimestampUtc,

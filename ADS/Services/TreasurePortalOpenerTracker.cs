@@ -17,6 +17,7 @@ public sealed class TreasurePortalOpenerTracker
     private const string PortalChatUnresolvedSource = "PortalChat:Unresolved";
     private const string FallbackPartySlot2Source = "Fallback:PartySlot2";
     private const string RelaySourcePrefix = "Relay:";
+    private static readonly TimeSpan InteractionWitnessTtl = TimeSpan.FromSeconds(15);
 
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
@@ -31,6 +32,8 @@ public sealed class TreasurePortalOpenerTracker
     private DateTime fallbackEligibleSinceUtc = DateTime.MinValue;
     private DateTime fallbackEligibleAtUtc = DateTime.MinValue;
     private string fallbackDelayLogKey = string.Empty;
+    private TreasureInteractionWitness? lastInteractionWitness;
+    private string lastInteractionWitnessDecisionKey = string.Empty;
 
     public TreasurePortalOpenerTracker(
         IObjectTable objectTable,
@@ -56,6 +59,20 @@ public sealed class TreasurePortalOpenerTracker
     public double? CurrentAgeSeconds
         => pendingPortalOpener is { } opener
             ? Math.Max(0, (DateTime.UtcNow - opener.CapturedUtc).TotalSeconds)
+            : null;
+
+    public string LastInteractionWitnessSource
+        => GetFreshLastInteractionWitness()?.Source ?? string.Empty;
+
+    public string LastInteractionWitnessName
+        => GetFreshLastInteractionWitness()?.ActorName ?? string.Empty;
+
+    public string LastInteractionWitnessTarget
+        => GetFreshLastInteractionWitness()?.TargetName ?? string.Empty;
+
+    public double? LastInteractionWitnessAgeSeconds
+        => GetFreshLastInteractionWitness() is { } witness
+            ? Math.Max(0, (DateTime.UtcNow - witness.CapturedUtc).TotalSeconds)
             : null;
 
     public string RelayStatus { get; private set; } = "Relay idle.";
@@ -156,9 +173,10 @@ public sealed class TreasurePortalOpenerTracker
         return true;
     }
 
-    public void Update(DutyContextSnapshot dutyContext, bool fallbackAllowed)
+    public void Update(DutyContextSnapshot dutyContext, bool fallbackAllowed, TreasureInteractionWitness? interactionWitness)
     {
         var now = DateTime.UtcNow;
+        RecordInteractionWitness(interactionWitness, now);
         ClearExpiredPendingOpener(now);
         RefreshPendingOpener();
 
@@ -168,6 +186,7 @@ public sealed class TreasurePortalOpenerTracker
         if (importedRelay)
             RefreshPendingOpener();
 
+        TryPromoteInteractionWitness(interactionWitness, fallbackAllowed, now);
         TryCapturePartySlot2Fallback(fallbackAllowed, now);
     }
 
@@ -259,6 +278,160 @@ public sealed class TreasurePortalOpenerTracker
 
         return true;
     }
+
+    private void RecordInteractionWitness(TreasureInteractionWitness? witness, DateTime now)
+    {
+        if (witness is null)
+            return;
+
+        if (now - witness.CapturedUtc > InteractionWitnessTtl)
+            return;
+
+        lastInteractionWitness = witness;
+    }
+
+    private TreasureInteractionWitness? GetFreshLastInteractionWitness()
+        => lastInteractionWitness is { } witness
+           && DateTime.UtcNow - witness.CapturedUtc <= InteractionWitnessTtl
+            ? witness
+            : null;
+
+    private bool TryPromoteInteractionWitness(
+        TreasureInteractionWitness? witness,
+        bool fallbackAllowed,
+        DateTime now)
+    {
+        if (witness is null)
+            return false;
+
+        if (pendingPortalOpener is { } current
+            && string.Equals(current.Source, witness.Source, StringComparison.Ordinal)
+            && current.CapturedUtc == witness.CapturedUtc)
+        {
+            return false;
+        }
+
+        if (now - witness.CapturedUtc > InteractionWitnessTtl)
+        {
+            LogInteractionWitnessDecision(witness, promoted: false, "stale witness");
+            return false;
+        }
+
+        if (!ShouldPromoteInteractionWitness(fallbackAllowed, out var promoteGateReason))
+        {
+            LogInteractionWitnessDecision(witness, promoted: false, promoteGateReason);
+            return false;
+        }
+
+        var local = CaptureLocalPlayer();
+        if (!TryResolveInteractionWitnessOpener(witness, local, out var partyMember, out var resolveReason))
+        {
+            LogInteractionWitnessDecision(witness, promoted: false, resolveReason);
+            return false;
+        }
+
+        var opener = new PendingPortalOpener(
+            partyMember.DisplayName,
+            local.DisplayName,
+            partyMember.Slot,
+            partyMember.GameObjectId ?? witness.ActorGameObjectId,
+            partyMember.EntityId ?? witness.ActorEntityId,
+            partyMember.ContentId ?? witness.ActorContentId,
+            partyMember.IsLocal,
+            witness.Source,
+            BuildInteractionWitnessText(witness),
+            witness.CapturedUtc);
+
+        var replacedSource = pendingPortalOpener?.Source ?? "fallback grace";
+        pendingPortalOpener = opener;
+        lastPublishedRelayKey = string.Empty;
+        ResetFallbackGate($"interaction witness promoted from {witness.EventKind}");
+        LogInteractionWitnessDecision(
+            witness,
+            promoted: true,
+            $"replaced {replacedSource}; opener='{opener.OpenerName}', slot={FormatSlot(opener.PartySlot)}, contentId={FormatId(opener.ContentId)}");
+        return true;
+    }
+
+    private bool ShouldPromoteInteractionWitness(bool fallbackAllowed, out string reason)
+    {
+        reason = string.Empty;
+        if (pendingPortalOpener is null)
+        {
+            if (fallbackAllowed)
+                return true;
+
+            reason = "no fallback grace pending";
+            return false;
+        }
+
+        if (IsFallback(pendingPortalOpener))
+            return true;
+
+        if (pendingPortalOpener.Source == PortalChatUnresolvedSource)
+            return true;
+
+        reason = $"current opener source {pendingPortalOpener.Source} already active";
+        return false;
+    }
+
+    private bool TryResolveInteractionWitnessOpener(
+        TreasureInteractionWitness witness,
+        LocalPlayerIdentity local,
+        out PartyMemberIdentity partyMember,
+        out string reason)
+    {
+        if (witness.ActorContentId is { } contentId
+            && TryFindPartyMemberByContentId(contentId, local, out partyMember))
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (witness.ActorGameObjectId is { } gameObjectId
+            && TryFindPartyMemberByGameObjectId(gameObjectId, local, out partyMember))
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (witness.ActorEntityId is { } entityId
+            && TryFindPartyMemberByEntityId(entityId, local, out partyMember))
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (witness.AllowActorNameResolution
+            && !string.IsNullOrWhiteSpace(witness.ActorName)
+            && TryFindPartyMember(witness.ActorName, local, out partyMember))
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        reason =
+            $"witness actor unresolved: source={witness.Source}, actor='{FormatName(witness.ActorName)}', contentId={FormatId(witness.ActorContentId)}, objectId={FormatId(witness.ActorGameObjectId)}, entityId={FormatId(witness.ActorEntityId)}";
+        partyMember = default;
+        return false;
+    }
+
+    private void LogInteractionWitnessDecision(TreasureInteractionWitness witness, bool promoted, string reason)
+    {
+        var decisionKey = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{witness.Sequence}:{witness.Source}:{promoted}:{reason}");
+        if (string.Equals(decisionKey, lastInteractionWitnessDecisionKey, StringComparison.Ordinal))
+            return;
+
+        lastInteractionWitnessDecisionKey = decisionKey;
+        var action = promoted ? "promoted" : "ignored";
+        log.Information(
+            $"[ADS] Treasure opener interaction witness {action}: source={witness.Source}, actor='{FormatName(witness.ActorName)}', target='{FormatName(witness.TargetName)}', contentId={FormatId(witness.ActorContentId)}, objectId={FormatId(witness.ActorGameObjectId)}, entityId={FormatId(witness.ActorEntityId)}, reason={reason}.");
+    }
+
+    private static string BuildInteractionWitnessText(TreasureInteractionWitness witness)
+        => $"Witnessed {witness.EventKind} on {FormatName(witness.TargetName)}";
 
     private bool ShouldPromoteRelay(TreasurePortalRelaySnapshot relaySnapshot, PartyMemberIdentity partyMember, out string reason)
     {
@@ -424,7 +597,7 @@ public sealed class TreasurePortalOpenerTracker
 
         var local = CaptureLocalPlayer();
         PendingPortalOpener? refreshed = null;
-        var resolvedSource = IsRelaySource(opener.Source)
+        var resolvedSource = IsRelaySource(opener.Source) || IsInteractionWitnessSource(opener.Source)
             ? opener.Source
             : PortalChatSource;
         if (opener.IsLocalOpener || NamesMatch(opener.OpenerName, local.DisplayName))
@@ -604,6 +777,36 @@ public sealed class TreasurePortalOpenerTracker
         foreach (var member in EnumeratePartyMembers(local))
         {
             if (member.ContentId == contentId)
+            {
+                partyMember = member;
+                return true;
+            }
+        }
+
+        partyMember = default;
+        return false;
+    }
+
+    private bool TryFindPartyMemberByGameObjectId(ulong gameObjectId, LocalPlayerIdentity local, out PartyMemberIdentity partyMember)
+    {
+        foreach (var member in EnumeratePartyMembers(local))
+        {
+            if (member.GameObjectId == gameObjectId)
+            {
+                partyMember = member;
+                return true;
+            }
+        }
+
+        partyMember = default;
+        return false;
+    }
+
+    private bool TryFindPartyMemberByEntityId(ulong entityId, LocalPlayerIdentity local, out PartyMemberIdentity partyMember)
+    {
+        foreach (var member in EnumeratePartyMembers(local))
+        {
+            if (member.EntityId == entityId)
             {
                 partyMember = member;
                 return true;
@@ -807,6 +1010,9 @@ public sealed class TreasurePortalOpenerTracker
 
     private static bool IsRelaySource(string source)
         => source.StartsWith(RelaySourcePrefix, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsInteractionWitnessSource(string source)
+        => source.StartsWith("InteractionWitness:", StringComparison.OrdinalIgnoreCase);
 
     private static bool ContainsWord(string text, string word)
         => Regex.IsMatch(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);
