@@ -72,6 +72,7 @@ public sealed class Plugin : IDalamudPlugin
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
+    public LootAutomationService LootAutomationService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
     public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
     public TreasurePortalOpenerRelayService TreasurePortalOpenerRelayService { get; }
@@ -89,6 +90,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GhostListWindow ghostListWindow;
     private readonly FrontierLabelWindow frontierLabelWindow;
     private readonly QuickControlWindow quickControlWindow;
+    private readonly LootWindow lootWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private readonly HigherLowerWindow higherLowerWindow;
@@ -140,6 +142,7 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
+        LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
         BmrReflectionService = new BmrReflectionService(PluginInterface, Configuration, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
@@ -158,6 +161,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow = new GhostListWindow(this);
         frontierLabelWindow = new FrontierLabelWindow(this);
         quickControlWindow = new QuickControlWindow(this);
+        lootWindow = new LootWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
@@ -171,6 +175,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(ghostListWindow);
         WindowSystem.AddWindow(frontierLabelWindow);
         WindowSystem.AddWindow(quickControlWindow);
+        WindowSystem.AddWindow(lootWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
         WindowSystem.AddWindow(higherLowerWindow);
@@ -231,6 +236,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.Dispose();
         frontierLabelWindow.Dispose();
         quickControlWindow.Dispose();
+        lootWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
         higherLowerWindow.Dispose();
@@ -264,6 +270,12 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ToggleQuickControlUi()
         => quickControlWindow.IsOpen = !quickControlWindow.IsOpen;
+
+    public void ToggleLootUi()
+        => lootWindow.IsOpen = !lootWindow.IsOpen;
+
+    public void OpenLootUi()
+        => lootWindow.IsOpen = true;
 
     public void OpenFrontierLabelUi()
         => frontierLabelWindow.IsOpen = true;
@@ -319,6 +331,117 @@ public sealed class Plugin : IDalamudPlugin
     public void ForceRemoteJsonUpdate()
         => RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button");
 
+    public void SetLootMode(LootRollMode mode)
+    {
+        if (Configuration.LootMode == mode)
+        {
+            PrintStatus($"Loot mode: {mode}.");
+            return;
+        }
+
+        var previous = Configuration.LootMode;
+        Configuration.LootMode = mode;
+        SaveConfiguration();
+        Log.Information($"[ADS][Loot] Loot mode {previous} -> {mode}.");
+        PrintStatus($"Loot mode: {mode}.");
+    }
+
+    public void SetLootRegistrableNeedingEnabled(bool enabled, bool printStatus = false)
+    {
+        if (Configuration.LootRegistrableNeedingEnabled == enabled)
+        {
+            if (printStatus)
+                PrintStatus($"Loot registrable Need override: {(enabled ? "ON" : "OFF")}.");
+            return;
+        }
+
+        Configuration.LootRegistrableNeedingEnabled = enabled;
+        SaveConfiguration();
+        if (printStatus)
+            PrintStatus($"Loot registrable Need override: {(enabled ? "ON" : "OFF")}.");
+    }
+
+    public void SetLootRegistrableMountsEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableMountsEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableMountsEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableMinionsEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableMinionsEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableMinionsEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableFashionAccessoriesEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableFashionAccessoriesEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableFashionAccessoriesEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableFacewearEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableFacewearEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableFacewearEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableOrchestrionRollsEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableOrchestrionRollsEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableOrchestrionRollsEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableFadedOrchestrionCopiesEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableFadedOrchestrionCopiesEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableFadedOrchestrionCopiesEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableEmotesHairstylesEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableEmotesHairstylesEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableEmotesHairstylesEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableBardingsEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableBardingsEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableBardingsEnabled = enabled;
+        SaveConfiguration();
+    }
+
+    public void SetLootRegistrableTripleTriadCardsEnabled(bool enabled)
+    {
+        if (Configuration.LootRegistrableTripleTriadCardsEnabled == enabled)
+            return;
+
+        Configuration.LootRegistrableTripleTriadCardsEnabled = enabled;
+        SaveConfiguration();
+    }
+
     public void ResetWindowPositions()
     {
         mainWindow.QueueResetToOrigin();
@@ -327,6 +450,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.QueueResetToOrigin();
         frontierLabelWindow.QueueResetToOrigin();
         quickControlWindow.QueueResetToOrigin();
+        lootWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
         higherLowerWindow.QueueResetToOrigin();
@@ -344,6 +468,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.QueueRandomVisibleJump();
         frontierLabelWindow.QueueRandomVisibleJump();
         quickControlWindow.QueueRandomVisibleJump();
+        lootWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
         higherLowerWindow.QueueRandomVisibleJump();
@@ -567,6 +692,9 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 pluginEnabled = Configuration.PluginEnabled,
+                lootMode = Configuration.LootMode.ToString(),
+                lootRegistrableNeedingEnabled = Configuration.LootRegistrableNeedingEnabled,
+                lootStatus = LootAutomationService.Status,
                 processDialogRulesOutsideOwnedDuty = Configuration.ProcessDialogRulesOutsideOwnedDuty,
                 higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 reflection = BmrReflectionService.CaptureStatusPayload(),
@@ -1149,6 +1277,7 @@ public sealed class Plugin : IDalamudPlugin
             HigherLowerAutomationService.Status,
             HigherLowerAutomationService.BlocksDutyExit,
             HigherLowerAutomationService.LastHigherLowerActivityUtc);
+        LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
 
         if (DutyContextService.Current.IsUnsafeTransition)
         {
@@ -1260,6 +1389,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads ghosts - toggle the ghost inspector\n" +
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads mini - toggle the compact control window\n" +
+                "/ads loot - toggle the loot control window\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
                 "/ads hl - toggle the Higher/Lower calibration window\n" +
@@ -1281,6 +1411,8 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
+                "/ads lootoff|lootneed|lootgreed|lootpass - set ADS-owned loot rolling mode\n" +
+                "/ads lootregon|lootregoff - toggle registrable Need override\n" +
                 "/ads hldebug on|off|dump|state|trace [seconds]|export|exportpath <tex> [u v w h]|card <1-9> [current|next|previous]|board <left> <right> [label...]|solver|status|folder - Higher/Lower diagnostic file logging\n" +
                 "/ads hlauto on|off|status - Higher/Lower guarded automation\n" +
                 "/ads stop - drop ownership",
@@ -1335,6 +1467,48 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("mini", StringComparison.OrdinalIgnoreCase))
         {
             ToggleQuickControlUi();
+            return;
+        }
+
+        if (trimmed.Equals("loot", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleLootUi();
+            return;
+        }
+
+        if (trimmed.Equals("lootoff", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootMode(LootRollMode.Off);
+            return;
+        }
+
+        if (trimmed.Equals("lootneed", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootMode(LootRollMode.Need);
+            return;
+        }
+
+        if (trimmed.Equals("lootgreed", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootMode(LootRollMode.Greed);
+            return;
+        }
+
+        if (trimmed.Equals("lootpass", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootMode(LootRollMode.Pass);
+            return;
+        }
+
+        if (trimmed.Equals("lootregon", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootRegistrableNeedingEnabled(true, printStatus: true);
+            return;
+        }
+
+        if (trimmed.Equals("lootregoff", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLootRegistrableNeedingEnabled(false, printStatus: true);
             return;
         }
 
@@ -1831,6 +2005,23 @@ public sealed class Plugin : IDalamudPlugin
         {
             configuration.BmraiTreasureFollowCleanupPending = true;
             configuration.Version = 16;
+            changed = true;
+        }
+
+        if (configuration.Version < 17)
+        {
+            configuration.LootMode = LootRollMode.Off;
+            configuration.LootRegistrableNeedingEnabled = false;
+            configuration.LootRegistrableMountsEnabled = true;
+            configuration.LootRegistrableMinionsEnabled = true;
+            configuration.LootRegistrableFashionAccessoriesEnabled = true;
+            configuration.LootRegistrableFacewearEnabled = true;
+            configuration.LootRegistrableOrchestrionRollsEnabled = true;
+            configuration.LootRegistrableFadedOrchestrionCopiesEnabled = true;
+            configuration.LootRegistrableEmotesHairstylesEnabled = true;
+            configuration.LootRegistrableBardingsEnabled = true;
+            configuration.LootRegistrableTripleTriadCardsEnabled = true;
+            configuration.Version = 17;
             changed = true;
         }
 

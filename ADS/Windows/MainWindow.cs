@@ -74,6 +74,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Mini"))
             plugin.ToggleQuickControlUi();
         ImGui.SameLine();
+        if (ImGui.SmallButton("LOOT"))
+            plugin.ToggleLootUi();
+        ImGui.SameLine();
         if (ImGui.SmallButton("Rules"))
             plugin.ToggleRuleEditorUi();
         ImGui.SameLine();
@@ -141,6 +144,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
         ImGui.TextUnformatted($"Treasure coffers: {(plugin.Configuration.ConsiderTreasureCoffers ? "ON" : "OFF")}");
         ImGui.SameLine();
+        ImGui.TextUnformatted($"Loot: {plugin.Configuration.LootMode}");
+        ImGui.SameLine();
         ImGui.TextUnformatted($"Object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount}");
         ImGui.SameLine();
         ImGui.TextUnformatted($"Dialog rules: {plugin.DialogYesNoRuleService.ActiveRuleCount}");
@@ -173,6 +178,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         if (planner.TargetDistance.HasValue || planner.TargetVerticalDelta.HasValue)
             ImGui.TextWrapped($"Target distance / vertical: {planner.TargetDistance?.ToString("0.0") ?? "-"} / {planner.TargetVerticalDelta?.ToString("0.0") ?? "-"}");
         ImGui.TextWrapped($"Execution phase summary: {execution.LastStatus}");
+        ImGui.TextWrapped($"Loot automation: {plugin.LootAutomationService.Status}");
 
         if (context.InInstancedDuty && !execution.IsOwned)
         {
