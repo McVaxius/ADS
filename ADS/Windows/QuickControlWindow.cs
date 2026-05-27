@@ -15,9 +15,9 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(360f, 120f),
-            MaximumSize = new Vector2(520f, 260f),
+            MaximumSize = new Vector2(560f, 340f),
         };
-        Size = new Vector2(420f, 170f);
+        Size = new Vector2(440f, 230f);
     }
 
     public void Dispose()
@@ -60,11 +60,29 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");
         var duty = plugin.DutyContextService.Current.CurrentDuty?.EnglishName ?? "No duty";
         ImGui.TextUnformatted(duty);
+        DrawTreasureFollowSummary();
         ImGui.TextWrapped(plugin.ExecutionService.LastStatus);
 
         if (plugin.InnEntryService.IsRunning)
             ImGui.TextWrapped($"Inn: {plugin.InnEntryService.StatusMessage}");
         if (plugin.UtilityAutomationService.IsRunning)
             ImGui.TextWrapped($"Utility: {plugin.UtilityAutomationService.StatusMessage}");
+    }
+
+    private void DrawTreasureFollowSummary()
+    {
+        var target = plugin.TreasurePortalOpenerTracker.Current;
+        var follow = plugin.BossModMultiboxFollowService;
+        var targetName = string.IsNullOrWhiteSpace(target?.OpenerName) ? "-" : target.OpenerName;
+        var targetSource = string.IsNullOrWhiteSpace(target?.Source) ? "-" : target.Source;
+        var targetLocality = target is null ? "-" : target.IsLocalOpener ? "local" : "remote";
+        var commandAccepted = follow.BmraiFollowCommandAccepted is null
+            ? "not sent"
+            : follow.BmraiFollowCommandAccepted.Value ? "accepted" : "rejected";
+
+        ImGui.TextWrapped($"Treasure role: {plugin.ExecutionService.TreasureDungeonRoleDisplayName} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
+        ImGui.TextWrapped($"Opener: {targetName} {targetLocality} src {targetSource}");
+        ImGui.TextWrapped($"BMRAI: {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
+        ImGui.TextWrapped($"Reason: {follow.BmraiFollowCommandStatus}");
     }
 }

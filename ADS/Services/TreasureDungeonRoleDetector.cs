@@ -72,7 +72,7 @@ public sealed class TreasureDungeonRoleDetector
                 LootGoblinAdsSolverEnabled: true);
         }
 
-        var detail = $"Default map-opener behavior. FrenRider: {frenRider.Detail} LootGoblin: {lootGoblin.Detail}";
+        var detail = $"No positive LootGoblin map-opener signal. ADS shows Map Seeker outside treasure duties and keeps map-opener route behavior inside until a role source is confirmed. FrenRider: {frenRider.Detail} LootGoblin: {lootGoblin.Detail}";
         return new TreasureDungeonRoleInference(
             TreasureDungeonRole.MapOpener,
             "Default",

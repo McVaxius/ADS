@@ -119,7 +119,7 @@ public sealed class Plugin : IDalamudPlugin
         TreasureDungeonData.Configure(configDirectory, Log);
         TreasureDungeonRoleDetector = new TreasureDungeonRoleDetector(PluginInterface, ObjectTable, Log, configDirectory);
         TreasurePortalOpenerRelayService = new TreasurePortalOpenerRelayService(Log);
-        TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, ChatGui, ToastGui, TreasurePortalOpenerRelayService, Log);
+        TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, TreasurePortalOpenerRelayService, Log);
         BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
@@ -543,7 +543,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         QueueDutyOwnershipRemoteUpdate();
         ResetOwnedTreasureRoleInferenceLatch();
-        TreasurePortalOpenerTracker.ClearPendingOpener("new treasure cycle");
+        InferAndApplyTreasureDungeonRole("outside start");
+        TreasurePortalOpenerTracker.BeginEntryCycle("outside start");
         TreasurePortalOpenerRelayService.Clear("new treasure cycle");
         var result = ExecutionService.StartDutyFromOutside();
         PrintStatus(ExecutionService.LastStatus);
@@ -554,6 +555,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
+        TreasurePortalOpenerTracker.BeginEntryCycle("inside start");
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         if (result)
@@ -569,6 +571,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool ResumeDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
+        TreasurePortalOpenerTracker.BeginEntryCycle("inside resume");
         InferAndApplyTreasureDungeonRole("inside resume");
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         if (result)
@@ -584,6 +587,9 @@ public sealed class Plugin : IDalamudPlugin
     public bool LeaveDuty()
     {
         var result = ExecutionService.LeaveDuty(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+        TreasurePortalOpenerTracker.ClearPendingOpener("leave duty");
+        TreasurePortalOpenerRelayService.Clear("leave duty");
+        BossModMultiboxFollowService.Clear("leave duty");
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -702,7 +708,8 @@ public sealed class Plugin : IDalamudPlugin
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
-                treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
+                treasureDungeonRole = ExecutionService.TreasureDungeonRoleDisplayName,
+                treasureDungeonRoleBehavior = ExecutionService.TreasureDungeonRole.ToString(),
                 effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
@@ -713,6 +720,11 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
                 treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasureFollowTargetName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
+                treasureFollowTargetSlot = TreasurePortalOpenerTracker.Current?.PartySlot,
+                treasureFollowTargetSource = TreasurePortalOpenerTracker.Current?.Source ?? string.Empty,
+                treasureFollowTargetContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasureFollowTargetLocal = TreasurePortalOpenerTracker.Current?.IsLocalOpener,
                 treasurePortalInteractionWitnessSource = TreasurePortalOpenerTracker.LastInteractionWitnessSource,
                 treasurePortalInteractionWitnessName = TreasurePortalOpenerTracker.LastInteractionWitnessName,
                 treasurePortalInteractionWitnessTarget = TreasurePortalOpenerTracker.LastInteractionWitnessTarget,
@@ -725,6 +737,17 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
                 treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
                 treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
+                bmraiFollowCommandMethod = BossModMultiboxFollowService.BmraiFollowCommandMethod,
+                bmraiFollowCommandText = BossModMultiboxFollowService.BmraiFollowCommandText,
+                bmraiFollowCommandAccepted = BossModMultiboxFollowService.BmraiFollowCommandAccepted,
+                bmraiFollowCommandAtUtc = BossModMultiboxFollowService.BmraiFollowCommandAtUtc?.ToString("O"),
+                bmraiFollowCommandStatus = BossModMultiboxFollowService.BmraiFollowCommandStatus,
+                bmraiFollowCommandTargetName = BossModMultiboxFollowService.BmraiFollowCommandTargetName,
+                bmraiFollowCommandTargetSlot = BossModMultiboxFollowService.BmraiFollowCommandTargetSlot,
+                bmraiFollowCommandTargetContentId = FormatOptionalId(BossModMultiboxFollowService.BmraiFollowCommandTargetContentId),
+                bmraiFollowCommandTargetSource = BossModMultiboxFollowService.BmraiFollowCommandTargetSource,
+                treasureFollowerMovementOwnedByBmrai = BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                treasureFollowerMovementStatus = BossModMultiboxFollowService.FollowerMovementStatus,
                 treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
                 treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
                     ? string.Empty
@@ -815,7 +838,8 @@ public sealed class Plugin : IDalamudPlugin
                 explanation = ObjectivePlannerService.Current.Explanation,
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
-                treasureDungeonRole = ExecutionService.TreasureDungeonRole.ToString(),
+                treasureDungeonRole = ExecutionService.TreasureDungeonRoleDisplayName,
+                treasureDungeonRoleBehavior = ExecutionService.TreasureDungeonRole.ToString(),
                 treasureDungeonRoleSource = ExecutionService.TreasureDungeonRoleSource,
                 treasureDungeonRoleDetail = ExecutionService.TreasureDungeonRoleDetail,
                 treasurePortalOpenerSource = TreasurePortalOpenerTracker.Current?.Source ?? string.Empty,
@@ -825,6 +849,11 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalOpenerEntityId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.EntityId),
                 treasurePortalOpenerContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
                 treasurePortalOpenerAgeSeconds = TreasurePortalOpenerTracker.CurrentAgeSeconds,
+                treasureFollowTargetName = TreasurePortalOpenerTracker.Current?.OpenerName ?? string.Empty,
+                treasureFollowTargetSlot = TreasurePortalOpenerTracker.Current?.PartySlot,
+                treasureFollowTargetSource = TreasurePortalOpenerTracker.Current?.Source ?? string.Empty,
+                treasureFollowTargetContentId = FormatOptionalId(TreasurePortalOpenerTracker.Current?.ContentId),
+                treasureFollowTargetLocal = TreasurePortalOpenerTracker.Current?.IsLocalOpener,
                 treasurePortalInteractionWitnessSource = TreasurePortalOpenerTracker.LastInteractionWitnessSource,
                 treasurePortalInteractionWitnessName = TreasurePortalOpenerTracker.LastInteractionWitnessName,
                 treasurePortalInteractionWitnessTarget = TreasurePortalOpenerTracker.LastInteractionWitnessTarget,
@@ -837,6 +866,17 @@ public sealed class Plugin : IDalamudPlugin
                 treasurePortalFollowLeaderContentId = FormatOptionalId(BossModMultiboxFollowService.FollowLeaderContentId),
                 treasurePortalFollowMethod = BossModMultiboxFollowService.FollowMethod,
                 treasurePortalFollowStatus = BossModMultiboxFollowService.FollowStatus,
+                bmraiFollowCommandMethod = BossModMultiboxFollowService.BmraiFollowCommandMethod,
+                bmraiFollowCommandText = BossModMultiboxFollowService.BmraiFollowCommandText,
+                bmraiFollowCommandAccepted = BossModMultiboxFollowService.BmraiFollowCommandAccepted,
+                bmraiFollowCommandAtUtc = BossModMultiboxFollowService.BmraiFollowCommandAtUtc?.ToString("O"),
+                bmraiFollowCommandStatus = BossModMultiboxFollowService.BmraiFollowCommandStatus,
+                bmraiFollowCommandTargetName = BossModMultiboxFollowService.BmraiFollowCommandTargetName,
+                bmraiFollowCommandTargetSlot = BossModMultiboxFollowService.BmraiFollowCommandTargetSlot,
+                bmraiFollowCommandTargetContentId = FormatOptionalId(BossModMultiboxFollowService.BmraiFollowCommandTargetContentId),
+                bmraiFollowCommandTargetSource = BossModMultiboxFollowService.BmraiFollowCommandTargetSource,
+                treasureFollowerMovementOwnedByBmrai = BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                treasureFollowerMovementStatus = BossModMultiboxFollowService.FollowerMovementStatus,
                 treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
                 treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
                     ? string.Empty
@@ -858,7 +898,8 @@ public sealed class Plugin : IDalamudPlugin
                 frontier = new
                 {
                     mode = DungeonFrontierService.CurrentMode.ToString(),
-                    treasureDungeonRole = DungeonFrontierService.TreasureDungeonRole.ToString(),
+                    treasureDungeonRole = DungeonFrontierService.TreasureDungeonRoleDisplayName,
+                    treasureDungeonRoleBehavior = DungeonFrontierService.TreasureDungeonRole.ToString(),
                     effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
                     treasureDungeonRoleSource = DungeonFrontierService.TreasureDungeonRoleSource,
                     treasureDungeonRoleDetail = DungeonFrontierService.TreasureDungeonRoleDetail,
@@ -1021,7 +1062,7 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService.SetTreasureDungeonRole(inference);
         DungeonFrontierService.SetTreasureDungeonRole(inference, resetFollowerProgressForOwnership);
         Log.Information(
-            $"[ADS] Treasure role {reason}: role={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
+            $"[ADS] Treasure role {reason}: display={inference.DisplayName}, behavior={inference.Role}, source={inference.Source}, character='{inference.CharacterKey}'. {inference.Detail}");
     }
 
     private void InferAndApplyTreasureDungeonRole(string reason, bool resetFollowerProgressForOwnership = false)
@@ -1223,17 +1264,23 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         ClearTreasureDutyRecoveryMarker("outside duty");
-        BossModMultiboxFollowService.Clear("outside duty cleanup");
     }
 
-    private bool ShouldUsePartySlot2PortalOpenerFallback()
+    private bool ShouldUseTreasureFollowerBmraiFollow()
     {
         var context = DutyContextService.Current;
-        return ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower
-               && IsActiveTreasureDutyOwnershipMode()
-               && context.PluginEnabled
-               && context.IsLoggedIn
-               && context.InInstancedDuty;
+        if (!IsActiveTreasureDutyOwnershipMode()
+            || !context.PluginEnabled
+            || !context.IsLoggedIn)
+        {
+            return false;
+        }
+
+        if (ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower)
+            return true;
+
+        return !context.InInstancedDuty
+               && ExecutionService.TreasureDungeonRoleAllowsOutsideBmraiFollow;
     }
 
     private void OnFrameworkUpdate(IFramework framework)
@@ -1252,15 +1299,21 @@ public sealed class Plugin : IDalamudPlugin
         TryRecoverTreasureDutyOwnership();
         EnsureTreasureDungeonRoleInferredForOwnedDuty();
         WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
-        var shouldUseTreasureFollowerFollow = ShouldUsePartySlot2PortalOpenerFallback();
+        var shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow();
         HigherLowerServerEventTraceService.Update(DutyContextService.Current);
         var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
         DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
-        TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerFollow, treasureInteractionWitness);
+        var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
+        if (directWitnessOpener is not null)
+            BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(directWitnessOpener);
         BossModMultiboxFollowService.Update(
             ExecutionService.TreasureDungeonRole,
+            ExecutionService.TreasureDungeonRoleDisplayName,
             TreasurePortalOpenerTracker.Current,
-            shouldUseTreasureFollowerFollow);
+            shouldUseTreasureFollowerBmraiFollow);
+        ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
+            BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+            BossModMultiboxFollowService.FollowerMovementStatus);
         HigherLowerVfxTraceService.Update(DutyContextService.Current);
         HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
         ObjectPriorityRuleService.ReloadIfChanged();
@@ -1331,7 +1384,12 @@ public sealed class Plugin : IDalamudPlugin
     private void OnChatMessage(IHandleableChatMessage message)
     {
         var text = message.Message.TextValue;
-        TreasurePortalOpenerTracker.HandleChatMessage(text);
+        if (TreasurePortalOpenerTracker.HandleChatMessage(text)
+            && TreasurePortalOpenerTracker.Current is { } portalChatOpener)
+        {
+            BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(portalChatOpener);
+        }
+
         HigherLowerAutomationService.HandleChatMessage(text);
         ExecutionService.HandleChatMessage(text);
     }

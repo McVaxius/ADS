@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using ADS.Models;
-using Dalamud.Game.Gui.Toast;
 using Dalamud.Plugin.Services;
 
 namespace ADS.Services;
@@ -9,29 +8,24 @@ namespace ADS.Services;
 public sealed class TreasurePortalOpenerTracker
 {
     private static readonly TimeSpan PendingOpenerTtl = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan PartySlot2FallbackGrace = TimeSpan.FromSeconds(10);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex YouHandPortalRegex = new(@"^You\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex NamedPlacesRegex = new(@"^(?<name>.+?)\s+places?\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private const string PortalChatSource = "PortalChat";
     private const string PortalChatUnresolvedSource = "PortalChat:Unresolved";
-    private const string FallbackPartySlot2Source = "Fallback:PartySlot2";
     private const string RelaySourcePrefix = "Relay:";
     private static readonly TimeSpan InteractionWitnessTtl = TimeSpan.FromSeconds(15);
 
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
     private readonly IPlayerState playerState;
-    private readonly IChatGui chatGui;
-    private readonly IToastGui toastGui;
     private readonly TreasurePortalOpenerRelayService relayService;
     private readonly IPluginLog log;
 
     private PendingPortalOpener? pendingPortalOpener;
     private string lastPublishedRelayKey = string.Empty;
-    private DateTime fallbackEligibleSinceUtc = DateTime.MinValue;
-    private DateTime fallbackEligibleAtUtc = DateTime.MinValue;
-    private string fallbackDelayLogKey = string.Empty;
+    private ulong openerCycleEpoch;
+    private DateTime openerCycleStartedUtc = DateTime.MinValue;
     private TreasureInteractionWitness? lastInteractionWitness;
     private string lastInteractionWitnessDecisionKey = string.Empty;
 
@@ -39,16 +33,12 @@ public sealed class TreasurePortalOpenerTracker
         IObjectTable objectTable,
         IPartyList partyList,
         IPlayerState playerState,
-        IChatGui chatGui,
-        IToastGui toastGui,
         TreasurePortalOpenerRelayService relayService,
         IPluginLog log)
     {
         this.objectTable = objectTable;
         this.partyList = partyList;
         this.playerState = playerState;
-        this.chatGui = chatGui;
-        this.toastGui = toastGui;
         this.relayService = relayService;
         this.log = log;
     }
@@ -75,17 +65,28 @@ public sealed class TreasurePortalOpenerTracker
             ? Math.Max(0, (DateTime.UtcNow - witness.CapturedUtc).TotalSeconds)
             : null;
 
-    public string RelayStatus { get; private set; } = "Relay idle.";
+    public string RelayStatus { get; private set; } = "Relay ignored: BMRAI follow uses only direct portal chat or interaction witness.";
 
     public DateTime? FallbackEligibleAtUtc
-        => fallbackEligibleAtUtc == DateTime.MinValue ? null : fallbackEligibleAtUtc;
+        => null;
 
     public double? FallbackRemainingSeconds
-        => fallbackEligibleAtUtc == DateTime.MinValue
-            ? null
-            : Math.Max(0, (fallbackEligibleAtUtc - DateTime.UtcNow).TotalSeconds);
+        => null;
 
-    public string FallbackReason { get; private set; } = "Fallback disabled until follower owns an instanced treasure duty.";
+    public string FallbackReason { get; private set; } = "Invented follow fallback disabled; waiting for a real treasure opener.";
+
+    public void BeginEntryCycle(string reason)
+    {
+        openerCycleEpoch++;
+        openerCycleStartedUtc = DateTime.UtcNow;
+        pendingPortalOpener = null;
+        lastPublishedRelayKey = string.Empty;
+        lastInteractionWitness = null;
+        lastInteractionWitnessDecisionKey = string.Empty;
+        ResetFallbackGate($"opener cycle reset after {reason}");
+        log.Information(
+            $"[ADS] Started treasure portal opener cycle {openerCycleEpoch.ToString(CultureInfo.InvariantCulture)} after {reason} at {openerCycleStartedUtc:O}.");
+    }
 
     public bool HandleChatMessage(string message)
     {
@@ -96,13 +97,13 @@ public sealed class TreasurePortalOpenerTracker
         }
 
         var local = CaptureLocalPlayer();
-        PendingPortalOpener? opener = null;
+        PendingPortalOpener? opener;
         if (parsed.LocalPronoun)
         {
             opener = new PendingPortalOpener(
-                string.IsNullOrWhiteSpace(local.DisplayName) ? "You" : local.DisplayName,
                 local.DisplayName,
-                FindPartySlotForLocal(local),
+                local.DisplayName,
+                null,
                 local.GameObjectId,
                 local.EntityId,
                 local.ContentId,
@@ -117,7 +118,7 @@ public sealed class TreasurePortalOpenerTracker
             opener = new PendingPortalOpener(
                 string.IsNullOrWhiteSpace(local.DisplayName) ? parsed.OpenerName : local.DisplayName,
                 local.DisplayName,
-                FindPartySlotForLocal(local),
+                null,
                 local.GameObjectId,
                 local.EntityId,
                 local.ContentId,
@@ -126,23 +127,7 @@ public sealed class TreasurePortalOpenerTracker
                 parsed.MatchedText,
                 DateTime.UtcNow);
         }
-        else if (TryFindPartyMember(parsed.OpenerName, local, out var partyMember)
-                 || TryFindPartyMemberAtMessageStart(parsed.MatchedText, local, out partyMember))
-        {
-            opener = new PendingPortalOpener(
-                partyMember.DisplayName,
-                local.DisplayName,
-                partyMember.Slot,
-                partyMember.GameObjectId,
-                partyMember.EntityId,
-                partyMember.ContentId,
-                IsLocalOpener: false,
-                PortalChatSource,
-                parsed.MatchedText,
-                DateTime.UtcNow);
-        }
-
-        if (opener is null)
+        else
         {
             opener = new PendingPortalOpener(
                 parsed.OpenerName,
@@ -152,7 +137,7 @@ public sealed class TreasurePortalOpenerTracker
                 null,
                 null,
                 IsLocalOpener: false,
-                PortalChatUnresolvedSource,
+                PortalChatSource,
                 parsed.MatchedText,
                 DateTime.UtcNow);
         }
@@ -167,38 +152,36 @@ public sealed class TreasurePortalOpenerTracker
         if (replacedFallback)
         {
             log.Information(
-                $"[ADS] Replaced party-slot-2 fallback with real treasure portal opener: source={opener.Source}, opener='{opener.OpenerName}', slot={FormatSlot(opener.PartySlot)}.");
+                $"[ADS] Replaced fallback treasure follow target with real treasure portal opener: source={opener.Source}, opener='{opener.OpenerName}', slot={FormatSlot(opener.PartySlot)}.");
         }
 
         return true;
     }
 
-    public void Update(DutyContextSnapshot dutyContext, bool fallbackAllowed, TreasureInteractionWitness? interactionWitness)
+    public TreasurePortalOpenerSnapshot? Update(DutyContextSnapshot dutyContext, bool openerPromotionAllowed, TreasureInteractionWitness? interactionWitness)
     {
         var now = DateTime.UtcNow;
         RecordInteractionWitness(interactionWitness, now);
+        ClearOutOfCyclePendingOpener(now);
         ClearExpiredPendingOpener(now);
-        RefreshPendingOpener();
 
-        var relayContext = BuildRelayContext(dutyContext);
-        PublishCurrentOpener(relayContext);
-        var importedRelay = TryImportRelayOpener(relayContext);
-        if (importedRelay)
-            RefreshPendingOpener();
+        RelayStatus = "Relay ignored: BMRAI follow uses only direct portal chat or interaction witness.";
 
-        TryPromoteInteractionWitness(interactionWitness, fallbackAllowed, now);
-        TryCapturePartySlot2Fallback(fallbackAllowed, now);
+        return TryPromoteInteractionWitness(interactionWitness, now)
+            ? pendingPortalOpener?.ToSnapshot()
+            : null;
     }
 
     public void ClearPendingOpener(string reason)
     {
-        if (pendingPortalOpener is null)
-            return;
-
+        var hadPendingOpener = pendingPortalOpener is not null;
         pendingPortalOpener = null;
         lastPublishedRelayKey = string.Empty;
+        lastInteractionWitness = null;
+        lastInteractionWitnessDecisionKey = string.Empty;
         ResetFallbackGate($"pending opener cleared after {reason}");
-        log.Information($"[ADS] Cleared pending treasure portal opener after {reason}.");
+        if (hadPendingOpener)
+            log.Information($"[ADS] Cleared pending treasure portal opener after {reason}.");
     }
 
     private void PublishCurrentOpener(TreasurePortalRelayContext relayContext)
@@ -233,6 +216,12 @@ public sealed class TreasurePortalOpenerTracker
         }
 
         RelayStatus = relayService.Status;
+        if (!IsCurrentCycleCapture(relaySnapshot.CapturedUtc))
+        {
+            RelayStatus = $"Relay ignored: opener captured before current cycle {openerCycleEpoch.ToString(CultureInfo.InvariantCulture)}.";
+            return false;
+        }
+
         if (relaySnapshot.Source.StartsWith("Fallback", StringComparison.OrdinalIgnoreCase))
         {
             RelayStatus = "Relay ignored: fallback snapshots are not imported.";
@@ -273,7 +262,7 @@ public sealed class TreasurePortalOpenerTracker
         if (replacedFallback)
         {
             log.Information(
-                $"[ADS] Replaced party-slot-2 fallback with relay treasure portal opener: source={imported.Source}, opener='{imported.OpenerName}', slot={FormatSlot(imported.PartySlot)}.");
+                $"[ADS] Replaced fallback treasure follow target with relay treasure portal opener: source={imported.Source}, opener='{imported.OpenerName}', slot={FormatSlot(imported.PartySlot)}.");
         }
 
         return true;
@@ -287,18 +276,21 @@ public sealed class TreasurePortalOpenerTracker
         if (now - witness.CapturedUtc > InteractionWitnessTtl)
             return;
 
+        if (!IsCurrentCycleCapture(witness.CapturedUtc))
+            return;
+
         lastInteractionWitness = witness;
     }
 
     private TreasureInteractionWitness? GetFreshLastInteractionWitness()
         => lastInteractionWitness is { } witness
            && DateTime.UtcNow - witness.CapturedUtc <= InteractionWitnessTtl
+           && IsCurrentCycleCapture(witness.CapturedUtc)
             ? witness
             : null;
 
     private bool TryPromoteInteractionWitness(
         TreasureInteractionWitness? witness,
-        bool fallbackAllowed,
         DateTime now)
     {
         if (witness is null)
@@ -317,30 +309,24 @@ public sealed class TreasurePortalOpenerTracker
             return false;
         }
 
-        if (!ShouldPromoteInteractionWitness(fallbackAllowed, out var promoteGateReason))
+        if (!IsCurrentCycleCapture(witness.CapturedUtc))
+        {
+            LogInteractionWitnessDecision(witness, promoted: false, $"witness captured before current opener cycle {openerCycleEpoch.ToString(CultureInfo.InvariantCulture)}");
+            return false;
+        }
+
+        if (!ShouldPromoteInteractionWitness(out var promoteGateReason))
         {
             LogInteractionWitnessDecision(witness, promoted: false, promoteGateReason);
             return false;
         }
 
         var local = CaptureLocalPlayer();
-        if (!TryResolveInteractionWitnessOpener(witness, local, out var partyMember, out var resolveReason))
+        if (!TryBuildInteractionWitnessOpener(witness, local, out var opener, out var resolveReason))
         {
             LogInteractionWitnessDecision(witness, promoted: false, resolveReason);
             return false;
         }
-
-        var opener = new PendingPortalOpener(
-            partyMember.DisplayName,
-            local.DisplayName,
-            partyMember.Slot,
-            partyMember.GameObjectId ?? witness.ActorGameObjectId,
-            partyMember.EntityId ?? witness.ActorEntityId,
-            partyMember.ContentId ?? witness.ActorContentId,
-            partyMember.IsLocal,
-            witness.Source,
-            BuildInteractionWitnessText(witness),
-            witness.CapturedUtc);
 
         var replacedSource = pendingPortalOpener?.Source ?? "fallback grace";
         pendingPortalOpener = opener;
@@ -349,21 +335,15 @@ public sealed class TreasurePortalOpenerTracker
         LogInteractionWitnessDecision(
             witness,
             promoted: true,
-            $"replaced {replacedSource}; opener='{opener.OpenerName}', slot={FormatSlot(opener.PartySlot)}, contentId={FormatId(opener.ContentId)}");
+            $"replaced {replacedSource}; opener='{opener.OpenerName}', contentId={FormatId(opener.ContentId)}");
         return true;
     }
 
-    private bool ShouldPromoteInteractionWitness(bool fallbackAllowed, out string reason)
+    private bool ShouldPromoteInteractionWitness(out string reason)
     {
         reason = string.Empty;
         if (pendingPortalOpener is null)
-        {
-            if (fallbackAllowed)
-                return true;
-
-            reason = "no fallback grace pending";
-            return false;
-        }
+            return true;
 
         if (IsFallback(pendingPortalOpener))
             return true;
@@ -375,45 +355,38 @@ public sealed class TreasurePortalOpenerTracker
         return false;
     }
 
-    private bool TryResolveInteractionWitnessOpener(
+    private bool TryBuildInteractionWitnessOpener(
         TreasureInteractionWitness witness,
         LocalPlayerIdentity local,
-        out PartyMemberIdentity partyMember,
+        out PendingPortalOpener opener,
         out string reason)
     {
-        if (witness.ActorContentId is { } contentId
-            && TryFindPartyMemberByContentId(contentId, local, out partyMember))
+        var actorName = NormalizeDisplayName(witness.ActorName);
+        if (string.IsNullOrWhiteSpace(actorName))
         {
-            reason = string.Empty;
-            return true;
+            reason =
+                $"witness actor display name empty: source={witness.Source}, contentId={FormatId(witness.ActorContentId)}, objectId={FormatId(witness.ActorGameObjectId)}, entityId={FormatId(witness.ActorEntityId)}";
+            opener = null!;
+            return false;
         }
 
-        if (witness.ActorGameObjectId is { } gameObjectId
-            && TryFindPartyMemberByGameObjectId(gameObjectId, local, out partyMember))
-        {
-            reason = string.Empty;
-            return true;
-        }
-
-        if (witness.ActorEntityId is { } entityId
-            && TryFindPartyMemberByEntityId(entityId, local, out partyMember))
-        {
-            reason = string.Empty;
-            return true;
-        }
-
-        if (witness.AllowActorNameResolution
-            && !string.IsNullOrWhiteSpace(witness.ActorName)
-            && TryFindPartyMember(witness.ActorName, local, out partyMember))
-        {
-            reason = string.Empty;
-            return true;
-        }
-
-        reason =
-            $"witness actor unresolved: source={witness.Source}, actor='{FormatName(witness.ActorName)}', contentId={FormatId(witness.ActorContentId)}, objectId={FormatId(witness.ActorGameObjectId)}, entityId={FormatId(witness.ActorEntityId)}";
-        partyMember = default;
-        return false;
+        var isLocal = (local.ContentId is not null && local.ContentId == witness.ActorContentId)
+                      || (local.GameObjectId is not null && local.GameObjectId == witness.ActorGameObjectId)
+                      || (local.EntityId is not null && local.EntityId == witness.ActorEntityId)
+                      || (!string.IsNullOrWhiteSpace(local.DisplayName) && NamesMatch(local.DisplayName, actorName));
+        opener = new PendingPortalOpener(
+            actorName,
+            local.DisplayName,
+            null,
+            witness.ActorGameObjectId,
+            witness.ActorEntityId,
+            witness.ActorContentId,
+            isLocal,
+            witness.Source,
+            BuildInteractionWitnessText(witness),
+            witness.CapturedUtc);
+        reason = string.Empty;
+        return true;
     }
 
     private void LogInteractionWitnessDecision(TreasureInteractionWitness witness, bool promoted, string reason)
@@ -443,6 +416,9 @@ public sealed class TreasurePortalOpenerTracker
             return true;
 
         if (pendingPortalOpener.Source == PortalChatUnresolvedSource)
+            return true;
+
+        if (IsInteractionWitnessSource(pendingPortalOpener.Source))
             return true;
 
         if (IsRelaySource(pendingPortalOpener.Source))
@@ -486,108 +462,6 @@ public sealed class TreasurePortalOpenerTracker
         reason = $"name='{relaySnapshot.OpenerName}', contentId={FormatId(relaySnapshot.ContentId)}.";
         partyMember = default;
         return false;
-    }
-
-    private void TryCapturePartySlot2Fallback(bool enabled, DateTime now)
-    {
-        if (!enabled)
-        {
-            ResetFallbackGate("fallback disabled until follower owns an instanced treasure duty");
-            return;
-        }
-
-        if (HasResolvedRealOpener())
-        {
-            ResetFallbackGate("real opener available");
-            FallbackReason = "Fallback blocked by real opener.";
-            return;
-        }
-
-        var fallbackReason = BuildFallbackReason();
-        if (IsFallback(pendingPortalOpener))
-        {
-            RefreshFallbackPartySlot2();
-            FallbackReason = "Party-slot-2 fallback already active.";
-            return;
-        }
-
-        if (fallbackEligibleSinceUtc == DateTime.MinValue)
-        {
-            fallbackEligibleSinceUtc = now;
-            fallbackEligibleAtUtc = now + PartySlot2FallbackGrace;
-            FallbackReason = fallbackReason;
-        }
-
-        if (now < fallbackEligibleAtUtc)
-        {
-            var delayKey = $"{fallbackEligibleAtUtc:O}:{fallbackReason}";
-            if (!string.Equals(delayKey, fallbackDelayLogKey, StringComparison.Ordinal))
-            {
-                fallbackDelayLogKey = delayKey;
-                log.Information(
-                    $"[ADS] Delaying party-slot-2 fallback until {fallbackEligibleAtUtc:O}: reason={fallbackReason}; relayStatus='{RelayStatus}'.");
-            }
-
-            return;
-        }
-
-        var local = CaptureLocalPlayer();
-        if (!TryGetPartyMemberBySlot(2, local, out var partyMember))
-        {
-            FallbackReason = "Party slot 2 unavailable after fallback grace.";
-            return;
-        }
-
-        var opener = new PendingPortalOpener(
-            partyMember.DisplayName,
-            local.DisplayName,
-            partyMember.Slot,
-            partyMember.GameObjectId,
-            partyMember.EntityId,
-            partyMember.ContentId,
-            partyMember.IsLocal,
-            FallbackPartySlot2Source,
-            "Party slot 2 fallback",
-            now);
-
-        pendingPortalOpener = opener;
-        var message = $"ADS did not catch the portal opener. Using party slot 2 {opener.OpenerName} as BMRAI follow target.";
-        toastGui.ShowNormal(message);
-        chatGui.Print(message);
-        log.Information(
-            $"[ADS] Captured delayed treasure portal opener fallback: source={opener.Source}, opener='{opener.OpenerName}', local='{FormatName(opener.LocalName)}', slot={FormatSlot(opener.PartySlot)}, contentId={FormatId(opener.ContentId)}, objectId={FormatId(opener.GameObjectId)}, entityId={FormatId(opener.EntityId)}, reason={fallbackReason}, relayStatus='{RelayStatus}'.");
-        FallbackReason = fallbackReason;
-    }
-
-    private void RefreshFallbackPartySlot2()
-    {
-        if (pendingPortalOpener is not { Source: FallbackPartySlot2Source } existing)
-            return;
-
-        var local = CaptureLocalPlayer();
-        if (!TryGetPartyMemberBySlot(2, local, out var partyMember))
-            return;
-
-        if (existing.PartySlot != partyMember.Slot
-            || !NamesMatch(existing.OpenerName, partyMember.DisplayName))
-        {
-            return;
-        }
-
-        var refreshed = existing with
-        {
-            LocalName = local.DisplayName,
-            GameObjectId = partyMember.GameObjectId ?? existing.GameObjectId,
-            EntityId = partyMember.EntityId ?? existing.EntityId,
-            ContentId = partyMember.ContentId ?? existing.ContentId,
-            IsLocalOpener = partyMember.IsLocal,
-        };
-        pendingPortalOpener = refreshed;
-        if (existing.ContentId is null && refreshed.ContentId is not null)
-        {
-            log.Information(
-                $"[ADS] Resolved fallback treasure portal opener content id: opener='{refreshed.OpenerName}', slot={FormatSlot(refreshed.PartySlot)}, contentId={FormatId(refreshed.ContentId)}.");
-        }
     }
 
     private void RefreshPendingOpener()
@@ -674,6 +548,18 @@ public sealed class TreasurePortalOpenerTracker
         ResetFallbackGate("pending opener expired");
         log.Information(
             $"[ADS] Expired stale treasure portal opener after {age.TotalSeconds:0}s: source={opener.Source}, opener='{opener.OpenerName}', chat='{opener.ChatText}'.");
+    }
+
+    private void ClearOutOfCyclePendingOpener(DateTime now)
+    {
+        if (pendingPortalOpener is not { } opener || IsCurrentCycleCapture(opener.CapturedUtc))
+            return;
+
+        pendingPortalOpener = null;
+        lastPublishedRelayKey = string.Empty;
+        ResetFallbackGate("pending opener captured before current opener cycle");
+        log.Information(
+            $"[ADS] Ignored out-of-cycle treasure portal opener: cycle={openerCycleEpoch.ToString(CultureInfo.InvariantCulture)}, cycleStarted={openerCycleStartedUtc:O}, source={opener.Source}, opener='{opener.OpenerName}', captured={opener.CapturedUtc:O}, age={(now - opener.CapturedUtc).TotalSeconds:0}s.");
     }
 
     private TreasurePortalRelayContext BuildRelayContext(DutyContextSnapshot dutyContext)
@@ -832,21 +718,6 @@ public sealed class TreasurePortalOpenerTracker
         return false;
     }
 
-    private bool TryGetPartyMemberBySlot(int slot, LocalPlayerIdentity local, out PartyMemberIdentity partyMember)
-    {
-        foreach (var member in EnumeratePartyMembers(local))
-        {
-            if (member.Slot == slot)
-            {
-                partyMember = member;
-                return true;
-            }
-        }
-
-        partyMember = default;
-        return false;
-    }
-
     private IEnumerable<PartyMemberIdentity> EnumeratePartyMembers(LocalPlayerIdentity local)
     {
         for (var i = 0; i < partyList.Length; i++)
@@ -954,38 +825,13 @@ public sealed class TreasurePortalOpenerTracker
         return true;
     }
 
-    private string BuildFallbackReason()
-    {
-        if (pendingPortalOpener is null)
-            return $"No local or relay portal opener captured; relayStatus='{RelayStatus}'.";
-
-        if (pendingPortalOpener.Source == PortalChatUnresolvedSource)
-            return $"Local portal chat opener unresolved and relay lookup failed; relayStatus='{RelayStatus}'.";
-
-        if (IsRelaySource(pendingPortalOpener.Source))
-            return $"Relay opener did not resolve to a valid follow slot; relayStatus='{RelayStatus}'.";
-
-        return $"No usable real portal opener available from source {pendingPortalOpener.Source}; relayStatus='{RelayStatus}'.";
-    }
-
-    private bool HasResolvedRealOpener()
-    {
-        if (pendingPortalOpener is not { } opener || IsFallback(opener))
-            return false;
-
-        if (opener.IsLocalOpener)
-            return true;
-
-        return opener.PartySlot is >= 1 and <= 8;
-    }
-
     private void ResetFallbackGate(string reason)
     {
-        fallbackEligibleSinceUtc = DateTime.MinValue;
-        fallbackEligibleAtUtc = DateTime.MinValue;
-        fallbackDelayLogKey = string.Empty;
         FallbackReason = reason;
     }
+
+    private bool IsCurrentCycleCapture(DateTime capturedUtc)
+        => openerCycleStartedUtc == DateTime.MinValue || capturedUtc >= openerCycleStartedUtc;
 
     private static string BuildRelayPublishKey(PendingPortalOpener opener, TreasurePortalRelayContext context)
         => string.Join(
@@ -1006,7 +852,7 @@ public sealed class TreasurePortalOpenerTracker
             : $"{RelaySourcePrefix}{source}";
 
     private static bool IsFallback(PendingPortalOpener? opener)
-        => opener?.Source == FallbackPartySlot2Source;
+        => opener?.Source.StartsWith("Fallback:", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool IsRelaySource(string source)
         => source.StartsWith(RelaySourcePrefix, StringComparison.OrdinalIgnoreCase);

@@ -73,10 +73,11 @@ public sealed class LootAutomationService
 
     public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode, bool pluginEnabled)
     {
-        var ownershipEligible = pluginEnabled
-                                && context.IsLoggedIn
-                                && context.InInstancedDuty
-                                && IsOwnedOrLeaving(ownershipMode);
+        var ownsStartOrLeaveFlow = pluginEnabled
+                                    && context.IsLoggedIn
+                                    && IsOwnedOrLeaving(ownershipMode);
+        var ownershipEligible = ownsStartOrLeaveFlow
+                                && (context.InInstancedDuty || configuration.LootMode != LootRollMode.Off);
         if (!ownershipEligible)
         {
             ResetOwnershipLatch();
@@ -95,13 +96,8 @@ public sealed class LootAutomationService
             return;
         }
 
-        if (context.IsUnsafeTransition || context.OccupiedInCutSceneEvent || context.WatchingCutscene)
-        {
-            Status = "Loot armed; waiting for stable duty state.";
-            return;
-        }
-
-        EnsureLazyLootDisabledForOwnership();
+        if (context.InInstancedDuty)
+            EnsureLazyLootDisabledForOwnership();
 
         var needGreedVisible = GameInteractionHelper.IsAddonVisible("NeedGreed");
         if (!needGreedVisible)
@@ -111,6 +107,12 @@ public sealed class LootAutomationService
             else
                 Status = $"Loot {configuration.LootMode}; waiting for loot window.";
 
+            return;
+        }
+
+        if (context.IsUnsafeTransition || context.OccupiedInCutSceneEvent || context.WatchingCutscene)
+        {
+            Status = "Loot armed; waiting for stable duty state.";
             return;
         }
 

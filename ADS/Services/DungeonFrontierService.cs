@@ -203,9 +203,11 @@ public sealed class DungeonFrontierService
 
     public TreasureDungeonRole TreasureDungeonRole { get; private set; } = ADS.Models.TreasureDungeonRole.MapOpener;
 
+    public string TreasureDungeonRoleDisplayName { get; private set; } = TreasureDungeonRoleInference.MapSeekerDisplayName;
+
     public string TreasureDungeonRoleSource { get; private set; } = "Default";
 
-    public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS keeps map-opener behavior.";
+    public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS shows Map Seeker outside treasure duties.";
 
     public TreasureDungeonRole EffectiveTreasureDungeonRole
         => TreasureFollowerEntryMapOpenerRoleActive
@@ -324,6 +326,7 @@ public sealed class DungeonFrontierService
     {
         var roleChanged = TreasureDungeonRole != inference.Role;
         TreasureDungeonRole = inference.Role;
+        TreasureDungeonRoleDisplayName = inference.DisplayName;
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
         if (resetFollowerProgressForOwnership && inference.Role == ADS.Models.TreasureDungeonRole.Follower)

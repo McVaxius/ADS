@@ -24,8 +24,6 @@ public sealed class BossModMultiboxFollowService
         }
         """;
 
-    private static readonly TimeSpan FailureRetryInterval = TimeSpan.FromSeconds(2);
-
     private static readonly string[] MultiboxModuleTypeNames =
     [
         "BossMod.Autorotation.MiscAI.Multibox, BossMod",
@@ -38,9 +36,6 @@ public sealed class BossModMultiboxFollowService
     private readonly Configuration configuration;
     private readonly IPluginLog log;
 
-    private DateTime nextApplyUtc = DateTime.MinValue;
-    private string pendingFollowKey = string.Empty;
-    private string appliedBmraiFollowKey = string.Empty;
     private string lastLoggedSuccessKey = string.Empty;
     private bool bmraiFollowActivated;
 
@@ -60,9 +55,31 @@ public sealed class BossModMultiboxFollowService
 
     public string FollowStatus { get; private set; } = "No treasure portal opener captured.";
 
+    public bool FollowerMovementOwnedByBmrai { get; private set; }
+
+    public string FollowerMovementStatus { get; private set; } = "No treasure portal opener captured.";
+
     public ulong? FollowLeaderContentId { get; private set; }
 
     public string FollowMethod { get; private set; } = string.Empty;
+
+    public string BmraiFollowCommandMethod { get; private set; } = "Name";
+
+    public string BmraiFollowCommandText { get; private set; } = string.Empty;
+
+    public bool? BmraiFollowCommandAccepted { get; private set; }
+
+    public DateTime? BmraiFollowCommandAtUtc { get; private set; }
+
+    public string BmraiFollowCommandStatus { get; private set; } = "BMRAI command not sent: no direct portal chat or interaction witness opener captured.";
+
+    public string BmraiFollowCommandTargetName { get; private set; } = string.Empty;
+
+    public int? BmraiFollowCommandTargetSlot { get; private set; }
+
+    public ulong? BmraiFollowCommandTargetContentId { get; private set; }
+
+    public string BmraiFollowCommandTargetSource { get; private set; } = string.Empty;
 
     public bool CleanupPending
         => configuration.BmraiTreasureFollowCleanupPending || bmraiFollowActivated;
@@ -81,161 +98,211 @@ public sealed class BossModMultiboxFollowService
             }
         }
 
-        pendingFollowKey = string.Empty;
-        appliedBmraiFollowKey = string.Empty;
         FollowApplied = false;
         FollowLeaderContentId = null;
         FollowMethod = string.Empty;
         FollowStatus = $"Treasure portal follow cleared after {reason}.{cleanupStatus}";
-        nextApplyUtc = DateTime.MinValue;
+        SetBmraiCommandSkipped(null, FollowStatus);
+        SetFollowerMovementAuthority(false, FollowStatus);
         lastLoggedSuccessKey = string.Empty;
         bmraiFollowActivated = false;
     }
 
-    public void Update(TreasureDungeonRole role, TreasurePortalOpenerSnapshot? opener, bool followAllowed)
+    public bool ApplyDirectTreasurePortalOpener(TreasurePortalOpenerSnapshot opener)
     {
-        if (opener is null)
-        {
-            pendingFollowKey = string.Empty;
-            FollowApplied = false;
-            FollowLeaderContentId = null;
-            FollowMethod = string.Empty;
-            FollowStatus = "No treasure portal opener captured.";
-            nextApplyUtc = DateTime.MinValue;
-            return;
-        }
+        FollowLeaderContentId = opener.ContentId;
 
-        if (role != TreasureDungeonRole.Follower)
+        if (!IsDirectBmraiSource(opener.Source))
         {
-            pendingFollowKey = string.Empty;
             FollowApplied = false;
-            FollowLeaderContentId = opener.ContentId;
             FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}; ADS role is {role}, so BMRAI follow is not applied.";
-            nextApplyUtc = DateTime.MinValue;
-            return;
-        }
-
-        if (!followAllowed)
-        {
-            pendingFollowKey = string.Empty;
-            FollowApplied = false;
-            FollowLeaderContentId = opener.ContentId;
-            FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}; ADS is not in owned instanced duty, so BMRAI follow is not applied.";
-            nextApplyUtc = DateTime.MinValue;
-            return;
-        }
-
-        if (opener.IsLocalOpener)
-        {
-            pendingFollowKey = string.Empty;
-            FollowApplied = false;
-            FollowLeaderContentId = opener.ContentId;
-            FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' from {opener.Source} is local player; BMRAI follow target not applied.";
-            nextApplyUtc = DateTime.MinValue;
-            return;
-        }
-
-        if (opener.PartySlot is not { } partySlot
-            || partySlot is < 1 or > 8)
-        {
-            pendingFollowKey = string.Empty;
-            FollowApplied = false;
-            FollowLeaderContentId = opener.ContentId;
-            FollowMethod = string.Empty;
-            FollowStatus = $"Portal opener '{opener.OpenerName}' captured from {opener.Source}, but party slot is not resolved yet; retrying.";
-            nextApplyUtc = DateTime.MinValue;
-            return;
+            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for BMRAI follow; source is not direct portal chat or interaction witness.";
+            SetBmraiCommandSkipped(opener, $"BMRAI command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
+            SetFollowerMovementAuthority(false, FollowStatus);
+            return false;
         }
 
         var followKey = BuildFollowKey(opener);
-        var now = DateTime.UtcNow;
+        if (!TryApplyViaBmraiSlash(opener, out var commandResult))
+        {
+            FollowApplied = false;
+            FollowMethod = commandResult.Method;
+            FollowStatus = $"BMRAI name follow not applied for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {commandResult.Status}";
+            RecordBmraiFollowCommand(opener, commandResult);
+            SetFollowerMovementAuthority(false, FollowStatus);
+            log.Information($"[ADS] {FollowStatus}");
+            return false;
+        }
+
+        MarkBmraiApplied(opener, followKey, commandResult);
+        return true;
+    }
+
+    public void Update(TreasureDungeonRole role, string roleDisplayName, TreasurePortalOpenerSnapshot? opener, bool followAllowed)
+    {
+        if (opener is null)
+        {
+            FollowLeaderContentId = null;
+            FollowApplied = false;
+            FollowMethod = string.Empty;
+            FollowStatus = "No treasure portal opener captured.";
+            if (BmraiFollowCommandAccepted is null)
+                SetBmraiCommandSkipped(null, "BMRAI command not sent: no direct portal chat or interaction witness opener captured.");
+
+            SetFollowerMovementAuthority(false, FollowStatus);
+            return;
+        }
+
         FollowLeaderContentId = opener.ContentId;
 
-        if (string.Equals(appliedBmraiFollowKey, followKey, StringComparison.Ordinal))
-        {
-            FollowApplied = true;
-            FollowMethod = "BMRAI slash";
-            return;
-        }
-
-        if (string.Equals(pendingFollowKey, followKey, StringComparison.Ordinal)
-            && now < nextApplyUtc)
-        {
-            return;
-        }
-
-        pendingFollowKey = followKey;
-
-        if (!TryApplyViaBmraiSlash(partySlot, out var slashStatus))
+        if (!IsDirectBmraiSource(opener.Source))
         {
             FollowApplied = false;
             FollowMethod = string.Empty;
-            FollowStatus = $"BMRAI slash follow failed for portal opener '{opener.OpenerName}' from {opener.Source} at Slot{partySlot}. {slashStatus}";
-            nextApplyUtc = now + FailureRetryInterval;
+            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for BMRAI follow; only direct portal chat or interaction witness can send BMRAI.";
+            SetBmraiCommandSkipped(opener, $"BMRAI command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
+            SetFollowerMovementAuthority(false, FollowStatus);
             return;
         }
 
-        TryApplyMultiboxLeaderHint(opener.ContentId, out var hintMethod, out var hintStatus);
-        MarkBmraiApplied(opener, partySlot, followKey, slashStatus, hintMethod, hintStatus);
+        var commandMatchesOpener = BmraiFollowCommandAccepted == true
+                                   && NamesMatch(BmraiFollowCommandTargetName, opener.OpenerName)
+                                   && string.Equals(BmraiFollowCommandTargetSource, opener.Source, StringComparison.OrdinalIgnoreCase);
+        if (!commandMatchesOpener)
+        {
+            FollowApplied = false;
+            FollowMethod = BmraiFollowCommandMethod;
+            FollowStatus = $"Direct treasure opener '{opener.OpenerName}' from {opener.Source} has no accepted BMRAI follow command. {BmraiFollowCommandStatus}";
+            SetFollowerMovementAuthority(false, FollowStatus);
+            return;
+        }
+
+        FollowApplied = true;
+        FollowMethod = BmraiFollowCommandMethod;
+        FollowStatus = $"BMRAI name follow accepted for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {BmraiFollowCommandStatus}";
+        SetFollowerMovementAuthority(
+            followAllowed,
+            followAllowed
+                ? FollowStatus
+                : $"{FollowStatus} ADS movement authority inactive for role {roleDisplayName} ({role}).");
     }
 
     private void MarkBmraiApplied(
         TreasurePortalOpenerSnapshot opener,
-        int partySlot,
         string followKey,
-        string slashStatus,
-        string hintMethod,
-        string hintStatus)
+        BmraiFollowCommandResult commandResult)
     {
         FollowApplied = true;
-        FollowMethod = "BMRAI slash";
+        FollowMethod = commandResult.Method;
         FollowLeaderContentId = opener.ContentId;
-        appliedBmraiFollowKey = followKey;
         bmraiFollowActivated = true;
-        nextApplyUtc = DateTime.MaxValue;
+        RecordBmraiFollowCommand(opener, commandResult);
 
         var contentId = opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "unresolved";
-        FollowStatus = $"BMRAI follow set to portal opener '{opener.OpenerName}' from {opener.Source} at Slot{partySlot}, content id {contentId}. {slashStatus} {hintStatus}";
+        FollowStatus = $"BMRAI name follow set to direct treasure opener '{opener.OpenerName}' from {opener.Source}, content id {contentId}. {commandResult.Status}";
+        SetFollowerMovementAuthority(true, FollowStatus);
 
-        var successKey = $"BMRAI:{followKey}:{hintMethod}:{hintStatus}";
+        var successKey = $"BMRAI:{followKey}:{commandResult.Method}:{commandResult.CommandText}:{commandResult.Accepted}";
         if (string.Equals(successKey, lastLoggedSuccessKey, StringComparison.Ordinal))
             return;
 
         lastLoggedSuccessKey = successKey;
         log.Information(
-            $"[ADS] BMRAI follow target slot: source={opener.Source}, opener='{opener.OpenerName}', slot=Slot{partySlot}, contentId={contentId}.");
+            $"[ADS] BMRAI follow target command: source={opener.Source}, opener='{opener.OpenerName}', contentId={contentId}, method={commandResult.Method}, command='{commandResult.CommandText}', accepted={commandResult.Accepted?.ToString() ?? "not sent"}, at={commandResult.AtUtc:O}.");
         log.Information($"[ADS] {FollowStatus}");
     }
 
-    private bool TryApplyViaBmraiSlash(int partySlot, out string status)
+    private void SetFollowerMovementAuthority(bool ownedByBmrai, string status)
     {
+        FollowerMovementOwnedByBmrai = ownedByBmrai;
+        FollowerMovementStatus = status;
+    }
+
+    private void SetBmraiCommandSkipped(TreasurePortalOpenerSnapshot? target, string status)
+    {
+        BmraiFollowCommandMethod = "Name";
+        BmraiFollowCommandText = string.Empty;
+        BmraiFollowCommandAccepted = null;
+        BmraiFollowCommandAtUtc = null;
+        BmraiFollowCommandStatus = status;
+        BmraiFollowCommandTargetName = target?.OpenerName ?? string.Empty;
+        BmraiFollowCommandTargetSlot = target?.PartySlot;
+        BmraiFollowCommandTargetContentId = target?.ContentId;
+        BmraiFollowCommandTargetSource = target?.Source ?? string.Empty;
+    }
+
+    private void RecordBmraiFollowCommand(TreasurePortalOpenerSnapshot target, BmraiFollowCommandResult result)
+    {
+        BmraiFollowCommandMethod = result.Method;
+        BmraiFollowCommandText = result.CommandText;
+        BmraiFollowCommandAccepted = result.Accepted;
+        BmraiFollowCommandAtUtc = result.AtUtc;
+        BmraiFollowCommandStatus = result.Status;
+        BmraiFollowCommandTargetName = target.OpenerName;
+        BmraiFollowCommandTargetSlot = target.PartySlot;
+        BmraiFollowCommandTargetContentId = target.ContentId;
+        BmraiFollowCommandTargetSource = target.Source;
+    }
+
+    private bool TryApplyViaBmraiSlash(TreasurePortalOpenerSnapshot opener, out BmraiFollowCommandResult result)
+    {
+        var targetName = opener.OpenerName.Trim();
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            result = new BmraiFollowCommandResult(
+                "Name",
+                string.Empty,
+                null,
+                DateTime.UtcNow,
+                $"BMRAI command not sent: direct opener name from {opener.Source} is empty.");
+            return false;
+        }
+
         const string followOutOfCombatCommand = "/bmrai followoutofcombat on";
+        var nameCommand = $"/bmrai follow {targetName}";
+        var outOfCombatAtUtc = DateTime.UtcNow;
         if (!TryProcessBmraiCommand(followOutOfCombatCommand, out var followOutOfCombatStatus))
         {
-            status = $"Could not enable BMRAI out-of-combat follow: {followOutOfCombatStatus}";
+            result = new BmraiFollowCommandResult(
+                "Name",
+                nameCommand,
+                null,
+                outOfCombatAtUtc,
+                $"BMRAI target command not sent: {followOutOfCombatStatus}");
             return false;
         }
 
-        var followCommand = $"/bmrai follow Slot{partySlot}";
-        if (!TryProcessBmraiCommand(followCommand, out var followStatus))
+        var nameAtUtc = DateTime.UtcNow;
+        if (TryProcessBmraiCommand(nameCommand, out var nameStatus))
         {
-            TryProcessBmraiCommand("/bmrai followoutofcombat off", out _);
-            TryProcessBmraiCommand("/bmrai followcombat off", out _);
-            status = $"Could not set BMRAI follow target: {followStatus}";
-            return false;
+            EnsureCleanupPending();
+            result = new BmraiFollowCommandResult(
+                "Name",
+                nameCommand,
+                true,
+                nameAtUtc,
+                $"BMRAI name follow accepted. {followOutOfCombatStatus} {nameStatus}");
+            return true;
         }
 
-        if (!configuration.BmraiTreasureFollowCleanupPending)
-        {
-            configuration.BmraiTreasureFollowCleanupPending = true;
-            configuration.Save();
-        }
+        TryProcessBmraiCommand("/bmrai followoutofcombat off", out _);
+        TryProcessBmraiCommand("/bmrai followcombat off", out _);
+        result = new BmraiFollowCommandResult(
+            "Name",
+            nameCommand,
+            false,
+            nameAtUtc,
+            $"BMRAI name follow rejected. {followOutOfCombatStatus} Name command status: {nameStatus}");
+        return false;
+    }
 
-        status = $"Sent {followOutOfCombatCommand} and {followCommand}.";
-        return true;
+    private void EnsureCleanupPending()
+    {
+        if (configuration.BmraiTreasureFollowCleanupPending)
+            return;
+
+        configuration.BmraiTreasureFollowCleanupPending = true;
+        configuration.Save();
     }
 
     private string DisableBmraiTreasureFollow(string reason, bool disableBmrai)
@@ -305,7 +372,11 @@ public sealed class BossModMultiboxFollowService
     }
 
     private static string BuildFollowKey(TreasurePortalOpenerSnapshot opener)
-        => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}";
+        => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.OpenerName.Trim()}";
+
+    private static bool IsDirectBmraiSource(string source)
+        => string.Equals(source, "PortalChat", StringComparison.OrdinalIgnoreCase)
+           || source.StartsWith("InteractionWitness:", StringComparison.OrdinalIgnoreCase);
 
     private bool TryApplyViaIpc(ulong leaderContentId, out string status)
     {
@@ -1142,6 +1213,13 @@ public sealed class BossModMultiboxFollowService
 
         return null;
     }
+
+    private readonly record struct BmraiFollowCommandResult(
+        string Method,
+        string CommandText,
+        bool? Accepted,
+        DateTime AtUtc,
+        string Status);
 
     private sealed record BossModReflectionContext(
         IExposedPlugin ExposedPlugin,

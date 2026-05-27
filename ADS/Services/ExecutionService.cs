@@ -207,6 +207,10 @@ public sealed class ExecutionService
     private DateTime higherLowerLastActivityUtc = DateTime.MinValue;
     private bool higherLowerOwnedMovementHoldLogged;
     private bool higherLowerDutyExitHoldLogged;
+    private bool treasureFollowerBmraiOwnsMovement;
+    private string treasureFollowerBmraiMovementStatus = "No treasure portal opener captured.";
+    private string lastTreasureFollowerBmraiMovementHoldLogKey = string.Empty;
+    private string lastTreasureFollowerAdsNavFallbackLogKey = string.Empty;
     private string lastTreasureFollowerSelectYesnoPreserveLogKey = string.Empty;
     private string lastTreasureFollowerDoorFollowThroughRetargetLogKey = string.Empty;
 
@@ -247,9 +251,13 @@ public sealed class ExecutionService
 
     public TreasureDungeonRole TreasureDungeonRole { get; private set; } = ADS.Models.TreasureDungeonRole.MapOpener;
 
+    public string TreasureDungeonRoleDisplayName { get; private set; } = TreasureDungeonRoleInference.MapSeekerDisplayName;
+
     public string TreasureDungeonRoleSource { get; private set; } = "Default";
 
-    public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS keeps map-opener behavior.";
+    public string TreasureDungeonRoleDetail { get; private set; } = "No external treasure-role source was active; ADS shows Map Seeker outside treasure duties.";
+
+    public bool TreasureDungeonRoleAllowsOutsideBmraiFollow { get; private set; } = true;
 
     private TreasureDungeonRole EffectiveTreasureDungeonRole
         => dungeonFrontierService.EffectiveTreasureDungeonRole;
@@ -303,8 +311,10 @@ public sealed class ExecutionService
     public void SetTreasureDungeonRole(TreasureDungeonRoleInference inference)
     {
         TreasureDungeonRole = inference.Role;
+        TreasureDungeonRoleDisplayName = inference.DisplayName;
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
+        TreasureDungeonRoleAllowsOutsideBmraiFollow = inference.AllowsOutsideBmraiFollow;
         ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
         ClearTreasureFollowerPostTransitSettle("treasure role changed");
     }
@@ -363,10 +373,18 @@ public sealed class ExecutionService
             higherLowerDutyExitHoldLogged = false;
     }
 
+    public void SetTreasureFollowerBmraiMovementAuthority(bool ownsMovement, string status)
+    {
+        treasureFollowerBmraiOwnsMovement = ownsMovement;
+        treasureFollowerBmraiMovementStatus = string.IsNullOrWhiteSpace(status)
+            ? "BMRAI treasure follow status unavailable."
+            : status;
+        if (!ownsMovement)
+            lastTreasureFollowerBmraiMovementHoldLogKey = string.Empty;
+    }
+
     private string BuildTreasureRoleStatus()
-        => TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
-            ? $"Treasure role: follower ({TreasureDungeonRoleSource})."
-            : $"Treasure role: map opener ({TreasureDungeonRoleSource}).";
+        => $"Treasure role: {TreasureDungeonRoleDisplayName} ({TreasureDungeonRoleSource}).";
 
     public bool StartDutyFromOutside()
     {
@@ -2113,6 +2131,18 @@ public sealed class ExecutionService
                 return;
             }
 
+            var bmraiMovementLabel = $"{frontierLabel} {frontierPoint.Name}";
+            if (TryHoldTreasureFollowerBmraiMovement(
+                    frontierPoint,
+                    bmraiMovementLabel,
+                    GetFrontierNavigatingPhase(isMapXzDestination, isXyzDestination),
+                    prefix))
+            {
+                return;
+            }
+
+            LogTreasureFollowerAdsNavFallback(frontierPoint, bmraiMovementLabel);
+
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
             var canUseMapFlagNavigation = dungeonFrontierService.CurrentMode == FrontierMode.Label
                                           || (isMapXzDestination && !frontierPoint.UsePlayerYForNavigation);
@@ -2485,6 +2515,67 @@ public sealed class ExecutionService
         => IsTreasureRouteFrontierPoint()
            && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
            && frontierPoint.IsTreasurePassageCandidate;
+
+    private bool IsTreasureFollowerBmraiMovementTarget(DungeonFrontierPoint? frontierPoint)
+    {
+        if (EffectiveTreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower)
+            return false;
+
+        if (frontierPoint is null)
+            return dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout;
+
+        if (frontierPoint.IsManualDestination)
+            return false;
+
+        return frontierPoint.IsTreasureRoutePoint
+               || dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
+               || frontierPoint.Key.StartsWith("treasure-follower-door-follow-through:", StringComparison.Ordinal);
+    }
+
+    private bool TryHoldTreasureFollowerBmraiMovement(
+        DungeonFrontierPoint? frontierPoint,
+        string movementLabel,
+        ExecutionPhase phase,
+        string prefix)
+    {
+        if (!IsTreasureFollowerBmraiMovementTarget(frontierPoint) || !treasureFollowerBmraiOwnsMovement)
+            return false;
+
+        StopNavigationForTreasureRouteNudge();
+        ResetTreasureRouteStuckTracking();
+        ResetManualDestinationNoProgressTracking(clearStatus: true);
+        ResetTreasureDoorJiggleTracking(releaseKeys: true);
+        LogTreasureFollowerBmraiMovementHold(frontierPoint, movementLabel);
+        SetPhase(
+            phase,
+            $"{prefix} BMRAI owns treasure follower movement; ADS is not sending vnav for {movementLabel}. {treasureFollowerBmraiMovementStatus}");
+        return true;
+    }
+
+    private void LogTreasureFollowerBmraiMovementHold(DungeonFrontierPoint? frontierPoint, string movementLabel)
+    {
+        var key = $"{frontierPoint?.Key ?? "none"}:{movementLabel}:{treasureFollowerBmraiMovementStatus}";
+        if (string.Equals(key, lastTreasureFollowerBmraiMovementHoldLogKey, StringComparison.Ordinal))
+            return;
+
+        lastTreasureFollowerBmraiMovementHoldLogKey = key;
+        log?.Information(
+            $"[ADS] Treasure follower movement held for BMRAI: target='{EscapeLogText(movementLabel)}', frontierKey='{frontierPoint?.Key ?? "none"}', status='{EscapeLogText(treasureFollowerBmraiMovementStatus)}'.");
+    }
+
+    private void LogTreasureFollowerAdsNavFallback(DungeonFrontierPoint? frontierPoint, string movementLabel)
+    {
+        if (!IsTreasureFollowerBmraiMovementTarget(frontierPoint) || treasureFollowerBmraiOwnsMovement)
+            return;
+
+        var key = $"{frontierPoint?.Key ?? "none"}:{movementLabel}:{treasureFollowerBmraiMovementStatus}";
+        if (string.Equals(key, lastTreasureFollowerAdsNavFallbackLogKey, StringComparison.Ordinal))
+            return;
+
+        lastTreasureFollowerAdsNavFallbackLogKey = key;
+        log?.Information(
+            $"[ADS] Treasure follower using ADS nav fallback for {EscapeLogText(movementLabel)}: {EscapeLogText(treasureFollowerBmraiMovementStatus)}");
+    }
 
     private static bool IsSameTreasureFollowerPassageGroup(DungeonFrontierPoint left, DungeonFrontierPoint? right)
         => right is not null
@@ -3947,6 +4038,18 @@ public sealed class ExecutionService
             : PreferredFrontierArrivalRange;
         if (targetHorizontalDistance > arrivalRange)
         {
+            var bmraiMovementLabel = $"{label} follow-through {frontierPoint.Name}";
+            if (TryHoldTreasureFollowerBmraiMovement(
+                    frontierPoint,
+                    bmraiMovementLabel,
+                    ExecutionPhase.AttemptingInteractableObjective,
+                    prefix))
+            {
+                return true;
+            }
+
+            LogTreasureFollowerAdsNavFallback(frontierPoint, bmraiMovementLabel);
+
             var navigationDecision = ResolveTreasureDoorFollowThroughNavigation(frontierPoint, playerPosition.Value, maxNudgeAttempts);
             if (navigationDecision.StuckRecoveryExhausted)
             {
@@ -5655,6 +5758,13 @@ public sealed class ExecutionService
 
     private static string FormatVector(Vector3 value)
         => string.Create(CultureInfo.InvariantCulture, $"{value.X:0.00},{value.Y:0.00},{value.Z:0.00}");
+
+    private static string EscapeLogText(string value)
+        => (value ?? string.Empty)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private void SetPhase(ExecutionPhase phase, string status)
     {

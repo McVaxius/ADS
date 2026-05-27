@@ -197,14 +197,18 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var follow = plugin.BossModMultiboxFollowService;
         var openerAge = plugin.TreasurePortalOpenerTracker.CurrentAgeSeconds?.ToString("0") ?? "-";
         var witnessAge = plugin.TreasurePortalOpenerTracker.LastInteractionWitnessAgeSeconds?.ToString("0") ?? "-";
-        var fallbackIn = plugin.TreasurePortalOpenerTracker.FallbackRemainingSeconds?.ToString("0") ?? "-";
         var postTransitSettle = plugin.ExecutionService.TreasureFollowerPostTransitSettleRemainingSeconds.ToString("0.0");
-        ImGui.TextUnformatted($"Treasure role: {plugin.ExecutionService.TreasureDungeonRole} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
+        ImGui.TextUnformatted($"Treasure role: {plugin.ExecutionService.TreasureDungeonRoleDisplayName} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
         ImGui.SameLine();
-        ImGui.TextUnformatted($"Portal opener: {opener?.Source ?? "None"} {opener?.OpenerName ?? string.Empty} slot {opener?.PartySlot?.ToString() ?? "-"} cid {opener?.ContentId?.ToString() ?? "-"} age {openerAge}s");
+        var openerLocal = opener is null ? "-" : opener.IsLocalOpener ? "local" : "remote";
+        ImGui.TextUnformatted($"Portal opener: {opener?.Source ?? "None"} {opener?.OpenerName ?? string.Empty} {openerLocal} age {openerAge}s");
         ImGui.TextWrapped($"Interaction witness: {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessSource} {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessName} -> {plugin.TreasurePortalOpenerTracker.LastInteractionWitnessTarget} age {witnessAge}s | post-transit settle {postTransitSettle}s");
-        ImGui.TextWrapped($"Relay: {plugin.TreasurePortalOpenerTracker.RelayStatus} | fallback in {fallbackIn}s: {plugin.TreasurePortalOpenerTracker.FallbackReason}");
-        ImGui.TextWrapped($"BMRAI follow: {(follow.FollowApplied ? "applied" : "not applied")} {follow.FollowMethod} {follow.FollowStatus}");
+        ImGui.TextWrapped($"Relay: {plugin.TreasurePortalOpenerTracker.RelayStatus}");
+        var commandAccepted = follow.BmraiFollowCommandAccepted is null
+            ? "not sent"
+            : follow.BmraiFollowCommandAccepted.Value ? "accepted" : "rejected";
+        ImGui.TextWrapped($"BMRAI follow: {(follow.FollowApplied ? "applied" : "not applied")} method {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
+        ImGui.TextWrapped($"BMRAI reason: {follow.BmraiFollowCommandStatus}");
     }
 
     private void DrawActionRow()
