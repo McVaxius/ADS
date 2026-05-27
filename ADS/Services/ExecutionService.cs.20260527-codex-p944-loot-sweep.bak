@@ -55,8 +55,8 @@ public sealed class ExecutionService
     private const float TreasureDoorNudgeSideOffset = 1.25f;
     private const float TreasureDoorNudgeForwardOffset = 1.5f;
     //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
-    private const float LeaveTreasureSweepHorizontalRange = 100.0f;
-    private const float LeaveTreasureSweepVerticalCap = 5.0f;
+    private const float LeaveTreasureSweepHorizontalRange = 50.0f;  //this might be better range i saw it skip a few times in a relatively normal boss arena.
+    private const float LeaveTreasureSweepVerticalCap = 6.0f;
     private const float ManualDestinationSatisfiedByProgressionRadius = 8.0f;
     private const float ManualDestinationNoProgressDistance = 0.5f;
     private const float InteractableRetryIdentityPositionBucketSize = 5.0f;
@@ -123,7 +123,6 @@ public sealed class ExecutionService
     private DateTime pendingProgressionInteractResultUntilUtc;
     private DateTime pendingProgressionInteractAfterWaitUntilUtc;
     private int pendingRequiredInteractionAttemptsSent;
-    private bool pendingTreasureFollowerLootFollowThrough;
     private DungeonFrontierPoint? committedForceMarchManualDestination;
     private DateTime committedForceMarchManualDestinationUntilUtc;
     private string? interactArrivalWaitKey;
@@ -785,10 +784,7 @@ public sealed class ExecutionService
                 if (IsStickyInteractableCommitment(committedInteractableObjectiveKind)
                     && planner.ObjectiveKind == committedInteractableObjectiveKind)
                 {
-                    var stickyTarget = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
-                        ? "treasure follower loot"
-                        : "treasure coffer";
-                    TryAdvanceInteractableObjective(context, committedInteractable, $"{prefix} Following through on the committed {stickyTarget} so ADS does not bounce between loot and competing objectives.");
+                    TryAdvanceInteractableObjective(context, committedInteractable, $"{prefix} Following through on the committed treasure coffer so ADS does not bounce between chest and combat objectives.");
                     return;
                 }
 
@@ -797,8 +793,7 @@ public sealed class ExecutionService
                     or PlannerObjectiveKind.ExpendableInteractable
                     or PlannerObjectiveKind.OptionalInteractable
                     or PlannerObjectiveKind.TreasureDoor
-                    or PlannerObjectiveKind.TreasureCoffer
-                    or PlannerObjectiveKind.TreasureFollowerLoot)
+                    or PlannerObjectiveKind.TreasureCoffer)
                 {
                     var replannedInteractable = plannerInteractable;
                     if (replannedInteractable is not null && !IsEquivalentProgressionInteractable(replannedInteractable, committedInteractable))
@@ -868,8 +863,7 @@ public sealed class ExecutionService
                 or PlannerObjectiveKind.ExpendableInteractable
                 or PlannerObjectiveKind.OptionalInteractable
                 or PlannerObjectiveKind.TreasureDoor
-                or PlannerObjectiveKind.TreasureCoffer
-                or PlannerObjectiveKind.TreasureFollowerLoot)
+                or PlannerObjectiveKind.TreasureCoffer)
             {
                 var selectedInteractable = plannerInteractable;
                 if (selectedInteractable is null)
@@ -1900,8 +1894,7 @@ public sealed class ExecutionService
             or PlannerObjectiveKind.ExpendableInteractable
             or PlannerObjectiveKind.OptionalInteractable
             or PlannerObjectiveKind.TreasureDoor
-            or PlannerObjectiveKind.TreasureCoffer
-            or PlannerObjectiveKind.TreasureFollowerLoot;
+            or PlannerObjectiveKind.TreasureCoffer;
 
     private static bool IsFrontierLikePlannerObjective(PlannerObjectiveKind objectiveKind)
         => objectiveKind is PlannerObjectiveKind.Frontier
@@ -3065,10 +3058,7 @@ public sealed class ExecutionService
 
         if (TryInteractWithObject(gameObject, cameraBasedInteract: cameraBasedInteract))
         {
-            var isTreasureFollowerLootFollowThrough = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
-                && observedInteractable.Classification == InteractableClass.TreasureCoffer;
-            if (observedInteractable.Classification == InteractableClass.TreasureCoffer
-                && !isTreasureFollowerLootFollowThrough)
+            if (observedInteractable.Classification == InteractableClass.TreasureCoffer)
             {
                 if (IsTreasureCofferLockedRetryActive(observedInteractable))
                 {
@@ -3088,12 +3078,9 @@ public sealed class ExecutionService
                     && previousPendingProgressionInteractable is not null
                     && IsEquivalentProgressionInteractable(previousPendingProgressionInteractable, observedInteractable);
                 pendingProgressionInteractable = observedInteractable;
-                pendingTreasureFollowerLootFollowThrough = isTreasureFollowerLootFollowThrough;
-                pendingProgressionInteractResultUntilUtc = isTreasureFollowerLootFollowThrough
-                    ? now + InteractAttemptCooldown
-                    : isRequiredLikeInteractable
-                        ? now + RequiredInteractionRetryDelay
-                        : now + ProgressionInteractResultSettleDelay;
+                pendingProgressionInteractResultUntilUtc = isRequiredLikeInteractable
+                    ? now + RequiredInteractionRetryDelay
+                    : now + ProgressionInteractResultSettleDelay;
                 pendingProgressionInteractAfterWaitUntilUtc = waitAfterInteractSeconds > 0f
                     ? now + TimeSpan.FromSeconds(waitAfterInteractSeconds)
                     : DateTime.MinValue;
@@ -3117,15 +3104,13 @@ public sealed class ExecutionService
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
             nextInteractAttemptUtc = now + InteractAttemptCooldown;
-            var interactResult = isTreasureFollowerLootFollowThrough
-                ? $"Direct interact sent to treasure follower loot {observedInteractable.Name}; ADS will keep retrying until it disappears."
-                : observedInteractable.Classification switch
-                {
-                    InteractableClass.Required => $"Direct interact sent to {observedInteractable.Name} (required attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
-                    InteractableClass.TreasureDoor => $"Direct interact sent to treasure door {observedInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
-                    InteractableClass.Expendable => $"Direct interact sent to {observedInteractable.Name}; ADS will keep retrying this expendable until it disappears.",
-                    _ => $"Direct interact sent to {observedInteractable.Name}.",
-                };
+            var interactResult = observedInteractable.Classification switch
+            {
+                InteractableClass.Required => $"Direct interact sent to {observedInteractable.Name} (required attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
+                InteractableClass.TreasureDoor => $"Direct interact sent to treasure door {observedInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
+                InteractableClass.Expendable => $"Direct interact sent to {observedInteractable.Name}; ADS will keep retrying this expendable until it disappears.",
+                _ => $"Direct interact sent to {observedInteractable.Name}.",
+            };
             if (usingCloseRangeInteractFallback)
             {
                 interactResult = $"{interactResult} Close-XZ fallback engaged after {CloseRangeInteractFallbackNoProgressTimeout.TotalSeconds:0}s with no XZ progress (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}).";
@@ -3232,7 +3217,7 @@ public sealed class ExecutionService
     }
 
     private static bool IsStickyInteractableCommitment(PlannerObjectiveKind objectiveKind)
-        => objectiveKind is PlannerObjectiveKind.TreasureCoffer or PlannerObjectiveKind.TreasureFollowerLoot;
+        => objectiveKind == PlannerObjectiveKind.TreasureCoffer;
 
     private bool TryAdvanceCommittedTreasureCofferLockedRetry(
         DutyContextSnapshot context,
@@ -3259,9 +3244,6 @@ public sealed class ExecutionService
         string prefix,
         DateTime now)
     {
-        if (committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot)
-            return false;
-
         if (!IsTreasureCofferLockedRetryActive(interactable))
             return false;
 
@@ -3315,8 +3297,7 @@ public sealed class ExecutionService
             or PlannerObjectiveKind.ExpendableInteractable
             or PlannerObjectiveKind.OptionalInteractable
             or PlannerObjectiveKind.TreasureDoor
-            or PlannerObjectiveKind.TreasureCoffer
-            or PlannerObjectiveKind.TreasureFollowerLoot;
+            or PlannerObjectiveKind.TreasureCoffer;
 
     private bool ShouldSwitchToPlannerInteractable(
         DutyContextSnapshot context,
@@ -3491,7 +3472,6 @@ public sealed class ExecutionService
             or PlannerObjectiveKind.OptionalInteractable
             or PlannerObjectiveKind.TreasureDoor
             or PlannerObjectiveKind.TreasureCoffer
-            or PlannerObjectiveKind.TreasureFollowerLoot
             or PlannerObjectiveKind.BossFightMonster
             or PlannerObjectiveKind.MapXzDestination
             or PlannerObjectiveKind.XyzDestination
@@ -3543,9 +3523,6 @@ public sealed class ExecutionService
     private bool TrySkipStuckTreasureCoffer(ObservedInteractable observedInteractable, float targetHorizontalDistance, string prefix)
     {
         if (observedInteractable.Classification != InteractableClass.TreasureCoffer)
-            return false;
-
-        if (committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot)
             return false;
 
         if (IsTreasureCofferLockedRetryActive(observedInteractable))
@@ -3791,12 +3768,6 @@ public sealed class ExecutionService
             return true;
         }
 
-        var isTreasureFollowerLootFollowThrough = pendingTreasureFollowerLootFollowThrough
-            && pendingInteractable.Classification == InteractableClass.TreasureCoffer;
-        var pendingObjectiveKind = isTreasureFollowerLootFollowThrough
-            ? PlannerObjectiveKind.TreasureFollowerLoot
-            : GetObjectiveKindForInteractable(pendingInteractable.Classification);
-
         if (planner.Mode == PlannerMode.Progression && IsInteractablePlannerObjective(planner.ObjectiveKind))
         {
             var plannerInteractable = ResolveObservedInteractable(planner, observation);
@@ -3805,7 +3776,7 @@ public sealed class ExecutionService
                 && ShouldSwitchToPlannerInteractable(
                     context,
                     pendingInteractable,
-                    pendingObjectiveKind,
+                    GetObjectiveKindForInteractable(pendingInteractable.Classification),
                     plannerInteractable,
                     planner.ObjectiveKind,
                     out var switchReason))
@@ -3813,7 +3784,7 @@ public sealed class ExecutionService
                 PrepareInteractableSwitch(
                     context,
                     pendingInteractable,
-                    pendingObjectiveKind,
+                    GetObjectiveKindForInteractable(pendingInteractable.Classification),
                     plannerInteractable,
                     planner.ObjectiveKind,
                     switchReason);
@@ -3901,11 +3872,9 @@ public sealed class ExecutionService
                 ? $"Holding configured post-interact wait on {pendingInteractable.Name} for another {(pendingProgressionInteractAfterWaitUntilUtc - now).TotalSeconds:0.0}s before ADS retries or replans."
                     : isRequiredFollowThrough
                         ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
-                        : isTreasureFollowerLootFollowThrough
-                            ? $"Waiting for treasure follower loot result on {pendingInteractable.Name}; ADS will retry on cooldown until it disappears."
-                            : isExpendableFollowThrough
-                                ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
-                                : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
+                    : isExpendableFollowThrough
+                        ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
+                        : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {holdReason}");
@@ -3929,15 +3898,6 @@ public sealed class ExecutionService
                 context,
                 pendingLiveInteractable,
                 $"{prefix} Required interact follow-through is still live, so ADS is retrying attempt {pendingRequiredInteractionAttemptsSent + 1}/{RequiredInteractionAttemptLimit} while holding the target steady.");
-            return true;
-        }
-
-        if (isTreasureFollowerLootFollowThrough && pendingLiveInteractable is not null)
-        {
-            TryAdvanceInteractableObjective(
-                context,
-                pendingLiveInteractable,
-                $"{prefix} Treasure follower loot follow-through is still live and targetable, so ADS is retrying it on cooldown.");
             return true;
         }
 
@@ -3971,18 +3931,15 @@ public sealed class ExecutionService
             }
         }
 
-        if (!isTreasureFollowerLootFollowThrough)
-            observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
+        observationMemoryService.MarkProgressionInteractionSent(context, pendingInteractable);
         TryRetirePendingSatisfiedManualDestination(pendingInteractable, objectTable.LocalPlayer?.Position);
         ClearInteractableCommitment();
         StopMovementAssists();
         var completionReason = isRequiredFollowThrough
             ? $"Required interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
-            : isTreasureFollowerLootFollowThrough
-                ? $"Treasure follower loot follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
-                : isExpendableFollowThrough
-                    ? $"Expendable interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
-                    : $"Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.";
+            : isExpendableFollowThrough
+                ? $"Expendable interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
+                : $"Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.";
         SetPhase(
             ExecutionPhase.AttemptingInteractableObjective,
             $"{prefix} {completionReason}");
@@ -4019,7 +3976,6 @@ public sealed class ExecutionService
         pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
-        pendingTreasureFollowerLootFollowThrough = false;
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 
@@ -4541,7 +4497,7 @@ public sealed class ExecutionService
     {
         var normalized = name.Trim();
         return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains("sack", StringComparison.OrdinalIgnoreCase)
+               || normalized.Contains("leather sack", StringComparison.OrdinalIgnoreCase)
                || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
@@ -5240,7 +5196,6 @@ public sealed class ExecutionService
             PlannerObjectiveKind.OptionalInteractable => InteractableClass.Optional,
             PlannerObjectiveKind.TreasureDoor => InteractableClass.TreasureDoor,
             PlannerObjectiveKind.TreasureCoffer => InteractableClass.TreasureCoffer,
-            PlannerObjectiveKind.TreasureFollowerLoot => InteractableClass.TreasureCoffer,
             _ => (InteractableClass?)null,
         };
 

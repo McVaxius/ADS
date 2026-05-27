@@ -19,5 +19,4 @@ public enum PlannerObjectiveKind
     MapXzForceMarchDestination = 14,
     XyzForceMarchDestination = 15,
     TreasureDoor = 16,
-    TreasureFollowerLoot = 17,
 }

@@ -116,9 +116,7 @@ public sealed class ObjectivePlannerService
         var nearestTreasureCoffer = considerTreasureCoffers
             && !isRawTreasureFollower
             ? GetBestInteractable(
-                observation.LiveInteractables.Where(x =>
-                    x.Classification == InteractableClass.TreasureCoffer
-                    && !LooksLikeTreasureFollowerLootSackName(x.Name)),
+                observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureCoffer),
                 playerPosition,
                 context)
             : null;
@@ -200,12 +198,6 @@ public sealed class ObjectivePlannerService
                 Explanation = "ADS stays monster-first but does not become the combat brain; it waits for combat to clear before progression decisions resume.",
                 CapturedAtUtc = now,
             };
-            return;
-        }
-
-        if (TryBuildTreasureFollowerLootSnapshot(context, observation, playerPosition, now, considerTreasureCoffers, out var treasureFollowerLootSnapshot))
-        {
-            Current = treasureFollowerLootSnapshot;
             return;
         }
 
@@ -1070,92 +1062,6 @@ public sealed class ObjectivePlannerService
 
         return $"Treasure-coffer scan is enabled, and the nearest coffer stayed inside the optional-coffer gate at XZ {treasureHorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {treasureDistance:0.0}, Y {treasureVerticalDelta:0.0}. Its effective priority ({treasurePriority}) tied the nearest live monster ({monsterText}) and progression interactable ({requiredText}), so ADS spent the tie on the coffer lead margin.";
     }
-
-    private bool TryBuildTreasureFollowerLootSnapshot(
-        DutyContextSnapshot context,
-        ObservationSnapshot observation,
-        Vector3? playerPosition,
-        DateTime now,
-        bool considerTreasureCoffers,
-        out PlannerSnapshot snapshot)
-    {
-        snapshot = default!;
-        if (!considerTreasureCoffers
-            || dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower
-            || context.InCombat
-            || !playerPosition.HasValue
-            || IsTreasureFollowerPreCombatStagingActive())
-        {
-            return false;
-        }
-
-        var selected = observation.LiveInteractables
-            .Where(x => x.Classification == InteractableClass.TreasureCoffer)
-            .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
-            .Select(x =>
-            {
-                var distance = Vector3.Distance(x.Position, playerPosition.Value);
-                var horizontalDistance = GetHorizontalDistance(playerPosition.Value, x.Position) ?? distance;
-                var verticalDelta = MathF.Abs(x.Position.Y - playerPosition.Value.Y);
-                var priority = objectPriorityRuleService.GetEffectivePriority(context, x, distance, verticalDelta);
-                return new
-                {
-                    Interactable = x,
-                    Distance = distance,
-                    HorizontalDistance = horizontalDistance,
-                    VerticalDelta = verticalDelta,
-                    Priority = priority,
-                    SackRank = GetTreasureFollowerLootSackRank(x.Name),
-                };
-            })
-            .Where(x => x.HorizontalDistance <= TreasureCofferMaxHorizontalDistance)
-            .Where(x => x.VerticalDelta <= TreasureCofferVerticalCap)
-            .Where(x => !objectPriorityRuleService.IsSuppressedByRuleGates(
-                context,
-                x.Interactable,
-                x.Distance,
-                x.VerticalDelta))
-            .OrderBy(x => x.SackRank)
-            .ThenBy(x => x.Priority)
-            .ThenBy(x => x.HorizontalDistance)
-            .ThenBy(x => x.VerticalDelta)
-            .FirstOrDefault();
-
-        if (selected is null)
-            return false;
-
-        snapshot = new PlannerSnapshot
-        {
-            Mode = PlannerMode.Progression,
-            ObjectiveKind = PlannerObjectiveKind.TreasureFollowerLoot,
-            Objective = $"Collect treasure follower loot: {selected.Interactable.Name}",
-            Explanation = $"Treasure follower loot sweep is enabled, and {selected.Interactable.Name} stayed inside the follower loot gate at XZ {selected.HorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {selected.Distance:0.0}, Y {selected.VerticalDelta:0.0}/{TreasureCofferVerticalCap:0.0}. Sacks sort before other treasure containers (rank {selected.SackRank}), then priority {selected.Priority}, then distance, so ADS selected this loot before follower route movement.",
-            TargetName = selected.Interactable.Name,
-            TargetDistance = selected.Distance,
-            TargetVerticalDelta = selected.VerticalDelta,
-            CapturedAtUtc = now,
-        };
-        return true;
-    }
-
-    private bool IsTreasureFollowerPreCombatStagingActive()
-        => dungeonFrontierService.CurrentTarget is { IsTreasureFollowerStagingPoint: true }
-           || (dungeonFrontierService.TreasureFollowerDoorChaseHoldActive
-               && (string.Equals(dungeonFrontierService.TreasureFollowerDoorChaseGateState, "StagedAtTreasureCoffer", StringComparison.Ordinal)
-                   || string.Equals(dungeonFrontierService.TreasureFollowerDoorChaseGateState, "StagingTowardTreasureCoffer", StringComparison.Ordinal)
-                   || string.Equals(dungeonFrontierService.TreasureFollowerDoorChaseGateState, "WaitingForRoomCombat", StringComparison.Ordinal)));
-
-    private static int GetTreasureFollowerLootSackRank(string name)
-    {
-        var normalized = name.Trim();
-        if (normalized.Contains("leather sack", StringComparison.OrdinalIgnoreCase))
-            return 0;
-
-        return LooksLikeTreasureFollowerLootSackName(normalized) ? 1 : 2;
-    }
-
-    private static bool LooksLikeTreasureFollowerLootSackName(string name)
-        => name.Trim().Contains("sack", StringComparison.OrdinalIgnoreCase);
 
     private string BuildFrontierExplanation(
         DutyContextSnapshot context,

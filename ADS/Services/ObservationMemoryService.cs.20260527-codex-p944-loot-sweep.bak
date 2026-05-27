@@ -592,7 +592,7 @@ public sealed class ObservationMemoryService
         if (ShouldIgnoreTreasureDungeonShortcut(context, loweredName))
             return InteractableClass.Ignored;
 
-        if (considerTreasureCoffers && LooksLikeTreasureLootName(context, name))
+        if (considerTreasureCoffers && LooksLikeTreasureCofferOrChestName(name))
             return InteractableClass.TreasureCoffer;
 
         if (ExpendableTokens.Any(loweredName.Contains))
@@ -644,14 +644,6 @@ public sealed class ObservationMemoryService
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool LooksLikeTreasureLootName(DutyContextSnapshot context, string name)
-        => LooksLikeTreasureCofferOrChestName(name)
-           || (TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
-               && LooksLikeTreasureSackName(name));
-
-    private static bool LooksLikeTreasureSackName(string name)
-        => name.Trim().Contains("sack", StringComparison.OrdinalIgnoreCase);
 
     private static bool ShouldIgnoreTreasureDungeonShortcut(DutyContextSnapshot context, string loweredName)
         => TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)

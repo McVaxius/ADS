@@ -814,7 +814,6 @@ public sealed class ObjectPriorityRuleService
     {
         var normalized = NormalizeName(objectName);
         return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains("sack", StringComparison.OrdinalIgnoreCase)
                || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
