@@ -26,6 +26,16 @@ public sealed class Plugin : IDalamudPlugin
 {
     private static readonly TimeSpan TreasureDutyRecoveryTtl = TimeSpan.FromHours(8);
     private static readonly TimeSpan TreasureDutyRecoveryRefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan FrameworkSlowLogCooldown = TimeSpan.FromSeconds(5);
+    private const double FrameworkSlowLogThresholdMs = 100d;
+
+    private enum RemoteJsonReloadStep
+    {
+        ObjectRules,
+        DialogRules,
+        DutyMaturity,
+        TreasureRoutes,
+    }
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
@@ -103,6 +113,9 @@ public sealed class Plugin : IDalamudPlugin
     private uint lastOwnedTreasureRoleInferenceDutyKey;
     private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
     private bool treasureDutyRecoveryAttemptedThisLoad;
+    private readonly Queue<RemoteJsonReloadStep> pendingRemoteJsonReloadSteps = new();
+    private DateTime nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
+    private DateTime nextFrameworkSlowLogUtc = DateTime.MinValue;
 
     public Plugin()
     {
@@ -1285,100 +1298,238 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        if (RemoteJsonUpdateService.TryConsumeCompletedUpdate())
+        var updateStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var slowestSection = "none";
+        var slowestMs = 0d;
+
+        void Measure(string section, Action action)
         {
-            ObjectPriorityRuleService.Reload();
-            DialogYesNoRuleService.Reload();
-            DutyCatalogService.ReloadMaturity();
-            TreasureDungeonData.Reload();
+            var sectionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            action();
+            sectionStopwatch.Stop();
+            var elapsedMs = sectionStopwatch.Elapsed.TotalMilliseconds;
+            if (elapsedMs > slowestMs)
+            {
+                slowestMs = elapsedMs;
+                slowestSection = section;
+            }
         }
 
-        BmrReflectionService.Update();
-        DutyContextService.Update(Configuration.PluginEnabled);
-        CleanupTreasureDutyRuntimeOutsideDuty();
-        TryRecoverTreasureDutyOwnership();
-        EnsureTreasureDungeonRoleInferredForOwnedDuty();
-        WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
-        var shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow();
-        HigherLowerServerEventTraceService.Update(DutyContextService.Current);
-        var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
-        DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
-        var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
-        if (directWitnessOpener is not null)
-            BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(directWitnessOpener);
-        BossModMultiboxFollowService.Update(
-            ExecutionService.TreasureDungeonRole,
-            ExecutionService.TreasureDungeonRoleDisplayName,
-            TreasurePortalOpenerTracker.Current,
-            shouldUseTreasureFollowerBmraiFollow);
-        ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
-            BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
-            BossModMultiboxFollowService.FollowerMovementStatus);
-        HigherLowerVfxTraceService.Update(DutyContextService.Current);
-        HigherLowerCardVfxSolverService.Update(DutyContextService.Current);
-        ObjectPriorityRuleService.ReloadIfChanged();
-        DialogYesNoRuleService.ReloadIfChanged();
-        TreasureDungeonData.ReloadIfChanged();
-        DialogAutomationService.Update(
-            DutyContextService.Current,
-            ExecutionService.CurrentMode,
-            Configuration.PluginEnabled,
-            Configuration.ProcessDialogRulesOutsideOwnedDuty);
-        HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
-        ExecutionService.SetHigherLowerAutomationHold(
-            HigherLowerAutomationService.HoldMovement,
-            HigherLowerAutomationService.Status,
-            HigherLowerAutomationService.BlocksDutyExit,
-            HigherLowerAutomationService.LastHigherLowerActivityUtc);
-        LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
-
-        if (DutyContextService.Current.IsUnsafeTransition)
+        try
         {
-            ObservationMemoryService.HoldUnsafeTransition();
-            DungeonFrontierService.HoldUnsafeTransition(DutyContextService.Current);
-            ObjectivePlannerService.Update(
+            Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            Measure("remote-json-complete", QueueCompletedRemoteJsonReload);
+            Measure("dialog", () => DialogAutomationService.Update(
                 DutyContextService.Current,
-                ObservationSnapshot.Empty,
                 ExecutionService.CurrentMode,
-                Configuration.ConsiderTreasureCoffers);
-            ExecutionService.Update(
+                Configuration.PluginEnabled,
+                Configuration.ProcessDialogRulesOutsideOwnedDuty));
+            Measure("bmr-reflection", BmrReflectionService.Update);
+            Measure("duty-housekeeping", () =>
+            {
+                CleanupTreasureDutyRuntimeOutsideDuty();
+                TryRecoverTreasureDutyOwnership();
+                EnsureTreasureDungeonRoleInferredForOwnedDuty();
+                WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
+            });
+
+            if (DutyContextService.Current.IsUnsafeTransition)
+            {
+                Measure("transition-hold", () =>
+                {
+                    ObservationMemoryService.HoldUnsafeTransition();
+                    DungeonFrontierService.HoldUnsafeTransition(DutyContextService.Current);
+                    ObjectivePlannerService.Update(
+                        DutyContextService.Current,
+                        ObservationSnapshot.Empty,
+                        ExecutionService.CurrentMode,
+                        Configuration.ConsiderTreasureCoffers);
+                    ExecutionService.Update(
+                        DutyContextService.Current,
+                        ObjectivePlannerService.Current,
+                        ObservationSnapshot.Empty,
+                        Configuration.PluginEnabled,
+                        Configuration.ConsiderTreasureCoffers,
+                        DialogAutomationService.DialogStatus);
+                    TreasureHighLowDiagnosticService.Update(
+                        DutyContextService.Current,
+                        ObservationSnapshot.Empty,
+                        ObjectivePlannerService.Current,
+                        DialogAutomationService.DialogStatus);
+                    UpdateDtrBar();
+                });
+                return;
+            }
+
+            Measure("json-reload", UpdateJsonReloads);
+
+            var shouldUseTreasureFollowerBmraiFollow = false;
+            Measure("treasure-follow-mode", () => shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow());
+            Measure("higher-lower-server", () => HigherLowerServerEventTraceService.Update(DutyContextService.Current));
+            var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
+            Measure("treasure-witness", () =>
+            {
+                DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
+                var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
+                if (directWitnessOpener is not null)
+                    BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(directWitnessOpener);
+                BossModMultiboxFollowService.Update(
+                    ExecutionService.TreasureDungeonRole,
+                    ExecutionService.TreasureDungeonRoleDisplayName,
+                    TreasurePortalOpenerTracker.Current,
+                    shouldUseTreasureFollowerBmraiFollow);
+                ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
+                    BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                    BossModMultiboxFollowService.FollowerMovementStatus);
+            });
+            Measure("higher-lower-vfx", () => HigherLowerVfxTraceService.Update(DutyContextService.Current));
+            Measure("higher-lower-card", () => HigherLowerCardVfxSolverService.Update(DutyContextService.Current));
+            Measure("higher-lower-auto", () =>
+            {
+                HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+                ExecutionService.SetHigherLowerAutomationHold(
+                    HigherLowerAutomationService.HoldMovement,
+                    HigherLowerAutomationService.Status,
+                    HigherLowerAutomationService.BlocksDutyExit,
+                    HigherLowerAutomationService.LastHigherLowerActivityUtc);
+            });
+            Measure("loot", () => LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled));
+            Measure("observation", () => ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers));
+            Measure("frontier", () => DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current));
+            Measure("planner", () => ObjectivePlannerService.Update(
+                DutyContextService.Current,
+                ObservationMemoryService.Current,
+                ExecutionService.CurrentMode,
+                Configuration.ConsiderTreasureCoffers));
+            Measure("execution", () => ExecutionService.Update(
                 DutyContextService.Current,
                 ObjectivePlannerService.Current,
-                ObservationSnapshot.Empty,
+                ObservationMemoryService.Current,
                 Configuration.PluginEnabled,
                 Configuration.ConsiderTreasureCoffers,
-                DialogAutomationService.DialogStatus);
-            TreasureHighLowDiagnosticService.Update(
+                DialogAutomationService.DialogStatus));
+            Measure("diagnostics", () => TreasureHighLowDiagnosticService.Update(
                 DutyContextService.Current,
-                ObservationSnapshot.Empty,
+                ObservationMemoryService.Current,
                 ObjectivePlannerService.Current,
-                DialogAutomationService.DialogStatus);
-            UpdateDtrBar();
+                DialogAutomationService.DialogStatus));
+            Measure("inn", InnEntryService.Update);
+            Measure("utility", UtilityAutomationService.Update);
+            Measure("dtr", UpdateDtrBar);
+        }
+        finally
+        {
+            updateStopwatch.Stop();
+            ReportFrameworkSlowUpdate(updateStopwatch.Elapsed.TotalMilliseconds, slowestSection, slowestMs);
+        }
+    }
+
+    private void QueueCompletedRemoteJsonReload()
+    {
+        if (!RemoteJsonUpdateService.TryConsumeCompletedUpdate())
+            return;
+
+        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.ObjectRules);
+        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.DialogRules);
+        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.DutyMaturity);
+        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.TreasureRoutes);
+        Log.Information("[ADS] Remote config update completed; queued cache reload across framework frames.");
+    }
+
+    private void UpdateJsonReloads()
+    {
+        if (ShouldDeferJsonReloads(out var reason))
+        {
+            if (pendingRemoteJsonReloadSteps.Count > 0 && DateTime.UtcNow >= nextRemoteJsonReloadDeferredLogUtc)
+            {
+                nextRemoteJsonReloadDeferredLogUtc = DateTime.UtcNow.AddSeconds(5);
+                Log.Debug($"[ADS] Deferring {pendingRemoteJsonReloadSteps.Count} remote config reload step(s): {reason}.");
+            }
+
             return;
         }
 
-        ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
-        DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current);
-        ObjectivePlannerService.Update(
-            DutyContextService.Current,
-            ObservationMemoryService.Current,
-            ExecutionService.CurrentMode,
-            Configuration.ConsiderTreasureCoffers);
-        ExecutionService.Update(
-            DutyContextService.Current,
-            ObjectivePlannerService.Current,
-            ObservationMemoryService.Current,
-            Configuration.PluginEnabled,
-            Configuration.ConsiderTreasureCoffers,
+        nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
+        if (pendingRemoteJsonReloadSteps.TryDequeue(out var step))
+        {
+            RunRemoteJsonReloadStep(step);
+            return;
+        }
+
+        ObjectPriorityRuleService.ReloadIfChanged();
+        DialogYesNoRuleService.ReloadIfChanged();
+        TreasureDungeonData.ReloadIfChanged();
+    }
+
+    private bool ShouldDeferJsonReloads(out string reason)
+    {
+        var context = DutyContextService.Current;
+        if (context.BetweenAreas)
+        {
+            reason = "BetweenAreas active";
+            return true;
+        }
+
+        if (context.BetweenAreas51)
+        {
+            reason = "BetweenAreas51 active";
+            return true;
+        }
+
+        if (DialogAutomationService.DialogVisible)
+        {
+            reason = "SelectYesno visible";
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    private void RunRemoteJsonReloadStep(RemoteJsonReloadStep step)
+    {
+        switch (step)
+        {
+            case RemoteJsonReloadStep.ObjectRules:
+                ObjectPriorityRuleService.Reload();
+                break;
+            case RemoteJsonReloadStep.DialogRules:
+                DialogYesNoRuleService.Reload();
+                break;
+            case RemoteJsonReloadStep.DutyMaturity:
+                DutyCatalogService.ReloadMaturity();
+                break;
+            case RemoteJsonReloadStep.TreasureRoutes:
+                TreasureDungeonData.Reload();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown remote JSON reload step.");
+        }
+    }
+
+    private void ReportFrameworkSlowUpdate(double elapsedMs, string slowestSection, double slowestMs)
+    {
+        if (elapsedMs < FrameworkSlowLogThresholdMs)
+            return;
+
+        var now = DateTime.UtcNow;
+        if (now < nextFrameworkSlowLogUtc)
+            return;
+
+        nextFrameworkSlowLogUtc = now + FrameworkSlowLogCooldown;
+        var context = DutyContextService.Current;
+        Log.Warning(
+            "[ADS][HITCH] framework update slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; territory={Territory}; map={Map}; betweenAreas={BetweenAreas}; betweenAreas51={BetweenAreas51}; dialogVisible={DialogVisible}; dialogRule={DialogRule}; dialogStatus={DialogStatus}.",
+            elapsedMs,
+            slowestSection,
+            slowestMs,
+            context.TerritoryTypeId,
+            context.MapId,
+            context.BetweenAreas,
+            context.BetweenAreas51,
+            DialogAutomationService.DialogVisible,
+            DialogAutomationService.DialogRule,
             DialogAutomationService.DialogStatus);
-        TreasureHighLowDiagnosticService.Update(
-            DutyContextService.Current,
-            ObservationMemoryService.Current,
-            ObjectivePlannerService.Current,
-            DialogAutomationService.DialogStatus);
-        InnEntryService.Update();
-        UtilityAutomationService.Update();
-        UpdateDtrBar();
     }
 
     private void OnChatMessage(IHandleableChatMessage message)
