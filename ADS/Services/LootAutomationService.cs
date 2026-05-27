@@ -13,10 +13,10 @@ namespace ADS.Services;
 public sealed class LootAutomationService
 {
     private const string RollSignature = "41 83 F8 ?? 0F 83 ?? ?? ?? ?? 48 89 5C 24 08";
-    private static readonly TimeSpan RollCooldown = TimeSpan.FromSeconds(1.5);
-    private static readonly TimeSpan RestoreCooldown = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RestoreCooldown = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan SameLootRetryDelay = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SignatureRetryCooldown = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan LootDiagnosticCooldown = TimeSpan.FromSeconds(10);
 
     private readonly IDataManager dataManager;
     private readonly ICommandManager commandManager;
@@ -24,11 +24,11 @@ public sealed class LootAutomationService
     private readonly Configuration configuration;
     private readonly IPluginLog log;
     private readonly Dictionary<uint, uint[]> fadedCopyResultCache = [];
+    private readonly Dictionary<string, DateTime> nextDiagnosticLogUtcByKey = [];
 
     private RollItemRaw? rollItemRaw;
     private string activeOwnershipKey = string.Empty;
     private bool lazyLootDisabledForOwnership;
-    private DateTime nextRollAttemptUtc = DateTime.MinValue;
     private DateTime nextRestoreAttemptUtc = DateTime.MinValue;
     private DateTime nextSignatureScanUtc = DateTime.MinValue;
     private DateTime nextFailureLogUtc = DateTime.MinValue;
@@ -73,58 +73,110 @@ public sealed class LootAutomationService
 
     public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode, bool pluginEnabled)
     {
-        var ownsStartOrLeaveFlow = pluginEnabled
-                                    && context.IsLoggedIn
-                                    && IsOwnedOrLeaving(ownershipMode);
-        var ownershipEligible = ownsStartOrLeaveFlow
-                                && (context.InInstancedDuty || configuration.LootMode != LootRollMode.Off);
-        if (!ownershipEligible)
-        {
-            ResetOwnershipLatch();
-            Status = configuration.LootMode == LootRollMode.Off
-                ? "Loot off."
-                : "Loot waiting for ADS-owned duty.";
-            return;
-        }
-
-        EnsureOwnershipLatch(context);
-
         if (configuration.LootMode == LootRollMode.Off)
         {
-            ResetAttemptState();
-            Status = "Loot off for ADS-owned duty.";
+            ResetOwnershipLatch();
+            Status = "Loot off.";
             return;
         }
 
-        if (context.InInstancedDuty)
+        if (!pluginEnabled)
+        {
+            ResetOwnershipLatch();
+            Status = "Loot waiting for ADS enabled.";
+            return;
+        }
+
+        if (!context.IsLoggedIn)
+        {
+            ResetOwnershipLatch();
+            Status = "Loot waiting for login.";
+            return;
+        }
+
+        var ownsStartOrLeaveFlow = IsOwnedOrLeaving(ownershipMode);
+        var safeForLoot = IsSafeForLoot(context);
+        var needGreedVisible = GameInteractionHelper.IsAddonVisible("NeedGreed");
+        var notificationLootVisible = GameInteractionHelper.IsAddonVisible("_NotificationLoot");
+        var visibleLootPresent = needGreedVisible || notificationLootVisible;
+        var visibleLootAssistEligible = safeForLoot && visibleLootPresent;
+
+        if (!ownsStartOrLeaveFlow && !visibleLootAssistEligible)
+        {
+            ResetOwnershipLatch(resetAttempts: !visibleLootPresent);
+            if (visibleLootPresent)
+            {
+                Status = "Loot visible; waiting for stable game state.";
+                LogLootDiagnostic(
+                    "unsafe-visible-loot",
+                    $"Loot visible outside ADS ownership but game state is unsafe; needGreed={needGreedVisible}, notificationLoot={notificationLootVisible}, territory={context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}, cfc={context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}.");
+            }
+            else
+            {
+                Status = "Loot waiting for ADS ownership or visible loot.";
+            }
+
+            return;
+        }
+
+        if (ownsStartOrLeaveFlow)
+            EnsureOwnershipLatch(context);
+        else
+            ResetOwnershipLatch(resetAttempts: false);
+
+        if (ownsStartOrLeaveFlow && context.InInstancedDuty)
             EnsureLazyLootDisabledForOwnership();
 
-        var needGreedVisible = GameInteractionHelper.IsAddonVisible("NeedGreed");
-        if (!needGreedVisible)
+        if (!safeForLoot)
         {
-            if (GameInteractionHelper.IsAddonVisible("_NotificationLoot"))
-                TryRestoreMinimizedLoot();
-            else
-                Status = $"Loot {configuration.LootMode}; waiting for loot window.";
+            Status = "Loot armed; waiting for stable game state.";
+            if (visibleLootPresent)
+            {
+                LogLootDiagnostic(
+                    "unsafe-owned-loot",
+                    $"Loot visible during ADS ownership but game state is unsafe; needGreed={needGreedVisible}, notificationLoot={notificationLootVisible}, territory={context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}, cfc={context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}.");
+            }
 
             return;
         }
 
-        if (context.IsUnsafeTransition || context.OccupiedInCutSceneEvent || context.WatchingCutscene)
+        if (!ownsStartOrLeaveFlow)
         {
-            Status = "Loot armed; waiting for stable duty state.";
-            return;
+            LogLootDiagnostic(
+                "visible-loot-assist",
+                $"Visible loot assist active outside ADS ownership; mode={configuration.LootMode}, needGreed={needGreedVisible}, notificationLoot={notificationLootVisible}, territory={context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}, cfc={context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}.");
+        }
+
+        if (!needGreedVisible)
+        {
+            var restoreAttempted = false;
+            if (notificationLootVisible)
+            {
+                restoreAttempted = true;
+                if (TryRestoreMinimizedLoot())
+                    needGreedVisible = GameInteractionHelper.IsAddonVisible("NeedGreed");
+            }
+
+            if (!needGreedVisible)
+            {
+                if (!restoreAttempted)
+                    Status = $"Loot {configuration.LootMode}; waiting for loot window.";
+                return;
+            }
         }
 
         var now = DateTime.UtcNow;
-        if (now < nextRollAttemptUtc)
+        if (!TryGetNextLootItem(now, out var index, out var lootItem, out var blockedDuplicateItemId))
         {
-            Status = $"Loot {configuration.LootMode}; waiting {GetRemainingSeconds(nextRollAttemptUtc):0.0}s before next roll.";
-            return;
-        }
+            if (blockedDuplicateItemId != 0)
+            {
+                var duplicateName = TryGetItem(blockedDuplicateItemId, out var duplicateItem)
+                    ? duplicateItem.Name.ToString()
+                    : $"item {blockedDuplicateItemId.ToString(CultureInfo.InvariantCulture)}";
+                Status = $"Loot {configuration.LootMode}; waiting {GetRemainingSeconds(lastAttemptUtc + SameLootRetryDelay):0.0}s to retry {duplicateName}.";
+                return;
+            }
 
-        if (!TryGetNextLootItem(out var index, out var lootItem))
-        {
             ResetAttemptState();
             Status = $"Loot {configuration.LootMode}; NeedGreed visible but no eligible loot rows.";
             return;
@@ -138,26 +190,18 @@ public sealed class LootAutomationService
             : new RollDecision(
                 ResultMerge(MapBaseMode(configuration.LootMode), GetHardCap(lootItem)),
                 $"base={configuration.LootMode}, itemSheet=missing");
-        if (IsSameLootAttempt(itemId, index) && now - lastAttemptUtc < SameLootRetryDelay)
-        {
-            Status = $"Loot {configuration.LootMode}; waiting {GetRemainingSeconds(lastAttemptUtc + SameLootRetryDelay):0.0}s to retry {itemName}.";
-            return;
-        }
-
         if (TryRoll(decision.Result, index))
         {
             lastAttemptItemId = itemId;
             lastAttemptIndex = index;
             lastAttemptResult = decision.Result;
             lastAttemptUtc = now;
-            nextRollAttemptUtc = now + RollCooldown;
             Status = $"Loot {configuration.LootMode}; {FormatRollResult(decision.Result)} {itemName}.";
             log.Information(
                 $"[ADS][Loot] Rolled {FormatRollResult(decision.Result)} on {EscapeLogText(itemName)} ({itemId}) slot={index.ToString(CultureInfo.InvariantCulture)}; {decision.Reason}");
             return;
         }
 
-        nextRollAttemptUtc = now + RollCooldown;
         Status = $"Loot {configuration.LootMode}; failed to roll {itemName}.";
         LogRollFailure(itemId, index, "native roll call failed");
     }
@@ -173,11 +217,12 @@ public sealed class LootAutomationService
         ResetAttemptState();
     }
 
-    private void ResetOwnershipLatch()
+    private void ResetOwnershipLatch(bool resetAttempts = true)
     {
         activeOwnershipKey = string.Empty;
         lazyLootDisabledForOwnership = false;
-        ResetAttemptState();
+        if (resetAttempts)
+            ResetAttemptState();
     }
 
     private void EnsureLazyLootDisabledForOwnership()
@@ -195,25 +240,26 @@ public sealed class LootAutomationService
         log.Warning("[ADS][Loot] Failed to send /xldisableplugin lazyloot for this ADS-owned duty.");
     }
 
-    private void TryRestoreMinimizedLoot()
+    private bool TryRestoreMinimizedLoot()
     {
         var now = DateTime.UtcNow;
         if (now < nextRestoreAttemptUtc)
         {
             Status = $"Loot {configuration.LootMode}; minimized loot restore cooling down.";
-            return;
+            return false;
         }
 
         nextRestoreAttemptUtc = now + RestoreCooldown;
         if (GameInteractionHelper.TryFireAddonCallback("_Notification", true, 0, 2))
         {
             Status = "Loot notification restored; waiting for NeedGreed.";
-            log.Information("[ADS][Loot] Restored minimized loot via _Notification true 0 2.");
-            return;
+            LogLootDiagnostic("restore-minimized-loot", "Restored minimized loot via _Notification true 0 2.");
+            return true;
         }
 
         Status = "Loot notification visible; restore callback failed.";
-        log.Warning("[ADS][Loot] Failed minimized loot restore via _Notification true 0 2.");
+        LogLootDiagnostic("restore-minimized-loot-failed", "Failed minimized loot restore via _Notification true 0 2.", warning: true);
+        return false;
     }
 
     private RollDecision ResolveDecision(LootItem lootItem, uint itemId, Item item)
@@ -338,8 +384,9 @@ public sealed class LootAutomationService
             _ => RollResult.Passed,
         };
 
-    private unsafe bool TryGetNextLootItem(out uint index, out LootItem lootItem)
+    private unsafe bool TryGetNextLootItem(DateTime now, out uint index, out LootItem lootItem, out uint blockedDuplicateItemId)
     {
+        blockedDuplicateItemId = 0;
         var loot = Loot.Instance();
         if (loot == null)
         {
@@ -365,6 +412,12 @@ public sealed class LootAutomationService
             if (lootItem.LootMode is FFXIVClientStructs.FFXIV.Client.Game.UI.LootMode.LootMasterGreedOnly
                 or FFXIVClientStructs.FFXIV.Client.Game.UI.LootMode.Unavailable)
             {
+                continue;
+            }
+
+            if (IsSameLootAttempt(lootItem.ItemId, index) && now - lastAttemptUtc < SameLootRetryDelay)
+            {
+                blockedDuplicateItemId = lootItem.ItemId;
                 continue;
             }
 
@@ -478,11 +531,23 @@ public sealed class LootAutomationService
 
     private void ResetAttemptState()
     {
-        nextRollAttemptUtc = DateTime.MinValue;
         lastAttemptItemId = 0;
         lastAttemptIndex = 0;
         lastAttemptResult = RollResult.UnAwarded;
         lastAttemptUtc = DateTime.MinValue;
+    }
+
+    private void LogLootDiagnostic(string key, string message, bool warning = false)
+    {
+        var now = DateTime.UtcNow;
+        if (nextDiagnosticLogUtcByKey.TryGetValue(key, out var nextLogUtc) && now < nextLogUtc)
+            return;
+
+        nextDiagnosticLogUtcByKey[key] = now + LootDiagnosticCooldown;
+        if (warning)
+            log.Warning($"[ADS][Loot] {message}");
+        else
+            log.Information($"[ADS][Loot] {message}");
     }
 
     private void LogRollFailure(uint itemId, uint index, string reason)
@@ -511,6 +576,11 @@ public sealed class LootAutomationService
             or OwnershipMode.OwnedStartInside
             or OwnershipMode.OwnedResumeInside
             or OwnershipMode.Leaving;
+
+    private static bool IsSafeForLoot(DutyContextSnapshot context)
+        => !context.IsUnsafeTransition
+           && !context.OccupiedInCutSceneEvent
+           && !context.WatchingCutscene;
 
     private static uint NormalizeItemId(uint itemId)
         => itemId >= 1_000_000 ? itemId - 1_000_000 : itemId;

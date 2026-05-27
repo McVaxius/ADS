@@ -1469,7 +1469,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
-                "/ads lootoff|lootneed|lootgreed|lootpass - set ADS-owned loot rolling mode\n" +
+                "/ads lootoff|lootneed|lootgreed|lootpass - set loot rolling mode\n" +
                 "/ads lootregon|lootregoff - toggle registrable Need override\n" +
                 "/ads hldebug on|off|dump|state|trace [seconds]|export|exportpath <tex> [u v w h]|card <1-9> [current|next|previous]|board <left> <right> [label...]|solver|status|folder - Higher/Lower diagnostic file logging\n" +
                 "/ads hlauto on|off|status - Higher/Lower guarded automation\n" +
