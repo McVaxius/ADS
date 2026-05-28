@@ -183,7 +183,7 @@ public sealed class TreasurePortalOpenerTracker
 
         RelayStatus = "Relay ignored: BMRAI/VBM follow uses only direct portal chat or interaction witness.";
 
-        return TryPromoteInteractionWitness(interactionWitness, now, openerPromotionAllowed)
+        return TryPromoteInteractionWitness(interactionWitness, now)
             ? pendingPortalOpener?.ToSnapshot()
             : null;
     }
@@ -308,8 +308,7 @@ public sealed class TreasurePortalOpenerTracker
 
     private bool TryPromoteInteractionWitness(
         TreasureInteractionWitness? witness,
-        DateTime now,
-        bool openerPromotionAllowed)
+        DateTime now)
     {
         if (witness is null)
             return false;
@@ -330,12 +329,6 @@ public sealed class TreasurePortalOpenerTracker
         if (!IsCurrentCycleCapture(witness.CapturedUtc))
         {
             LogInteractionWitnessDecision(witness, promoted: false, $"witness captured before current opener cycle {openerCycleEpoch.ToString(CultureInfo.InvariantCulture)}");
-            return false;
-        }
-
-        if (!openerPromotionAllowed)
-        {
-            LogInteractionWitnessDecision(witness, promoted: false, "opener promotion disallowed for current treasure follow role");
             return false;
         }
 
