@@ -76,7 +76,8 @@ public sealed class DialogAutomationService
         DutyContextSnapshot context,
         OwnershipMode ownershipMode,
         bool pluginEnabled,
-        bool processDialogRulesOutsideOwnedDuty)
+        bool processDialogRulesOutsideOwnedDuty,
+        bool suppressGenericYesNo)
     {
         RefreshVisibleDialogSnapshot();
 
@@ -95,6 +96,12 @@ public sealed class DialogAutomationService
         if (context.IsUnsafeTransition)
         {
             SetBlockedStatus("unsafe transition active");
+            return;
+        }
+
+        if (suppressGenericYesNo)
+        {
+            SetBlockedStatus("utility repair owns SelectYesno confirmations");
             return;
         }
 

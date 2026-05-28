@@ -851,6 +851,7 @@ public sealed class Plugin : IDalamudPlugin
                 manualDestinationLastProgressAgeSeconds = ExecutionService.ManualDestinationLastProgressAgeSeconds,
                 manualDestinationLastGhostReason = DungeonFrontierService.LastGhostedManualDestinationReason,
                 utilityRunning = UtilityAutomationService.IsRunning,
+                utilitySuppressesGenericYesNo = UtilityAutomationService.SuppressesGenericYesNo,
                 utilityTask = UtilityAutomationService.ActiveTaskName,
                 utilityMode = UtilityAutomationService.ActiveModeName,
                 utilityStatus = UtilityAutomationService.StatusMessage,
@@ -1374,7 +1375,8 @@ public sealed class Plugin : IDalamudPlugin
                 DutyContextService.Current,
                 ExecutionService.CurrentMode,
                 Configuration.PluginEnabled,
-                Configuration.ProcessDialogRulesOutsideOwnedDuty));
+                Configuration.ProcessDialogRulesOutsideOwnedDuty,
+                UtilityAutomationService.SuppressesGenericYesNo));
             Measure("bmr-reflection", BmrReflectionService.Update);
             Measure("duty-housekeeping", () =>
             {

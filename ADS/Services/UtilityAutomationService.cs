@@ -266,6 +266,9 @@ public sealed unsafe class UtilityAutomationService
     public bool IsRunning
         => activeTask != UtilityTask.None;
 
+    public bool SuppressesGenericYesNo
+        => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair;
+
     public string StatusMessage { get; private set; } = "Idle";
 
     public string ActiveTaskName
