@@ -13,6 +13,7 @@ public sealed class BossModMultiboxFollowService
     private const string MultiboxModuleFullName = "BossMod.Autorotation.MiscAI.Multibox";
     private const string MultiboxLeaderTrack = "Leader";
     private const string AdsTreasureFollowPresetName = "ADS Treasure Follow";
+    private const string FollowProviderLabel = "BMRAI/VBM";
     private const string AdsTreasureFollowPresetJson = """
         {
           "Name": "ADS Treasure Follow",
@@ -37,6 +38,8 @@ public sealed class BossModMultiboxFollowService
     private readonly IPluginLog log;
 
     private string lastLoggedSuccessKey = string.Empty;
+    private string lastReapplyAttemptKey = string.Empty;
+    private uint bmraiFollowCommandAcceptedDutyKey;
     private bool bmraiFollowActivated;
 
     public BossModMultiboxFollowService(
@@ -71,7 +74,7 @@ public sealed class BossModMultiboxFollowService
 
     public DateTime? BmraiFollowCommandAtUtc { get; private set; }
 
-    public string BmraiFollowCommandStatus { get; private set; } = "BMRAI command not sent: no direct portal chat or interaction witness opener captured.";
+    public string BmraiFollowCommandStatus { get; private set; } = "BMRAI/VBM command not sent: no direct portal chat or interaction witness opener captured.";
 
     public string BmraiFollowCommandTargetName { get; private set; } = string.Empty;
 
@@ -105,10 +108,15 @@ public sealed class BossModMultiboxFollowService
         SetBmraiCommandSkipped(null, FollowStatus);
         SetFollowerMovementAuthority(false, FollowStatus);
         lastLoggedSuccessKey = string.Empty;
+        lastReapplyAttemptKey = string.Empty;
+        bmraiFollowCommandAcceptedDutyKey = 0;
         bmraiFollowActivated = false;
     }
 
-    public bool ApplyDirectTreasurePortalOpener(TreasurePortalOpenerSnapshot opener)
+    public bool ApplyDirectTreasurePortalOpener(
+        TreasurePortalOpenerSnapshot opener,
+        DutyContextSnapshot? context = null,
+        string reason = "direct treasure opener")
     {
         FollowLeaderContentId = opener.ContentId;
 
@@ -116,26 +124,45 @@ public sealed class BossModMultiboxFollowService
         {
             FollowApplied = false;
             FollowMethod = string.Empty;
-            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for BMRAI follow; source is not direct portal chat or interaction witness.";
-            SetBmraiCommandSkipped(opener, $"BMRAI command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
+            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for {FollowProviderLabel} follow; source is not direct portal chat or interaction witness.";
+            SetBmraiCommandSkipped(opener, $"{FollowProviderLabel} command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
             SetFollowerMovementAuthority(false, FollowStatus);
             return false;
         }
 
         var followKey = BuildFollowKey(opener);
-        if (!TryApplyViaBmraiSlash(opener, out var commandResult))
+        if (!TryApplyViaFollowSlash(opener, out var commandResult))
         {
             FollowApplied = false;
             FollowMethod = commandResult.Method;
-            FollowStatus = $"BMRAI name follow not applied for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {commandResult.Status}";
+            FollowStatus = $"{FollowProviderLabel} name follow not applied for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {commandResult.Status}";
             RecordBmraiFollowCommand(opener, commandResult);
             SetFollowerMovementAuthority(false, FollowStatus);
             log.Information($"[ADS] {FollowStatus}");
             return false;
         }
 
-        MarkBmraiApplied(opener, followKey, commandResult);
+        MarkBmraiApplied(opener, followKey, commandResult, GetAcceptedFollowDutyKey(context), reason);
         return true;
+    }
+
+    public bool ReapplyDirectTreasurePortalOpenerIfNeeded(
+        TreasurePortalOpenerSnapshot opener,
+        DutyContextSnapshot context,
+        string reason)
+    {
+        if (!TryGetDirectTreasureFollowReapplyReason(opener, context, out var reapplyReason))
+            return false;
+
+        var dutyKey = GetAcceptedFollowDutyKey(context);
+        var reapplyKey = $"{dutyKey}:{BuildFollowKey(opener)}:{reapplyReason}";
+        if (string.Equals(reapplyKey, lastReapplyAttemptKey, StringComparison.Ordinal))
+            return false;
+
+        lastReapplyAttemptKey = reapplyKey;
+        log.Information(
+            $"[ADS] Reapplying {FollowProviderLabel} treasure follow after {reason}: opener='{opener.OpenerName}', source={opener.Source}, dutyKey={dutyKey}, reason={reapplyReason}.");
+        return ApplyDirectTreasurePortalOpener(opener, context, $"reapply after {reason}");
     }
 
     public void Update(TreasureDungeonRole role, string roleDisplayName, TreasurePortalOpenerSnapshot? opener, bool followAllowed)
@@ -147,7 +174,7 @@ public sealed class BossModMultiboxFollowService
             FollowMethod = string.Empty;
             FollowStatus = "No treasure portal opener captured.";
             if (BmraiFollowCommandAccepted is null)
-                SetBmraiCommandSkipped(null, "BMRAI command not sent: no direct portal chat or interaction witness opener captured.");
+                SetBmraiCommandSkipped(null, $"{FollowProviderLabel} command not sent: no direct portal chat or interaction witness opener captured.");
 
             SetFollowerMovementAuthority(false, FollowStatus);
             return;
@@ -159,27 +186,25 @@ public sealed class BossModMultiboxFollowService
         {
             FollowApplied = false;
             FollowMethod = string.Empty;
-            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for BMRAI follow; only direct portal chat or interaction witness can send BMRAI.";
-            SetBmraiCommandSkipped(opener, $"BMRAI command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
+            FollowStatus = $"Treasure opener '{opener.OpenerName}' from {opener.Source} ignored for {FollowProviderLabel} follow; only direct portal chat or interaction witness can send {FollowProviderLabel}.";
+            SetBmraiCommandSkipped(opener, $"{FollowProviderLabel} command not sent: source {opener.Source} is not direct portal chat or interaction witness.");
             SetFollowerMovementAuthority(false, FollowStatus);
             return;
         }
 
-        var commandMatchesOpener = BmraiFollowCommandAccepted == true
-                                   && NamesMatch(BmraiFollowCommandTargetName, opener.OpenerName)
-                                   && string.Equals(BmraiFollowCommandTargetSource, opener.Source, StringComparison.OrdinalIgnoreCase);
+        var commandMatchesOpener = CommandMatchesOpener(opener);
         if (!commandMatchesOpener)
         {
             FollowApplied = false;
             FollowMethod = BmraiFollowCommandMethod;
-            FollowStatus = $"Direct treasure opener '{opener.OpenerName}' from {opener.Source} has no accepted BMRAI follow command. {BmraiFollowCommandStatus}";
+            FollowStatus = $"Direct treasure opener '{opener.OpenerName}' from {opener.Source} has no accepted {FollowProviderLabel} follow command. {BmraiFollowCommandStatus}";
             SetFollowerMovementAuthority(false, FollowStatus);
             return;
         }
 
         FollowApplied = true;
         FollowMethod = BmraiFollowCommandMethod;
-        FollowStatus = $"BMRAI name follow accepted for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {BmraiFollowCommandStatus}";
+        FollowStatus = $"{FollowProviderLabel} name follow accepted for direct treasure opener '{opener.OpenerName}' from {opener.Source}. {BmraiFollowCommandStatus}";
         SetFollowerMovementAuthority(
             followAllowed,
             followAllowed
@@ -190,25 +215,28 @@ public sealed class BossModMultiboxFollowService
     private void MarkBmraiApplied(
         TreasurePortalOpenerSnapshot opener,
         string followKey,
-        BmraiFollowCommandResult commandResult)
+        BmraiFollowCommandResult commandResult,
+        uint acceptedDutyKey,
+        string reason)
     {
         FollowApplied = true;
         FollowMethod = commandResult.Method;
         FollowLeaderContentId = opener.ContentId;
         bmraiFollowActivated = true;
         RecordBmraiFollowCommand(opener, commandResult);
+        RecordAcceptedFollowDutyKey(commandResult, acceptedDutyKey);
 
         var contentId = opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "unresolved";
-        FollowStatus = $"BMRAI name follow set to direct treasure opener '{opener.OpenerName}' from {opener.Source}, content id {contentId}. {commandResult.Status}";
+        FollowStatus = $"{FollowProviderLabel} name follow set to direct treasure opener '{opener.OpenerName}' from {opener.Source}, content id {contentId}. {commandResult.Status}";
         SetFollowerMovementAuthority(true, FollowStatus);
 
-        var successKey = $"BMRAI:{followKey}:{commandResult.Method}:{commandResult.CommandText}:{commandResult.Accepted}";
+        var successKey = $"{FollowProviderLabel}:{followKey}:{commandResult.Method}:{commandResult.CommandText}:{commandResult.Accepted}:{acceptedDutyKey}:{reason}";
         if (string.Equals(successKey, lastLoggedSuccessKey, StringComparison.Ordinal))
             return;
 
         lastLoggedSuccessKey = successKey;
         log.Information(
-            $"[ADS] BMRAI follow target command: source={opener.Source}, opener='{opener.OpenerName}', contentId={contentId}, method={commandResult.Method}, command='{commandResult.CommandText}', accepted={commandResult.Accepted?.ToString() ?? "not sent"}, at={commandResult.AtUtc:O}.");
+            $"[ADS] {FollowProviderLabel} follow target commands: source={opener.Source}, opener='{opener.OpenerName}', contentId={contentId}, method={commandResult.Method}, commands='{commandResult.CommandText}', accepted={commandResult.Accepted?.ToString() ?? "not sent"}, dutyKey={acceptedDutyKey}, reason='{reason}', at={commandResult.AtUtc:O}.");
         log.Information($"[ADS] {FollowStatus}");
     }
 
@@ -229,6 +257,7 @@ public sealed class BossModMultiboxFollowService
         BmraiFollowCommandTargetSlot = target?.PartySlot;
         BmraiFollowCommandTargetContentId = target?.ContentId;
         BmraiFollowCommandTargetSource = target?.Source ?? string.Empty;
+        bmraiFollowCommandAcceptedDutyKey = 0;
     }
 
     private void RecordBmraiFollowCommand(TreasurePortalOpenerSnapshot target, BmraiFollowCommandResult result)
@@ -242,9 +271,14 @@ public sealed class BossModMultiboxFollowService
         BmraiFollowCommandTargetSlot = target.PartySlot;
         BmraiFollowCommandTargetContentId = target.ContentId;
         BmraiFollowCommandTargetSource = target.Source;
+        if (result.Accepted != true)
+            bmraiFollowCommandAcceptedDutyKey = 0;
     }
 
-    private bool TryApplyViaBmraiSlash(TreasurePortalOpenerSnapshot opener, out BmraiFollowCommandResult result)
+    private void RecordAcceptedFollowDutyKey(BmraiFollowCommandResult result, uint dutyKey)
+        => bmraiFollowCommandAcceptedDutyKey = result.Accepted == true ? dutyKey : 0;
+
+    private bool TryApplyViaFollowSlash(TreasurePortalOpenerSnapshot opener, out BmraiFollowCommandResult result)
     {
         var targetName = opener.OpenerName.Trim();
         if (string.IsNullOrWhiteSpace(targetName))
@@ -254,46 +288,81 @@ public sealed class BossModMultiboxFollowService
                 string.Empty,
                 null,
                 DateTime.UtcNow,
-                $"BMRAI command not sent: direct opener name from {opener.Source} is empty.");
+                $"{FollowProviderLabel} command not sent: direct opener name from {opener.Source} is empty.");
             return false;
         }
 
-        const string followOutOfCombatCommand = "/bmrai followoutofcombat on";
-        var nameCommand = $"/bmrai follow {targetName}";
-        var outOfCombatAtUtc = DateTime.UtcNow;
-        if (!TryProcessBmraiCommand(followOutOfCombatCommand, out var followOutOfCombatStatus))
-        {
-            result = new BmraiFollowCommandResult(
-                "Name",
-                nameCommand,
-                null,
-                outOfCombatAtUtc,
-                $"BMRAI target command not sent: {followOutOfCombatStatus}");
-            return false;
-        }
+        var bmraiResult = TryApplyProviderFollowSlash("BMRAI", "/bmrai", targetName, cleanupRejectedBmrai: true);
+        var vbmResult = TryApplyProviderFollowSlash("VBM", "/vbmai", targetName, cleanupRejectedBmrai: false);
+        var accepted = bmraiResult.Accepted || vbmResult.Accepted;
+        var acceptedStatus = accepted ? true : bmraiResult.CommandSent || vbmResult.CommandSent ? false : (bool?)null;
+        var commandText = string.Join(" | ", new[] { bmraiResult.CommandText, vbmResult.CommandText }
+            .Where(command => !string.IsNullOrWhiteSpace(command)));
+        var atUtc = MaxUtc(bmraiResult.AtUtc, vbmResult.AtUtc);
 
-        var nameAtUtc = DateTime.UtcNow;
-        if (TryProcessBmraiCommand(nameCommand, out var nameStatus))
+        if (accepted)
         {
             EnsureCleanupPending();
             result = new BmraiFollowCommandResult(
                 "Name",
-                nameCommand,
-                true,
-                nameAtUtc,
-                $"BMRAI name follow accepted. {followOutOfCombatStatus} {nameStatus}");
+                commandText,
+                acceptedStatus,
+                atUtc,
+                $"{FollowProviderLabel} name follow accepted. {bmraiResult.Status} {vbmResult.Status}");
             return true;
         }
 
-        TryProcessBmraiCommand("/bmrai followoutofcombat off", out _);
-        TryProcessBmraiCommand("/bmrai followcombat off", out _);
         result = new BmraiFollowCommandResult(
             "Name",
+            commandText,
+            acceptedStatus,
+            atUtc,
+            $"{FollowProviderLabel} name follow rejected. {bmraiResult.Status} {vbmResult.Status}");
+        return false;
+    }
+
+    private FollowProviderCommandResult TryApplyProviderFollowSlash(
+        string providerName,
+        string commandPrefix,
+        string targetName,
+        bool cleanupRejectedBmrai)
+    {
+        var followOutOfCombatCommand = $"{commandPrefix} followoutofcombat on";
+        var nameCommand = $"{commandPrefix} follow {targetName}";
+        var outOfCombatAtUtc = DateTime.UtcNow;
+        if (!TryProcessFollowCommand(followOutOfCombatCommand, providerName, out var followOutOfCombatStatus))
+        {
+            return new FollowProviderCommandResult(
+                nameCommand,
+                false,
+                false,
+                outOfCombatAtUtc,
+                $"{providerName} target command not sent: {followOutOfCombatStatus}");
+        }
+
+        var nameAtUtc = DateTime.UtcNow;
+        if (TryProcessFollowCommand(nameCommand, providerName, out var nameStatus))
+        {
+            return new FollowProviderCommandResult(
+                nameCommand,
+                true,
+                true,
+                nameAtUtc,
+                $"{providerName} name follow accepted. {followOutOfCombatStatus} {nameStatus}");
+        }
+
+        if (cleanupRejectedBmrai)
+        {
+            TryProcessFollowCommand("/bmrai followoutofcombat off", "BMRAI", out _);
+            TryProcessFollowCommand("/bmrai followcombat off", "BMRAI", out _);
+        }
+
+        return new FollowProviderCommandResult(
             nameCommand,
+            true,
             false,
             nameAtUtc,
-            $"BMRAI name follow rejected. {followOutOfCombatStatus} Name command status: {nameStatus}");
-        return false;
+            $"{providerName} name follow rejected. {followOutOfCombatStatus} Name command status: {nameStatus}");
     }
 
     private void EnsureCleanupPending()
@@ -308,23 +377,26 @@ public sealed class BossModMultiboxFollowService
     private string DisableBmraiTreasureFollow(string reason, bool disableBmrai)
     {
         var cleanupStatuses = new List<string>();
-        TryProcessBmraiCommand("/bmrai followoutofcombat off", out var followOutOfCombatStatus);
+        TryProcessFollowCommand("/bmrai followoutofcombat off", "BMRAI", out var followOutOfCombatStatus);
         cleanupStatuses.Add(followOutOfCombatStatus);
-        TryProcessBmraiCommand("/bmrai followcombat off", out var followCombatStatus);
+        TryProcessFollowCommand("/bmrai followcombat off", "BMRAI", out var followCombatStatus);
         cleanupStatuses.Add(followCombatStatus);
 
         if (disableBmrai)
         {
-            TryProcessBmraiCommand("/bmrai off", out var bmraiOffStatus);
+            TryProcessFollowCommand("/bmrai off", "BMRAI", out var bmraiOffStatus);
             cleanupStatuses.Add(bmraiOffStatus);
         }
 
+        TryProcessFollowCommand("/vbmai follow Slot1", "VBM", out var vbmFollowSlotStatus);
+        cleanupStatuses.Add(vbmFollowSlotStatus);
+
         var status = $" Sent cleanup commands: {string.Join(" ", cleanupStatuses)}";
-        log.Information($"[ADS] Clearing ADS BMRAI follow after {reason}.{status}");
+        log.Information($"[ADS] Clearing ADS {FollowProviderLabel} follow after {reason}.{status}");
         return status;
     }
 
-    private bool TryProcessBmraiCommand(string command, out string status)
+    private bool TryProcessFollowCommand(string command, string providerName, out string status)
     {
         try
         {
@@ -334,7 +406,7 @@ public sealed class BossModMultiboxFollowService
                 return true;
             }
 
-            status = $"{command} was not handled; BMRAI may be missing or unloaded.";
+            status = $"{command} was not handled; {providerName} may be missing or unloaded.";
             return false;
         }
         catch (Exception ex)
@@ -373,6 +445,55 @@ public sealed class BossModMultiboxFollowService
 
     private static string BuildFollowKey(TreasurePortalOpenerSnapshot opener)
         => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.OpenerName.Trim()}";
+
+    private bool CommandMatchesOpener(TreasurePortalOpenerSnapshot opener)
+        => BmraiFollowCommandAccepted == true
+           && NamesMatch(BmraiFollowCommandTargetName, opener.OpenerName)
+           && string.Equals(BmraiFollowCommandTargetSource, opener.Source, StringComparison.OrdinalIgnoreCase);
+
+    private bool TryGetDirectTreasureFollowReapplyReason(
+        TreasurePortalOpenerSnapshot opener,
+        DutyContextSnapshot context,
+        out string reason)
+    {
+        reason = string.Empty;
+        if (!context.PluginEnabled
+            || !context.IsLoggedIn
+            || !context.InInstancedDuty
+            || context.IsUnsafeTransition
+            || !IsDirectBmraiSource(opener.Source))
+        {
+            return false;
+        }
+
+        var dutyKey = GetAcceptedFollowDutyKey(context);
+        if (dutyKey == 0)
+            return false;
+
+        if (!CommandMatchesOpener(opener))
+        {
+            reason = "accepted command target missing or stale";
+            return true;
+        }
+
+        if (bmraiFollowCommandAcceptedDutyKey != dutyKey)
+        {
+            reason = $"accepted command duty key {bmraiFollowCommandAcceptedDutyKey.ToString(CultureInfo.InvariantCulture)} does not match current duty key {dutyKey.ToString(CultureInfo.InvariantCulture)}";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static uint GetAcceptedFollowDutyKey(DutyContextSnapshot? context)
+    {
+        if (context is null || !context.InInstancedDuty)
+            return 0;
+
+        return context.TerritoryTypeId != 0
+            ? context.TerritoryTypeId
+            : context.ContentFinderConditionId;
+    }
 
     private static bool IsDirectBmraiSource(string source)
         => string.Equals(source, "PortalChat", StringComparison.OrdinalIgnoreCase)
@@ -1173,6 +1294,9 @@ public sealed class BossModMultiboxFollowService
     private static bool NamesMatch(string left, string right)
         => string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    private static DateTime MaxUtc(DateTime left, DateTime right)
+        => left >= right ? left : right;
+
     private static FieldInfo? FindField(Type type, string name)
         => FindFields(type).FirstOrDefault(field => string.Equals(field.Name, name, StringComparison.Ordinal));
 
@@ -1218,6 +1342,13 @@ public sealed class BossModMultiboxFollowService
         string Method,
         string CommandText,
         bool? Accepted,
+        DateTime AtUtc,
+        string Status);
+
+    private readonly record struct FollowProviderCommandResult(
+        string CommandText,
+        bool CommandSent,
+        bool Accepted,
         DateTime AtUtc,
         string Status);
 

@@ -82,7 +82,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
         ImGui.TextWrapped($"Treasure role: {plugin.ExecutionService.TreasureDungeonRoleDisplayName} ({plugin.ExecutionService.TreasureDungeonRoleSource})");
         ImGui.TextWrapped($"Opener: {targetName} {targetLocality} src {targetSource}");
-        ImGui.TextWrapped($"BMRAI: {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
+        ImGui.TextWrapped($"BMRAI/VBM: {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
         ImGui.TextWrapped($"Reason: {follow.BmraiFollowCommandStatus}");
     }
 }

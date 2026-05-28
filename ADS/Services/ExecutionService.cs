@@ -8,7 +8,8 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
- using MountSheet = Lumina.Excel.Sheets.Mount;
+using MapSheet = Lumina.Excel.Sheets.Map;
+using MountSheet = Lumina.Excel.Sheets.Mount;
 
 namespace ADS.Services;
 
@@ -378,7 +379,7 @@ public sealed class ExecutionService
     {
         treasureFollowerBmraiOwnsMovement = ownsMovement;
         treasureFollowerBmraiMovementStatus = string.IsNullOrWhiteSpace(status)
-            ? "BMRAI treasure follow status unavailable."
+            ? "BMRAI/VBM treasure follow status unavailable."
             : status;
         if (!ownsMovement)
             lastTreasureFollowerBmraiMovementHoldLogKey = string.Empty;
@@ -2152,9 +2153,9 @@ public sealed class ExecutionService
 
             var frontierTargetId = BuildFrontierTargetId(frontierPoint);
             var canUseMapFlagNavigation = dungeonFrontierService.CurrentMode == FrontierMode.Label
-                                          || (isMapXzDestination && !frontierPoint.UsePlayerYForNavigation);
+                                          || isMapXzDestination;
             var usedMapFlagNavigation = canUseMapFlagNavigation
-                && TryBeginMapFlagNavigation(context, frontierTargetId, frontierPoint.Name, frontierPoint.Position);
+                && TryBeginMapFlagNavigation(context, frontierTargetId, frontierPoint);
             var treasureRouteNudgeApplied = false;
             var treasureRouteNudgeAttempt = 0;
             var treasureRouteNudgeDestination = Vector3.Zero;
@@ -2555,7 +2556,7 @@ public sealed class ExecutionService
         LogTreasureFollowerBmraiMovementHold(frontierPoint, movementLabel);
         SetPhase(
             phase,
-            $"{prefix} BMRAI owns treasure follower movement; ADS is not sending vnav for {movementLabel}. {treasureFollowerBmraiMovementStatus}");
+            $"{prefix} BMRAI/VBM owns treasure follower movement; ADS is not sending vnav for {movementLabel}. {treasureFollowerBmraiMovementStatus}");
         return true;
     }
 
@@ -2567,7 +2568,7 @@ public sealed class ExecutionService
 
         lastTreasureFollowerBmraiMovementHoldLogKey = key;
         log?.Information(
-            $"[ADS] Treasure follower movement held for BMRAI: target='{EscapeLogText(movementLabel)}', frontierKey='{frontierPoint?.Key ?? "none"}', status='{EscapeLogText(treasureFollowerBmraiMovementStatus)}'.");
+            $"[ADS] Treasure follower movement held for BMRAI/VBM: target='{EscapeLogText(movementLabel)}', frontierKey='{frontierPoint?.Key ?? "none"}', status='{EscapeLogText(treasureFollowerBmraiMovementStatus)}'.");
     }
 
     private void LogTreasureFollowerAdsNavFallback(DungeonFrontierPoint? frontierPoint, string movementLabel)
@@ -4854,8 +4855,11 @@ public sealed class ExecutionService
         return false;
     }
 
-    private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, string targetName, Vector3 destination)
+    private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, DungeonFrontierPoint frontierPoint)
     {
+        var targetName = frontierPoint.Name;
+        var destination = frontierPoint.Position;
+
         if (IsTreasureFollowerPostTransitSettleActive())
         {
             StopNavigationForTreasureFollowerPostTransitSettle();
@@ -4872,10 +4876,15 @@ public sealed class ExecutionService
         if (navigationActive && mapFlagNavigationActive && movementTargetGameObjectId == targetId && now < nextNavigationCommandUtc)
             return true;
 
-        if (!mapFlagService.TryPlaceFlag(context.TerritoryTypeId, destination, targetName, out _))
+        if (!mapFlagService.TryPlaceFlag(context.TerritoryTypeId, destination, targetName, out var flagStatus))
+        {
+            LogMapXzMoveflagResult(context, frontierPoint, destination, "flag-placement-failed", flagStatus);
             return false;
+        }
 
-        if (!TrySendCommand("/vnav moveflag"))
+        var moveflagSent = TrySendCommand("/vnav moveflag");
+        LogMapXzMoveflagResult(context, frontierPoint, destination, moveflagSent ? "sent" : "send-failed", flagStatus);
+        if (!moveflagSent)
             return false;
 
         navigationActive = true;
@@ -4883,6 +4892,29 @@ public sealed class ExecutionService
         movementTargetGameObjectId = targetId;
         nextNavigationCommandUtc = now + MapFlagNavigationRetryCooldown;
         return true;
+    }
+
+    private void LogMapXzMoveflagResult(
+        DutyContextSnapshot context,
+        DungeonFrontierPoint frontierPoint,
+        Vector3 destination,
+        string moveflagResult,
+        string flagStatus)
+    {
+        if (frontierPoint.MapCoordinates is not { } mapCoordinates)
+            return;
+
+        var mapId = frontierPoint.MapId != 0 ? frontierPoint.MapId : context.MapId;
+        var mapSheet = dataManager.GetExcelSheet<MapSheet>();
+        if (mapId != 0 && mapSheet.TryGetRow(mapId, out var map))
+        {
+            log?.Information(
+                $"[ADS] Map XZ moveflag navigation {frontierPoint.Name}: authored map XZ {mapCoordinates.X:0.0},{mapCoordinates.Y:0.0}; active map row {map.RowId}; converted world XZ {destination.X:0.00},{destination.Z:0.00}; sizeFactor {map.SizeFactor}; offsets X={map.OffsetX},Y={map.OffsetY}; flag placement result: {flagStatus}; /vnav moveflag result: {moveflagResult}.");
+            return;
+        }
+
+        log?.Information(
+            $"[ADS] Map XZ moveflag navigation {frontierPoint.Name}: authored map XZ {mapCoordinates.X:0.0},{mapCoordinates.Y:0.0}; active map row {mapId}; converted world XZ {destination.X:0.00},{destination.Z:0.00}; map row details unavailable; flag placement result: {flagStatus}; /vnav moveflag result: {moveflagResult}.");
     }
 
     private static Vector3 BuildPreferredApproachPoint(Vector3 playerPosition, Vector3 objectPosition, float preferredArrivalRange = PreferredInteractArrivalRange)

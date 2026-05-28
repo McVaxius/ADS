@@ -1441,14 +1441,12 @@ public sealed class ObjectPriorityRuleService
             currentObjectY,
             ConvertMapCoordinateToWorld(mapCoordinates.Y, map.SizeFactor, map.OffsetY));
 
-    private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint scale, int offset)
+    private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint sizeFactor, int offset)
     {
-        var mapScale = scale / 100f;
-        if (mapScale <= float.Epsilon)
+        if (sizeFactor == 0)
             return 0f;
 
-        var textureCoordinate = (((mapCoordinate - 1f) * mapScale) / 41f) * 2048f;
-        return (textureCoordinate - (offset + 1024f)) / mapScale;
+        return (50f * (mapCoordinate - 1f - (2048f / sizeFactor))) - offset;
     }
 
     private static float GetHorizontalDistance(Vector3 a, Vector3 b)

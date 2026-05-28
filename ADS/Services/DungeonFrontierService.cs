@@ -1115,7 +1115,7 @@ public sealed class DungeonFrontierService
             if (loggedResolvedMapXzDestinationRules.Add(ruleKey))
             {
                 log.Information(
-                    $"[ADS] Resolved Map XZ destination {name} ({mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}) on map row {map.RowId} to world {FormatVector(worldPosition)} using sizeFactor {map.SizeFactor} and offsets {map.OffsetX},{map.OffsetY}.");
+                    $"[ADS] Resolved Map XZ destination {name}: authored map XZ {mapCoordinates.X:0.0},{mapCoordinates.Y:0.0}; active map row {map.RowId}; converted world XZ {worldPosition.X:0.00},{worldPosition.Z:0.00} on Y {worldPosition.Y:0.00}; sizeFactor {map.SizeFactor}; offsets X={map.OffsetX},Y={map.OffsetY}.");
             }
 
             points.Add(new DungeonFrontierPoint
@@ -3937,14 +3937,12 @@ public sealed class DungeonFrontierService
         return NormalizeMapLayerSelector(rule.DestinationType);
     }
 
-    private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint scale, int offset)
+    private static float ConvertMapCoordinateToWorld(float mapCoordinate, uint sizeFactor, int offset)
     {
-        var mapScale = scale / 100f;
-        if (mapScale <= float.Epsilon)
+        if (sizeFactor == 0)
             return 0f;
 
-        var textureCoordinate = (((mapCoordinate - 1f) * mapScale) / 41f) * 2048f;
-        return (textureCoordinate - (offset + 1024f)) / mapScale;
+        return (50f * (mapCoordinate - 1f - (2048f / sizeFactor))) - offset;
     }
 
     private static string BuildMapXzDestinationRuleKey(DutyContextSnapshot context, ObjectPriorityRule rule)

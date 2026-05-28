@@ -8,6 +8,7 @@ namespace ADS.Services;
 public sealed class TreasurePortalOpenerTracker
 {
     private static readonly TimeSpan PendingOpenerTtl = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RecentDirectPortalOpenerTtl = TimeSpan.FromMinutes(5);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex YouHandPortalRegex = new(@"^You\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex NamedPlacesRegex = new(@"^(?<name>.+?)\s+places?\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -28,6 +29,7 @@ public sealed class TreasurePortalOpenerTracker
     private DateTime openerCycleStartedUtc = DateTime.MinValue;
     private TreasureInteractionWitness? lastInteractionWitness;
     private string lastInteractionWitnessDecisionKey = string.Empty;
+    private TreasurePortalOpenerSnapshot? recentDirectPortalOpener;
 
     public TreasurePortalOpenerTracker(
         IObjectTable objectTable,
@@ -45,6 +47,17 @@ public sealed class TreasurePortalOpenerTracker
 
     public TreasurePortalOpenerSnapshot? Current
         => pendingPortalOpener?.ToSnapshot();
+
+    public TreasurePortalOpenerSnapshot? CurrentOrRecentDirect
+        => Current is { } current && IsDirectFollowSource(current.Source)
+            ? current
+            : RecentDirectPortalOpener;
+
+    public TreasurePortalOpenerSnapshot? RecentDirectPortalOpener
+        => recentDirectPortalOpener is { } opener
+           && DateTime.UtcNow - opener.CapturedUtc <= RecentDirectPortalOpenerTtl
+            ? opener
+            : null;
 
     public double? CurrentAgeSeconds
         => pendingPortalOpener is { } opener
@@ -65,7 +78,7 @@ public sealed class TreasurePortalOpenerTracker
             ? Math.Max(0, (DateTime.UtcNow - witness.CapturedUtc).TotalSeconds)
             : null;
 
-    public string RelayStatus { get; private set; } = "Relay ignored: BMRAI follow uses only direct portal chat or interaction witness.";
+    public string RelayStatus { get; private set; } = "Relay ignored: BMRAI/VBM follow uses only direct portal chat or interaction witness.";
 
     public DateTime? FallbackEligibleAtUtc
         => null;
@@ -75,7 +88,7 @@ public sealed class TreasurePortalOpenerTracker
 
     public string FallbackReason { get; private set; } = "Invented follow fallback disabled; waiting for a real treasure opener.";
 
-    public void BeginEntryCycle(string reason)
+    public void BeginEntryCycle(string reason, bool preserveRecentDirectOpener = false)
     {
         openerCycleEpoch++;
         openerCycleStartedUtc = DateTime.UtcNow;
@@ -83,6 +96,8 @@ public sealed class TreasurePortalOpenerTracker
         lastPublishedRelayKey = string.Empty;
         lastInteractionWitness = null;
         lastInteractionWitnessDecisionKey = string.Empty;
+        if (!preserveRecentDirectOpener)
+            recentDirectPortalOpener = null;
         ResetFallbackGate($"opener cycle reset after {reason}");
         log.Information(
             $"[ADS] Started treasure portal opener cycle {openerCycleEpoch.ToString(CultureInfo.InvariantCulture)} after {reason} at {openerCycleStartedUtc:O}.");
@@ -144,6 +159,7 @@ public sealed class TreasurePortalOpenerTracker
 
         var replacedFallback = IsFallback(pendingPortalOpener);
         pendingPortalOpener = opener;
+        RememberRecentDirectPortalOpener(opener);
         lastPublishedRelayKey = string.Empty;
         ResetFallbackGate($"real opener captured from {opener.Source}");
 
@@ -165,7 +181,7 @@ public sealed class TreasurePortalOpenerTracker
         ClearOutOfCyclePendingOpener(now);
         ClearExpiredPendingOpener(now);
 
-        RelayStatus = "Relay ignored: BMRAI follow uses only direct portal chat or interaction witness.";
+        RelayStatus = "Relay ignored: BMRAI/VBM follow uses only direct portal chat or interaction witness.";
 
         return TryPromoteInteractionWitness(interactionWitness, now)
             ? pendingPortalOpener?.ToSnapshot()
@@ -179,6 +195,7 @@ public sealed class TreasurePortalOpenerTracker
         lastPublishedRelayKey = string.Empty;
         lastInteractionWitness = null;
         lastInteractionWitnessDecisionKey = string.Empty;
+        recentDirectPortalOpener = null;
         ResetFallbackGate($"pending opener cleared after {reason}");
         if (hadPendingOpener)
             log.Information($"[ADS] Cleared pending treasure portal opener after {reason}.");
@@ -330,6 +347,7 @@ public sealed class TreasurePortalOpenerTracker
 
         var replacedSource = pendingPortalOpener?.Source ?? "fallback grace";
         pendingPortalOpener = opener;
+        RememberRecentDirectPortalOpener(opener);
         lastPublishedRelayKey = string.Empty;
         ResetFallbackGate($"interaction witness promoted from {witness.EventKind}");
         LogInteractionWitnessDecision(
@@ -859,6 +877,18 @@ public sealed class TreasurePortalOpenerTracker
 
     private static bool IsInteractionWitnessSource(string source)
         => source.StartsWith("InteractionWitness:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDirectFollowSource(string source)
+        => string.Equals(source, PortalChatSource, StringComparison.OrdinalIgnoreCase)
+           || IsInteractionWitnessSource(source);
+
+    private void RememberRecentDirectPortalOpener(PendingPortalOpener opener)
+    {
+        if (!IsDirectFollowSource(opener.Source))
+            return;
+
+        recentDirectPortalOpener = opener.ToSnapshot();
+    }
 
     private static bool ContainsWord(string text, string word)
         => Regex.IsMatch(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);

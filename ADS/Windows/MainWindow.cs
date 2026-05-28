@@ -207,8 +207,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var commandAccepted = follow.BmraiFollowCommandAccepted is null
             ? "not sent"
             : follow.BmraiFollowCommandAccepted.Value ? "accepted" : "rejected";
-        ImGui.TextWrapped($"BMRAI follow: {(follow.FollowApplied ? "applied" : "not applied")} method {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
-        ImGui.TextWrapped($"BMRAI reason: {follow.BmraiFollowCommandStatus}");
+        ImGui.TextWrapped($"BMRAI/VBM follow: {(follow.FollowApplied ? "applied" : "not applied")} method {follow.BmraiFollowCommandMethod} {commandAccepted} {follow.BmraiFollowCommandText}");
+        ImGui.TextWrapped($"BMRAI/VBM reason: {follow.BmraiFollowCommandStatus}");
     }
 
     private void DrawActionRow()

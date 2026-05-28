@@ -568,7 +568,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
-        TreasurePortalOpenerTracker.BeginEntryCycle("inside start");
+        TreasurePortalOpenerTracker.BeginEntryCycle("inside start", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         if (result)
@@ -584,7 +584,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool ResumeDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
-        TreasurePortalOpenerTracker.BeginEntryCycle("inside resume");
+        TreasurePortalOpenerTracker.BeginEntryCycle("inside resume", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside resume");
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         if (result)
@@ -1372,11 +1372,20 @@ public sealed class Plugin : IDalamudPlugin
                 DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
                 var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
                 if (directWitnessOpener is not null)
-                    BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(directWitnessOpener);
+                    BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(directWitnessOpener, DutyContextService.Current, "interaction witness");
+                var followOpener = TreasurePortalOpenerTracker.CurrentOrRecentDirect;
+                if (shouldUseTreasureFollowerBmraiFollow && followOpener is not null)
+                {
+                    BossModMultiboxFollowService.ReapplyDirectTreasurePortalOpenerIfNeeded(
+                        followOpener,
+                        DutyContextService.Current,
+                        "stable follower duty truth");
+                }
+
                 BossModMultiboxFollowService.Update(
                     ExecutionService.TreasureDungeonRole,
                     ExecutionService.TreasureDungeonRoleDisplayName,
-                    TreasurePortalOpenerTracker.Current,
+                    followOpener,
                     shouldUseTreasureFollowerBmraiFollow);
                 ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
                     BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
@@ -1538,7 +1547,7 @@ public sealed class Plugin : IDalamudPlugin
         if (TreasurePortalOpenerTracker.HandleChatMessage(text)
             && TreasurePortalOpenerTracker.Current is { } portalChatOpener)
         {
-            BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(portalChatOpener);
+            BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(portalChatOpener, DutyContextService.Current, "portal chat");
         }
 
         HigherLowerAutomationService.HandleChatMessage(text);
