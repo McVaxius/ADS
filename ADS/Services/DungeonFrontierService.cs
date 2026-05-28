@@ -329,17 +329,9 @@ public sealed class DungeonFrontierService
         TreasureDungeonRoleDisplayName = inference.DisplayName;
         TreasureDungeonRoleSource = inference.Source;
         TreasureDungeonRoleDetail = inference.Detail;
-        if (resetFollowerProgressForOwnership && inference.Role == ADS.Models.TreasureDungeonRole.Follower)
+        if (resetFollowerProgressForOwnership || roleChanged)
         {
             Reset();
-            return;
-        }
-
-        if (roleChanged)
-        {
-            ClearTreasureFollowerCandidateHold("treasure role ownership reset");
-            TreasureFollowerRetryCycle = 0;
-            ResetTreasureFollowerProgress();
         }
     }
 

@@ -17,6 +17,8 @@ public sealed class BmrReflectionService : IDisposable
     {
         WriteIndented = false,
     };
+    private static readonly TimeSpan StablePollInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan UnavailablePollInterval = TimeSpan.FromSeconds(1);
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly Configuration configuration;
@@ -31,6 +33,8 @@ public sealed class BmrReflectionService : IDisposable
     private bool pendingRegistryRestore;
     private bool pendingMaxLoadDistanceRestore;
     private bool clearMaxLoadDistanceDesiredAfterRestore;
+    private DateTime nextReflectionPollUtc = DateTime.MinValue;
+    private string lastReflectionPollRequestKey = string.Empty;
 
     public BmrReflectionService(
         IDalamudPluginInterface pluginInterface,
@@ -88,9 +92,19 @@ public sealed class BmrReflectionService : IDisposable
     {
         lock (syncRoot)
         {
+            var now = DateTime.UtcNow;
+            var requestKey = BuildUpdateRequestKeyLocked();
+            if (now < nextReflectionPollUtc
+                && string.Equals(requestKey, lastReflectionPollRequestKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             try
             {
                 UpdateLocked();
+                lastReflectionPollRequestKey = BuildUpdateRequestKeyLocked();
+                nextReflectionPollUtc = now + GetNextPollIntervalLocked(lastStatus);
             }
             catch (Exception ex)
             {
@@ -98,6 +112,8 @@ public sealed class BmrReflectionService : IDisposable
                 lastAction = message;
                 SetStatusLocked(BuildUnavailableStatus(null, false, message));
                 LogAvailabilityChange(lastStatus);
+                lastReflectionPollRequestKey = BuildUpdateRequestKeyLocked();
+                nextReflectionPollUtc = now + UnavailablePollInterval;
             }
         }
     }
@@ -133,6 +149,7 @@ public sealed class BmrReflectionService : IDisposable
             lastAction = enabled
                 ? "Reflection tools enabled."
                 : "Reflection tools disabled; queued in-session restore.";
+            QueueImmediateUpdateLocked();
         }
     }
 
@@ -146,6 +163,7 @@ public sealed class BmrReflectionService : IDisposable
             lastAction = disabled
                 ? "Queued Queen Lunatender disable."
                 : "Queued Queen Lunatender restore.";
+            QueueImmediateUpdateLocked();
             return true;
         }
     }
@@ -160,6 +178,7 @@ public sealed class BmrReflectionService : IDisposable
             lastAction = disabled
                 ? "Queued hunt module disable."
                 : "Queued hunt module restore.";
+            QueueImmediateUpdateLocked();
             return true;
         }
     }
@@ -176,6 +195,7 @@ public sealed class BmrReflectionService : IDisposable
             configuration.ReflectionMaxLoadDistanceMinimized = true;
             configuration.Save();
             lastAction = $"Queued BMR MaxLoadDistance set to {configuration.ReflectionMinimizedMaxLoadDistance.ToString("0.###", CultureInfo.InvariantCulture)}.";
+            QueueImmediateUpdateLocked();
             return true;
         }
     }
@@ -191,6 +211,7 @@ public sealed class BmrReflectionService : IDisposable
             configuration.ReflectionMinimizedMaxLoadDistance = Math.Clamp(configuration.ReflectionMinimizedMaxLoadDistance, 0.1f, DefaultFallbackMaxLoadDistance);
             configuration.Save();
             lastAction = $"Queued BMR MaxLoadDistance minimization to {configuration.ReflectionMinimizedMaxLoadDistance.ToString("0.###", CultureInfo.InvariantCulture)}.";
+            QueueImmediateUpdateLocked();
             return true;
         }
     }
@@ -205,8 +226,33 @@ public sealed class BmrReflectionService : IDisposable
             clearMaxLoadDistanceDesiredAfterRestore = true;
             configuration.Save();
             lastAction = "Queued BMR MaxLoadDistance reset.";
+            QueueImmediateUpdateLocked();
             return true;
         }
+    }
+
+    private void QueueImmediateUpdateLocked()
+    {
+        nextReflectionPollUtc = DateTime.MinValue;
+        lastReflectionPollRequestKey = string.Empty;
+    }
+
+    private string BuildUpdateRequestKeyLocked()
+        => string.Create(
+            CultureInfo.InvariantCulture,
+            $"{configuration.ReflectionToolsEnabled}|{configuration.ReflectionQueenLunatenderDisabled}|{configuration.ReflectionHuntsDisabled}|{configuration.ReflectionMaxLoadDistanceMinimized}|{configuration.ReflectionMinimizedMaxLoadDistance:0.###}|{configuration.ReflectionHasOriginalMaxLoadDistance}|{configuration.ReflectionOriginalMaxLoadDistance:0.###}|{pendingRegistryRestore}|{pendingMaxLoadDistanceRestore}|{clearMaxLoadDistanceDesiredAfterRestore}|{removedRegistryEntries.Count}");
+
+    private TimeSpan GetNextPollIntervalLocked(BmrReflectionStatus status)
+    {
+        if (pendingRegistryRestore || pendingMaxLoadDistanceRestore)
+            return UnavailablePollInterval;
+
+        if (!configuration.ReflectionToolsEnabled && removedRegistryEntries.Count == 0)
+            return StablePollInterval;
+
+        return status is { BmrLoaded: true, ReflectionReady: true }
+            ? StablePollInterval
+            : UnavailablePollInterval;
     }
 
     private void UpdateLocked()

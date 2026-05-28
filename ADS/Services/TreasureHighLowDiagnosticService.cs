@@ -46,6 +46,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private const int MaxTraceVfxRows = 600;
     private const string TextureExportScriptName = "hldbg_tex_export.py";
     private static readonly TimeSpan TraceSampleInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan WriterFlushInterval = TimeSpan.FromSeconds(1);
 
     private readonly IGameGui gameGui;
     private readonly IObjectTable objectTable;
@@ -104,8 +105,21 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private bool traceVfxTruncationLogged;
     private DateTime lastHigherLowerSignalUtc = DateTime.MinValue;
     private string lastHigherLowerSignalSource = "none";
+    private int frameworkTickSequence;
+    private int runtimeProbeTick = -1;
+    private RuntimeProbe? runtimeProbeCache;
+    private int runtimeProbeSideEffectsTick = -1;
+    private int liveProbeTick = -1;
+    private HigherLowerLiveProbe? liveProbeCache;
+    private bool writerFlushPending;
+    private DateTime lastWriterFlushUtc = DateTime.MinValue;
+    private bool datamineFlushPending;
+    private DateTime lastDatamineFlushUtc = DateTime.MinValue;
+    private string lastDatamineSolverKey = string.Empty;
+    private DateTime lastDatamineSolverUtc = DateTime.MinValue;
     private static readonly TimeSpan DatamineSessionGrace = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan DatamineSignalLogCooldown = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan DatamineSolverCooldown = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan DatamineSurfaceCooldown = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan DatamineTrackedVfxCooldown = TimeSpan.FromSeconds(1);
     private const int KnownCardTagMaxSnapshots = 6;
@@ -131,6 +145,21 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         diagnosticDirectory = Path.Combine(configDirectory, "HigherLowerDiagnostics");
         datamineDirectory = Path.Combine(diagnosticDirectory, "Datamine");
         cardMapPath = Path.Combine(configDirectory, "higher-lower-card-map.json");
+    }
+
+    public void BeginFrameworkTick()
+    {
+        unchecked
+        {
+            frameworkTickSequence++;
+            if (frameworkTickSequence == 0)
+                frameworkTickSequence = 1;
+        }
+
+        runtimeProbeCache = null;
+        liveProbeCache = null;
+        FlushWriter();
+        FlushDatamineWriters();
     }
 
     public bool Enabled
@@ -171,27 +200,10 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     public HigherLowerLiveProbe CaptureLiveProbe()
     {
-        var selectYesnoVisible = IsAddonVisible("SelectYesno");
-        var selectYesnoPrompt = ReadSelectYesnoPrompt();
-        var treasureHighLowVisible = IsAddonVisible(AddonName);
-        var notificationChallengeVisible = IsAddonVisible("_NotificationChallenge");
-        var addonCardDecode = CaptureAddonCardDecode();
-        var objects = CaptureWorldObjects();
-        var candidates = ResolveBoardCandidates(objects)
-            .Select((candidate, index) => ToBoardCandidate(index == 0 ? "left" : "right", candidate))
-            .ToList();
-        var currentCandidate = candidates.FirstOrDefault();
-        var currentGraphicKey = currentCandidate?.GraphicKey ?? string.Empty;
-        var currentCard = ResolveCard(currentGraphicKey);
-        var active = treasureHighLowVisible
-            || notificationChallengeVisible
-            || objects.Any(static x => x.IsHighLow)
-            || (selectYesnoVisible && IsHigherLowerPrompt(selectYesnoPrompt));
-        var warnings = BuildSafetyWarnings(candidates).ToList();
-        var visualCardSourceSafe = currentCard.HasValue
-                                   && IsAuthoritativeCardFaceKey(currentGraphicKey)
-                                   && warnings.All(static x => !x.StartsWith("blocked:", StringComparison.OrdinalIgnoreCase));
+        if (liveProbeTick == frameworkTickSequence && liveProbeCache is not null)
+            return liveProbeCache;
 
+        var probe = GetRuntimeProbe();
         EnsureCardMapLoaded();
         var entries = cardMap.GraphicToCard
             .OrderBy(static x => x.Value)
@@ -203,39 +215,25 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 Unsafe: IsUnsafeGraphicKey(x.Key)))
             .ToList();
 
-        return new HigherLowerLiveProbe(
-            Runtime: new HigherLowerRuntimeState(
-                Active: active,
-                TreasureHighLowVisible: treasureHighLowVisible,
-                NotificationChallengeVisible: notificationChallengeVisible,
-                SelectYesnoVisible: selectYesnoVisible,
-                SelectYesnoPrompt: selectYesnoPrompt,
-                HighTargetable: objects.Any(static x => x.IsHighLow && x.Targetable && string.Equals(x.Name, "High", StringComparison.OrdinalIgnoreCase)),
-                LowTargetable: objects.Any(static x => x.IsHighLow && x.Targetable && string.Equals(x.Name, "Low", StringComparison.OrdinalIgnoreCase)),
-                AddonCurrentCard: addonCardDecode.CurrentCard,
-                AddonCurrentCardText: addonCardDecode.CurrentCardText,
-                AddonOtherCard: addonCardDecode.OtherCard,
-                AddonOtherCardText: addonCardDecode.OtherCardText,
-                AddonCurrentCardSource: addonCardDecode.CurrentCardSource,
-                CurrentGraphicKey: currentGraphicKey,
-                CurrentCard: currentCard,
-                KnownCardCount: entries.Count,
-                CardSourceSafe: visualCardSourceSafe,
-                SafetyStatus: visualCardSourceSafe ? "ready: visual card-face key" : "blocked: addon card-face key not proven"),
-            BoardCandidates: candidates,
+        var liveProbe = new HigherLowerLiveProbe(
+            Runtime: probe.Runtime with { KnownCardCount = entries.Count },
+            BoardCandidates: probe.BoardCandidates,
             CardMapEntries: entries,
-            SafetyWarnings: warnings,
+            SafetyWarnings: probe.SafetyWarnings,
             DiagnosticDirectory: diagnosticDirectory,
             CurrentLogPath: CurrentLogPath,
             DatamineDirectory: datamineDirectory,
             CurrentDatamineSessionDirectory: CurrentDatamineSessionDirectory,
             VfxDataminingEnabled: VfxDataminingEnabled,
             CardMapPath: cardMapPath);
+        liveProbeCache = liveProbe;
+        liveProbeTick = frameworkTickSequence;
+        return liveProbe;
     }
 
     public unsafe IReadOnlyList<BoardSlotSnapshot> CaptureBoardSlots()
     {
-        var objects = CaptureWorldObjects();
+        var objects = GetRuntimeProbe().WorldObjects;
         var candidates = ResolveLiveCardSlotCandidates(objects).ToList();
         var result = new List<BoardSlotSnapshot>(candidates.Count);
         for (var i = 0; i < candidates.Count; i++)
@@ -461,6 +459,29 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     {
         if (!runtime.Active || !ShouldRecordDatamine())
             return;
+
+        var now = DateTime.UtcNow;
+        var key = string.Join(
+            "|",
+            runtime.AddonCurrentCardText,
+            runtime.AddonOtherCardText,
+            runtime.CurrentGraphicKey,
+            runtime.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "none",
+            state.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "none",
+            state.RecommendedChoice,
+            state.Confidence.ToString(),
+            state.CardSource,
+            state.Slot,
+            state.SourceRowSequence?.ToString(CultureInfo.InvariantCulture) ?? "none",
+            state.SourceStateData,
+            state.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "none",
+            state.TextureIndexSource,
+            state.Reason);
+        if (key == lastDatamineSolverKey && now - lastDatamineSolverUtc < DatamineSolverCooldown)
+            return;
+
+        lastDatamineSolverKey = key;
+        lastDatamineSolverUtc = now;
 
         territoryId = ResolveDatamineTerritory(territoryId);
         if (!EnsureDatamineWriters(territoryId))
@@ -786,10 +807,115 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     public HigherLowerRuntimeState CaptureRuntimeState()
     {
-        var runtime = CaptureLiveProbe().Runtime;
+        var probe = GetRuntimeProbe();
+        ApplyRuntimeProbeSideEffects(probe.Runtime);
+        return probe.Runtime;
+    }
+
+    private RuntimeProbe GetRuntimeProbe()
+    {
+        if (runtimeProbeTick == frameworkTickSequence && runtimeProbeCache is not null)
+            return runtimeProbeCache;
+
+        var probe = CaptureRuntimeProbe();
+        runtimeProbeCache = probe;
+        runtimeProbeTick = frameworkTickSequence;
+        return probe;
+    }
+
+    private unsafe RuntimeProbe CaptureRuntimeProbe()
+    {
+        nint addonPointer = gameGui.GetAddonByName(AddonName, 1);
+        var addon = addonPointer == nint.Zero ? null : (AtkUnitBase*)addonPointer;
+        var treasureHighLowVisible = addon != null && addon->IsVisible;
+        var notificationChallengeVisible = IsAddonVisible("_NotificationChallenge");
+        var selectYesnoVisible = IsAddonVisible("SelectYesno");
+        var selectYesnoPrompt = ReadSelectYesnoPrompt();
+        var addonCardDecode = DecodeAddonCards(addon);
+        var objects = CaptureWorldObjects();
+        var hasHighLowNearby = objects.Any(static x => x.IsHighLow);
+        var highLowTargetable = objects.Any(static x => x.IsHighLow && x.Targetable);
+        var highTargetable = objects.Any(static x => x.IsHighLow && x.Targetable && string.Equals(x.Name, "High", StringComparison.OrdinalIgnoreCase));
+        var lowTargetable = objects.Any(static x => x.IsHighLow && x.Targetable && string.Equals(x.Name, "Low", StringComparison.OrdinalIgnoreCase));
+        var active = treasureHighLowVisible
+            || notificationChallengeVisible
+            || hasHighLowNearby
+            || (selectYesnoVisible && IsHigherLowerPrompt(selectYesnoPrompt));
+
+        IReadOnlyList<HigherLowerBoardCandidate> candidates = [];
+        IReadOnlyList<string> warnings = [];
+        var currentGraphicKey = string.Empty;
+        int? currentCard = null;
+        var knownCardCount = cardMapLoaded ? cardMap.GraphicToCard.Count : 0;
+        var visualCardSourceSafe = false;
+        var safetyStatus = active
+            ? "blocked: addon card-face key not proven"
+            : "blocked: Higher/Lower inactive";
+
+        if (active)
+        {
+            var resolvedCandidates = ResolveBoardCandidates(objects)
+                .Select((candidate, index) => ToBoardCandidate(index == 0 ? "left" : "right", candidate))
+                .ToList();
+            candidates = resolvedCandidates;
+            warnings = BuildSafetyWarnings(resolvedCandidates).ToList();
+            currentGraphicKey = resolvedCandidates.FirstOrDefault()?.GraphicKey ?? string.Empty;
+            EnsureCardMapLoaded();
+            knownCardCount = cardMap.GraphicToCard.Count;
+            currentCard = ResolveCard(currentGraphicKey);
+            visualCardSourceSafe = currentCard.HasValue
+                                   && IsAuthoritativeCardFaceKey(currentGraphicKey)
+                                   && warnings.All(static x => !x.StartsWith("blocked:", StringComparison.OrdinalIgnoreCase));
+            safetyStatus = visualCardSourceSafe
+                ? "ready: visual card-face key"
+                : "blocked: addon card-face key not proven";
+        }
+
+        var runtime = new HigherLowerRuntimeState(
+            Active: active,
+            TreasureHighLowVisible: treasureHighLowVisible,
+            NotificationChallengeVisible: notificationChallengeVisible,
+            SelectYesnoVisible: selectYesnoVisible,
+            SelectYesnoPrompt: selectYesnoPrompt,
+            HighTargetable: highTargetable,
+            LowTargetable: lowTargetable,
+            AddonCurrentCard: addonCardDecode.CurrentCard,
+            AddonCurrentCardText: addonCardDecode.CurrentCardText,
+            AddonOtherCard: addonCardDecode.OtherCard,
+            AddonOtherCardText: addonCardDecode.OtherCardText,
+            AddonCurrentCardSource: addonCardDecode.CurrentCardSource,
+            CurrentGraphicKey: currentGraphicKey,
+            CurrentCard: currentCard,
+            KnownCardCount: knownCardCount,
+            CardSourceSafe: visualCardSourceSafe,
+            SafetyStatus: safetyStatus);
+
+        return new RuntimeProbe(
+            Runtime: runtime,
+            WorldObjects: objects,
+            BoardCandidates: candidates,
+            SafetyWarnings: warnings,
+            TreasureHighLowPointer: addonPointer,
+            HighLowTargetable: highLowTargetable);
+    }
+
+    private void ApplyRuntimeProbeSideEffects(HigherLowerRuntimeState runtime)
+    {
+        if (runtimeProbeSideEffectsTick == frameworkTickSequence)
+            return;
+
+        runtimeProbeSideEffectsTick = frameworkTickSequence;
         UpdateDatamineSessionFromRuntime(runtime, clientState.TerritoryType);
         StartLazyTraceIfAddonAppeared(runtime.TreasureHighLowVisible);
-        return runtime;
+    }
+
+    private void InvalidateProbeCaches()
+    {
+        runtimeProbeTick = -1;
+        runtimeProbeCache = null;
+        runtimeProbeSideEffectsTick = -1;
+        liveProbeTick = -1;
+        liveProbeCache = null;
     }
 
     private unsafe AddonCardDecode CaptureAddonCardDecode()
@@ -853,6 +979,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         knownCardSequence++;
         knownCardTag = new KnownCardTag(card, role, DateTime.UtcNow, knownCardSequence, 0);
         forceNextSnapshot = true;
+        InvalidateProbeCaches();
         log.Information($"{Prefix} known card tag queued card={card} role={role} seq={knownCardSequence}.");
         return true;
     }
@@ -876,6 +1003,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         knownBoardSequence++;
         knownBoardTag = new KnownBoardTag(left, right, label, DateTime.UtcNow, knownBoardSequence, 0);
         forceNextSnapshot = true;
+        InvalidateProbeCaches();
         log.Information($"{Prefix} known board tag queued left={left} right={right} label='{Escape(label)}' seq={knownBoardSequence}.");
         return true;
     }
@@ -893,6 +1021,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         cardMap.UpdatedUtc = DateTime.UtcNow;
         cardMapDirty = true;
         SaveCardMap();
+        InvalidateProbeCaches();
         log.Information($"{Prefix} cleared unsafe calibration map entries removed={before - cardMap.GraphicToCard.Count} remaining={cardMap.GraphicToCard.Count}.");
     }
 
@@ -1000,13 +1129,42 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             CloseDatamineSessionIfExpired(now);
         }
 
+        var needsRuntimeProbe = configuration.HigherLowerDiagnosticsEnabled
+                                || configuration.HigherLowerVfxDataminingEnabled
+                                || forceNextSnapshot
+                                || traceActive;
+        if (!needsRuntimeProbe)
+            return;
+
+        RuntimeProbe runtimeProbe;
+        try
+        {
+            runtimeProbe = GetRuntimeProbe();
+            ApplyRuntimeProbeSideEffects(runtimeProbe.Runtime);
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, $"{Prefix} runtime probe failed.");
+            return;
+        }
+
+        now = DateTime.UtcNow;
+        FinishTraceIfExpired(now);
+        traceActive = IsTraceActive(now);
+
         if (!configuration.HigherLowerDiagnosticsEnabled && !forceNextSnapshot && !traceActive)
             return;
+
+        if (!runtimeProbe.Runtime.Active && !forceNextSnapshot && !traceActive)
+        {
+            ResetIfPuzzleEnded(runtimeProbe);
+            return;
+        }
 
         Snapshot snapshot;
         try
         {
-            snapshot = CaptureSnapshot(context, observation, planner, dialogStatus);
+            snapshot = CaptureSnapshot(runtimeProbe, context, observation, planner, dialogStatus);
         }
         catch (Exception ex)
         {
@@ -1722,6 +1880,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         WriteLine(
             $"{Prefix} hldbg-trace end seq={activeTraceSequence} elapsedMs={elapsedMs} " +
             $"samples={traceSampleSequence} vfxRows={traceVfxRowsWritten} vfxDropped={traceVfxRowsDropped} reason=expired");
+        FlushWriter(force: true);
 
         activeTraceSequence = 0;
         traceStartedUtc = DateTime.MinValue;
@@ -1746,18 +1905,36 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private void ResetIfPuzzleEnded(Snapshot snapshot)
+        => ResetIfPuzzleEnded(snapshot.TreasureHighLowVisible, snapshot.HighLowTargetable);
+
+    private void ResetIfPuzzleEnded(RuntimeProbe probe)
+        => ResetIfPuzzleEnded(probe.Runtime.TreasureHighLowVisible, probe.HighLowTargetable);
+
+    private void ResetIfPuzzleEnded(bool treasureHighLowVisible, bool highLowTargetable)
     {
+        var wroteMarker = false;
         if (lastAddonVisible)
+        {
             WriteLine($"{Prefix} marker=addon disappeared territory={clientState.TerritoryType}");
+            wroteMarker = true;
+        }
+
         if (lastHighLowTargetable)
+        {
             WriteLine($"{Prefix} marker=High/Low untargetable territory={clientState.TerritoryType}");
-        FlushWriter();
+            wroteMarker = true;
+        }
+
+        if (wroteMarker)
+            FlushWriter(force: true);
+        else
+            FlushWriter();
 
         lastSignature = string.Empty;
         lastAddonSignature = string.Empty;
         lastWorldSignature = string.Empty;
-        lastAddonVisible = snapshot.TreasureHighLowVisible;
-        lastHighLowTargetable = snapshot.HighLowTargetable;
+        lastAddonVisible = treasureHighLowVisible;
+        lastHighLowTargetable = highLowTargetable;
         lastSnapshotUtc = DateTime.MinValue;
         forceNextStateProbe = false;
         traceNeedsBaseline = activeTraceSequence > 0;
@@ -1834,8 +2011,10 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
         writer = new StreamWriter(new FileStream(currentLogPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
         {
-            AutoFlush = true,
+            AutoFlush = false,
         };
+        writerFlushPending = false;
+        lastWriterFlushUtc = DateTime.UtcNow;
         fileErrorLogged = false;
         log.Information($"{Prefix} diagnostics file: {currentLogPath}");
         return true;
@@ -1849,6 +2028,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         try
         {
             writer.WriteLine(line);
+            writerFlushPending = true;
         }
         catch (Exception ex)
         {
@@ -1862,10 +2042,22 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private void FlushWriter()
+        => FlushWriter(force: false);
+
+    private void FlushWriter(bool force)
     {
+        if (writer == null)
+            return;
+
         try
         {
-            writer?.Flush();
+            var now = DateTime.UtcNow;
+            if (!force && (!writerFlushPending || now - lastWriterFlushUtc < WriterFlushInterval))
+                return;
+
+            writer.Flush();
+            writerFlushPending = false;
+            lastWriterFlushUtc = now;
         }
         catch (Exception ex)
         {
@@ -2105,7 +2297,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                     LastSignalUtc = datamineSessionLastSignalUtc,
                     LastSignalSource = datamineSessionLastSignalSource,
                 });
-            FlushDatamineWriters();
+            FlushDatamineWriters(force: true);
         }
 
         CloseDatamineWritersIfOpen();
@@ -2174,13 +2366,15 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             currentDatamineJsonlPath = Path.Combine(currentDatamineSessionDirectory, "datamine.jsonl");
             datamineLogWriter = new StreamWriter(new FileStream(currentDatamineLogPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
             {
-                AutoFlush = true,
+                AutoFlush = false,
             };
             datamineJsonlWriter = new StreamWriter(new FileStream(currentDatamineJsonlPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
             {
-                AutoFlush = true,
+                AutoFlush = false,
             };
             currentDatamineTerritoryId = territoryId;
+            datamineFlushPending = false;
+            lastDatamineFlushUtc = DateTime.UtcNow;
             datamineFileErrorLogged = false;
 
             WriteDatamineLogLine($"{Prefix} datamine-session-start territory={territoryId} path='{Escape(currentDatamineSessionDirectory)}'");
@@ -2217,6 +2411,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         try
         {
             datamineLogWriter.WriteLine(line);
+            datamineFlushPending = true;
+            FlushDatamineWriters();
         }
         catch (Exception ex)
         {
@@ -2230,11 +2426,23 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private void FlushDatamineWriters()
+        => FlushDatamineWriters(force: false);
+
+    private void FlushDatamineWriters(bool force)
     {
+        if (datamineLogWriter == null && datamineJsonlWriter == null)
+            return;
+
         try
         {
+            var now = DateTime.UtcNow;
+            if (!force && (!datamineFlushPending || now - lastDatamineFlushUtc < WriterFlushInterval))
+                return;
+
             datamineLogWriter?.Flush();
             datamineJsonlWriter?.Flush();
+            datamineFlushPending = false;
+            lastDatamineFlushUtc = now;
         }
         catch (Exception ex)
         {
@@ -2263,6 +2471,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
                 TerritoryId: territoryId,
                 Payload: payload);
             datamineJsonlWriter.WriteLine(JsonSerializer.Serialize(row));
+            datamineFlushPending = true;
+            FlushDatamineWriters();
         }
         catch (Exception ex)
         {
@@ -2277,10 +2487,21 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private void CloseDatamineWriters()
     {
+        var logWriter = datamineLogWriter;
+        var jsonlWriter = datamineJsonlWriter;
+        datamineLogWriter = null;
+        datamineJsonlWriter = null;
+
         try
         {
-            datamineLogWriter?.Dispose();
-            datamineJsonlWriter?.Dispose();
+            if (datamineFlushPending)
+            {
+                logWriter?.Flush();
+                jsonlWriter?.Flush();
+            }
+
+            logWriter?.Dispose();
+            jsonlWriter?.Dispose();
         }
         catch (Exception ex)
         {
@@ -2288,12 +2509,11 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
         finally
         {
-            datamineLogWriter = null;
-            datamineJsonlWriter = null;
             currentDatamineSessionDirectory = null;
             currentDatamineLogPath = null;
             currentDatamineJsonlPath = null;
             currentDatamineTerritoryId = 0;
+            datamineFlushPending = false;
         }
     }
 
@@ -2313,6 +2533,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     {
         lastDatamineSurfaceKey = string.Empty;
         lastDatamineSurfaceUtc = DateTime.MinValue;
+        lastDatamineSolverKey = string.Empty;
+        lastDatamineSolverUtc = DateTime.MinValue;
         datamineTrackedVfxLogUtc.Clear();
         datamineServerCardLogKeys.Clear();
     }
@@ -2339,9 +2561,14 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private void CloseWriter()
     {
+        var closingWriter = writer;
+        writer = null;
+
         try
         {
-            writer?.Dispose();
+            if (writerFlushPending)
+                closingWriter?.Flush();
+            closingWriter?.Dispose();
         }
         catch (Exception ex)
         {
@@ -2349,8 +2576,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
         finally
         {
-            writer = null;
             currentLogPath = null;
+            writerFlushPending = false;
         }
     }
 
@@ -2375,33 +2602,25 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     }
 
     private unsafe Snapshot CaptureSnapshot(
+        RuntimeProbe runtimeProbe,
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         PlannerSnapshot planner,
         string dialogStatus)
     {
-        nint addonPointer = gameGui.GetAddonByName(AddonName, 1);
+        var runtime = runtimeProbe.Runtime;
+        nint addonPointer = runtimeProbe.TreasureHighLowPointer;
         var addon = addonPointer == nint.Zero ? null : (AtkUnitBase*)addonPointer;
-        var addonVisible = addon != null && addon->IsVisible;
-        var addonCardDecode = DecodeAddonCards(addon);
-        var notificationChallengeVisible = IsAddonVisible("_NotificationChallenge");
-        var selectYesnoVisible = IsAddonVisible("SelectYesno");
-        var selectYesnoPrompt = ReadSelectYesnoPrompt();
-        var objects = CaptureWorldObjects();
-        var hasHighLowNearby = objects.Any(static x => x.IsHighLow);
-        var highLowTargetable = objects.Any(static x => x.IsHighLow && x.Targetable);
-        var dialogLooksRelated = selectYesnoVisible
-            && ContainsAny(selectYesnoPrompt, "treasure", "coffer", "gamble", "lure", "high", "low");
-        var active = addonVisible
-            || notificationChallengeVisible
-            || hasHighLowNearby
-            || dialogLooksRelated;
+        var addonVisible = runtime.TreasureHighLowVisible;
+        var objects = runtimeProbe.WorldObjects;
+        var highLowTargetable = runtimeProbe.HighLowTargetable;
+        var active = runtime.Active;
 
         var addonSignature = addonVisible && addon != null
             ? BuildAddonSignature(addon)
             : "addon:none";
         var worldSignature = string.Join("|", objects.Select(static x => x.Signature));
-        var dialogSignature = $"{selectYesnoVisible}:{selectYesnoPrompt}";
+        var dialogSignature = $"{runtime.SelectYesnoVisible}:{runtime.SelectYesnoPrompt}";
         var signature = $"{addonSignature}##{worldSignature}##{dialogSignature}";
 
         return new Snapshot(
@@ -2413,14 +2632,14 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             DialogStatus: dialogStatus,
             TreasureHighLowPointer: addonPointer,
             TreasureHighLowVisible: addonVisible,
-            NotificationChallengeVisible: notificationChallengeVisible,
-            SelectYesnoVisible: selectYesnoVisible,
-            SelectYesnoPrompt: selectYesnoPrompt,
-            AddonCurrentCard: addonCardDecode.CurrentCard,
-            AddonCurrentCardText: addonCardDecode.CurrentCardText,
-            AddonOtherCard: addonCardDecode.OtherCard,
-            AddonOtherCardText: addonCardDecode.OtherCardText,
-            AddonCurrentCardSource: addonCardDecode.CurrentCardSource,
+            NotificationChallengeVisible: runtime.NotificationChallengeVisible,
+            SelectYesnoVisible: runtime.SelectYesnoVisible,
+            SelectYesnoPrompt: runtime.SelectYesnoPrompt,
+            AddonCurrentCard: runtime.AddonCurrentCard,
+            AddonCurrentCardText: runtime.AddonCurrentCardText,
+            AddonOtherCard: runtime.AddonOtherCard,
+            AddonOtherCardText: runtime.AddonOtherCardText,
+            AddonCurrentCardSource: runtime.AddonCurrentCardSource,
             HighLowTargetable: highLowTargetable,
             WorldObjects: objects,
             Signature: signature,
@@ -2477,7 +2696,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             LogFocusedStateProbe(snapshot, knownBoard);
         if (cardMapDirty)
             SaveCardMap();
-        FlushWriter();
+        FlushWriter(force || runStateProbe);
     }
 
     private void EmitTraceSample(Snapshot snapshot, IReadOnlyList<string> markers, DateTime nowUtc)
@@ -4087,6 +4306,14 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
             return this;
         }
     }
+
+    private sealed record RuntimeProbe(
+        HigherLowerRuntimeState Runtime,
+        IReadOnlyList<WorldObjectSnapshot> WorldObjects,
+        IReadOnlyList<HigherLowerBoardCandidate> BoardCandidates,
+        IReadOnlyList<string> SafetyWarnings,
+        nint TreasureHighLowPointer,
+        bool HighLowTargetable);
 
     private sealed record Snapshot(
         bool Active,
