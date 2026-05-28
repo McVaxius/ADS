@@ -27,7 +27,6 @@ public sealed class Plugin : IDalamudPlugin
     private static readonly TimeSpan TreasureDutyRecoveryTtl = TimeSpan.FromHours(8);
     private static readonly TimeSpan TreasureDutyRecoveryRefreshInterval = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan FrameworkSlowLogCooldown = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan HigherLowerRecentSignalWindow = TimeSpan.FromSeconds(20);
     private const double FrameworkSlowLogThresholdMs = 100d;
 
     private enum RemoteJsonReloadStep
@@ -37,17 +36,6 @@ public sealed class Plugin : IDalamudPlugin
         DutyMaturity,
         TreasureRoutes,
     }
-
-    private sealed record FrameworkSlowUpdateContext(
-        uint territoryTypeId,
-        uint mapId,
-        bool betweenAreas,
-        bool betweenAreas51,
-        bool dialogVisible,
-        string dialogRule,
-        string dialogStatus,
-        int pendingHigherLowerVfxCount,
-        int trackedHigherLowerVfxCount);
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
@@ -129,10 +117,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Queue<RemoteJsonReloadStep> pendingRemoteJsonReloadSteps = new();
     private DateTime nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
     private DateTime nextFrameworkSlowLogUtc = DateTime.MinValue;
-    private double lastFrameworkSlowUpdateMs;
-    private string lastFrameworkSlowUpdateSection = "none";
-    private DateTime lastFrameworkSlowUpdateUtc = DateTime.MinValue;
-    private FrameworkSlowUpdateContext? lastFrameworkSlowUpdateContext;
 
     public Plugin()
     {
@@ -736,16 +720,6 @@ public sealed class Plugin : IDalamudPlugin
                 higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 reflection = BmrReflectionService.CaptureStatusPayload(),
                 version = PluginInfo.GetVersion(),
-                lastFrameworkSlowUpdateMs = lastFrameworkSlowUpdateUtc == DateTime.MinValue
-                    ? null
-                    : (double?)lastFrameworkSlowUpdateMs,
-                lastFrameworkSlowUpdateSection = lastFrameworkSlowUpdateUtc == DateTime.MinValue
-                    ? string.Empty
-                    : lastFrameworkSlowUpdateSection,
-                lastFrameworkSlowUpdateUtc = lastFrameworkSlowUpdateUtc == DateTime.MinValue
-                    ? null
-                    : lastFrameworkSlowUpdateUtc.ToString("O"),
-                lastFrameworkSlowUpdateContext,
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
@@ -1173,20 +1147,6 @@ public sealed class Plugin : IDalamudPlugin
            && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
                || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
 
-    private bool ShouldRunHigherLowerHeavyWork(DutyContextSnapshot context)
-    {
-        if (!IsSupportedTreasureDutyContext(context))
-            return false;
-
-        var runtime = TreasureHighLowDiagnosticService.CaptureRuntimeState();
-        if (runtime.Active)
-            return true;
-
-        var lastSignalUtc = TreasureHighLowDiagnosticService.LastHigherLowerSignalUtc;
-        return lastSignalUtc != DateTime.MinValue
-               && DateTime.UtcNow - lastSignalUtc <= HigherLowerRecentSignalWindow;
-    }
-
     private bool IsActiveTreasureDutyOwnershipMode()
         => ExecutionService.CurrentMode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside;
 
@@ -1422,8 +1382,6 @@ public sealed class Plugin : IDalamudPlugin
             var shouldUseTreasureFollowerBmraiFollow = false;
             Measure("treasure-follow-mode", () => shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow());
             Measure("higher-lower-server", () => HigherLowerServerEventTraceService.Update(DutyContextService.Current));
-            var allowHigherLowerHeavyWork = false;
-            Measure("higher-lower-gate", () => allowHigherLowerHeavyWork = ShouldRunHigherLowerHeavyWork(DutyContextService.Current));
             var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
             Measure("treasure-witness", () =>
             {
@@ -1457,8 +1415,8 @@ public sealed class Plugin : IDalamudPlugin
                     BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                     BossModMultiboxFollowService.FollowerMovementStatus);
             });
-            Measure("higher-lower-vfx", () => HigherLowerVfxTraceService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
-            Measure("higher-lower-card", () => HigherLowerCardVfxSolverService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
+            Measure("higher-lower-vfx", () => HigherLowerVfxTraceService.Update(DutyContextService.Current));
+            Measure("higher-lower-card", () => HigherLowerCardVfxSolverService.Update(DutyContextService.Current));
             Measure("higher-lower-auto", () =>
             {
                 HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
@@ -1588,40 +1546,23 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         var now = DateTime.UtcNow;
+        if (now < nextFrameworkSlowLogUtc)
+            return;
+
+        nextFrameworkSlowLogUtc = now + FrameworkSlowLogCooldown;
         var context = DutyContextService.Current;
-        var slowContext = new FrameworkSlowUpdateContext(
+        Log.Warning(
+            "[ADS][HITCH] framework update slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; territory={Territory}; map={Map}; betweenAreas={BetweenAreas}; betweenAreas51={BetweenAreas51}; dialogVisible={DialogVisible}; dialogRule={DialogRule}; dialogStatus={DialogStatus}.",
+            elapsedMs,
+            slowestSection,
+            slowestMs,
             context.TerritoryTypeId,
             context.MapId,
             context.BetweenAreas,
             context.BetweenAreas51,
             DialogAutomationService.DialogVisible,
             DialogAutomationService.DialogRule,
-            DialogAutomationService.DialogStatus,
-            HigherLowerVfxTraceService.PendingCount,
-            HigherLowerVfxTraceService.LastTrackedSnapshotCount);
-        lastFrameworkSlowUpdateMs = elapsedMs;
-        lastFrameworkSlowUpdateSection = slowestSection;
-        lastFrameworkSlowUpdateUtc = now;
-        lastFrameworkSlowUpdateContext = slowContext;
-
-        if (now < nextFrameworkSlowLogUtc)
-            return;
-
-        nextFrameworkSlowLogUtc = now + FrameworkSlowLogCooldown;
-        Log.Warning(
-            "[ADS][HITCH] framework update slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; territory={Territory}; map={Map}; betweenAreas={BetweenAreas}; betweenAreas51={BetweenAreas51}; dialogVisible={DialogVisible}; dialogRule={DialogRule}; dialogStatus={DialogStatus}; pendingHigherLowerVfx={PendingHigherLowerVfx}; trackedHigherLowerVfx={TrackedHigherLowerVfx}.",
-            elapsedMs,
-            slowestSection,
-            slowestMs,
-            slowContext.territoryTypeId,
-            slowContext.mapId,
-            slowContext.betweenAreas,
-            slowContext.betweenAreas51,
-            slowContext.dialogVisible,
-            slowContext.dialogRule,
-            slowContext.dialogStatus,
-            slowContext.pendingHigherLowerVfxCount,
-            slowContext.trackedHigherLowerVfxCount);
+            DialogAutomationService.DialogStatus);
     }
 
     private void OnChatMessage(IHandleableChatMessage message)

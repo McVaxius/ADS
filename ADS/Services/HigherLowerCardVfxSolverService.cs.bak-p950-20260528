@@ -288,21 +288,7 @@ public sealed unsafe class HigherLowerCardVfxSolverService
     }
 
     public void Update(DutyContextSnapshot context)
-        => Update(context, allowWork: true);
-
-    public void Update(DutyContextSnapshot context, bool allowWork)
     {
-        if (!allowWork)
-        {
-            lock (gate)
-            {
-                currentState = SolverState.Inactive;
-                PruneRecentProbes(DateTime.UtcNow);
-            }
-
-            return;
-        }
-
         var runtime = diagnostics.CaptureRuntimeState();
         var now = DateTime.UtcNow;
         IReadOnlyList<HigherLowerVfxTraceService.TrackedVfxRow> trackedRows = [];

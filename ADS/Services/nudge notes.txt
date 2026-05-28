@@ -1,0 +1,82 @@
+
+• Door follow-through side-nudge:
+
+  - Z:/ads/ADS/Services/ExecutionService.cs:4178: attempt alternates 1/2
+  - Z:/ads/ADS/Services/ExecutionService.cs:4179: builds side-nudge destination
+  - Z:/ads/ADS/Services/ExecutionService.cs:4183: exact log line you pasted
+  - Z:/ads/ADS/Services/ExecutionService.cs:4213: actual left/right math starts
+  - Z:/ads/ADS/Services/ExecutionService.cs:4220: side = new Vector3(-forward.Z, 0f, forward.X)
+  - Z:/ads/ADS/Services/ExecutionService.cs:4221: odd attempt = one side, even attempt = other side
+  - Z:/ads/ADS/Services/ExecutionService.cs:4223: final destination math
+
+  Route stuck nudge:
+
+  - Z:/ads/ADS/Services/ExecutionService.cs:2632: waits 10s no progress
+  - Z:/ads/ADS/Services/ExecutionService.cs:2663: increments nudge attempt
+  - Z:/ads/ADS/Services/ExecutionService.cs:2665: builds adjusted destination
+  - Z:/ads/ADS/Services/ExecutionService.cs:2198: exact Treasure route stuck nudge attempt log
+  - Z:/ads/ADS/Services/ExecutionService.cs:2900: actual route nudge math
+  - Z:/ads/ADS/Services/ExecutionService.cs:2903: attempt 1 = X + 0.5
+  - Z:/ads/ADS/Services/ExecutionService.cs:2904: attempt 2 = X - 0.5
+
+  Actual /vnav moveto send:
+
+  - Z:/ads/ADS/Services/ExecutionService.cs:4106: door side-nudge calls navigation
+  - Z:/ads/ADS/Services/ExecutionService.cs:2203: route stuck nudge calls navigation
+  - Z:/ads/ADS/Services/ExecutionService.cs:4823: TryBeginNavigation
+  - Z:/ads/ADS/Services/ExecutionService.cs:4841: sends /vnav moveto X Y Z
+
+  Constants to change:
+
+  - Z:/ads/ADS/Services/ExecutionService.cs:52: route nudge 0.5f
+  - Z:/ads/ADS/Services/ExecutionService.cs:54: door follow-through max attempts 2
+  - Z:/ads/ADS/Services/ExecutionService.cs:56: door side offset 1.25f
+  - Z:/ads/ADS/Services/ExecutionService.cs:57: door forward offset 1.5f
+  - Z:/ads/ADS/Services/ExecutionService.cs:79: stuck timeout 10s
+  - Z:/ads/ADS/Services/ExecutionService.cs:80: nudge hold 2.5s
+  
+  
+  › so if i change `TreasureFollowerDoorFollowThroughNudgeAttemptLimit` it will move a bit more to the right or left depending on which direction the
+  current set of attempts is on?
+
+
+• No.
+
+  TreasureFollowerDoorFollowThroughNudgeAttemptLimit only controls how many no-progress side-nudge windows before fail.
+
+  Current code only has two actual directions:
+
+  - attempt 1 = one side
+  - attempt 2 = other side
+  - then code wraps back to 1
+
+  Line:
+
+  Z:/ads/ADS/Services/ExecutionService.cs:4178
+
+  treasureDoorNudgeAttempt = treasureDoorNudgeAttempt >= 2 ? 1 : treasureDoorNudgeAttempt + 1;
+
+  Direction line:
+
+  Z:/ads/ADS/Services/ExecutionService.cs:4221
+
+  var sideSign = attempt % 2 == 1 ? 1f : -1f;
+
+  Distance moved sideways controlled here:
+
+  Z:/ads/ADS/Services/ExecutionService.cs:56
+
+  private const float TreasureDoorNudgeSideOffset = 1.25f;
+
+  Forward amount controlled here:
+
+  Z:/ads/ADS/Services/ExecutionService.cs:57
+
+  private const float TreasureDoorNudgeForwardOffset = 1.5f;
+
+  So:
+
+  - Want more left/right distance: change TreasureDoorNudgeSideOffset.
+  - Want more forward push: change TreasureDoorNudgeForwardOffset.
+  - Want try longer before failing: change TreasureFollowerDoorFollowThroughNudgeAttemptLimit, but if set above 2, current wrap logic may keep
+    repeating attempt 1/2, not create farther attempts.

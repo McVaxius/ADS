@@ -15,11 +15,8 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
 {
     private const int MaxRows = 1000;
     private const int MaxPendingRows = 4096;
-    private const int MaxEventsPerUpdate = 64;
-    private const int BacklogLogThreshold = 128;
     private const int MaxPathChars = 512;
     private const float HigherLowerNearbyRadius = 80f;
-    private static readonly TimeSpan BacklogLogInterval = TimeSpan.FromSeconds(5);
 
     private readonly IObjectTable objectTable;
     private readonly IClientState clientState;
@@ -31,8 +28,6 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
     private readonly Dictionary<nint, KnownVfx> knownVfx = new();
     private HigherLowerCardVfxSolverService? cardSolver;
     private ulong rowSequence;
-    private DateTime nextBacklogLogUtc = DateTime.MinValue;
-    private int lastTrackedSnapshotCount;
 
     public HigherLowerVfxTraceService(
         IObjectTable objectTable,
@@ -64,9 +59,6 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
         }
     }
 
-    public int LastTrackedSnapshotCount
-        => lastTrackedSnapshotCount;
-
     public IReadOnlyList<VfxEventRow> GetRowsSnapshot()
     {
         lock (gate)
@@ -83,7 +75,6 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
         catch (Exception ex)
         {
             log.Warning(ex, "[ADS][VFX] Failed to snapshot tracked VFX list.");
-            lastTrackedSnapshotCount = 0;
             return [];
         }
 
@@ -133,13 +124,11 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
                 SolverReason: cardFields.SolverReason));
         }
 
-        var ordered = result
+        return result
             .OrderByDescending(static x => x.HigherLowerRelevant)
             .ThenBy(static x => x.AgeSeconds)
             .ThenBy(static x => x.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        lastTrackedSnapshotCount = ordered.Count;
-        return ordered;
     }
 
     public void Clear()
@@ -151,32 +140,17 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
         }
     }
 
-    public void Update(DutyContextSnapshot context, bool allowProcessing)
+    public void Update(DutyContextSnapshot context)
     {
         List<RawVfxEvent> drained;
-        var pendingBefore = 0;
-        var pendingAfter = 0;
         lock (gate)
         {
             if (pending.Count == 0)
                 return;
 
-            pendingBefore = pending.Count;
-            if (!allowProcessing)
-            {
-                pending.Clear();
-                LogBacklogIfNeeded(context, pendingBefore, processed: 0, remaining: 0, dropped: pendingBefore, "idle-drop");
-                return;
-            }
-
-            var takeCount = Math.Min(pending.Count, MaxEventsPerUpdate);
-            drained = new List<RawVfxEvent>(takeCount);
-            for (var i = 0; i < takeCount; i++)
-                drained.Add(pending.Dequeue());
-            pendingAfter = pending.Count;
+            drained = pending.ToList();
+            pending.Clear();
         }
-
-        LogBacklogIfNeeded(context, pendingBefore, drained.Count, pendingAfter, dropped: 0, "process");
 
         foreach (var raw in drained)
         {
@@ -192,24 +166,6 @@ public sealed unsafe class HigherLowerVfxTraceService : IDisposable
             if (probe != null)
                 cardSolver?.RecordProbe(probe);
         }
-    }
-
-    private void LogBacklogIfNeeded(DutyContextSnapshot context, int pendingBefore, int processed, int remaining, int dropped, string reason)
-    {
-        if (pendingBefore < BacklogLogThreshold
-            && remaining < BacklogLogThreshold
-            && dropped < BacklogLogThreshold)
-        {
-            return;
-        }
-
-        var now = DateTime.UtcNow;
-        if (now < nextBacklogLogUtc)
-            return;
-
-        nextBacklogLogUtc = now + BacklogLogInterval;
-        log.Debug(
-            $"[ADS][VFX] Higher/Lower VFX backlog reason={reason}; pendingBefore={pendingBefore}; processed={processed}; remaining={remaining}; dropped={dropped}; tracked={lastTrackedSnapshotCount}; territory={context.TerritoryTypeId}; map={context.MapId}.");
     }
 
     public void Dispose()

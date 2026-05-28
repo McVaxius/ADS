@@ -157,13 +157,6 @@ public sealed class BmrReflectionService : IDisposable
     {
         lock (syncRoot)
         {
-            if (configuration.ReflectionQueenLunatenderDisabled == disabled
-                && !HasPendingRegistryRestoreLocked()
-                && (!disabled || configuration.ReflectionToolsEnabled))
-            {
-                return true;
-            }
-
             configuration.ReflectionToolsEnabled = true;
             configuration.ReflectionQueenLunatenderDisabled = disabled;
             configuration.Save();
@@ -179,13 +172,6 @@ public sealed class BmrReflectionService : IDisposable
     {
         lock (syncRoot)
         {
-            if (configuration.ReflectionHuntsDisabled == disabled
-                && !HasPendingRegistryRestoreLocked()
-                && (!disabled || configuration.ReflectionToolsEnabled))
-            {
-                return true;
-            }
-
             configuration.ReflectionToolsEnabled = true;
             configuration.ReflectionHuntsDisabled = disabled;
             configuration.Save();
@@ -204,17 +190,8 @@ public sealed class BmrReflectionService : IDisposable
 
         lock (syncRoot)
         {
-            var clampedValue = Math.Clamp(value, 0.1f, DefaultFallbackMaxLoadDistance);
-            if (configuration.ReflectionToolsEnabled
-                && configuration.ReflectionMaxLoadDistanceMinimized
-                && Math.Abs(configuration.ReflectionMinimizedMaxLoadDistance - clampedValue) < 0.001f
-                && !pendingMaxLoadDistanceRestore)
-            {
-                return true;
-            }
-
             configuration.ReflectionToolsEnabled = true;
-            configuration.ReflectionMinimizedMaxLoadDistance = clampedValue;
+            configuration.ReflectionMinimizedMaxLoadDistance = Math.Clamp(value, 0.1f, DefaultFallbackMaxLoadDistance);
             configuration.ReflectionMaxLoadDistanceMinimized = true;
             configuration.Save();
             lastAction = $"Queued BMR MaxLoadDistance set to {configuration.ReflectionMinimizedMaxLoadDistance.ToString("0.###", CultureInfo.InvariantCulture)}.";
@@ -227,22 +204,11 @@ public sealed class BmrReflectionService : IDisposable
     {
         lock (syncRoot)
         {
-            var minimizedValue = configuration.ReflectionMinimizedMaxLoadDistance;
-            if (!float.IsFinite(minimizedValue) || minimizedValue <= 0f)
-                minimizedValue = DefaultMinimizedMaxLoadDistance;
-            minimizedValue = Math.Clamp(minimizedValue, 0.1f, DefaultFallbackMaxLoadDistance);
-
-            if (configuration.ReflectionToolsEnabled
-                && configuration.ReflectionMaxLoadDistanceMinimized
-                && Math.Abs(configuration.ReflectionMinimizedMaxLoadDistance - minimizedValue) < 0.001f
-                && !pendingMaxLoadDistanceRestore)
-            {
-                return true;
-            }
-
             configuration.ReflectionToolsEnabled = true;
             configuration.ReflectionMaxLoadDistanceMinimized = true;
-            configuration.ReflectionMinimizedMaxLoadDistance = minimizedValue;
+            if (!float.IsFinite(configuration.ReflectionMinimizedMaxLoadDistance) || configuration.ReflectionMinimizedMaxLoadDistance <= 0f)
+                configuration.ReflectionMinimizedMaxLoadDistance = DefaultMinimizedMaxLoadDistance;
+            configuration.ReflectionMinimizedMaxLoadDistance = Math.Clamp(configuration.ReflectionMinimizedMaxLoadDistance, 0.1f, DefaultFallbackMaxLoadDistance);
             configuration.Save();
             lastAction = $"Queued BMR MaxLoadDistance minimization to {configuration.ReflectionMinimizedMaxLoadDistance.ToString("0.###", CultureInfo.InvariantCulture)}.";
             QueueImmediateUpdateLocked();
@@ -254,13 +220,6 @@ public sealed class BmrReflectionService : IDisposable
     {
         lock (syncRoot)
         {
-            if (!configuration.ReflectionMaxLoadDistanceMinimized
-                && !pendingMaxLoadDistanceRestore
-                && !configuration.ReflectionHasOriginalMaxLoadDistance)
-            {
-                return true;
-            }
-
             configuration.ReflectionToolsEnabled = true;
             configuration.ReflectionMaxLoadDistanceMinimized = false;
             pendingMaxLoadDistanceRestore = true;
@@ -277,9 +236,6 @@ public sealed class BmrReflectionService : IDisposable
         nextReflectionPollUtc = DateTime.MinValue;
         lastReflectionPollRequestKey = string.Empty;
     }
-
-    private bool HasPendingRegistryRestoreLocked()
-        => pendingRegistryRestore || removedRegistryEntries.Count > 0;
 
     private string BuildUpdateRequestKeyLocked()
         => string.Create(

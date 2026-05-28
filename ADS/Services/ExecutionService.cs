@@ -53,8 +53,8 @@ public sealed class ExecutionService
     private const float AquapolisRouteWiggleSideOffset = 1.25f;
     private const int TreasureFollowerDoorFollowThroughNudgeAttemptLimit = 2;
     private const float TreasureDoorNudgeProgressDistance = 0.5f;
-    private const float TreasureDoorNudgeSideOffset = 1.25f;
-    private const float TreasureDoorNudgeForwardOffset = 1.5f;
+    private const float TreasureDoorNudgeSideOffset = 3f;//1.25f was default i changed it to 3. this is the wiggle distance
+    private const float TreasureDoorNudgeForwardOffset = 2.0f; //this was 1.5f before bu i changed it to 2.0f
     //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
     private const float LeaveTreasureSweepHorizontalRange = 100.0f;
     private const float LeaveTreasureSweepVerticalCap = 5.0f;
