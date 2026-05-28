@@ -38,6 +38,8 @@ public static class GameInteractionHelper
         "The Baldesion Annex",
         "The For'ard Cabins",
     };
+    private static readonly object SheetLookupLock = new();
+    private static readonly Dictionary<uint, string> TerritoryNameCache = new();
 
     public static unsafe bool IsAddonVisible(string addonName)
     {
@@ -348,6 +350,13 @@ public static class GameInteractionHelper
 
     public static string GetTerritoryName(IDataManager dataManager, uint territoryId)
     {
+        lock (SheetLookupLock)
+        {
+            if (TerritoryNameCache.TryGetValue(territoryId, out var cachedName))
+                return cachedName;
+        }
+
+        var resolvedName = $"Territory {territoryId}";
         try
         {
             var sheet = dataManager.GetExcelSheet<TerritoryType>();
@@ -355,7 +364,7 @@ public static class GameInteractionHelper
             {
                 var placeName = territory.PlaceName.Value.Name.ToString().Trim();
                 if (!string.IsNullOrWhiteSpace(placeName))
-                    return placeName;
+                    resolvedName = placeName;
             }
         }
         catch
@@ -363,7 +372,9 @@ public static class GameInteractionHelper
             // Fall through to the generic territory label.
         }
 
-        return $"Territory {territoryId}";
+        lock (SheetLookupLock)
+            TerritoryNameCache[territoryId] = resolvedName;
+        return resolvedName;
     }
 
     public static bool IsInnTerritory(IDataManager dataManager, ushort territoryId)

@@ -10,6 +10,8 @@ public sealed class TreasurePortalOpenerTracker
     private static readonly TimeSpan PendingOpenerTtl = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan RecentDirectPortalOpenerTtl = TimeSpan.FromMinutes(5);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex HandWordRegex = new(@"(^|[^A-Za-z])hand([^A-Za-z]|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PortalWordRegex = new(@"(^|[^A-Za-z])portal([^A-Za-z]|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex YouHandPortalRegex = new(@"^You\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex NamedPlacesRegex = new(@"^(?<name>.+?)\s+places?\b.*\bhand\b.*\bportal\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private const string PortalChatSource = "PortalChat";
@@ -891,10 +893,19 @@ public sealed class TreasurePortalOpenerTracker
     }
 
     private static bool ContainsWord(string text, string word)
-        => Regex.IsMatch(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);
+        => GetWordRegex(word)?.IsMatch(text)
+           ?? Regex.IsMatch(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);
 
     private static Match FindWord(string text, string word)
-        => Regex.Match(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);
+        => GetWordRegex(word)?.Match(text)
+           ?? Regex.Match(text, $@"(^|[^A-Za-z]){Regex.Escape(word)}([^A-Za-z]|$)", RegexOptions.IgnoreCase);
+
+    private static Regex? GetWordRegex(string word)
+        => word.Equals("hand", StringComparison.OrdinalIgnoreCase)
+            ? HandWordRegex
+            : word.Equals("portal", StringComparison.OrdinalIgnoreCase)
+                ? PortalWordRegex
+                : null;
 
     private void LogIgnoredPortalishLine(string message, string reason)
     {

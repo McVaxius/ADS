@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
@@ -19,6 +20,11 @@ public sealed class BmrReflectionService : IDisposable
     };
     private static readonly TimeSpan StablePollInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan UnavailablePollInterval = TimeSpan.FromSeconds(1);
+    private const double SlowReflectionLogThresholdMs = 25d;
+    private static readonly object ReflectionMetadataLock = new();
+    private static readonly Dictionary<(Type Type, string Name), FieldInfo?> FieldCache = [];
+    private static readonly Dictionary<(Type Type, string Name), PropertyInfo?> PropertyCache = [];
+    private static readonly Dictionary<(Type Type, string Name, string Signature), MethodInfo?> MethodCache = [];
 
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly Configuration configuration;
@@ -35,6 +41,11 @@ public sealed class BmrReflectionService : IDisposable
     private bool clearMaxLoadDistanceDesiredAfterRestore;
     private DateTime nextReflectionPollUtc = DateTime.MinValue;
     private string lastReflectionPollRequestKey = string.Empty;
+    private IExposedPlugin? cachedBmrPlugin;
+    private DateTime cachedBmrPluginExpiresUtc = DateTime.MinValue;
+    private DateTime nextSlowReflectionLogUtc = DateTime.MinValue;
+    private string slowestReflectionSection = "none";
+    private double slowestReflectionSectionMs;
 
     public BmrReflectionService(
         IDalamudPluginInterface pluginInterface,
@@ -100,6 +111,9 @@ public sealed class BmrReflectionService : IDisposable
                 return;
             }
 
+            var updateStopwatch = Stopwatch.StartNew();
+            slowestReflectionSection = "none";
+            slowestReflectionSectionMs = 0d;
             try
             {
                 UpdateLocked();
@@ -114,6 +128,11 @@ public sealed class BmrReflectionService : IDisposable
                 LogAvailabilityChange(lastStatus);
                 lastReflectionPollRequestKey = BuildUpdateRequestKeyLocked();
                 nextReflectionPollUtc = now + UnavailablePollInterval;
+            }
+            finally
+            {
+                updateStopwatch.Stop();
+                ReportSlowReflectionUpdateLocked(updateStopwatch.Elapsed.TotalMilliseconds);
             }
         }
     }
@@ -301,7 +320,7 @@ public sealed class BmrReflectionService : IDisposable
 
     private void UpdateLocked()
     {
-        var exposedPlugin = FindBmrPlugin();
+        var exposedPlugin = MeasureReflection("find-bmr", FindBmrPlugin);
         var bmrInstalled = exposedPlugin is not null;
         var bmrLoaded = exposedPlugin?.IsLoaded == true;
 
@@ -333,7 +352,11 @@ public sealed class BmrReflectionService : IDisposable
             return;
         }
 
-        if (!TryResolveContext(exposedPlugin, out var context, out var error))
+        var resolveStopwatch = Stopwatch.StartNew();
+        var resolvedContext = TryResolveContext(exposedPlugin, out var context, out var error);
+        resolveStopwatch.Stop();
+        RecordReflectionSection("resolve-context", resolveStopwatch.Elapsed.TotalMilliseconds);
+        if (!resolvedContext)
         {
             SetStatusLocked(BuildUnavailableStatus(exposedPlugin, bmrLoaded, error));
             LogAvailabilityChange(lastStatus);
@@ -346,7 +369,7 @@ public sealed class BmrReflectionService : IDisposable
             trackedRegistry = context.RegisteredModules;
         }
 
-        var knownHuntOids = FindKnownHuntOids(context.RegisteredModules);
+        var knownHuntOids = MeasureReflection("hunt-oids", () => FindKnownHuntOids(context.RegisteredModules));
         var disabledOids = new HashSet<uint>();
         if (configuration.ReflectionToolsEnabled)
         {
@@ -359,8 +382,8 @@ public sealed class BmrReflectionService : IDisposable
             }
         }
 
-        var registryResult = ApplyRegistryState(context, disabledOids);
-        var maxLoadDistanceResult = ApplyMaxLoadDistanceState(context);
+        var registryResult = MeasureReflection("registry", () => ApplyRegistryState(context, disabledOids));
+        var maxLoadDistanceResult = MeasureReflection("max-load-distance", () => ApplyMaxLoadDistanceState(context));
 
         pendingRegistryRestore = false;
         if (pendingMaxLoadDistanceRestore && maxLoadDistanceResult.ResetApplied)
@@ -417,12 +440,22 @@ public sealed class BmrReflectionService : IDisposable
 
     private IExposedPlugin? FindBmrPlugin()
     {
+        var now = DateTime.UtcNow;
+        if (cachedBmrPlugin is not null && now < cachedBmrPluginExpiresUtc && LooksLikeBmr(cachedBmrPlugin))
+            return cachedBmrPlugin;
+
         foreach (var plugin in pluginInterface.InstalledPlugins)
         {
             if (LooksLikeBmr(plugin))
+            {
+                cachedBmrPlugin = plugin;
+                cachedBmrPluginExpiresUtc = now.AddSeconds(2);
                 return plugin;
+            }
         }
 
+        cachedBmrPlugin = null;
+        cachedBmrPluginExpiresUtc = DateTime.MinValue;
         return null;
     }
 
@@ -703,7 +736,7 @@ public sealed class BmrReflectionService : IDisposable
         try
         {
             var modified = GetMemberValue(config, "Modified");
-            var fire = modified?.GetType().GetMethod("Fire", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, Type.EmptyTypes);
+            var fire = modified is null ? null : FindMethod(modified.GetType(), "Fire", Type.EmptyTypes);
             fire?.Invoke(modified, []);
         }
         catch (Exception ex)
@@ -774,6 +807,49 @@ public sealed class BmrReflectionService : IDisposable
 
         lastAvailabilityKey = key;
         log.Information($"[ADS] BMR reflection status changed: enabled={status.ToolsEnabled}, installed={status.BmrInstalled}, loaded={status.BmrLoaded}, ready={status.ReflectionReady}, state={status.ReflectionState}, error={status.Error ?? "(none)"}");
+    }
+
+    private T MeasureReflection<T>(string section, Func<T> action)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            stopwatch.Stop();
+            RecordReflectionSection(section, stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private void RecordReflectionSection(string section, double elapsedMs)
+    {
+        if (elapsedMs <= slowestReflectionSectionMs)
+            return;
+
+        slowestReflectionSection = section;
+        slowestReflectionSectionMs = elapsedMs;
+    }
+
+    private void ReportSlowReflectionUpdateLocked(double elapsedMs)
+    {
+        if (elapsedMs < SlowReflectionLogThresholdMs)
+            return;
+
+        var now = DateTime.UtcNow;
+        if (now < nextSlowReflectionLogUtc)
+            return;
+
+        nextSlowReflectionLogUtc = now.AddSeconds(5);
+        log.Warning(
+            "[ADS][HITCH] BMR reflection slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; state={State}; pendingRegistryRestore={PendingRegistryRestore}; pendingMaxLoadDistanceRestore={PendingMaxLoadDistanceRestore}.",
+            elapsedMs,
+            slowestReflectionSection,
+            slowestReflectionSectionMs,
+            lastStatus.ReflectionState,
+            pendingRegistryRestore,
+            pendingMaxLoadDistanceRestore);
     }
 
     private static bool LooksLikeBmr(IExposedPlugin plugin)
@@ -884,7 +960,19 @@ public sealed class BmrReflectionService : IDisposable
     }
 
     private static FieldInfo? FindField(Type type, string name)
-        => FindFields(type).FirstOrDefault(field => string.Equals(field.Name, name, StringComparison.Ordinal));
+    {
+        var key = (type, name);
+        lock (ReflectionMetadataLock)
+        {
+            if (FieldCache.TryGetValue(key, out var cached))
+                return cached;
+        }
+
+        var field = FindFields(type).FirstOrDefault(field => string.Equals(field.Name, name, StringComparison.Ordinal));
+        lock (ReflectionMetadataLock)
+            FieldCache[key] = field;
+        return field;
+    }
 
     private static IEnumerable<FieldInfo> FindFields(Type type)
     {
@@ -897,18 +985,39 @@ public sealed class BmrReflectionService : IDisposable
 
     private static PropertyInfo? FindProperty(Type type, string name)
     {
+        var key = (type, name);
+        lock (ReflectionMetadataLock)
+        {
+            if (PropertyCache.TryGetValue(key, out var cached))
+                return cached;
+        }
+
         for (var current = type; current is not null; current = current.BaseType)
         {
             var property = current.GetProperty(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             if (property is not null)
+            {
+                lock (ReflectionMetadataLock)
+                    PropertyCache[key] = property;
                 return property;
+            }
         }
 
+        lock (ReflectionMetadataLock)
+            PropertyCache[key] = null;
         return null;
     }
 
     private static MethodInfo? FindMethod(Type type, string name, params Type[] parameterTypes)
     {
+        var signature = string.Join("|", parameterTypes.Select(parameterType => parameterType.FullName ?? parameterType.Name));
+        var key = (type, name, signature);
+        lock (ReflectionMetadataLock)
+        {
+            if (MethodCache.TryGetValue(key, out var cached))
+                return cached;
+        }
+
         for (var current = type; current is not null; current = current.BaseType)
         {
             var method = current.GetMethod(
@@ -918,9 +1027,15 @@ public sealed class BmrReflectionService : IDisposable
                 types: parameterTypes,
                 modifiers: null);
             if (method is not null)
+            {
+                lock (ReflectionMetadataLock)
+                    MethodCache[key] = method;
                 return method;
+            }
         }
 
+        lock (ReflectionMetadataLock)
+            MethodCache[key] = null;
         return null;
     }
 

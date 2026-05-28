@@ -200,6 +200,10 @@ public sealed unsafe class UtilityAutomationService
     private readonly ICondition condition;
     private readonly IPluginLog log;
     private readonly Dictionary<uint, int?> repairIndexCache = [];
+    private Lumina.Excel.ExcelSheet<Aetheryte>? aetheryteSheet;
+    private Lumina.Excel.ExcelSheet<ENpcBase>? enpcBaseSheet;
+    private bool cachedLifestreamLoaded;
+    private DateTime lifestreamCacheExpiresUtc = DateTime.MinValue;
 
     private UtilityTask activeTask = UtilityTask.None;
     private NpcRepairMode activeNpcRepairMode = NpcRepairMode.InnFallback;
@@ -239,6 +243,7 @@ public sealed unsafe class UtilityAutomationService
     private DateTime desynthCategorySeenUtc = DateTime.MinValue;
     private int desynthSettledCategoryIndex = -1;
     private bool desynthAttemptedAny;
+    private DateTime nextSlowUtilityLogUtc = DateTime.MinValue;
 
     public UtilityAutomationService(
         IDataManager dataManager,
@@ -454,6 +459,8 @@ public sealed unsafe class UtilityAutomationService
         if (!IsRunning)
             return;
 
+        var updateStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var measuredTask = activeTask;
         try
         {
             var now = DateTime.UtcNow;
@@ -483,6 +490,35 @@ public sealed unsafe class UtilityAutomationService
         {
             Fail($"{GetTaskLabel(activeTask)} failed: {ex.Message}");
         }
+        finally
+        {
+            updateStopwatch.Stop();
+            ReportSlowUtilityUpdate(measuredTask, updateStopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private void ReportSlowUtilityUpdate(UtilityTask task, double elapsedMs)
+    {
+        if (elapsedMs < 25d)
+            return;
+
+        var now = DateTime.UtcNow;
+        if (now < nextSlowUtilityLogUtc)
+            return;
+
+        nextSlowUtilityLogUtc = now.AddSeconds(5);
+        log.Warning(
+            "[ADS][HITCH] utility update slow task={Task}; elapsedMs={ElapsedMs:0.0}; stage={Stage}; repairMode={RepairMode}; targetNpc={TargetNpc}; route={Route}.",
+            task,
+            elapsedMs,
+            npcRepairTravelStage,
+            activeNpcRepairMode,
+            string.IsNullOrWhiteSpace(targetNpcName) ? "(none)" : targetNpcName,
+            activeNpcRepairFieldRoute.HasValue
+                ? FormatFieldRepairRoute(activeNpcRepairFieldRoute.Value)
+                : activeNpcRepairInnRoute.HasValue
+                    ? activeNpcRepairInnRoute.Value.TerritoryName
+                    : "(none)");
     }
 
     private bool IsNpcRepairFieldRouteAttemptActive()
@@ -1324,7 +1360,7 @@ public sealed unsafe class UtilityAutomationService
     private bool TryResolveInnRepairRoute(out ResolvedInnRepairRoute route)
     {
         route = default;
-        var aetheryteSheet = dataManager.GetExcelSheet<Aetheryte>();
+        var aetheryteSheet = GetAetheryteSheet();
         if (aetheryteSheet == null)
             return false;
 
@@ -1385,7 +1421,7 @@ public sealed unsafe class UtilityAutomationService
     private bool TryResolveFieldRepairRoute(out ResolvedFieldRepairRoute route)
     {
         route = default;
-        var aetheryteSheet = dataManager.GetExcelSheet<Aetheryte>();
+        var aetheryteSheet = GetAetheryteSheet();
         if (aetheryteSheet == null)
             return false;
 
@@ -1490,7 +1526,7 @@ public sealed unsafe class UtilityAutomationService
     private bool TryGetUnlockedInnTerritoryGilCost(uint territoryTypeId, out int gilCost)
     {
         gilCost = int.MaxValue;
-        var aetheryteSheet = dataManager.GetExcelSheet<Aetheryte>();
+        var aetheryteSheet = GetAetheryteSheet();
         if (aetheryteSheet == null)
             return false;
 
@@ -1826,11 +1862,21 @@ public sealed unsafe class UtilityAutomationService
         npcRepairInnPathIndex = 0;
     }
 
-    private static bool IsLifestreamLoaded()
+    private Lumina.Excel.ExcelSheet<Aetheryte>? GetAetheryteSheet()
+        => aetheryteSheet ??= dataManager.GetExcelSheet<Aetheryte>();
+
+    private Lumina.Excel.ExcelSheet<ENpcBase>? GetENpcBaseSheet()
+        => enpcBaseSheet ??= dataManager.GetExcelSheet<ENpcBase>();
+
+    private bool IsLifestreamLoaded()
     {
+        var now = DateTime.UtcNow;
+        if (now < lifestreamCacheExpiresUtc)
+            return cachedLifestreamLoaded;
+
         try
         {
-            return Plugin.PluginInterface.InstalledPlugins.Any(plugin =>
+            cachedLifestreamLoaded = Plugin.PluginInterface.InstalledPlugins.Any(plugin =>
                 plugin.IsLoaded
                 && (string.Equals(plugin.InternalName, "Lifestream", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(plugin.Name, "Lifestream", StringComparison.OrdinalIgnoreCase)
@@ -1838,8 +1884,11 @@ public sealed unsafe class UtilityAutomationService
         }
         catch
         {
-            return false;
+            cachedLifestreamLoaded = false;
         }
+
+        lifestreamCacheExpiresUtc = now.AddSeconds(2);
+        return cachedLifestreamLoaded;
     }
 
     private unsafe bool TryFindNearbyRepairNpc(out RepairNpcCandidate candidate)
@@ -1918,7 +1967,7 @@ public sealed unsafe class UtilityAutomationService
         }
 
         repairIndex = -1;
-        var sheet = dataManager.GetExcelSheet<ENpcBase>();
+        var sheet = GetENpcBaseSheet();
         if (sheet == null || !sheet.TryGetRow(baseId, out var enpcBase))
         {
             repairIndexCache[baseId] = null;
