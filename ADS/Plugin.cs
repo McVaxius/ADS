@@ -88,6 +88,7 @@ public sealed class Plugin : IDalamudPlugin
     public TreasurePortalOpenerRelayService TreasurePortalOpenerRelayService { get; }
     public TreasurePortalOpenerTracker TreasurePortalOpenerTracker { get; }
     public BossModMultiboxFollowService BossModMultiboxFollowService { get; }
+    public TreasureFollowerAutoMoveAssistService TreasureFollowerAutoMoveAssistService { get; }
     public TreasureHighLowDiagnosticService TreasureHighLowDiagnosticService { get; }
     public HigherLowerServerEventTraceService HigherLowerServerEventTraceService { get; }
     public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
@@ -134,6 +135,7 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerRelayService = new TreasurePortalOpenerRelayService(Log);
         TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, TreasurePortalOpenerRelayService, Log);
         BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
+        TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartMissingUpdate("startup");
 
@@ -761,6 +763,10 @@ public sealed class Plugin : IDalamudPlugin
                 bmraiFollowCommandTargetSource = BossModMultiboxFollowService.BmraiFollowCommandTargetSource,
                 treasureFollowerMovementOwnedByBmrai = BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                 treasureFollowerMovementStatus = BossModMultiboxFollowService.FollowerMovementStatus,
+                treasureFollowerAutoMoveAssistStatus = TreasureFollowerAutoMoveAssistService.Status,
+                treasureFollowerAutoMoveAssistTargetName = TreasureFollowerAutoMoveAssistService.TargetName,
+                treasureFollowerAutoMoveAssistDistanceXz = TreasureFollowerAutoMoveAssistService.DistanceXz,
+                treasureFollowerAutoMoveAssistCommandSentAtUtc = TreasureFollowerAutoMoveAssistService.CommandSentAtUtc?.ToString("O"),
                 treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
                 treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
                     ? string.Empty
@@ -890,6 +896,10 @@ public sealed class Plugin : IDalamudPlugin
                 bmraiFollowCommandTargetSource = BossModMultiboxFollowService.BmraiFollowCommandTargetSource,
                 treasureFollowerMovementOwnedByBmrai = BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                 treasureFollowerMovementStatus = BossModMultiboxFollowService.FollowerMovementStatus,
+                treasureFollowerAutoMoveAssistStatus = TreasureFollowerAutoMoveAssistService.Status,
+                treasureFollowerAutoMoveAssistTargetName = TreasureFollowerAutoMoveAssistService.TargetName,
+                treasureFollowerAutoMoveAssistDistanceXz = TreasureFollowerAutoMoveAssistService.DistanceXz,
+                treasureFollowerAutoMoveAssistCommandSentAtUtc = TreasureFollowerAutoMoveAssistService.CommandSentAtUtc?.ToString("O"),
                 treasureDutyRecoveryKey = Configuration.TreasureDutyRecoveryKey,
                 treasureDutyRecoveryUtc = Configuration.TreasureDutyRecoveryUtc == DateTime.MinValue
                     ? string.Empty
@@ -1357,6 +1367,11 @@ public sealed class Plugin : IDalamudPlugin
                         ObservationSnapshot.Empty,
                         ObjectivePlannerService.Current,
                         DialogAutomationService.DialogStatus);
+                    TreasureFollowerAutoMoveAssistService.Update(
+                        DutyContextService.Current,
+                        ExecutionService.TreasureDungeonRole,
+                        BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                        TreasurePortalOpenerTracker.CurrentOrRecentDirect);
                     UpdateDtrBar();
                 });
                 return;
@@ -1391,6 +1406,11 @@ public sealed class Plugin : IDalamudPlugin
                     ExecutionService.TreasureDungeonRoleDisplayName,
                     followOpener,
                     shouldUseTreasureFollowerBmraiFollow);
+                TreasureFollowerAutoMoveAssistService.Update(
+                    DutyContextService.Current,
+                    ExecutionService.TreasureDungeonRole,
+                    BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                    followOpener);
                 ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
                     BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                     BossModMultiboxFollowService.FollowerMovementStatus);
