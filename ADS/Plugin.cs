@@ -686,12 +686,22 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    public bool StartNpcRepairNoTeleportNoInn()
+    {
+        if (!CanStartManualUtility("NPC repair without inn fallback or teleport"))
+            return false;
+
+        var result = UtilityAutomationService.StartNpcRepairNoTeleportNoInn();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
     public bool StartRepair(string mode)
     {
         var normalized = NormalizeRepairMode(mode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            PrintStatus("Repair mode must be self, npc, or npc-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-no-inn, or npc-no-teleport-no-inn.");
             return false;
         }
 
@@ -700,6 +710,7 @@ public sealed class Plugin : IDalamudPlugin
             "self" => StartSelfRepair(),
             "npc" => StartNpcRepair(),
             "npc-no-inn" => StartNpcRepairNoInn(),
+            "npc-no-teleport-no-inn" => StartNpcRepairNoTeleportNoInn(),
             _ => false,
         };
     }
@@ -1086,6 +1097,7 @@ public sealed class Plugin : IDalamudPlugin
             "self" or "selfrepair" or "self-repair" => "self",
             "npc" or "npcrepair" or "npc-repair" => "npc",
             "npc-no-inn" or "npcnoinn" or "noinn" or "no-inn" => "npc-no-inn",
+            "npc-no-teleport-no-inn" or "npc-no-tp-no-inn" or "npc-no-inn-no-tp" or "npcrepair-no-teleport-no-inn" => "npc-no-teleport-no-inn",
             _ => string.Empty,
         };
     }
@@ -1711,10 +1723,11 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads resume - resume inside duty\n" +
                 "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
-                "/ads repair self|npc|npc-no-inn - start reusable repair automation\n" +
+                "/ads repair self|npc|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
+                "/ads npcrepair-no-teleport-no-inn - NPC repair only if a mender is within 120y\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
                 "/ads lootoff|lootneed|lootgreed|lootpass - set loot rolling mode\n" +
@@ -1907,7 +1920,7 @@ public sealed class Plugin : IDalamudPlugin
 
         if (trimmed.Equals("repair", StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus("Repair mode must be self, npc, or npc-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-no-inn, or npc-no-teleport-no-inn.");
             return;
         }
 
@@ -1927,6 +1940,12 @@ public sealed class Plugin : IDalamudPlugin
             || trimmed.Equals("npcrepair no-inn", StringComparison.OrdinalIgnoreCase))
         {
             StartNpcRepairNoInn();
+            return;
+        }
+
+        if (trimmed.Equals("npcrepair-no-teleport-no-inn", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepairNoTeleportNoInn();
             return;
         }
 

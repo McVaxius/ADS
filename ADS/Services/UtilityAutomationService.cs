@@ -28,6 +28,7 @@ public sealed unsafe class UtilityAutomationService
     {
         InnFallback,
         NoInn,
+        NoTeleportNoInn,
     }
 
     private enum NpcRepairTravelStage
@@ -41,6 +42,7 @@ public sealed unsafe class UtilityAutomationService
 
     private const uint RepairShopEventId = 720915;
     private const float RepairNpcSearchRadius = 80.0f;
+    private const float NoTeleportNoInnRepairNpcSearchRadius = 120.0f;
     private const float RepairNpcInteractRadius = 3.0f;
     private const float InnPathWaypointReachedRadius = 4.0f;
     private const int SelfRepairGeneralAction = 6;
@@ -278,7 +280,12 @@ public sealed unsafe class UtilityAutomationService
         => activeTask switch
         {
             UtilityTask.SelfRepair => "self",
-            UtilityTask.NpcRepair => activeNpcRepairMode == NpcRepairMode.NoInn ? "npc-no-inn" : "npc",
+            UtilityTask.NpcRepair => activeNpcRepairMode switch
+            {
+                NpcRepairMode.NoInn => "npc-no-inn",
+                NpcRepairMode.NoTeleportNoInn => "npc-no-teleport-no-inn",
+                _ => "npc",
+            },
             UtilityTask.ExtractMateria => "extract-materia",
             UtilityTask.DesynthFromInventory => "desynth-inventory",
             _ => string.Empty,
@@ -306,6 +313,9 @@ public sealed unsafe class UtilityAutomationService
     public bool StartNpcRepairNoInn()
         => StartNpcRepair(NpcRepairMode.NoInn);
 
+    public bool StartNpcRepairNoTeleportNoInn()
+        => StartNpcRepair(NpcRepairMode.NoTeleportNoInn);
+
     private bool StartNpcRepair(NpcRepairMode mode)
     {
         if (IsRepairBlockedByMountedState(UtilityTask.NpcRepair))
@@ -322,18 +332,30 @@ public sealed unsafe class UtilityAutomationService
             return false;
         }
 
-        var statusMessage = mode == NpcRepairMode.NoInn
-            ? "Starting NPC repair without inn fallback."
-            : "Starting NPC repair.";
+        var statusMessage = mode switch
+        {
+            NpcRepairMode.NoInn => "Starting NPC repair without inn fallback.",
+            NpcRepairMode.NoTeleportNoInn => "Starting NPC repair without inn fallback or teleport.",
+            _ => "Starting NPC repair.",
+        };
         if (!TryStartTask(UtilityTask.NpcRepair, statusMessage))
             return false;
 
         activeNpcRepairMode = mode;
         failedNpcRepairFieldAetheryteIds.Clear();
-        if (TryFindNearbyRepairNpc(out var targetNpc))
+        var repairNpcSearchRadius = mode == NpcRepairMode.NoTeleportNoInn
+            ? NoTeleportNoInnRepairNpcSearchRadius
+            : RepairNpcSearchRadius;
+        if (TryFindNearbyRepairNpc(out var targetNpc, repairNpcSearchRadius))
         {
             BeginNpcRepairWithCandidate(targetNpc, "Starting NPC repair with");
             return true;
+        }
+
+        if (mode == NpcRepairMode.NoTeleportNoInn)
+        {
+            Fail($"No repair NPC found within {NoTeleportNoInnRepairNpcSearchRadius:0}y for NPC no-inn/no-teleport repair.");
+            return false;
         }
 
         var startedTravel = mode == NpcRepairMode.NoInn
@@ -1894,7 +1916,7 @@ public sealed unsafe class UtilityAutomationService
         return cachedLifestreamLoaded;
     }
 
-    private unsafe bool TryFindNearbyRepairNpc(out RepairNpcCandidate candidate)
+    private unsafe bool TryFindNearbyRepairNpc(out RepairNpcCandidate candidate, float searchRadius = RepairNpcSearchRadius)
     {
         candidate = default;
         var player = objectTable.LocalPlayer;
@@ -1912,7 +1934,7 @@ public sealed unsafe class UtilityAutomationService
             }
 
             var distance = Vector3.Distance(player.Position, obj.Position);
-            if (distance > RepairNpcSearchRadius)
+            if (distance > searchRadius)
                 continue;
 
             if (!TryGetRepairIndex(obj.BaseId, out var repairIndex))
