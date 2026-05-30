@@ -225,6 +225,7 @@ public sealed class BossModMultiboxFollowService
         bmraiFollowActivated = true;
         RecordBmraiFollowCommand(opener, commandResult);
         RecordAcceptedFollowDutyKey(commandResult, acceptedDutyKey);
+        TryProcessFollowCommand("/bmrai followoutofcombat on", "BMRAI", out _);
 
         var contentId = opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "unresolved";
         FollowStatus = $"{FollowProviderLabel} name follow set to direct treasure opener '{opener.OpenerName}' from {opener.Source}, content id {contentId}. {commandResult.Status}";
