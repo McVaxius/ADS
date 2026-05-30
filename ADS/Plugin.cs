@@ -617,11 +617,16 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool LeaveDuty()
     {
+        var shouldClearTreasureFollow =
+            ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower ||
+            BossModMultiboxFollowService.FollowerMovementOwnedByBmrai ||
+            BossModMultiboxFollowService.BmraiFollowCommandAccepted == true ||
+            BossModMultiboxFollowService.CleanupPending;
+
         var result = ExecutionService.LeaveDuty(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
-        if (ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower) CommandManager.ProcessCommand("/bmrai followoutofcombat off");
         TreasurePortalOpenerTracker.ClearPendingOpener("leave duty");
         TreasurePortalOpenerRelayService.Clear("leave duty");
-        BossModMultiboxFollowService.Clear("leave duty");
+        BossModMultiboxFollowService.Clear("leave duty request", shouldClearTreasureFollow);
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;

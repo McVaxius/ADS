@@ -87,11 +87,11 @@ public sealed class BossModMultiboxFollowService
     public bool CleanupPending
         => configuration.BmraiTreasureFollowCleanupPending || bmraiFollowActivated;
 
-    public void Clear(string reason)
+    public void Clear(string reason, bool forceProviderCleanup = false)
     {
         var cleanupStatus = string.Empty;
         var shouldDisableBmrai = bmraiFollowActivated || configuration.BmraiTreasureFollowCleanupPending;
-        if (CleanupPending)
+        if (forceProviderCleanup || CleanupPending)
         {
             cleanupStatus = DisableBmraiTreasureFollow(reason, shouldDisableBmrai);
             if (configuration.BmraiTreasureFollowCleanupPending)
