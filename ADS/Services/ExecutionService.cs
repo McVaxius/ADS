@@ -1,6 +1,7 @@
 using ADS.Models;
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
@@ -90,6 +91,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan LivePartyDamageProgressWindow = TimeSpan.FromSeconds(4.0);
     private const float LivePartyDamageProgressRange = 35.0f;
     private const string TreasureCofferLockedTightMessage = "The coffer is locked tight.";
+    private const string TreasureDoorLockonCommand = "/lockon";
 
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
@@ -108,6 +110,7 @@ public sealed class ExecutionService
     private PlannerObjectiveKind committedInteractableObjectiveKind = PlannerObjectiveKind.None;
     private ulong lastInteractGameObjectId;
     private DateTime nextInteractAttemptUtc;
+    private string? treasureDoorLockonBeforeRetryKey;
     private DateTime nextNavigationCommandUtc;
     private ulong movementTargetGameObjectId;
     private bool navigationActive;
@@ -323,11 +326,14 @@ public sealed class ExecutionService
 
     public bool HandleChatMessage(string message)
     {
-        if (string.IsNullOrWhiteSpace(message)
-            || !message.Contains(TreasureCofferLockedTightMessage, StringComparison.OrdinalIgnoreCase))
-        {
+        if (string.IsNullOrWhiteSpace(message))
             return false;
-        }
+
+        if (TryArmTreasureDoorLockonRetry(message))
+            return true;
+
+        if (!message.Contains(TreasureCofferLockedTightMessage, StringComparison.OrdinalIgnoreCase))
+            return false;
 
         if (!IsActiveOwnedDutyMode()
             || committedInteractableObjectiveKind != PlannerObjectiveKind.TreasureCoffer
@@ -344,6 +350,65 @@ public sealed class ExecutionService
             ExecutionPhase.AttemptingInteractableObjective,
             $"Treasure coffer reported locked tight. ADS is holding the committed coffer and will retry in {TreasureCofferLockedRetryDelay.TotalSeconds:0}s.");
         return true;
+    }
+
+    private bool TryArmTreasureDoorLockonRetry(string message)
+    {
+        if (!IsTreasureDoorViewFailureMessage(message))
+            return false;
+
+        if (!IsActiveOwnedDutyMode()
+            || committedInteractableObjectiveKind != PlannerObjectiveKind.TreasureDoor
+            || string.IsNullOrWhiteSpace(committedInteractableKey)
+            || pendingProgressionInteractable is not { Classification: InteractableClass.TreasureDoor } pendingDoor
+            || pendingTreasureDoorTransitionPoint is null
+            || !string.Equals(pendingDoor.Key, committedInteractableKey, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        treasureDoorLockonBeforeRetryKey = committedInteractableKey;
+        log?.Information(
+            $"[ADS] Treasure door {pendingDoor.Name} reported view obstruction. ADS will send {TreasureDoorLockonCommand} before the next same-door retry.");
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"Treasure door {pendingDoor.Name} reported not in view; ADS will lock on before the next same-door retry.");
+        return true;
+    }
+
+    private static bool IsTreasureDoorViewFailureMessage(string message)
+    {
+        var normalized = NormalizeChatMessageForMatch(message);
+        return normalized.Contains("not in view", StringComparison.Ordinal)
+               || normalized.Contains("cannot see", StringComparison.Ordinal)
+               || normalized.Contains("can not see", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeChatMessageForMatch(string message)
+    {
+        var builder = new StringBuilder(message.Length);
+        var previousWasSpace = true;
+        foreach (var character in message.Normalize(NormalizationForm.FormKC))
+        {
+            var normalized = char.ToLowerInvariant(character);
+            if (char.IsLetterOrDigit(normalized))
+            {
+                builder.Append(normalized);
+                previousWasSpace = false;
+                continue;
+            }
+
+            if (!previousWasSpace)
+            {
+                builder.Append(' ');
+                previousWasSpace = true;
+            }
+        }
+
+        if (builder.Length > 0 && builder[^1] == ' ')
+            builder.Length--;
+
+        return builder.ToString();
     }
 
     public void ReleaseHeldMovementKeys(string reason)
@@ -3064,6 +3129,7 @@ public sealed class ExecutionService
         if (TryHoldResetCameraBeforeInteract(observedInteractable, cameraBasedInteract, prefix, now))
             return;
 
+        var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
         if (TryInteractWithObject(gameObject, cameraBasedInteract: cameraBasedInteract))
         {
             var isTreasureFollowerLootFollowThrough = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
@@ -3134,6 +3200,10 @@ public sealed class ExecutionService
             if (useCameraIndependentInteract)
             {
                 interactResult = $"{interactResult} Praetorium Magitek Armor camera-independent interact mode used to avoid zoom/camera obstruction.";
+            }
+            if (sentTreasureDoorLockonBeforeRetry)
+            {
+                interactResult = $"{interactResult} Sent {TreasureDoorLockonCommand} before retry after view-obstruction chat.";
             }
 
             SetPhase(ExecutionPhase.AttemptingInteractableObjective, $"{prefix} {interactResult}");
@@ -3214,6 +3284,13 @@ public sealed class ExecutionService
     {
         if (committedInteractableKey == interactable.Key && committedInteractableObjectiveKind == objectiveKind)
             return;
+
+        if (!string.IsNullOrWhiteSpace(treasureDoorLockonBeforeRetryKey)
+            && (objectiveKind != PlannerObjectiveKind.TreasureDoor
+                || !string.Equals(treasureDoorLockonBeforeRetryKey, interactable.Key, StringComparison.Ordinal)))
+        {
+            ResetTreasureDoorLockonBeforeRetry();
+        }
 
         var switchingTreasureCofferIdentity = objectiveKind != PlannerObjectiveKind.TreasureCoffer || committedInteractableKey != interactable.Key;
         if (switchingTreasureCofferIdentity)
@@ -3528,6 +3605,7 @@ public sealed class ExecutionService
 
     private void ClearInteractableCommitment()
     {
+        ResetTreasureDoorLockonBeforeRetry();
         committedInteractableKey = null;
         committedInteractableMapId = 0;
         committedInteractableObjectiveKind = PlannerObjectiveKind.None;
@@ -3743,6 +3821,40 @@ public sealed class ExecutionService
     {
         resetCameraBeforeInteractKey = null;
         resetCameraBeforeInteractReadyUtc = DateTime.MinValue;
+    }
+
+    private bool TrySendTreasureDoorLockonBeforeRetry(ObservedInteractable interactable, IGameObject gameObject)
+    {
+        if (interactable.Classification != InteractableClass.TreasureDoor
+            || string.IsNullOrWhiteSpace(treasureDoorLockonBeforeRetryKey))
+        {
+            return false;
+        }
+
+        if (!string.Equals(treasureDoorLockonBeforeRetryKey, interactable.Key, StringComparison.Ordinal))
+        {
+            ResetTreasureDoorLockonBeforeRetry();
+            return false;
+        }
+
+        ResetTreasureDoorLockonBeforeRetry();
+        targetManager.Target = gameObject;
+        var sent = GameInteractionHelper.TrySendChatCommand(commandManager, TreasureDoorLockonCommand, log);
+        if (sent)
+        {
+            log?.Information($"[ADS] Sent {TreasureDoorLockonCommand} before retrying treasure door {interactable.Name} after view-obstruction chat.");
+        }
+        else
+        {
+            log?.Warning($"[ADS] Failed to send {TreasureDoorLockonCommand} before retrying treasure door {interactable.Name}; retrying interact normally.");
+        }
+
+        return sent;
+    }
+
+    private void ResetTreasureDoorLockonBeforeRetry()
+    {
+        treasureDoorLockonBeforeRetryKey = null;
     }
 
     private static bool ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(DutyContextSnapshot context, ObservedInteractable interactable)
