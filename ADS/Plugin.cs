@@ -183,6 +183,16 @@ public sealed class Plugin : IDalamudPlugin
             StartDutyFromInside,
             ResumeDutyFromInside,
             LeaveDuty,
+            () =>
+            {
+                OpenLootUi();
+                return true;
+            },
+            () =>
+            {
+                ToggleLootUi();
+                return true;
+            },
             StartRepair,
             GetStatusJson,
             GetCurrentAnalysisJson);

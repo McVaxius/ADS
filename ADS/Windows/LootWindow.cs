@@ -63,6 +63,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
             plugin.SetLootRegistrableNeedingEnabled(registrableNeed);
 
         ImGui.BeginDisabled(!plugin.Configuration.LootRegistrableNeedingEnabled);
+        ImGui.Indent(ImGui.GetStyle().IndentSpacing);
         DrawCategoryCheckbox("Mounts", plugin.Configuration.LootRegistrableMountsEnabled, plugin.SetLootRegistrableMountsEnabled);
         DrawCategoryCheckbox("Minions", plugin.Configuration.LootRegistrableMinionsEnabled, plugin.SetLootRegistrableMinionsEnabled);
         DrawCategoryCheckbox("Fashion accessories", plugin.Configuration.LootRegistrableFashionAccessoriesEnabled, plugin.SetLootRegistrableFashionAccessoriesEnabled);
@@ -72,6 +73,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
         DrawCategoryCheckbox("Emotes / hairstyles", plugin.Configuration.LootRegistrableEmotesHairstylesEnabled, plugin.SetLootRegistrableEmotesHairstylesEnabled);
         DrawCategoryCheckbox("Bardings", plugin.Configuration.LootRegistrableBardingsEnabled, plugin.SetLootRegistrableBardingsEnabled);
         DrawCategoryCheckbox("Triple Triad cards", plugin.Configuration.LootRegistrableTripleTriadCardsEnabled, plugin.SetLootRegistrableTripleTriadCardsEnabled);
+        ImGui.Unindent(ImGui.GetStyle().IndentSpacing);
         ImGui.EndDisabled();
     }
 

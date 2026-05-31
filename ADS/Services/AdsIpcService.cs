@@ -12,6 +12,8 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> startDutyFromInside,
         Func<bool> resumeDutyFromInside,
         Func<bool> leaveDuty,
+        Func<bool> openLootUi,
+        Func<bool> toggleLootUi,
         Func<string, bool> startRepair,
         Func<string> getStatusJson,
         Func<string> getCurrentAnalysisJson)
@@ -20,6 +22,8 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
         Register(pluginInterface, "ADS.ResumeDutyFromInside", resumeDutyFromInside);
         Register(pluginInterface, "ADS.LeaveDuty", leaveDuty);
+        Register(pluginInterface, "ADS.OpenLootUi", openLootUi);
+        Register(pluginInterface, "ADS.ToggleLootUi", toggleLootUi);
         Register(pluginInterface, "ADS.StartRepair", startRepair);
         Register(pluginInterface, "ADS.GetStatusJson", getStatusJson);
         Register(pluginInterface, "ADS.GetCurrentAnalysisJson", getCurrentAnalysisJson);
