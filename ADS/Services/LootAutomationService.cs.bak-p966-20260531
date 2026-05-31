@@ -187,7 +187,9 @@ public sealed class LootAutomationService
         var itemName = hasItem ? item.Name.ToString() : $"item {itemId.ToString(CultureInfo.InvariantCulture)}";
         var decision = hasItem
             ? ResolveDecision(lootItem, itemId, item)
-            : ResolveMissingItemDecision(lootItem);
+            : new RollDecision(
+                ResultMerge(MapBaseMode(configuration.LootMode), GetHardCap(lootItem)),
+                $"base={configuration.LootMode}, itemSheet=missing");
         if (TryRoll(decision.Result, index))
         {
             lastAttemptItemId = itemId;
@@ -260,82 +262,25 @@ public sealed class LootAutomationService
         return false;
     }
 
-    private RollDecision ResolveMissingItemDecision(LootItem lootItem)
-    {
-        var baseDesired = MapBaseMode(configuration.LootMode);
-        var hardCap = GetHardCap(lootItem);
-        var final = ResultMerge(baseDesired, hardCap);
-        var reason =
-            $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
-            $"registrable=unknown(itemSheet=missing), " +
-            $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
-            $"override=none(itemSheet=missing), " +
-            $"rollStateCap={FormatRollResult(GetRollStateCap(lootItem))}, " +
-            $"lootModeCap={FormatRollResult(GetLootModeCap(lootItem))}, " +
-            $"liveCap={FormatRollResult(hardCap)}, " +
-            $"final={FormatRollResult(final)}";
-        return new RollDecision(final, reason);
-    }
-
     private RollDecision ResolveDecision(LootItem lootItem, uint itemId, Item item)
     {
-        var baseDesired = MapBaseMode(configuration.LootMode);
-        var desired = baseDesired;
-        var registrableReason = "not-registrable";
-        var overrideReason = "none(not-registrable)";
+        var desired = MapBaseMode(configuration.LootMode);
+        var reason = $"base={configuration.LootMode}";
 
-        if (TryClassifyRegistrable(itemId, item, out var category, out var categoryLabel, out var registrationItemIds))
+        if (configuration.LootRegistrableNeedingEnabled
+            && TryClassifyRegistrable(itemId, item, out var category, out var categoryLabel, out var registrationItemIds)
+            && IsCategoryEnabled(category))
         {
-            var categoryEnabled = IsCategoryEnabled(category);
             var inventoryCount = GetInventoryCount(itemId);
             var alreadyRegistered = IsAlreadyRegistered(itemId, registrationItemIds);
-            var owned = inventoryCount > 0 || alreadyRegistered;
-            var missing = !owned;
-
-            if (categoryEnabled && missing && configuration.LootRegistrableNeedingEnabled)
-            {
-                desired = RollResult.Needed;
-                overrideReason = "need-missing";
-            }
-            else if (!categoryEnabled)
-            {
-                overrideReason = "none(category-disabled)";
-            }
-            else if (missing)
-            {
-                overrideReason = "none(need-missing-disabled)";
-            }
-            else
-            {
-                overrideReason = "none(owned)";
-            }
-
-            registrableReason =
-                $"{categoryLabel}, categoryEnabled={categoryEnabled}, " +
-                $"inventory={inventoryCount.ToString(CultureInfo.InvariantCulture)}, " +
-                $"registered={alreadyRegistered}, owned={owned}, missing={missing}";
+            desired = inventoryCount > 0 || alreadyRegistered
+                ? RollResult.Passed
+                : RollResult.Needed;
+            reason = $"registrable={categoryLabel}, inventory={inventoryCount.ToString(CultureInfo.InvariantCulture)}, registered={alreadyRegistered}";
         }
 
-        var rollStateCap = GetRollStateCap(lootItem);
-        var lootModeCap = GetLootModeCap(lootItem);
-        var hardCap = ResultMerge(rollStateCap, lootModeCap);
-        var uniqueOwnedCap = item.IsUnique && (GetInventoryCount(itemId) > 0 || IsItemActionUnlocked(itemId));
-        if (uniqueOwnedCap)
-            hardCap = RollResult.Passed;
-
-        var final = ResultMerge(desired, hardCap);
-        var reason =
-            $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
-            $"registrable={registrableReason}, " +
-            $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
-            $"override={overrideReason}, " +
-            $"desired={FormatRollResult(desired)}, " +
-            $"rollStateCap={FormatRollResult(rollStateCap)}, " +
-            $"lootModeCap={FormatRollResult(lootModeCap)}, " +
-            $"uniqueOwnedCap={uniqueOwnedCap}, " +
-            $"liveCap={FormatRollResult(hardCap)}, " +
-            $"final={FormatRollResult(final)}";
-        return new RollDecision(final, reason);
+        var hardCap = GetHardCap(lootItem, itemId, item);
+        return new RollDecision(ResultMerge(desired, hardCap), reason);
     }
 
     private bool TryClassifyRegistrable(
@@ -409,6 +354,15 @@ public sealed class LootAutomationService
 
         fadedCopyResultCache[itemId] = results;
         return results;
+    }
+
+    private RollResult GetHardCap(LootItem lootItem, uint itemId, Item item)
+    {
+        var stateMax = GetRollStateCap(lootItem);
+        if (item.IsUnique && (GetInventoryCount(itemId) > 0 || IsItemActionUnlocked(itemId)))
+            stateMax = RollResult.Passed;
+
+        return ResultMerge(stateMax, GetLootModeCap(lootItem));
     }
 
     private static RollResult GetHardCap(LootItem lootItem)

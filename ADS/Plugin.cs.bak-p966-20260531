@@ -95,7 +95,6 @@ public sealed class Plugin : IDalamudPlugin
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
     public LootAutomationService LootAutomationService { get; }
-    public TreasureFollowerDutyExitMonitorService TreasureFollowerDutyExitMonitorService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
     public TreasureDungeonRoleDetector TreasureDungeonRoleDetector { get; }
     public TreasurePortalOpenerRelayService TreasurePortalOpenerRelayService { get; }
@@ -175,7 +174,6 @@ public sealed class Plugin : IDalamudPlugin
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
-        TreasureFollowerDutyExitMonitorService = new TreasureFollowerDutyExitMonitorService(CommandManager, Log);
         BmrReflectionService = new BmrReflectionService(PluginInterface, Configuration, Log);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
@@ -384,14 +382,14 @@ public sealed class Plugin : IDalamudPlugin
         if (Configuration.LootRegistrableNeedingEnabled == enabled)
         {
             if (printStatus)
-                PrintStatus($"Loot registrable Need missing: {(enabled ? "ON" : "OFF")}.");
+                PrintStatus($"Loot registrable Need override: {(enabled ? "ON" : "OFF")}.");
             return;
         }
 
         Configuration.LootRegistrableNeedingEnabled = enabled;
         SaveConfiguration();
         if (printStatus)
-            PrintStatus($"Loot registrable Need missing: {(enabled ? "ON" : "OFF")}.");
+            PrintStatus($"Loot registrable Need override: {(enabled ? "ON" : "OFF")}.");
     }
 
     public void SetLootRegistrableMountsEnabled(bool enabled)
@@ -629,8 +627,6 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerTracker.ClearPendingOpener("leave duty");
         TreasurePortalOpenerRelayService.Clear("leave duty");
         BossModMultiboxFollowService.Clear("leave duty request", shouldClearTreasureFollow);
-        if (result)
-            TreasureFollowerDutyExitMonitorService.Disarm("ADS leave duty request");
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -653,7 +649,6 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerTracker.ClearPendingOpener("ownership stop");
         TreasurePortalOpenerRelayService.Clear("ownership stop");
         BossModMultiboxFollowService.Clear("ownership stop");
-        TreasureFollowerDutyExitMonitorService.Disarm("ownership stop");
         InnEntryService.Cancel("operator stop");
         UtilityAutomationService.Cancel("operator stop");
         var stoppedText = stoppedInn || stoppedUtility
@@ -821,13 +816,6 @@ public sealed class Plugin : IDalamudPlugin
                     : Configuration.TreasureDutyRecoveryUtc.ToString("O"),
                 treasureDutyRecoveryRole = Configuration.TreasureDutyRecoveryRole,
                 bmraiTreasureFollowCleanupPending = Configuration.BmraiTreasureFollowCleanupPending,
-                treasureFollowerDutyExitMonitorArmed = TreasureFollowerDutyExitMonitorService.Armed,
-                treasureFollowerDutyExitMonitorCleanupSent = TreasureFollowerDutyExitMonitorService.CleanupSent,
-                treasureFollowerDutyExitMonitorStatus = TreasureFollowerDutyExitMonitorService.Status,
-                treasureFollowerDutyExitMonitorArmedAtUtc = TreasureFollowerDutyExitMonitorService.ArmedAtUtc?.ToString("O"),
-                treasureFollowerDutyExitMonitorCleanupSentAtUtc = TreasureFollowerDutyExitMonitorService.CleanupSentAtUtc?.ToString("O"),
-                treasureFollowerDutyExitMonitorDutyKey = TreasureFollowerDutyExitMonitorService.DutyKey,
-                treasureFollowerDutyExitMonitorSource = TreasureFollowerDutyExitMonitorService.Source,
                 frontierRouteSource = DungeonFrontierService.CurrentTreasureRouteSource,
                 frontierRouteKey = DungeonFrontierService.CurrentTarget?.Key,
                 treasureFollowerRouteHoldReason = DungeonFrontierService.TreasureFollowerRouteHoldReason,
@@ -962,9 +950,6 @@ public sealed class Plugin : IDalamudPlugin
                     : Configuration.TreasureDutyRecoveryUtc.ToString("O"),
                 treasureDutyRecoveryRole = Configuration.TreasureDutyRecoveryRole,
                 bmraiTreasureFollowCleanupPending = Configuration.BmraiTreasureFollowCleanupPending,
-                treasureFollowerDutyExitMonitorArmed = TreasureFollowerDutyExitMonitorService.Armed,
-                treasureFollowerDutyExitMonitorCleanupSent = TreasureFollowerDutyExitMonitorService.CleanupSent,
-                treasureFollowerDutyExitMonitorStatus = TreasureFollowerDutyExitMonitorService.Status,
                 dialogVisible = DialogAutomationService.DialogVisible,
                 dialogPrompt = DialogAutomationService.DialogPrompt,
                 dialogRule = DialogAutomationService.DialogRule,
@@ -1447,11 +1432,6 @@ public sealed class Plugin : IDalamudPlugin
                         ExecutionService.TreasureDungeonRole,
                         BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                         TreasurePortalOpenerTracker.CurrentOrRecentDirect);
-                    TreasureFollowerDutyExitMonitorService.Update(
-                        DutyContextService.Current,
-                        IsSupportedTreasureDutyContext(DutyContextService.Current),
-                        ExecutionService.TreasureDungeonRole,
-                        ExecutionService.TreasureDungeonRoleDisplayName);
                     UpdateDtrBar();
                 });
                 return;
@@ -1497,11 +1477,6 @@ public sealed class Plugin : IDalamudPlugin
                     BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
                     BossModMultiboxFollowService.FollowerMovementStatus);
             });
-            Measure("td-exit-monitor", () => TreasureFollowerDutyExitMonitorService.Update(
-                DutyContextService.Current,
-                IsSupportedTreasureDutyContext(DutyContextService.Current),
-                ExecutionService.TreasureDungeonRole,
-                ExecutionService.TreasureDungeonRoleDisplayName));
             Measure("higher-lower-vfx", () => HigherLowerVfxTraceService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
             Measure("higher-lower-card", () => HigherLowerCardVfxSolverService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
             Measure("higher-lower-auto", () =>
@@ -1762,8 +1737,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynthfrominventory - desynth inventory-only items\n" +
                 "/ads lootoff|lootneed|lootgreed|lootpass - set loot rolling mode\n" +
-                "/ads lootregon|lootregoff - toggle Need missing registrables\n" +
-                "/ads td-monitor-on|td-monitor-off - arm/disarm treasure follower exit cleanup monitor\n" +
+                "/ads lootregon|lootregoff - toggle registrable Need override\n" +
                 "/ads hldebug on|off|dump|state|trace [seconds]|export|exportpath <tex> [u v w h]|card <1-9> [current|next|previous]|board <left> <right> [label...]|solver|status|folder - Higher/Lower diagnostic file logging\n" +
                 "/ads hlauto on|off|status - Higher/Lower guarded automation\n" +
                 "/ads stop - drop ownership",
@@ -1860,20 +1834,6 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("lootregoff", StringComparison.OrdinalIgnoreCase))
         {
             SetLootRegistrableNeedingEnabled(false, printStatus: true);
-            return;
-        }
-
-        if (trimmed.Equals("td-monitor-on", StringComparison.OrdinalIgnoreCase))
-        {
-            TreasureFollowerDutyExitMonitorService.Arm(DutyContextService.Current, "manual command");
-            PrintStatus(TreasureFollowerDutyExitMonitorService.Status);
-            return;
-        }
-
-        if (trimmed.Equals("td-monitor-off", StringComparison.OrdinalIgnoreCase))
-        {
-            TreasureFollowerDutyExitMonitorService.Disarm("manual command");
-            PrintStatus(TreasureFollowerDutyExitMonitorService.Status);
             return;
         }
 

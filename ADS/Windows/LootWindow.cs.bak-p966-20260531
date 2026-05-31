@@ -58,9 +58,9 @@ public sealed class LootWindow : PositionedWindow, IDisposable
 
     private void DrawRegistrableControls()
     {
-        var registrableNeed = plugin.Configuration.LootRegistrableNeedingEnabled;
-        if (ImGui.Checkbox("Need missing registrables", ref registrableNeed))
-            plugin.SetLootRegistrableNeedingEnabled(registrableNeed);
+        var registrable = plugin.Configuration.LootRegistrableNeedingEnabled;
+        if (ImGui.Checkbox("Registrable Need override", ref registrable))
+            plugin.SetLootRegistrableNeedingEnabled(registrable);
 
         ImGui.BeginDisabled(!plugin.Configuration.LootRegistrableNeedingEnabled);
         DrawCategoryCheckbox("Mounts", plugin.Configuration.LootRegistrableMountsEnabled, plugin.SetLootRegistrableMountsEnabled);
