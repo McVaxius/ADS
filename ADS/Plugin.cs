@@ -65,6 +65,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
+    [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
     [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
@@ -107,6 +108,7 @@ public sealed class Plugin : IDalamudPlugin
     public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
     public HigherLowerCardVfxSolverService HigherLowerCardVfxSolverService { get; }
     public HigherLowerAutomationService HigherLowerAutomationService { get; }
+    public DebugStrafeService DebugStrafeService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -172,6 +174,7 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, HigherLowerServerEventTraceService, DataManager, Log);
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
+        DebugStrafeService = new DebugStrafeService(KeyState, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
@@ -252,6 +255,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        DebugStrafeService.Release("plugin dispose");
         ExecutionService.ReleaseHeldMovementKeys("plugin dispose");
         Framework.Update -= OnFrameworkUpdate;
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
@@ -312,7 +316,12 @@ public sealed class Plugin : IDalamudPlugin
         => frontierLabelWindow.IsOpen = !frontierLabelWindow.IsOpen;
 
     public void ToggleQuickControlUi()
-        => quickControlWindow.IsOpen = !quickControlWindow.IsOpen;
+    {
+        if (quickControlWindow.IsOpen)
+            DebugStrafeService.Release("mini close");
+
+        quickControlWindow.IsOpen = !quickControlWindow.IsOpen;
+    }
 
     public void ToggleLootUi()
         => lootWindow.IsOpen = !lootWindow.IsOpen;
@@ -364,6 +373,12 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenReflectionUi()
         => reflectionWindow.IsOpen = true;
+
+    public void ToggleDebugStrafeLeft()
+        => PrintStatus(DebugStrafeService.ToggleLeft(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled));
+
+    public void ToggleDebugStrafeRight()
+        => PrintStatus(DebugStrafeService.ToggleRight(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled));
 
     public void SaveConfiguration()
     {
@@ -657,6 +672,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         var stoppedInn = InnEntryService.IsRunning;
         var stoppedUtility = UtilityAutomationService.IsRunning;
+        DebugStrafeService.Release("ADS stop");
         ExecutionService.Stop(DutyContextService.Current);
         ResetOwnedTreasureRoleInferenceLatch();
         ClearTreasureDutyRecoveryMarker("ownership stop");
@@ -1413,6 +1429,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            Measure("debug-strafe", () => DebugStrafeService.Update(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled));
             Measure("remote-json-complete", QueueCompletedRemoteJsonReload);
             Measure("dialog", () => DialogAutomationService.Update(
                 DutyContextService.Current,
@@ -1749,6 +1766,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads mini - toggle the compact control window\n" +
                 "/ads loot - toggle the loot control window\n" +
+                "/ads debug on|off|status|release - toggle mini-window debug strafe controls\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
                 "/ads hl - toggle the Higher/Lower calibration window\n" +
@@ -1828,6 +1846,13 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("mini", StringComparison.OrdinalIgnoreCase))
         {
             ToggleQuickControlUi();
+            return;
+        }
+
+        if (trimmed.Equals("debug", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("debug ", StringComparison.OrdinalIgnoreCase))
+        {
+            HandleDebugCommand(trimmed);
             return;
         }
 
@@ -2189,6 +2214,39 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         ToggleMainUi();
+    }
+
+    private void HandleDebugCommand(string trimmed)
+    {
+        var mode = trimmed.Equals("debug", StringComparison.OrdinalIgnoreCase)
+            ? "status"
+            : trimmed["debug ".Length..].Trim();
+
+        if (mode.Equals("on", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(DebugStrafeService.Enable());
+            return;
+        }
+
+        if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(DebugStrafeService.Disable("command"));
+            return;
+        }
+
+        if (mode.Equals("release", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(DebugStrafeService.Release("command"));
+            return;
+        }
+
+        if (mode.Equals("status", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus(DebugStrafeService.Status);
+            return;
+        }
+
+        PrintStatus("Debug mode must be: /ads debug on|off|status|release.");
     }
 
     private void SetupDtrBar()

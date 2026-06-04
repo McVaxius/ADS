@@ -24,6 +24,11 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
     {
     }
 
+    public override void OnClose()
+    {
+        plugin.DebugStrafeService.Release("mini close");
+    }
+
     public override void Draw()
     {
         FinalizePendingWindowPlacement();
@@ -56,6 +61,9 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         if (plugin.RemoteJsonUpdateService.IsUpdateRunning)
             ImGui.EndDisabled();
 
+        if (plugin.DebugStrafeService.Enabled)
+            DrawDebugStrafeControls();
+
         ImGui.Separator();
         ImGui.TextUnformatted($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");
         var duty = plugin.DutyContextService.Current.CurrentDuty?.EnglishName ?? "No duty";
@@ -67,6 +75,18 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             ImGui.TextWrapped($"Inn: {plugin.InnEntryService.StatusMessage}");
         if (plugin.UtilityAutomationService.IsRunning)
             ImGui.TextWrapped($"Utility: {plugin.UtilityAutomationService.StatusMessage}");
+    }
+
+    private void DrawDebugStrafeControls()
+    {
+        var leftLabel = plugin.DebugStrafeService.IsHoldingLeft ? "Release Left" : "Strafe Left";
+        if (ImGui.Button(leftLabel, new Vector2(116f, 26f)))
+            plugin.ToggleDebugStrafeLeft();
+        ImGui.SameLine();
+        var rightLabel = plugin.DebugStrafeService.IsHoldingRight ? "Release Right" : "Strafe Right";
+        if (ImGui.Button(rightLabel, new Vector2(116f, 26f)))
+            plugin.ToggleDebugStrafeRight();
+        ImGui.TextWrapped(plugin.DebugStrafeService.Status);
     }
 
     private void DrawTreasureFollowSummary()
