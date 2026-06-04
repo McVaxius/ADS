@@ -4315,7 +4315,7 @@ public sealed class ExecutionService
 
         if (GetHorizontalDistance(treasureDoorNudgeBaselinePosition.Value, playerPosition) > TreasureDoorNudgeProgressDistance)
         {
-            StartTreasureDoorJiggleTracking(frontierPoint, playerPosition, now);
+            ResumeTreasureDoorJiggleTrackingAfterNudge(frontierPoint, playerPosition, now);
             return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
         }
 
