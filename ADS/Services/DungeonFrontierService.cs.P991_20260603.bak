@@ -49,7 +49,6 @@ public sealed class DungeonFrontierService
     private readonly IObjectTable objectTable;
     private readonly IPluginLog log;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
-    private readonly ObservationMemoryService observationMemoryService;
     private readonly Dictionary<ulong, IReadOnlyList<DungeonFrontierPoint>> frontierCache = [];
     private readonly Dictionary<ulong, IReadOnlyList<MapLabelMarker>> labelMarkerCache = [];
     private readonly Dictionary<ulong, string> labelMarkerStatusCache = [];
@@ -140,14 +139,12 @@ public sealed class DungeonFrontierService
         IDataManager dataManager,
         IObjectTable objectTable,
         IPluginLog log,
-        ObjectPriorityRuleService objectPriorityRuleService,
-        ObservationMemoryService observationMemoryService)
+        ObjectPriorityRuleService objectPriorityRuleService)
     {
         this.dataManager = dataManager;
         this.objectTable = objectTable;
         this.log = log;
         this.objectPriorityRuleService = objectPriorityRuleService;
-        this.observationMemoryService = observationMemoryService;
     }
 
     public void RecordTreasureInteractionWitness(TreasureInteractionWitness? witness)
@@ -1300,7 +1297,6 @@ public sealed class DungeonFrontierService
     {
         var coffers = observation.LiveInteractables
             .Where(interactable => interactable.Classification == InteractableClass.TreasureCoffer)
-            .Where(interactable => !observationMemoryService.IsTreasureFollowerContainerChecked(interactable))
             .ToList();
         var mapMatched = 0;
         var mapMismatch = 0;
@@ -2175,9 +2171,9 @@ public sealed class DungeonFrontierService
             && treasureFollowerActiveStagingRoomIndex == roomIndex)
         {
             treasureFollowerDoorChaseGateState = "StagedAtTreasureCoffer";
-            treasureFollowerDoorChaseHoldActive = false;
-            treasureFollowerRouteHoldReason = "StagedAtTreasureCofferComplete";
-            CurrentLabelStatus = $"Staged near treasure coffer in room {roomIndex}; coffer staging is complete and route gates may resume.";
+            treasureFollowerDoorChaseHoldActive = true;
+            treasureFollowerRouteHoldReason = "StagedAtTreasureCoffer";
+            CurrentLabelStatus = $"Staged near treasure coffer in room {roomIndex}; holding for room combat.";
             return null;
         }
 
@@ -2233,9 +2229,9 @@ public sealed class DungeonFrontierService
         if (treasureFollowerStagingReached)
         {
             treasureFollowerDoorChaseGateState = "StagedAtTreasureCoffer";
-            treasureFollowerDoorChaseHoldActive = false;
-            treasureFollowerRouteHoldReason = "StagedAtTreasureCofferComplete";
-            CurrentLabelStatus = $"Staged near treasure coffer in room {roomIndex}; coffer staging is complete and route gates may resume.";
+            treasureFollowerDoorChaseHoldActive = true;
+            treasureFollowerRouteHoldReason = "StagedAtTreasureCoffer";
+            CurrentLabelStatus = $"Staged near treasure coffer in room {roomIndex}; holding for room combat.";
             return null;
         }
 
@@ -2374,7 +2370,9 @@ public sealed class DungeonFrontierService
             && treasureFollowerActiveStagingRoomIndex == roomIndex
             && !treasureFollowerDoorSeekCombatStarted)
         {
-            treasureFollowerRouteHoldReason = "StagedAtTreasureCofferComplete";
+            routeHoldActive = true;
+            treasureFollowerRouteHoldReason = "WaitingForRoomCombat";
+            return null;
         }
 
         var roomCandidates = GetTreasureFollowerPreferredRoomCandidates(currentRoomGroup, playerPosition);

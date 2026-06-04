@@ -19,18 +19,15 @@ public sealed class ObjectivePlannerService
     private readonly IObjectTable objectTable;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
     private readonly DungeonFrontierService dungeonFrontierService;
-    private readonly ObservationMemoryService observationMemoryService;
 
     public ObjectivePlannerService(
         IObjectTable objectTable,
         ObjectPriorityRuleService objectPriorityRuleService,
-        DungeonFrontierService dungeonFrontierService,
-        ObservationMemoryService observationMemoryService)
+        DungeonFrontierService dungeonFrontierService)
     {
         this.objectTable = objectTable;
         this.objectPriorityRuleService = objectPriorityRuleService;
         this.dungeonFrontierService = dungeonFrontierService;
-        this.observationMemoryService = observationMemoryService;
         Current = new PlannerSnapshot
         {
             Mode = PlannerMode.IdleObserve,
@@ -1095,7 +1092,6 @@ public sealed class ObjectivePlannerService
         var selected = observation.LiveInteractables
             .Where(x => x.Classification == InteractableClass.TreasureCoffer)
             .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
-            .Where(x => !observationMemoryService.IsTreasureFollowerContainerChecked(x))
             .Select(x =>
             {
                 var distance = Vector3.Distance(x.Position, playerPosition.Value);
@@ -1110,7 +1106,6 @@ public sealed class ObjectivePlannerService
                     VerticalDelta = verticalDelta,
                     Priority = priority,
                     SackRank = GetTreasureFollowerLootSackRank(x.Name),
-                    IsSack = LooksLikeTreasureFollowerLootSackName(x.Name),
                 };
             })
             .Where(x => x.HorizontalDistance <= TreasureCofferMaxHorizontalDistance)
@@ -1133,10 +1128,8 @@ public sealed class ObjectivePlannerService
         {
             Mode = PlannerMode.Progression,
             ObjectiveKind = PlannerObjectiveKind.TreasureFollowerLoot,
-            Objective = selected.IsSack
-                ? $"Collect repeatable treasure follower sack: {selected.Interactable.Name}"
-                : $"Check treasure follower container once: {selected.Interactable.Name}",
-            Explanation = $"Treasure follower loot sweep is enabled, and {selected.Interactable.Name} stayed inside the follower loot gate at XZ {selected.HorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {selected.Distance:0.0}, Y {selected.VerticalDelta:0.0}/{TreasureCofferVerticalCap:0.0}. Sacks are repeatable and stay eligible until they disappear; non-sack containers are one-shot and ADS ignores them after one successful check until duty reset. Sacks sort before other treasure containers (rank {selected.SackRank}), then priority {selected.Priority}, then distance, so ADS selected this loot before follower route movement.",
+            Objective = $"Collect treasure follower loot: {selected.Interactable.Name}",
+            Explanation = $"Treasure follower loot sweep is enabled, and {selected.Interactable.Name} stayed inside the follower loot gate at XZ {selected.HorizontalDistance:0.0}/{TreasureCofferMaxHorizontalDistance:0.0}, 3D {selected.Distance:0.0}, Y {selected.VerticalDelta:0.0}/{TreasureCofferVerticalCap:0.0}. Sacks sort before other treasure containers (rank {selected.SackRank}), then priority {selected.Priority}, then distance, so ADS selected this loot before follower route movement.",
             TargetName = selected.Interactable.Name,
             TargetDistance = selected.Distance,
             TargetVerticalDelta = selected.VerticalDelta,

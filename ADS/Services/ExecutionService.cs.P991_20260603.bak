@@ -848,11 +848,11 @@ public sealed class ExecutionService
                     return;
                 }
 
-                if (IsStickyInteractableCommitment(committedInteractableObjectiveKind, committedInteractable)
+                if (IsStickyInteractableCommitment(committedInteractableObjectiveKind)
                     && planner.ObjectiveKind == committedInteractableObjectiveKind)
                 {
                     var stickyTarget = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
-                        ? "treasure follower sack"
+                        ? "treasure follower loot"
                         : "treasure coffer";
                     TryAdvanceInteractableObjective(context, committedInteractable, $"{prefix} Following through on the committed {stickyTarget} so ADS does not bounce between loot and competing objectives.");
                     return;
@@ -2286,15 +2286,7 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         if (frontierPoint.IsTreasureFollowerStagingPoint)
-        {
-            observationMemoryService.MarkTreasureFollowerContainerChecked(
-                frontierPoint.MapId == 0 ? context.MapId : frontierPoint.MapId,
-                Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure,
-                frontierPoint.Name,
-                frontierPoint.Position,
-                "one-shot follower staging arrival");
             dungeonFrontierService.MarkTreasureFollowerCofferSeekReached(frontierPoint, playerPosition.Value, "ExecutionArrival");
-        }
 
         if (isMapXzDestination || isXyzDestination)
             dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
@@ -3140,14 +3132,10 @@ public sealed class ExecutionService
         var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
         if (TryInteractWithObject(gameObject, cameraBasedInteract: cameraBasedInteract))
         {
-            var isTreasureFollowerLoot = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
+            var isTreasureFollowerLootFollowThrough = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
                 && observedInteractable.Classification == InteractableClass.TreasureCoffer;
-            var isTreasureFollowerLootFollowThrough = isTreasureFollowerLoot
-                && IsTreasureFollowerLootSackName(observedInteractable.Name);
-            var isTreasureFollowerOneShotContainer = isTreasureFollowerLoot
-                && !isTreasureFollowerLootFollowThrough;
             if (observedInteractable.Classification == InteractableClass.TreasureCoffer
-                && !isTreasureFollowerLoot)
+                && !isTreasureFollowerLootFollowThrough)
             {
                 if (IsTreasureCofferLockedRetryActive(observedInteractable))
                 {
@@ -3158,12 +3146,6 @@ public sealed class ExecutionService
                 {
                     observationMemoryService.MarkTreasureInteractionSent(observedInteractable);
                 }
-            }
-            else if (isTreasureFollowerOneShotContainer)
-            {
-                observationMemoryService.MarkTreasureFollowerContainerChecked(
-                    observedInteractable,
-                    "one-shot follower direct interact");
             }
             else
             {
@@ -3202,10 +3184,8 @@ public sealed class ExecutionService
 
             lastInteractGameObjectId = observedInteractable.GameObjectId;
             nextInteractAttemptUtc = now + InteractAttemptCooldown;
-            var interactResult = isTreasureFollowerOneShotContainer
-                ? $"Direct interact sent to treasure follower container {observedInteractable.Name}; ADS marked it checked until duty reset and will not retry this non-sack container."
-                : isTreasureFollowerLootFollowThrough
-                    ? $"Direct interact sent to treasure follower sack {observedInteractable.Name}; ADS will keep retrying until it disappears."
+            var interactResult = isTreasureFollowerLootFollowThrough
+                ? $"Direct interact sent to treasure follower loot {observedInteractable.Name}; ADS will keep retrying until it disappears."
                 : observedInteractable.Classification switch
                 {
                     InteractableClass.Required => $"Direct interact sent to {observedInteractable.Name} (required attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}).",
@@ -3227,9 +3207,6 @@ public sealed class ExecutionService
             }
 
             SetPhase(ExecutionPhase.AttemptingInteractableObjective, $"{prefix} {interactResult}");
-            if (isTreasureFollowerOneShotContainer)
-                ClearInteractableCommitment();
-
             return;
         }
 
@@ -3332,13 +3309,8 @@ public sealed class ExecutionService
         nextInteractAttemptUtc = DateTime.MinValue;
     }
 
-    private static bool IsStickyInteractableCommitment(PlannerObjectiveKind objectiveKind, ObservedInteractable interactable)
-        => objectiveKind == PlannerObjectiveKind.TreasureCoffer
-           || (objectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
-               && IsTreasureFollowerLootSackName(interactable.Name));
-
-    private static bool IsTreasureFollowerLootSackName(string name)
-        => name.Trim().Contains("sack", StringComparison.OrdinalIgnoreCase);
+    private static bool IsStickyInteractableCommitment(PlannerObjectiveKind objectiveKind)
+        => objectiveKind is PlannerObjectiveKind.TreasureCoffer or PlannerObjectiveKind.TreasureFollowerLoot;
 
     private bool TryAdvanceCommittedTreasureCofferLockedRetry(
         DutyContextSnapshot context,
@@ -3620,13 +3592,6 @@ public sealed class ExecutionService
             && MatchesCurrentMap(context, x.MapId));
         if (interactable is not null)
         {
-            if (committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
-                && observationMemoryService.IsTreasureFollowerContainerChecked(interactable))
-            {
-                ClearInteractableCommitment();
-                return null;
-            }
-
             if (IsInteractableStillAllowedInContext(context, interactable))
                 return interactable;
 
@@ -3940,8 +3905,7 @@ public sealed class ExecutionService
         }
 
         var isTreasureFollowerLootFollowThrough = pendingTreasureFollowerLootFollowThrough
-            && pendingInteractable.Classification == InteractableClass.TreasureCoffer
-            && IsTreasureFollowerLootSackName(pendingInteractable.Name);
+            && pendingInteractable.Classification == InteractableClass.TreasureCoffer;
         var pendingObjectiveKind = isTreasureFollowerLootFollowThrough
             ? PlannerObjectiveKind.TreasureFollowerLoot
             : GetObjectiveKindForInteractable(pendingInteractable.Classification);
@@ -4051,7 +4015,7 @@ public sealed class ExecutionService
                     : isRequiredFollowThrough
                         ? $"Holding still for required interact follow-through on {pendingInteractable.Name} (attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit})."
                         : isTreasureFollowerLootFollowThrough
-                            ? $"Waiting for treasure follower sack result on {pendingInteractable.Name}; ADS will retry on cooldown until it disappears."
+                            ? $"Waiting for treasure follower loot result on {pendingInteractable.Name}; ADS will retry on cooldown until it disappears."
                             : isExpendableFollowThrough
                                 ? $"Waiting for interact result on {pendingInteractable.Name}; ADS will keep this expendable selected until it disappears."
                                 : $"Waiting for interact result on {pendingInteractable.Name}; ADS will not select another objective until the interact follow-through window finishes.";
@@ -4086,7 +4050,7 @@ public sealed class ExecutionService
             TryAdvanceInteractableObjective(
                 context,
                 pendingLiveInteractable,
-                $"{prefix} Treasure follower sack follow-through is still live and targetable, so ADS is retrying it on cooldown.");
+                $"{prefix} Treasure follower loot follow-through is still live and targetable, so ADS is retrying it on cooldown.");
             return true;
         }
 
@@ -4128,7 +4092,7 @@ public sealed class ExecutionService
         var completionReason = isRequiredFollowThrough
             ? $"Required interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
             : isTreasureFollowerLootFollowThrough
-                ? $"Treasure follower sack follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
+                ? $"Treasure follower loot follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
                 : isExpendableFollowThrough
                     ? $"Expendable interact follow-through finished for {pendingInteractable.Name}; the object is gone, so ADS is waiting for refreshed duty truth before selecting another objective."
                     : $"Interact follow-through finished for {pendingInteractable.Name}; waiting for refreshed duty truth before selecting another objective.";
@@ -5430,9 +5394,6 @@ public sealed class ExecutionService
         var candidates = observation.LiveInteractables
             .Where(x => x.Name.Equals(planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
                 && x.Classification == expectedClass.Value);
-
-        if (planner.ObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot)
-            candidates = candidates.Where(x => !observationMemoryService.IsTreasureFollowerContainerChecked(x));
 
         if (planner.TargetDistance.HasValue)
         {

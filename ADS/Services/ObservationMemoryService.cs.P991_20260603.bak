@@ -58,7 +58,6 @@ public sealed class ObservationMemoryService
     private readonly Dictionary<string, ObservedMonster> knownMonsters = [];
     private readonly Dictionary<string, ObservedInteractable> knownInteractables = [];
     private readonly Dictionary<string, DateTime> treasureSuppressionUntil = [];
-    private readonly HashSet<string> checkedTreasureFollowerContainers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ObservedInteractable> usedProgressionInteractables = [];
     private readonly List<Vector3> retiredMonsterGhostClusters = [];
     private readonly List<Vector3> retiredInteractableGhostClusters = [];
@@ -86,10 +85,7 @@ public sealed class ObservationMemoryService
     {
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty)
         {
-            if (!loggedReset
-                && (knownMonsters.Count > 0
-                    || knownInteractables.Count > 0
-                    || checkedTreasureFollowerContainers.Count > 0))
+            if (!loggedReset && (knownMonsters.Count > 0 || knownInteractables.Count > 0))
             {
                 log.Debug("[ADS] Observation memory parked because ADS is outside instanced duty.");
             }
@@ -97,7 +93,6 @@ public sealed class ObservationMemoryService
             if (activeDutyKey != 0
                 || knownMonsters.Count > 0
                 || knownInteractables.Count > 0
-                || checkedTreasureFollowerContainers.Count > 0
                 || usedProgressionInteractables.Count > 0
                 || retiredMonsterGhostClusters.Count > 0
                 || retiredInteractableGhostClusters.Count > 0
@@ -342,7 +337,6 @@ public sealed class ObservationMemoryService
         knownMonsters.Clear();
         knownInteractables.Clear();
         treasureSuppressionUntil.Clear();
-        checkedTreasureFollowerContainers.Clear();
         usedProgressionInteractables.Clear();
         retiredMonsterGhostClusters.Clear();
         retiredInteractableGhostClusters.Clear();
@@ -355,54 +349,6 @@ public sealed class ObservationMemoryService
 
     public void MarkTreasureCofferSkipped(ObservedInteractable interactable, string reason)
         => MarkTreasureSuppressed(interactable, SkippedTreasureSuppressionDuration, reason);
-
-    public bool IsTreasureFollowerContainerChecked(ObservedInteractable interactable)
-    {
-        if (interactable.Classification != InteractableClass.TreasureCoffer
-            || LooksLikeTreasureSackName(interactable.Name))
-        {
-            return false;
-        }
-
-        var key = BuildTreasureFollowerContainerCheckKey(
-            interactable.MapId,
-            interactable.ObjectKind,
-            interactable.Name,
-            interactable.Position);
-        return checkedTreasureFollowerContainers.Contains(key);
-    }
-
-    public void MarkTreasureFollowerContainerChecked(ObservedInteractable interactable, string reason)
-    {
-        if (interactable.Classification != InteractableClass.TreasureCoffer
-            || LooksLikeTreasureSackName(interactable.Name))
-            return;
-
-        MarkTreasureFollowerContainerChecked(
-            interactable.MapId,
-            interactable.ObjectKind,
-            interactable.Name,
-            interactable.Position,
-            reason);
-
-        knownInteractables[interactable.Key] = CreateConsumedInteractable(interactable);
-    }
-
-    public void MarkTreasureFollowerContainerChecked(uint mapId, ObjectKind objectKind, string name, Vector3 position, string reason)
-    {
-        var containerName = NormalizeTreasureFollowerContainerName(name);
-        if (string.IsNullOrWhiteSpace(containerName)
-            || LooksLikeTreasureSackName(containerName))
-        {
-            return;
-        }
-
-        var key = BuildTreasureFollowerContainerCheckKey(mapId, objectKind, containerName, position);
-        if (checkedTreasureFollowerContainers.Add(key))
-        {
-            log.Information($"[ADS] Marked treasure follower container {containerName} at {Quantize(position)} checked until duty reset after {reason}.");
-        }
-    }
 
     public bool ClearTreasureCofferSuppression(string interactableKey, string reason)
     {
@@ -615,20 +561,6 @@ public sealed class ObservationMemoryService
 
     private static string BuildProgressionUseKey(DutyContextSnapshot context, ObjectKind objectKind, uint baseId, string name, Vector3 position)
         => $"{context.ContentFinderConditionId}:{context.TerritoryTypeId}:{objectKind}:{baseId}:{name}:{Quantize(position)}";
-
-    private static string BuildTreasureFollowerContainerCheckKey(uint mapId, ObjectKind objectKind, string name, Vector3 position)
-        => $"{mapId}:{objectKind}:{NormalizeTreasureFollowerContainerName(name)}:{Quantize(position)}";
-
-    private static string NormalizeTreasureFollowerContainerName(string name)
-    {
-        var normalized = string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        const string stagingPrefix = " staging coffer: ";
-        var stagingIndex = normalized.IndexOf(stagingPrefix, StringComparison.OrdinalIgnoreCase);
-        if (stagingIndex >= 0)
-            normalized = normalized[(stagingIndex + stagingPrefix.Length)..].Trim();
-
-        return normalized;
-    }
 
     private InteractableClass ClassifyInteractable(IGameObject gameObject, string name, DutyContextSnapshot context, bool considerTreasureCoffers)
     {
