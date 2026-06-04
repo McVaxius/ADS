@@ -54,8 +54,6 @@ public sealed class ExecutionService
     private const float AquapolisRouteWiggleSideOffset = 1.25f;
     private const int TreasureFollowerDoorFollowThroughNudgeAttemptLimit = 2;
     private const float TreasureDoorNudgeProgressDistance = 0.5f;
-    private const float TreasureDoorNudgeSideOffset = 3f;//1.25f was default i changed it to 3. this is the wiggle distance
-    private const float TreasureDoorNudgeForwardOffset = 2.0f; //this was 1.5f before bu i changed it to 2.0f
     //private const float LeaveTreasureSweepHorizontalRange = 20.0f;
     private const float LeaveTreasureSweepHorizontalRange = 100.0f;
     private const float LeaveTreasureSweepVerticalCap = 5.0f;
@@ -101,6 +99,7 @@ public sealed class ExecutionService
     private readonly DungeonFrontierService dungeonFrontierService;
     private readonly MapFlagService mapFlagService;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
+    private readonly TreasureDoorStrafeInputService treasureDoorStrafeInputService;
     private readonly Configuration configuration;
     private readonly IPluginLog? log;
     private readonly Dictionary<uint, MountedCombatAction[]> mountedCombatActionCache = [];
@@ -164,7 +163,7 @@ public sealed class ExecutionService
     private DateTime treasureDoorNudgeLastProgressUtc;
     private int treasureDoorNudgeAttempt;
     private DateTime treasureDoorNudgeUntilUtc = DateTime.MinValue;
-    private Vector3 treasureDoorNudgeDestination;
+    private StrafeDirection treasureDoorNudgeDirection = StrafeDirection.None;
     private string? manualDestinationNoProgressTargetKey;
     private ulong? manualDestinationNavigationTargetId;
     private Vector3? manualDestinationNoProgressBaselinePosition;
@@ -228,6 +227,7 @@ public sealed class ExecutionService
         DungeonFrontierService dungeonFrontierService,
         MapFlagService mapFlagService,
         ObjectPriorityRuleService objectPriorityRuleService,
+        TreasureDoorStrafeInputService treasureDoorStrafeInputService,
         Configuration configuration,
         IPluginLog? log = null)
     {
@@ -239,6 +239,7 @@ public sealed class ExecutionService
         this.dungeonFrontierService = dungeonFrontierService;
         this.mapFlagService = mapFlagService;
         this.objectPriorityRuleService = objectPriorityRuleService;
+        this.treasureDoorStrafeInputService = treasureDoorStrafeInputService;
         this.configuration = configuration;
         this.log = log;
     }
@@ -420,7 +421,7 @@ public sealed class ExecutionService
         ClearTreasureFollowerPostTransitSettle(reason);
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
         if (hadNudge)
-            log?.Information($"[ADS] Cleared treasure door vnav side-nudge recovery during {reason}.");
+            log?.Information($"[ADS] Cleared treasure door strafe nudge recovery during {reason}.");
         if (hadAquapolisWiggle)
             log?.Information($"[ADS] Cleared Aquapolis passage vnav side-step recovery during {reason}.");
     }
@@ -448,6 +449,8 @@ public sealed class ExecutionService
             : status;
         if (!ownsMovement)
             lastTreasureFollowerBmraiMovementHoldLogKey = string.Empty;
+        else
+            treasureDoorStrafeInputService.Release("BMRAI/VBM treasure follow movement authority");
     }
 
     private string BuildTreasureRoleStatus()
@@ -2493,12 +2496,12 @@ public sealed class ExecutionService
         {
             StopNavigationForTreasureRouteNudge();
             var failureDetail =
-                $"Clear-through target {FormatVector(followThroughPoint.Position)} made no progress after {TreasureDoorNudgeStuckTimeout.TotalSeconds:0}s windows and {TreasureFollowerDoorFollowThroughNudgeAttemptLimit} side-nudge attempt(s). Player {FormatVector(playerPosition)}, candidate {FormatVector(candidate.Position)}, candidate XZ {candidateHorizontalDistance:0.0}y, 3D {candidateDistance:0.0}y, Y {candidateVerticalDelta:0.0}y.";
+                $"Clear-through target {FormatVector(followThroughPoint.Position)} made no progress after {TreasureDoorNudgeStuckTimeout.TotalSeconds:0}s windows and {TreasureFollowerDoorFollowThroughNudgeAttemptLimit} strafe-nudge attempt(s). Player {FormatVector(playerPosition)}, candidate {FormatVector(candidate.Position)}, candidate XZ {candidateHorizontalDistance:0.0}y, 3D {candidateDistance:0.0}y, Y {candidateVerticalDelta:0.0}y.";
             dungeonFrontierService.MarkTreasureFollowerCandidateFailed(candidate, "DoorFollowThroughStuckRecoveryExhausted", failureDetail);
             ClearTreasureFollowerDoorFollowThrough(resetStuckTracking: true);
             SetPhase(
                 ExecutionPhase.FrontierHint,
-                $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} exhausted clear-through side-nudge recovery; ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
+                $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} exhausted clear-through strafe-nudge recovery; ADS is entering the room retry cooldown.{treasureRouteRadiusStatus}");
             return true;
         }
 
@@ -4292,10 +4295,15 @@ public sealed class ExecutionService
 
         if (now < treasureDoorNudgeUntilUtc)
         {
+            var direction = treasureDoorNudgeDirection == StrafeDirection.None
+                ? GetTreasureDoorNudgeDirection(treasureDoorNudgeAttempt)
+                : treasureDoorNudgeDirection;
+            var includePressed = !treasureDoorStrafeInputService.IsHolding(direction);
+            treasureDoorStrafeInputService.Hold(direction, includePressed, out var strafeStatus);
             return new TreasureDoorNavigationDecision(
-                treasureDoorNudgeDestination,
-                BuildTreasureDoorNudgeTargetId(frontierPoint),
-                $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.",
+                frontierPoint.Position,
+                originalTargetId,
+                $" Door-frame recovery is holding {TreasureDoorStrafeInputService.FormatDirection(direction)} attempt {treasureDoorNudgeAttempt} while vnav continues to the door target. {strafeStatus}",
                 StuckRecoveryExhausted: false);
         }
 
@@ -4324,17 +4332,18 @@ public sealed class ExecutionService
         }
 
         treasureDoorNudgeAttempt = treasureDoorNudgeAttempt >= 2 ? 1 : treasureDoorNudgeAttempt + 1;
-        treasureDoorNudgeDestination = BuildTreasureDoorSideNudgeDestination(frontierPoint.Position, playerPosition, treasureDoorNudgeAttempt);
+        treasureDoorNudgeDirection = GetTreasureDoorNudgeDirection(treasureDoorNudgeAttempt);
         treasureDoorNudgeUntilUtc = now + TreasureDoorNudgeHoldDuration;
         treasureDoorNudgeBaselinePosition = playerPosition;
         treasureDoorNudgeLastProgressUtc = now;
+        treasureDoorStrafeInputService.Hold(treasureDoorNudgeDirection, includePressed: true, out var nudgeStrafeStatus);
         log?.Information(
-            $"[ADS] Treasure door follow-through vnav side-nudge attempt {treasureDoorNudgeAttempt} started for {frontierPoint.Name}; XZ movement stayed under {TreasureDoorNudgeProgressDistance:0.0}y for {TreasureDoorNudgeStuckTimeout.TotalSeconds:0}s. Destination {FormatVector(treasureDoorNudgeDestination)}.");
+            $"[ADS] Treasure door follow-through raw strafe {TreasureDoorStrafeInputService.FormatDirection(treasureDoorNudgeDirection)} attempt {treasureDoorNudgeAttempt} started for {frontierPoint.Name}; XZ movement stayed under {TreasureDoorNudgeProgressDistance:0.0}y for {TreasureDoorNudgeStuckTimeout.TotalSeconds:0}s while vnav continues to {FormatVector(frontierPoint.Position)}. {nudgeStrafeStatus}");
 
         return new TreasureDoorNavigationDecision(
-            treasureDoorNudgeDestination,
-            BuildTreasureDoorNudgeTargetId(frontierPoint),
-            $" Door-frame recovery is moving to vnav side-nudge attempt {treasureDoorNudgeAttempt} at {FormatVector(treasureDoorNudgeDestination)}.",
+            frontierPoint.Position,
+            originalTargetId,
+            $" Door-frame recovery is holding {TreasureDoorStrafeInputService.FormatDirection(treasureDoorNudgeDirection)} attempt {treasureDoorNudgeAttempt} while vnav continues to the door target. {nudgeStrafeStatus}",
             StuckRecoveryExhausted: false);
     }
 
@@ -4352,27 +4361,12 @@ public sealed class ExecutionService
         treasureDoorNudgeBaselinePosition = playerPosition;
         treasureDoorNudgeLastProgressUtc = now;
         treasureDoorNudgeUntilUtc = DateTime.MinValue;
-        treasureDoorNudgeDestination = Vector3.Zero;
+        treasureDoorNudgeDirection = StrafeDirection.None;
+        treasureDoorStrafeInputService.Release("treasure door nudge hold complete");
     }
 
-    private ulong BuildTreasureDoorNudgeTargetId(DungeonFrontierPoint frontierPoint)
-        => BuildFrontierTargetId(frontierPoint) ^ (0x0100000000000000UL + (ulong)Math.Max(1, treasureDoorNudgeAttempt));
-
-    private static Vector3 BuildTreasureDoorSideNudgeDestination(Vector3 targetPosition, Vector3 playerPosition, int attempt)
-    {
-        var flatDelta = new Vector3(targetPosition.X - playerPosition.X, 0f, targetPosition.Z - playerPosition.Z);
-        var flatDistance = flatDelta.Length();
-        var forward = flatDistance <= float.Epsilon
-            ? Vector3.UnitZ
-            : Vector3.Normalize(flatDelta);
-        var side = new Vector3(-forward.Z, 0f, forward.X);
-        var sideSign = attempt % 2 == 1 ? 1f : -1f;
-
-        return new Vector3(
-            playerPosition.X + (forward.X * TreasureDoorNudgeForwardOffset) + (side.X * TreasureDoorNudgeSideOffset * sideSign),
-            playerPosition.Y,
-            playerPosition.Z + (forward.Z * TreasureDoorNudgeForwardOffset) + (side.Z * TreasureDoorNudgeSideOffset * sideSign));
-    }
+    private static StrafeDirection GetTreasureDoorNudgeDirection(int attempt)
+        => attempt % 2 == 1 ? StrafeDirection.Left : StrafeDirection.Right;
 
     private void ResetTreasureDoorJiggleTracking(bool releaseKeys)
     {
@@ -4381,7 +4375,9 @@ public sealed class ExecutionService
         treasureDoorNudgeLastProgressUtc = DateTime.MinValue;
         treasureDoorNudgeAttempt = 0;
         treasureDoorNudgeUntilUtc = DateTime.MinValue;
-        treasureDoorNudgeDestination = Vector3.Zero;
+        treasureDoorNudgeDirection = StrafeDirection.None;
+        if (releaseKeys)
+            treasureDoorStrafeInputService.Release("treasure door nudge reset");
     }
 
     private static DungeonFrontierPoint BuildTreasureDoorFollowThroughPoint(

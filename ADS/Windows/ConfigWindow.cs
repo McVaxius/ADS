@@ -79,7 +79,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS uses short vnav side-nudge destinations before resuming the door follow-through path.");
+        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS briefly holds strafe left/right while vnav keeps pushing toward the door follow-through path.");
 
         var resetCameraBeforeInteractEnabled = plugin.Configuration.ResetCameraBeforeInteractEnabled;
         if (ImGui.Checkbox("Reset camera before progression interact", ref resetCameraBeforeInteractEnabled))

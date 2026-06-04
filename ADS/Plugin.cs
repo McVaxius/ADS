@@ -108,6 +108,7 @@ public sealed class Plugin : IDalamudPlugin
     public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
     public HigherLowerCardVfxSolverService HigherLowerCardVfxSolverService { get; }
     public HigherLowerAutomationService HigherLowerAutomationService { get; }
+    public TreasureDoorStrafeInputService TreasureDoorStrafeInputService { get; }
     public DebugStrafeService DebugStrafeService { get; }
 
     private readonly MainWindow mainWindow;
@@ -166,7 +167,8 @@ public sealed class Plugin : IDalamudPlugin
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, ObservationMemoryService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
-        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, Configuration, Log);
+        TreasureDoorStrafeInputService = new TreasureDoorStrafeInputService(KeyState, Log);
+        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
