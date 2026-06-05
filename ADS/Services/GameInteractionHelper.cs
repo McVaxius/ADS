@@ -279,12 +279,12 @@ public static class GameInteractionHelper
             if (nativeObject == null)
                 return false;
 
-            targetSystem->InteractWithObject(nativeObject, true);
+            targetSystem->InteractWithObject(nativeObject, false);
             return true;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, $"[ADS] Direct interact failed for {gameObject.Name.TextValue}.");
+            log?.Warning(ex, $"[ADS] Direct non-camera interact failed for {gameObject.Name.TextValue}.");
             return false;
         }
     }

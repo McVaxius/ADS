@@ -32,7 +32,6 @@ public sealed class ExecutionService
     private const float TreasureDoorFollowThroughStaleVerticalDelta = 20.0f;
     private const float TreasureDoorPlannerSameFloorVerticalDelta = 6.0f;
     private const uint AquapolisTerritoryTypeId = 558;
-    private const uint PraetoriumTerritoryTypeId = 1044;
     private const uint BigCheekedCakeMonsters = 6942069; // Hello adventurer, are you enjoying my ai slop today :D
     private const uint PraetoriumMagitekCannonActionId = 1128;
     private const uint PraetoriumPhotonStreamActionId = 1129;
@@ -80,7 +79,6 @@ public sealed class ExecutionService
     private static readonly TimeSpan TreasureFollowerDoorFollowThroughTruthTimeout = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan TreasureFollowerPostTransitSettleDelay = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan TreasureFollowerPostCutsceneSettleDelay = TimeSpan.FromSeconds(4.0);
-    private static readonly TimeSpan ResetCameraBeforeInteractDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan LeaveUiRetryCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan LeaveLootDistributionDelay = TimeSpan.FromSeconds(10.0);
     private static readonly TimeSpan LeaveTreasureSweepSettleDelay = TimeSpan.FromSeconds(2.0);
@@ -196,10 +194,6 @@ public sealed class ExecutionService
     private string lastMountedCombatAggressionModeKey = string.Empty;
     private string lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
     private string lastMountedCombatBlindRearFallbackKey = string.Empty;
-    private string lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = string.Empty;
-    private string? resetCameraBeforeInteractKey;
-    private DateTime resetCameraBeforeInteractReadyUtc;
-    private string lastResetCameraBeforeInteractLogKey = string.Empty;
     private readonly HashSet<string> loggedLiveTargetNavigationModes = [];
     private string? bossFightCombatGhostKey;
     private string bossFightCombatGhostName = string.Empty;
@@ -333,6 +327,9 @@ public sealed class ExecutionService
         if (TryArmTreasureDoorLockonRetry(message))
             return true;
 
+        if (TryHandleCommittedInteractLocationFailure(message))
+            return true;
+
         if (!message.Contains(TreasureCofferLockedTightMessage, StringComparison.OrdinalIgnoreCase))
             return false;
 
@@ -384,6 +381,43 @@ public sealed class ExecutionService
                || normalized.Contains("cannot see", StringComparison.Ordinal)
                || normalized.Contains("can not see", StringComparison.Ordinal);
     }
+
+    private bool TryHandleCommittedInteractLocationFailure(string message)
+    {
+        if (!IsInteractLocationFailureMessage(message))
+            return false;
+
+        if (!IsActiveOwnedDutyMode()
+            || string.IsNullOrWhiteSpace(committedInteractableKey))
+        {
+            return false;
+        }
+
+        var pendingInteractable = pendingProgressionInteractable;
+        var interactableName = pendingInteractable?.Name ?? committedInteractableKey;
+        var isTreasureDoor = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureDoor
+                             || pendingInteractable?.Classification == InteractableClass.TreasureDoor;
+        var attemptText = pendingRequiredInteractionAttemptsSent > 0
+            ? $" attempt {pendingRequiredInteractionAttemptsSent}/{RequiredInteractionAttemptLimit}"
+            : string.Empty;
+        var detail = $"reported invalid interaction location{attemptText}; ADS is releasing the committed interactable so planner can re-resolve live truth instead of retrying from the same commitment.";
+
+        if (isTreasureDoor)
+            log?.Warning($"[ADS] Treasure door {interactableName} {detail}");
+        else
+            log?.Information($"[ADS] Interactable {interactableName} {detail}");
+
+        ClearInteractableCommitment();
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.AttemptingInteractableObjective,
+            $"Interactable {interactableName} reported invalid location; ADS cleared the attempt window and will replan.");
+        return true;
+    }
+
+    private static bool IsInteractLocationFailureMessage(string message)
+        => NormalizeChatMessageForMatch(message)
+            .Contains("unable to execute action from this location", StringComparison.Ordinal);
 
     private static string NormalizeChatMessageForMatch(string message)
     {
@@ -3132,16 +3166,8 @@ public sealed class ExecutionService
             return;
         }
 
-        var useCameraIndependentInteract = ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(context, observedInteractable);
-        if (useCameraIndependentInteract)
-            LogPraetoriumMagitekArmorCameraIndependentInteract(observedInteractable);
-
-        var cameraBasedInteract = !useCameraIndependentInteract;
-        if (TryHoldResetCameraBeforeInteract(observedInteractable, cameraBasedInteract, prefix, now))
-            return;
-
         var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
-        if (TryInteractWithObject(gameObject, cameraBasedInteract: cameraBasedInteract))
+        if (TryInteractWithObject(gameObject))
         {
             var isTreasureFollowerLoot = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
                 && observedInteractable.Classification == InteractableClass.TreasureCoffer;
@@ -3219,10 +3245,6 @@ public sealed class ExecutionService
             if (usingCloseRangeInteractFallback)
             {
                 interactResult = $"{interactResult} Close-XZ fallback engaged after {CloseRangeInteractFallbackNoProgressTimeout.TotalSeconds:0}s with no XZ progress (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}).";
-            }
-            if (useCameraIndependentInteract)
-            {
-                interactResult = $"{interactResult} Praetorium Magitek Armor camera-independent interact mode used to avoid zoom/camera obstruction.";
             }
             if (sentTreasureDoorLockonBeforeRetry)
             {
@@ -3652,7 +3674,6 @@ public sealed class ExecutionService
         ResetTreasureCofferLockedRetry();
         ResetTreasureCofferRouteTracking();
         ResetCloseRangeInteractFallbackTracking();
-        ResetCameraBeforeInteractTracking();
         ClearPendingProgressionInteractResult();
         ResetInteractArrivalWait();
     }
@@ -3790,77 +3811,6 @@ public sealed class ExecutionService
     private static string BuildRetryIdentityPositionBucket(Vector3 position)
         => $"{MathF.Round(position.X / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Y / InteractableRetryIdentityPositionBucketSize, 0):0},{MathF.Round(position.Z / InteractableRetryIdentityPositionBucketSize, 0):0}";
 
-    private bool TryHoldResetCameraBeforeInteract(ObservedInteractable interactable, bool cameraBasedInteract, string prefix, DateTime now)
-    {
-        if (!ShouldResetCameraBeforeInteract(interactable, cameraBasedInteract))
-        {
-            ResetCameraBeforeInteractTracking();
-            return false;
-        }
-
-        var retryKey = BuildInteractableRetryIdentity(interactable);
-        if (!string.Equals(resetCameraBeforeInteractKey, retryKey, StringComparison.Ordinal))
-        {
-            if (!TryRequestCameraResetBeforeInteract(interactable))
-                return false;
-
-            resetCameraBeforeInteractKey = retryKey;
-            resetCameraBeforeInteractReadyUtc = now + ResetCameraBeforeInteractDelay;
-            if (!string.Equals(lastResetCameraBeforeInteractLogKey, retryKey, StringComparison.Ordinal))
-            {
-                lastResetCameraBeforeInteractLogKey = retryKey;
-                log?.Information($"[ADS] Requested camera reset before interacting with {interactable.Name} ({interactable.Classification}).");
-            }
-
-            SetPhase(
-                ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Resetting camera before interacting with {interactable.Name}.");
-            return true;
-        }
-
-        if (now < resetCameraBeforeInteractReadyUtc)
-        {
-            SetPhase(
-                ExecutionPhase.AttemptingInteractableObjective,
-                $"{prefix} Waiting briefly for camera reset before interacting with {interactable.Name}.");
-            return true;
-        }
-
-        ResetCameraBeforeInteractTracking();
-        return false;
-    }
-
-    private bool ShouldResetCameraBeforeInteract(ObservedInteractable interactable, bool cameraBasedInteract)
-    {
-        return configuration.ResetCameraBeforeInteractEnabled
-               && cameraBasedInteract
-               && interactable.Classification is InteractableClass.Required or InteractableClass.TreasureDoor;
-    }
-
-    private unsafe bool TryRequestCameraResetBeforeInteract(ObservedInteractable interactable)
-    {
-        try
-        {
-            var cameraManager = CameraManager.Instance();
-            if (cameraManager == null || cameraManager->Camera == null)
-                return false;
-
-            cameraManager->Camera->ShouldResetAngles = true;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            log?.Warning(ex, $"[ADS] Failed to request camera reset before interacting with {interactable.Name}.");
-            return false;
-        }
-    }
-
-    private void ResetCameraBeforeInteractTracking()
-    {
-        resetCameraBeforeInteractKey = null;
-        resetCameraBeforeInteractReadyUtc = DateTime.MinValue;
-    }
-
     private bool TrySendTreasureDoorLockonBeforeRetry(ObservedInteractable interactable, IGameObject gameObject)
     {
         if (interactable.Classification != InteractableClass.TreasureDoor
@@ -3893,23 +3843,6 @@ public sealed class ExecutionService
     private void ResetTreasureDoorLockonBeforeRetry()
     {
         treasureDoorLockonBeforeRetryKey = null;
-    }
-
-    private static bool ShouldUsePraetoriumMagitekArmorCameraIndependentInteract(DutyContextSnapshot context, ObservedInteractable interactable)
-    {
-        return context.TerritoryTypeId == PraetoriumTerritoryTypeId
-               && string.Equals(interactable.Name, "Magitek Armor", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private void LogPraetoriumMagitekArmorCameraIndependentInteract(ObservedInteractable interactable)
-    {
-        var logKey = BuildInteractableRetryIdentity(interactable);
-        if (string.Equals(lastPraetoriumMagitekArmorCameraIndependentInteractLogKey, logKey, StringComparison.Ordinal))
-            return;
-
-        lastPraetoriumMagitekArmorCameraIndependentInteractLogKey = logKey;
-        log?.Information(
-            "[ADS] Praetorium Magitek Armor is using camera-independent interact mode (InteractWithObject cameraBasedInteract=false) because standard interact can be blocked by zoom/camera obstruction.");
     }
 
     private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -5506,7 +5439,7 @@ public sealed class ExecutionService
         }
     }
 
-    private unsafe bool TryInteractWithObject(IGameObject gameObject, bool cameraBasedInteract = true)
+    private unsafe bool TryInteractWithObject(IGameObject gameObject)
     {
         try
         {
@@ -5520,12 +5453,12 @@ public sealed class ExecutionService
             if (nativeObject == null)
                 return false;
 
-            targetSystem->InteractWithObject(nativeObject, cameraBasedInteract);
+            targetSystem->InteractWithObject(nativeObject, false);
             return true;
         }
         catch (Exception ex)
         {
-            log?.Warning(ex, $"[ADS] Direct interact failed for {gameObject.Name.TextValue} using cameraBasedInteract={cameraBasedInteract}.");
+            log?.Warning(ex, $"[ADS] Direct non-camera interact failed for {gameObject.Name.TextValue}.");
             return false;
         }
     }

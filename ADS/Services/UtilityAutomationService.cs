@@ -2020,17 +2020,6 @@ public sealed unsafe class UtilityAutomationService
     private void TryInteractWithRepairNpc(IGameObject npc)
     {
         lastInteractUtc = DateTime.UtcNow;
-        try
-        {
-            var cameraManager = CameraManager.Instance();
-            if (cameraManager != null && cameraManager->Camera != null)
-                cameraManager->Camera->ShouldResetAngles = true;
-        }
-        catch (Exception ex)
-        {
-            log.Warning(ex, $"[ADS][Utility] Failed to request camera reset before interacting with repair NPC {targetNpcName}.");
-        }
-
         if (GameInteractionHelper.TryInteractWithObject(targetManager, npc, log))
             log.Information($"[ADS][Utility] Interacting with repair NPC {targetNpcName}.");
     }
