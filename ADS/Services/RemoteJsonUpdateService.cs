@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ADS.Models;
@@ -181,18 +182,24 @@ public sealed class RemoteJsonUpdateService : IDisposable
     private async Task RunUpdateAsync(string reason)
     {
         var tempPaths = new List<string>();
+        var refreshedFiles = new List<RemoteJsonRefreshResult>();
+        var cacheBustToken = Guid.NewGuid().ToString("N");
         try
         {
             LastUpdateStatus = $"Remote config update running: {reason}.";
             foreach (var file in Files)
             {
-                var url = RemoteBaseUrl + file.FileName;
-                var json = await httpClient.GetStringAsync(url).ConfigureAwait(false);
+                var url = BuildRemoteUrl(file.FileName, cacheBustToken);
+                log.Debug($"[ADS] Remote config fetching {file.FileName} from {url}.");
+
+                var bytes = await httpClient.GetByteArrayAsync(url).ConfigureAwait(false);
+                var json = DecodeUtf8Json(bytes);
                 ValidateJson(file.Kind, json, url);
 
                 var tempPath = Path.Combine(configDirectory, $"{file.FileName}.{Guid.NewGuid():N}.tmp");
-                await File.WriteAllTextAsync(tempPath, json).ConfigureAwait(false);
+                await File.WriteAllBytesAsync(tempPath, bytes).ConfigureAwait(false);
                 tempPaths.Add(tempPath);
+                refreshedFiles.Add(new RemoteJsonRefreshResult(file.FileName, bytes.Length));
             }
 
             for (var index = 0; index < Files.Length; index++)
@@ -202,7 +209,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
             }
 
             tempPaths.Clear();
-            LastUpdateStatus = $"Remote config update complete: refreshed {Files.Length} file(s) from botologyupdates.";
+            LastUpdateStatus = $"Remote config update complete: refreshed {FormatRefreshSummary(refreshedFiles)} from botologyupdates.";
             completedUpdateSerial++;
             log.Information($"[ADS] {LastUpdateStatus}");
         }
@@ -227,6 +234,20 @@ public sealed class RemoteJsonUpdateService : IDisposable
             }
         }
     }
+
+    private static string BuildRemoteUrl(string fileName, string cacheBustToken)
+        => $"{RemoteBaseUrl}{fileName}?adsCacheBust={Uri.EscapeDataString(cacheBustToken)}";
+
+    private static string DecodeUtf8Json(byte[] bytes)
+    {
+        if (bytes is [0xEF, 0xBB, 0xBF, ..])
+            return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static string FormatRefreshSummary(IReadOnlyList<RemoteJsonRefreshResult> refreshedFiles)
+        => string.Join(", ", refreshedFiles.Select(file => $"{file.FileName} ({file.ByteCount} bytes)"));
 
     private static void ValidateJson(RemoteJsonKind kind, string json, string source)
     {
@@ -286,6 +307,8 @@ public sealed class RemoteJsonUpdateService : IDisposable
     }
 
     private sealed record RemoteJsonFile(string FileName, RemoteJsonKind Kind);
+
+    private sealed record RemoteJsonRefreshResult(string FileName, int ByteCount);
 
     private enum RemoteJsonKind
     {
