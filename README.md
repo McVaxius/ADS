@@ -1,90 +1,61 @@
 # AI Duty Solver
----
 
-**Help fund my AI overlords' coffee addiction so they can keep generating more plugins instead of taking over the world**
+AI Duty Solver (ADS) is an operator-controlled Dalamud plugin for observing, planning, and executing supported instanced-duty routes. It exposes live duty truth, planner decisions, execution phases, authored object/dialog rules, treasure state, and specialist diagnostics.
 
-[☕ Support development on Ko-fi](https://ko-fi.com/mcvaxius)
+ADS is observer-first. Entering a duty does not automatically grant ADS ownership unless the operator starts or resumes execution.
 
-[XA and I have created some Plugins and Guides here at -> aethertek.io](https://aethertek.io/)
-### Repo URL:
-```
+## Installation
+
+Add this custom repository in Dalamud:
+
+```text
 https://aethertek.io/x.json
 ```
 
----
+Install **AI Duty Solver**, then open it with `/ads`.
 
-[Join the Discord](https://discord.gg/VsXqydsvpu)
+## Quick Start
 
-Scroll down to "The Dumpster Fire" channel to discuss issues / suggestions for specific plugins.
+1. Open `/ads`.
+2. Review **Overview** for duty, ownership, phase, objective, explanation, warnings, and active options.
+3. Use **Start Outside** before queueing, or **Start Inside** after entering an instanced duty.
+4. Keep **Overview** or `/ads mini` visible while ADS owns execution.
+5. Use **Stop** at any time to release ADS ownership immediately.
 
-## Plugin Concept
+Use **Resume** after a plugin reload or intentional stop while still inside the duty. Use **Leave** only when ADS owns execution and you want ADS to request duty exit.
 
-- Show a real Lumina-backed catalog of all 4-man dungeons in the ADS main window.
-- Keep the implementation honest: staged execution, passive observation, planner explanation, ownership controls, IPC surfaces, and live movement/interaction only where currently validated.
-- Overlay duty maturity from `duty-maturity.json`; active support is data-driven instead of hard-coded in the plugin.
-- Keep harder duties visible but non-actionable until their duty-profile overlays are written.
-- Treat monsters as the default objective, but when both a live monster and a live progression interactable have active rules, lower rule priority wins first. Distance/Y only breaks ties or no-rule cases.
-- Status colors in the catalog:
-  - Red `[Not Cleared]`
-  - Blue `[1P Unsync Cleared]`
-  - Yellow `[1P Duty Support]`
-  - Green `[4P Sync Cleared]`
-- The catalog summary now groups those four readiness states into separate color-coded maturity cards instead of one wrapped status line.
+## Safety And Stop Guidance
 
-## Current Validation
+- **Stop** is always available in Main and compact Controls.
+- `/ads stop` releases ownership from chat.
+- ADS can remain in observing mode without owning movement or progression.
+- **Start Inside** and **Resume** require live instanced-duty truth.
+- **Leave** is disabled unless ADS owns execution.
+- Duty maturity and catalog metadata describe validation status; live instanced-duty truth controls whether inside start/resume is available.
 
-- Maturity status comes from `botologyupdates/ads/duty-maturity.json`; missing rows default to `[Not Cleared]` and passive-only support.
-- Current promoted rows include Sastasha, Haukke Manor, Halatali, Toto-Rak, Keeper of the Lake, Stone Vigil, Aurum Vale, Qarn, Hells' Lid, Dzemael Darkhold, The Burn, Pharos Sirius, Hullbreaker Isle, Doma Castle, Castrum Abania, and Brayflox as `[1P Unsync Cleared]`.
-- The Tam-Tara Deepcroft is marked `[1P Duty Support]`.
-- Copperbell Mines, Cutter's Cry, Castrum Meridianum, The Praetorium, and synthetic treasure-duty rows are marked `[4P Sync Cleared]`.
-- ADS stops owned execution and clears recovery memory when Dalamud reports `DutyCompleted`.
-- When the object table goes empty mid-duty, ADS can promote the next unvisited map-label frontier point instead of backtracking through stale ghosts.
-- The frontier label inspector reads the `MapMarker` collection referenced by `Map.MapMarkerRange`; this is required for Toto-Rak, where the territory map row and marker collection row are different.
-- Automation now also uses those `MapMarkerRange` labels as frontier waypoints when the older level-backed label join fails, so Toto-Rak should prefer labels like `Abacination Chamber` over synthetic heading scouts.
-- Frontier labels, fallback map flags, and manual `MapXzDestination` conversion now use the live sub-area `MapId` instead of mixing every map row in a territory, so multi-submap duties such as Keeper should stay inside the current subsection.
-- Duty-context map resolution now prefers `ClientState.MapId` when it is available, because that settles faster than the older `GameMain` map source during Praetorium-style sub-area swaps.
-- Label frontier navigation now places an in-game map flag and sends `/vnav moveflag`, falling back to direct `/vnav moveto` only if map flag placement fails.
-- ADS continues tracking visited frontier labels while live objects are present, but it only exposes a current frontier target once the live monster/interactable list is empty.
-- Manual `MapXzDestination` rows can now intentionally beat a worse live progression interactable when there are no live monsters or follow anchors and the waypoint row has the better priority. This makes authored staging points usable for cases like Brayflox talk NPCs instead of being ignored behind a later gate.
-- Duty-object rules now auto-reload while ADS is running; `Ignored` can suppress `BattleNpc` rows such as Cid, and used progression interactables are suppressed by stable duty/object/position until duty reset or a large relocation.
-- Dialog rules now auto-reload while ADS is running; these are global prompt matches that default to running whenever ADS is enabled, the character is logged in, and the game is not zoning. `SelectYesno` remains the default addon, with optional delay and minimized-notification restore callbacks, and Settings can restore the old owned-duty-only gate.
-- ADS now refreshes live `DEFAULT` JSON cache files from raw botologyupdates GitHub URLs: `duty-object-rules.json`, `dialog-yesno-rules.json`, and `duty-maturity.json`. The cache updates when a file is missing, when a file is older than 24h as ADS takes duty ownership, or when the operator clicks `Update`.
-- `Required` BattleNpc rules make ADS seek/kill by configured priority before distance tie-breaks.
-- `BossFight` BattleNpc rules are a stronger live-boss classification: once the rule distance/Y gates pass, ADS promotes that boss over nearby trash, treasure, ghosts, and remembered manual Map XZ follow-through.
-- `Required` progression interactables only hard-override monster-first flow when their effective rule priority actually beats the best live monster; equal priorities fall back to the distance and Y-space heuristics.
-- `Follow` rules are BattleNpc-only and turn live NPCs such as Cid into live-only movement anchors that yield to real monsters/interactables and never become ghost targets; non-BattleNpc Follow rows are migrated to `Ignored`.
-- `BossFight` rules are also BattleNpc-only; non-BattleNpc BossFight rows are migrated to `Ignored`.
-- `CombatFriendly` on `BattleNpc` or `EventNpc` is now the narrow direct-interact seam for talk targets such as Brayflox's `Goblin Pathfinder`; ADS observes those rows as live interactables instead of monsters/ignored NPCs and routes/uses them through the normal interactable pipeline.
-- Ghost recovery now carries live `MapId` metadata and only reuses monster/interactable ghosts from the current sub-area, so stale cross-layer hints stop dragging Keeper back and forth between quarterdeck/stern transitions.
-- Treasure coffer execution is sticky once ADS commits to the coffer, so a coffer that legitimately wins planning should be approached and handled instead of bouncing back to a monster objective mid-route.
-- Expendable interactables now stay in interaction follow-through after ADS sends the interact, and ADS keeps retrying them from the same `<1y` `moveto` stand-off until the object actually disappears.
-- Required interactables now get a bounded 3-attempt stationary follow-through window after ADS sends the interact; if `BetweenAreas` starts, the retry window ends immediately.
-- Interactable follow-through is now live-map aware and rule-aware. If ADS crosses into another sub-area or the current rules now ignore that target, execution drops the old follow-through and replans instead of carrying the stale interactable across the transition.
-- The rules editor's `Current Area + Global` filter now ignores `Layer` and filters by the current duty/territory/CFC scope instead, so Praetorium-style sub-area swaps do not hide other same-territory rules while authoring.
-- Live interactables now navigate with a full XYZ stand-off target instead of flattening the close-nav target onto the player's current Y, and ADS stays in navigation mode until the interactable is actually close in 3D. This fixes vertical/barrier cases such as Halatali `Chain Winch`.
-- If a live interactable is already within roughly `2.5y` X/Z and `4y` Y but ADS makes no X/Z progress for `3s`, execution now stops movement and starts direct-interact fallback instead of close-nav looping forever.
-- Rule wait fields are now live. `WaitAtDestinationSeconds` is the pre-interact arrival hold, and `WaitAfterInteractSeconds` is the post-interact follow-through hold after a successful direct interact send.
-- BattleNpc gate suppression no longer turns stale `Ignored` / `Follow` rows into planner dead states when the row's own distance/Y gates fail. This specifically covers Copperbell-style wildcard rows that should not erase visible mobs from planning.
-- `CombatFriendly` interactables now bypass the generic `CombatHold` when the planner selects them during `Svc.Condition[InCombat]`, so execution can still route and interact with combat-safe progression targets in duties such as Keeper.
-- `BossFight` monster objectives bypass the generic `CombatHold` only until ADS reaches the live boss within `5y` during combat. At that point ADS targets the boss, stops navigation, and holds progression for that boss until combat clears so combat tooling / aggro owns movement.
-- If ADS sends an interact to a progression target and `Svc.Condition[Mounted]` becomes true during follow-through, execution now treats that as a successful consume/use seam, marks the interactable position used, clears the old commitment, and waits for refreshed duty truth instead of retrying the same mount object again.
-- While mounted in Praetorium territory `1044`, ADS now bypasses the generic `CombatHold` and uses the current mount row's live mount-action list to fight nearby mobs. It prefers mounted ground-target actions such as `Magitek Cannon` / `Magitek Thunder` at the best nearby cluster, then falls back to the other live mount weapon such as `Photon Stream` / `Magitek Pulse` while enemies remain in range.
-- Manual destinations now support both `MapXzDestination` rows with `mapCoordinates` and precise `XYZ` rows with `worldCoordinates`. `XYZ` uses authored world X/Y/Z directly instead of converting map-space X/Z onto the current player Y plane.
-- Normal manual `XYZ` destinations ghost within `2.5y` in 3D, while force-march destinations keep the tighter `1y` arrival rule. If a non-treasure manual destination makes under `0.5y` player progress for `12s`, ADS stops `/vnav`, ghosts it as `ManualDestinationNoProgress`, and replans. Status / analysis JSON expose the active manual target, distance, progress age, and last manual ghost reason.
-- Ordinary same-name rows can now bind to one physical object instance with the new positional selector support, and the rules editor now exposes that through one unified `Coords` field plus radius instead of four separate coordinate columns.
-- Frontier/manual blocking is now gate-aware. Live progression interactables that are visible but currently fail their own distance/Y rule gates no longer block manual destinations, which fixes Praetorium-style `WaitingForTruth` deadlocks where a terminal was visible on the layer but not yet eligible.
-- Rule-backed interactable ghosts now only enter recovery after live monsters, live progression interactables, live follow anchors, and frontier/Map XZ options are exhausted, so they no longer steal control from stronger live truth.
-- `MapXzDestination` rules create manual no-live-object waypoints from player-facing map coordinates such as `11.3,10.4`; ADS converts those to world X/Z with the current player Y, prefers map-flag navigation with `/vnav moveflag`, falls back to direct `/vnav moveto`, keeps a selected manual target sticky through transient live-monster visibility, yields that remembered target once the planner has promoted a live interactable, stops `/vnav` immediately on `BetweenAreas`, does not select fresh manual targets during unsafe transition frames, ghosts the waypoint only once execution reaches within 1y on X/Z or when `BetweenAreas` fires during the area handoff, and now uses `Layer` as the optional live-map selector. Human-readable active subarea names such as `Forecastle` are preferred over raw numeric map ids when you know them. Legacy `DestinationType` layer rows auto-migrate on load.
-- `Layer` now filters any rule, not just `MapXzDestination`, against the current live sub-area. If you scope a rule to `Quarterdeck`, `Stern`, `Forecastle`, or a specific map row id, ADS only applies that row while you are actually on that layer.
-- If a visible `BattleNpc` only has authored layer-scoped rules and none of those layers match the current live sub-area, ADS now suppresses that mob from live monster truth instead of falling back to generic monster targeting. This covers Copperbell-style `B2` mobs leaking into `First Drop`.
-- ADS now has a standalone Ghost Inspector window and `/ads ghosts` command so you can see the current monster/interactable ghost cache, including ghost reason, live map id, age, and coordinates. It also exposes the current, remembered, and last-ghosted manual `MapXzDestination` / `XYZ` state so waypoint failures are visible in the UI instead of only in `dalamud.log`.
-- The global `Automaton Queen` ignore row is now authored as an exact-name wildcard-kind ignore so player pet suppression is not coupled to one object-kind guess.
-- Fallback map-label frontier selection now prefers labels ahead of the current route heading instead of raw sheet order.
-- The object and dialog rules editors now support parked full-manifest `PRESET`s in addition to the live `DEFAULT` file. You can switch presets, full-manifest export/import through the clipboard, disk import/export for giant manifests, create/delete presets, and load the current `DEFAULT` cache back into the `DEFAULT` draft with `@` before saving it live.
-- The rules editor now highlights brand-new rows from `+ Row` or Object Explorer `CREATE RULE` until you save, scrolls them into view, and gives the `Layer` column a live sub-area dropdown with a blank top option whenever the duty territory exposes known map/sub-area labels.
-- Object Explorer now has `CREATE RULE`, which seeds a new rules-editor row with the current duty scope, current live layer, object kind, base id, and exact object name.
-- The main window duty catalog now shows explicit per-duty rule counts and a top rule-atlas summary with global/grand-total counts, per-class breakdown, and maturity coverage signals.
+## Feature Map
 
-## Rule Guide
+| Surface | Purpose |
+|---|---|
+| Main > Overview | Operator truth: duty, ownership, phase, objective, explanation, warnings, options, status |
+| Main > Duties | Searchable responsive duty dashboard with family filters, maturity cards, compact catalog, selected-duty details, and collapsible rule coverage |
+| Main > Tools | Authoring, treasure, diagnostics, settings, updates, support links |
+| Main > Diagnostics | Territory/map/CFC, frontier, treasure follow, observations, JSON evidence |
+| Settings | General, automation, data/rules, advanced display, about/support |
+| Compact Controls | Full-label primary actions, tool shortcuts, concise live status |
+| Rules Editors | Live `DEFAULT` rules plus parked presets |
+| Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
-- See [GUIDE.md](GUIDE.md) for the full tester walkthrough, every ADS window/command, duty-maturity rule-testing workflow, duty-object rule authoring notes, positional same-name rule matching, the unified `Coords` editor surface, dialog yes/no rules, global scope behavior, BattleNpc-only `BossFight` / `Follow` behavior, layer semantics, editor-filter semantics, mounted interact follow-through behavior, ghost inspector usage, treasure clamp examples, close-range interact fallback behavior, and `MapXzDestination` / `XYZ` usage.
+## Documentation
+
+- [Operator Guide](GUIDE.md)
+- [Commands](docs/COMMANDS.md)
+- [Rule Authoring](docs/RULE_AUTHORING.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Changelog](CHANGELOG.md)
+
+## Support
+
+- [Discord](https://discord.gg/VsXqydsvpu)
+- [Repository](https://github.com/McVaxius/ADS)
+- [Ko-fi](https://ko-fi.com/mcvaxius)

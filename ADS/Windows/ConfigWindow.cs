@@ -1,3 +1,5 @@
+using System.Numerics;
+using ADS.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 
@@ -13,10 +15,10 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new System.Numerics.Vector2(420f, 280f),
-            MaximumSize = new System.Numerics.Vector2(2200f, 1600f),
+            MinimumSize = new Vector2(520f, 420f),
+            MaximumSize = new Vector2(2200f, 1600f),
         };
-        Size = new System.Numerics.Vector2(720f, 620f);
+        Size = new Vector2(760f, 640f);
     }
 
     public void Dispose()
@@ -28,6 +30,52 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
 
         var changed = false;
+        ImGui.TextUnformatted($"{PluginInfo.DisplayName} Settings");
+        ImGui.TextDisabled("Configuration saves immediately.");
+        ImGui.Spacing();
+
+        if (ImGui.BeginTabBar("ADSSettingsTabs"))
+        {
+            if (ImGui.BeginTabItem("General"))
+            {
+                DrawGeneral(ref changed);
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Automation"))
+            {
+                DrawAutomation(ref changed);
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Data & Rules"))
+            {
+                DrawDataAndRules();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Advanced"))
+            {
+                DrawAdvanced(ref changed);
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("About"))
+            {
+                DrawAbout();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+
+        if (changed)
+            plugin.SaveConfiguration();
+    }
+
+    private void DrawGeneral(ref bool changed)
+    {
+        ImGui.TextUnformatted("Startup");
         var pluginEnabled = plugin.Configuration.PluginEnabled;
         if (ImGui.Checkbox("Plugin enabled", ref pluginEnabled))
         {
@@ -43,104 +91,21 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         }
 
         var openQuickControlsOnLoad = plugin.Configuration.OpenQuickControlsOnLoad;
-        if (ImGui.Checkbox("Open quick controls on load", ref openQuickControlsOnLoad))
+        if (ImGui.Checkbox("Open compact controls on load", ref openQuickControlsOnLoad))
         {
             plugin.Configuration.OpenQuickControlsOnLoad = openQuickControlsOnLoad;
             changed = true;
         }
 
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("DTR Bar");
         var dtrBarEnabled = plugin.Configuration.DtrBarEnabled;
         if (ImGui.Checkbox("Enable DTR bar", ref dtrBarEnabled))
         {
             plugin.Configuration.DtrBarEnabled = dtrBarEnabled;
             changed = true;
         }
-
-        var showDebugSections = plugin.Configuration.ShowDebugSections;
-        if (ImGui.Checkbox("Show debug sections in the main window", ref showDebugSections))
-        {
-            plugin.Configuration.ShowDebugSections = showDebugSections;
-            changed = true;
-        }
-
-        var considerTreasureCoffers = plugin.Configuration.ConsiderTreasureCoffers;
-        if (ImGui.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
-        {
-            plugin.Configuration.ConsiderTreasureCoffers = considerTreasureCoffers;
-            changed = true;
-        }
-
-        ImGui.TextWrapped("When treasure-coffer scan is enabled, ADS treats coffers as optional pickups: they must materially beat competing targets on XZ, ADS still tries to stand within about 1y on approach, and coffers more than 5y away in Y are skipped.");
-
-        var treasureDoorJiggleRecoveryEnabled = plugin.Configuration.TreasureDoorJiggleRecoveryEnabled;
-        if (ImGui.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
-        {
-            plugin.Configuration.TreasureDoorJiggleRecoveryEnabled = treasureDoorJiggleRecoveryEnabled;
-            changed = true;
-        }
-
-        ImGui.TextWrapped("When a treasure door follow-through appears stuck, ADS briefly holds strafe left/right while vnav keeps pushing toward the door follow-through path.");
-
-        ImGui.Separator();
-        ImGui.TextWrapped("Remote JSON cache");
-        ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
-        if (ImGui.Button("Update rules cache"))
-            plugin.ForceRemoteJsonUpdate();
-        ImGui.EndDisabled();
-        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
-        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
-            ImGui.TextDisabled(statusLine);
-
-        ImGui.Separator();
-        ImGui.TextWrapped($"Duty object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active rule(s).");
-        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
-        if (ImGui.Button("Open rules JSON"))
-            plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath);
-        ImGui.SameLine();
-        if (ImGui.Button("Open frontier labels"))
-            plugin.OpenFrontierLabelUi();
-        ImGui.SameLine();
-        if (ImGui.Button("Open rules table"))
-            plugin.OpenRuleEditorUi();
-        ImGui.SameLine();
-        if (ImGui.Button("Reload rules JSON"))
-            plugin.ObjectPriorityRuleService.Reload();
-        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
-        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextWrapped("Recommended fields: contentFinderConditionId or territoryTypeId, dutyEnglishName while scouting, objectKind, baseId if names collide, objectName, classification override or Ignored, lower-is-better priority, priorityVerticalRadius, optional maxDistance, waitAtDestinationSeconds for pre-interact arrival hold, waitAfterInteractSeconds for post-interact follow-through hold, BossFight for BattleNpc bosses that should beat nearby trash/objectives once in range, CombatFriendly on BattleNpc or EventNpc for direct-interact talk targets such as Goblin Pathfinder, TreasureDoor for explicit treasure-dungeon gate overrides, and for manual waypoints classification MapXzDestination / MapXzForceMarch + mapCoordinates like 11.3,10.4 or XYZ / XYZForceMarch + worldCoordinates like 154.1,101.9,-34.2. ForceMarch rows are authored inside-duty bypass waypoints, not Praetorium-mounted-only rows. Layer now scopes any rule to the current live sub-area only: leave it blank for any layer, or set it to a live subarea name / map row id. Legacy DestinationType layer rows are auto-migrated on load.");
-        ImGui.TextWrapped("ADS loads DEFAULT object rules from the plugin config cache. The Update button refreshes that cache from botologyupdates; duty ownership refreshes it only when a cache file is missing or older than 24h. Named object presets are parked files and are never overwritten by remote updates.");
-
-        ImGui.Separator();
-        ImGui.TextWrapped($"Dialog yes/no rules: {plugin.DialogYesNoRuleService.ActiveRuleCount} active rule(s).");
-        ImGui.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
-        if (ImGui.Button("Open dialog rules JSON"))
-            plugin.OpenPath(plugin.DialogYesNoRuleService.ConfigPath);
-        ImGui.SameLine();
-        if (ImGui.Button("Open dialog rules table"))
-            plugin.OpenDialogRuleEditorUi();
-        ImGui.SameLine();
-        if (ImGui.Button("Reload dialog rules JSON"))
-            plugin.DialogYesNoRuleService.Reload();
-        ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastSyncStatus);
-        ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastLoadStatus);
-        var processDialogRulesOutsideOwnedDuty = plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty;
-        if (ImGui.Checkbox("Process dialog rules outside owned duties", ref processDialogRulesOutsideOwnedDuty))
-        {
-            plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty = processDialogRulesOutsideOwnedDuty;
-            changed = true;
-        }
-        ImGui.TextWrapped("When enabled, dialog rules can run whenever ADS is enabled, your character is logged in, and the game is not zoning. Disable this to require ADS-owned or leaving duty execution.");
-        ImGui.TextWrapped("ADS loads DEFAULT dialog rules from the plugin config cache. The dialog editor supports parked presets under dialog-rule-presets; only saving/importing into DEFAULT changes runtime behavior.");
-
-        ImGui.Separator();
-        ImGui.TextWrapped("Duty maturity");
-        ImGui.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
-        if (ImGui.Button("Open duty maturity JSON"))
-            plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath);
-        ImGui.SameLine();
-        if (ImGui.Button("Reload duty maturity JSON"))
-            plugin.DutyCatalogService.ReloadMaturity();
-        ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
         var dtrMode = plugin.Configuration.DtrBarMode;
@@ -164,10 +129,138 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.Separator();
-        ImGui.TextWrapped("ADS v1 now includes staged execution phases, explicit planner objective kinds, immediate dead/opened ghosting for monsters and treasure coffers, a ghost inspector window, and a human-edited duty-object-rules.json override seam on top of the observer, planner explanation, duty catalog, ownership shell, and IPC.");
+        ImGui.TextDisabled("Click the DTR entry to open the Main window.");
+    }
 
-        if (changed)
-            plugin.SaveConfiguration();
+    private void DrawAutomation(ref bool changed)
+    {
+        ImGui.TextUnformatted("Treasure");
+        var considerTreasureCoffers = plugin.Configuration.ConsiderTreasureCoffers;
+        if (ImGui.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
+        {
+            plugin.Configuration.ConsiderTreasureCoffers = considerTreasureCoffers;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards.");
+
+        var treasureDoorJiggleRecoveryEnabled = plugin.Configuration.TreasureDoorJiggleRecoveryEnabled;
+        if (ImGui.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
+        {
+            plugin.Configuration.TreasureDoorJiggleRecoveryEnabled = treasureDoorJiggleRecoveryEnabled;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("Briefly strafe when treasure-door follow-through appears stuck while vnav continues toward the route.");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Dialog Rules");
+        var processDialogRulesOutsideOwnedDuty = plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty;
+        if (ImGui.Checkbox("Process dialog rules outside owned duties", ref processDialogRulesOutsideOwnedDuty))
+        {
+            plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty = processDialogRulesOutsideOwnedDuty;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("When enabled, dialog rules can run while ADS is enabled, logged in, and not zoning. Disable to require ADS-owned or leaving duty execution.");
+    }
+
+    private void DrawDataAndRules()
+    {
+        ImGui.TextUnformatted("Remote JSON Cache");
+        ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
+        if (ImGui.Button("Update rules cache", new Vector2(-1f, 30f)))
+            plugin.ForceRemoteJsonUpdate();
+        ImGui.EndDisabled();
+        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
+        ImGui.TextWrapped(TreasureDungeonData.LastLoadStatus);
+        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
+            ImGui.TextDisabled(statusLine);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted($"Duty Object Rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active");
+        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.ConfigPath);
+        DrawActionGrid(
+            "ADSObjectRuleActions",
+            ("Open rules JSON", () => plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath)),
+            ("Open frontier labels", plugin.OpenFrontierLabelUi),
+            ("Open rules table", plugin.OpenRuleEditorUi),
+            ("Reload rules JSON", () => plugin.ObjectPriorityRuleService.Reload()));
+        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
+        ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
+        ImGui.TextDisabled("DEFAULT is live runtime data. Parked presets do not affect runtime until loaded into DEFAULT.");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted($"Dialog Yes/No Rules: {plugin.DialogYesNoRuleService.ActiveRuleCount} active");
+        ImGui.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
+        DrawActionGrid(
+            "ADSDialogRuleActions",
+            ("Open dialog rules JSON", () => plugin.OpenPath(plugin.DialogYesNoRuleService.ConfigPath)),
+            ("Open dialog rules table", plugin.OpenDialogRuleEditorUi),
+            ("Reload dialog rules JSON", () => plugin.DialogYesNoRuleService.Reload()));
+        ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastSyncStatus);
+        ImGui.TextWrapped(plugin.DialogYesNoRuleService.LastLoadStatus);
+        ImGui.TextDisabled("Only saving or importing into DEFAULT changes runtime dialog behavior.");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Duty Maturity");
+        ImGui.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
+        DrawActionGrid(
+            "ADSDutyMaturityActions",
+            ("Open duty maturity JSON", () => plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath)),
+            ("Reload duty maturity JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
+        ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
+    }
+
+    private void DrawAdvanced(ref bool changed)
+    {
+        ImGui.TextUnformatted("Display");
+        var showDebugSections = plugin.Configuration.ShowDebugSections;
+        if (ImGui.Checkbox("Show debug sections in the Main window", ref showDebugSections))
+        {
+            plugin.Configuration.ShowDebugSections = showDebugSections;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("Enables live JSON preview and short observation samples in Main > Diagnostics.");
+    }
+
+    private void DrawAbout()
+    {
+        ImGui.TextUnformatted($"{PluginInfo.DisplayName} v{PluginInfo.GetVersion()}");
+        ImGui.TextWrapped(PluginInfo.Summary);
+        ImGui.TextWrapped(PluginInfo.PilotDutySummary);
+        ImGui.Spacing();
+        DrawActionGrid(
+            "ADSAboutLinks",
+            ("Ko-fi", () => plugin.OpenUrl(PluginInfo.SupportUrl)),
+            ("Discord", () => plugin.OpenUrl(PluginInfo.DiscordUrl)),
+            ("Repository", () => plugin.OpenUrl(PluginInfo.RepoUrl)));
+        ImGui.TextDisabled(PluginInfo.DiscordFeedbackNote);
+        ImGui.Spacing();
+        ImGui.TextWrapped("ADS includes staged execution phases, explicit planner objectives, immediate dead/opened ghosting, specialist inspectors, human-edited rule overrides, duty catalog, ownership controls, and IPC.");
+    }
+
+    private void DrawActionGrid(string id, params (string Label, Action Action)[] actions)
+    {
+        var columnCount = ImGui.GetContentRegionAvail().X >= 800f ? 4 : 2;
+        if (!ImGui.BeginTable(id, columnCount, ImGuiTableFlags.SizingStretchSame))
+            return;
+
+        for (var index = 0; index < actions.Length; index++)
+        {
+            if (index % columnCount == 0)
+                ImGui.TableNextRow();
+
+            ImGui.TableSetColumnIndex(index % columnCount);
+            if (ImGui.Button($"{actions[index].Label}##{id}{index}", new Vector2(-1f, 28f)))
+                actions[index].Action();
+        }
+
+        ImGui.EndTable();
     }
 }

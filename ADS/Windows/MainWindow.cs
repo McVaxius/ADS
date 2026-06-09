@@ -12,6 +12,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private readonly Plugin plugin;
     private readonly Dictionary<DutyCategory, bool> dutyCategoryFilters = DutyCategoryDisplayCatalog.Entries
         .ToDictionary(x => x.Category, _ => true);
+    private string dutyCatalogSearch = string.Empty;
+    private string? selectedDutyCatalogKey;
 
     public MainWindow(Plugin plugin)
         : base("AI Duty Solver###ADSMain")
@@ -33,86 +35,83 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     {
         FinalizePendingWindowPlacement();
 
-        DrawTopRow();
+        DrawHeader();
         ImGui.Spacing();
         DrawActionRow();
         ImGui.Spacing();
-        DrawJsonButtons();
-        ImGui.Separator();
-        DrawCurrentState();
+        DrawCompactStateStrip();
         ImGui.Spacing();
-        DrawDutyCatalog();
-        ImGui.Spacing();
-        DrawObservationSummary();
+        DrawTabs();
     }
 
-    private void DrawTopRow()
+    private void DrawHeader()
     {
         ImGui.TextUnformatted($"{PluginInfo.DisplayName} v{PluginInfo.GetVersion()}");
         ImGui.SameLine();
-        if (ImGui.SmallButton("Ko-fi"))
-            plugin.OpenUrl(PluginInfo.SupportUrl);
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Discord"))
-            plugin.OpenUrl(PluginInfo.DiscordUrl);
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Repo"))
-            plugin.OpenUrl(PluginInfo.RepoUrl);
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Settings"))
-            plugin.OpenConfigUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Objects"))
-            plugin.ToggleObjectExplorerUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Ghosts"))
-            plugin.ToggleGhostListUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Labels"))
-            plugin.ToggleFrontierLabelUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Mini"))
-            plugin.ToggleQuickControlUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("LOOT"))
-            plugin.ToggleLootUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Rules"))
-            plugin.ToggleRuleEditorUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Dialogs"))
-            plugin.ToggleDialogRuleEditorUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Higher/Lower"))
-            plugin.ToggleHigherLowerUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Treasure"))
-            plugin.OpenTreasureRouteEditorUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Events"))
-            plugin.ToggleServerEventExplorerUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("VFX"))
-            plugin.ToggleVfxExplorerUi();
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Reflection"))
-            plugin.ToggleReflectionUi();
-        ImGui.SameLine();
-        using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
-        {
-            if (ImGui.SmallButton("Update"))
-                plugin.ForceRemoteJsonUpdate();
-        }
-
-        ImGui.TextWrapped(PluginInfo.Summary);
-        ImGui.TextWrapped(PluginInfo.PilotDutySummary);
-        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
-        ImGui.TextWrapped(TreasureDungeonData.LastLoadStatus);
-        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
-            ImGui.TextDisabled(statusLine);
+        ImGui.TextDisabled("Operator console");
     }
 
-    private void DrawCurrentState()
+    private void DrawCompactStateStrip()
+    {
+        var context = plugin.DutyContextService.Current;
+        var execution = plugin.ExecutionService;
+        if (!ImGui.BeginTable("ADSPrimaryState", 3, ImGuiTableFlags.SizingStretchSame))
+            return;
+
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.TextDisabled("DUTY");
+        ImGui.TextWrapped(GetCurrentDutyLabel(context));
+        ImGui.TableSetColumnIndex(1);
+        ImGui.TextDisabled("OWNERSHIP");
+        ImGui.TextWrapped(execution.CurrentMode.ToString());
+        ImGui.TableSetColumnIndex(2);
+        ImGui.TextDisabled("EXECUTION PHASE");
+        ImGui.TextWrapped(execution.CurrentPhase.ToString());
+        ImGui.EndTable();
+    }
+
+    private void DrawTabs()
+    {
+        if (!ImGui.BeginTabBar("ADSMainTabs"))
+            return;
+
+        if (ImGui.BeginTabItem("Overview"))
+        {
+            DrawScrollableTabContent("ADSOverviewTabContent", DrawOverview);
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Duties"))
+        {
+            DrawScrollableTabContent("ADSDutiesTabContent", DrawDutyCatalog);
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Tools"))
+        {
+            DrawScrollableTabContent("ADSToolsTabContent", DrawTools);
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Diagnostics"))
+        {
+            DrawScrollableTabContent("ADSDiagnosticsTabContent", DrawDiagnostics);
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    private static void DrawScrollableTabContent(string id, Action draw)
+    {
+        if (ImGui.BeginChild(id, Vector2.Zero, false))
+            draw();
+
+        ImGui.EndChild();
+    }
+
+    private void DrawOverview()
     {
         var context = plugin.DutyContextService.Current;
         var planner = plugin.ObjectivePlannerService.Current;
@@ -123,44 +122,166 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             : null;
         var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown";
 
-        ImGui.TextUnformatted($"Ownership: {execution.CurrentMode}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Exec phase: {execution.CurrentPhase}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Planner: {planner.Mode}");
+        ImGui.TextUnformatted("Current Duty");
+        if (ImGui.BeginTable("ADSOverviewDuty", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV))
+        {
+            ImGui.TableNextRow();
+            DrawOverviewCell(0, "Duty", GetCurrentDutyLabel(context));
+            DrawOverviewCell(1, "Family", dutyDisplay?.FilterLabel ?? "Uncatalogued");
+            DrawOverviewCell(2, "Readiness", currentDuty is not null ? GetSupportLevelLabel(currentDuty.SupportLevel) : "No catalog row");
+            ImGui.TableNextRow();
+            DrawOverviewCell(0, "Maturity", currentDuty is not null ? GetClearanceLabel(currentDuty.ClearanceStatus) : "No catalog row");
+            DrawOverviewCell(1, "Instanced / Catalog", $"{(context.InInstancedDuty ? "YES" : "NO")} / {(context.HasCatalogMetadata ? "YES" : "NO")}");
+            DrawOverviewCell(2, "Unsafe Transition", context.IsUnsafeTransition ? "YES" : "NO");
+            ImGui.EndTable();
+        }
 
-        ImGui.TextUnformatted($"Duty: {GetCurrentDutyLabel(context)}");
-        ImGui.TextUnformatted($"Instanced duty: {(context.InInstancedDuty ? "YES" : "NO")}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Catalog metadata: {(context.HasCatalogMetadata ? "YES" : "NO")}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Unsafe transition: {(context.IsUnsafeTransition ? "YES" : "NO")}");
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Planner And Execution");
+        if (ImGui.BeginTable("ADSOverviewExecution", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV))
+        {
+            ImGui.TableNextRow();
+            DrawOverviewCell(0, "Ownership", execution.CurrentMode.ToString());
+            DrawOverviewCell(1, "Execution Phase", execution.CurrentPhase.ToString());
+            DrawOverviewCell(2, "Planner Mode", planner.Mode.ToString());
+            ImGui.EndTable();
+        }
 
-        ImGui.TextUnformatted($"Family: {dutyDisplay?.FilterLabel ?? "Uncatalogued"}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Readiness: {(currentDuty is not null ? GetSupportLevelLabel(currentDuty.SupportLevel) : "No catalog row")}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Maturity: {(currentDuty is not null ? GetClearanceLabel(currentDuty.ClearanceStatus) : "No catalog row")}");
+        ImGui.TextWrapped($"Objective kind: {planner.ObjectiveKind}");
+        ImGui.TextWrapped($"Objective: {planner.Objective}");
+        ImGui.TextWrapped($"Explanation: {planner.Explanation}");
+        if (planner.TargetDistance.HasValue || planner.TargetVerticalDelta.HasValue)
+            ImGui.TextWrapped($"Target distance / vertical: {planner.TargetDistance?.ToString("0.0") ?? "-"} / {planner.TargetVerticalDelta?.ToString("0.0") ?? "-"}");
+        ImGui.TextWrapped($"Execution phase summary: {execution.LastStatus}");
+        ImGui.TextWrapped($"Loot automation: {plugin.LootAutomationService.Status}");
 
-        ImGui.TextUnformatted($"Treasure coffers: {(plugin.Configuration.ConsiderTreasureCoffers ? "ON" : "OFF")}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Loot: {plugin.Configuration.LootMode}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Dialog rules: {plugin.DialogYesNoRuleService.ActiveRuleCount}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Layer: {activeLayer}");
-        DrawTreasurePortalFollowState();
-        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
-        ImGui.TextUnformatted($"Objective kind: {planner.ObjectiveKind}");
-        ImGui.TextUnformatted($"Frontier mode: {plugin.DungeonFrontierService.CurrentMode}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Labels: {plugin.DungeonFrontierService.VisitedPoints} / {plugin.DungeonFrontierService.TotalPoints}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Map XZ: {plugin.DungeonFrontierService.VisitedManualMapXzDestinations} / {plugin.DungeonFrontierService.ManualMapXzDestinationCount}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"XYZ: {plugin.DungeonFrontierService.VisitedManualXyzDestinations} / {plugin.DungeonFrontierService.ManualXyzDestinationCount}");
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Active Options");
+        ImGui.TextWrapped(
+            $"Treasure coffers: {(plugin.Configuration.ConsiderTreasureCoffers ? "ON" : "OFF")}  |  " +
+            $"Loot: {plugin.Configuration.LootMode}  |  " +
+            $"Object rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount}  |  " +
+            $"Dialog rules: {plugin.DialogYesNoRuleService.ActiveRuleCount}  |  " +
+            $"Layer: {activeLayer}");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Warnings");
+        if (context.InInstancedDuty && !execution.IsOwned)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.98f, 0.82f, 0.34f, 1f));
+            ImGui.TextUnformatted("Observing only");
+            ImGui.PopStyleColor();
+        }
+
+        if (context.InInstancedDuty && !context.HasCatalogMetadata)
+        {
+            ImGui.TextWrapped("This instanced duty has no ADS catalog row yet. Runtime still keys off live instanced-duty truth, but family/readiness metadata is uncatalogued.");
+            ImGui.TextWrapped("Start/Resume stay enabled even without catalog metadata. ADS trusts instanced-duty truth and treats catalog rows as maturity metadata only.");
+        }
+
+        if (!context.InInstancedDuty || execution.IsOwned)
+            ImGui.TextDisabled("No ownership warning.");
+    }
+
+    private static void DrawOverviewCell(int column, string label, string value)
+    {
+        ImGui.TableSetColumnIndex(column);
+        ImGui.TextDisabled(label.ToUpperInvariant());
+        ImGui.TextWrapped(value);
+    }
+
+    private void DrawTools()
+    {
+        ImGui.TextUnformatted("Authoring");
+        DrawLauncherGrid(
+            "ADSAuthoringTools",
+            ("Object Explorer", plugin.ToggleObjectExplorerUi),
+            ("Object Rules", plugin.ToggleRuleEditorUi),
+            ("Dialog Rules", plugin.ToggleDialogRuleEditorUi),
+            ("Frontier Labels", plugin.ToggleFrontierLabelUi));
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Treasure And Operations");
+        DrawLauncherGrid(
+            "ADSTreasureTools",
+            ("Loot Controls", plugin.ToggleLootUi),
+            ("Higher / Lower", plugin.ToggleHigherLowerUi),
+            ("Treasure Routes", plugin.OpenTreasureRouteEditorUi),
+            ("Reflection", plugin.ToggleReflectionUi));
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Diagnostics");
+        DrawLauncherGrid(
+            "ADSDiagnosticTools",
+            ("Ghost Inspector", plugin.ToggleGhostListUi),
+            ("Server Events", plugin.ToggleServerEventExplorerUi),
+            ("VFX Explorer", plugin.ToggleVfxExplorerUi));
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Windows And Settings");
+        DrawLauncherGrid(
+            "ADSWindowTools",
+            ("Settings", plugin.OpenConfigUi),
+            ("Compact Controls", plugin.ToggleQuickControlUi));
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Data Update");
+        using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
+        {
+            if (ImGui.Button("Update Remote JSON Cache", new Vector2(-1f, 28f)))
+                plugin.ForceRemoteJsonUpdate();
+        }
+
+        ImGui.TextWrapped(plugin.RemoteJsonUpdateService.LastUpdateStatus);
+        ImGui.TextWrapped(TreasureDungeonData.LastLoadStatus);
+        foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
+            ImGui.TextDisabled(statusLine);
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("External Links");
+        DrawLauncherGrid(
+            "ADSExternalLinks",
+            ("Ko-fi", () => plugin.OpenUrl(PluginInfo.SupportUrl)),
+            ("Discord", () => plugin.OpenUrl(PluginInfo.DiscordUrl)),
+            ("Repository", () => plugin.OpenUrl(PluginInfo.RepoUrl)));
+
+        ImGui.Spacing();
+        ImGui.TextWrapped(PluginInfo.Summary);
+        ImGui.TextWrapped(PluginInfo.PilotDutySummary);
+    }
+
+    private void DrawLauncherGrid(string id, params (string Label, Action Action)[] launchers)
+    {
+        var columnCount = ImGui.GetContentRegionAvail().X >= 1000f ? 4 : 3;
+        if (!ImGui.BeginTable(id, columnCount, ImGuiTableFlags.SizingStretchSame))
+            return;
+
+        for (var index = 0; index < launchers.Length; index++)
+        {
+            if (index % columnCount == 0)
+                ImGui.TableNextRow();
+
+            ImGui.TableSetColumnIndex(index % columnCount);
+            if (ImGui.Button($"{launchers[index].Label}##{id}{index}", new Vector2(-1f, 28f)))
+                launchers[index].Action();
+        }
+
+        ImGui.EndTable();
+    }
+
+    private void DrawDiagnostics()
+    {
+        var context = plugin.DutyContextService.Current;
+        ImGui.TextUnformatted("Duty Context");
+        ImGui.TextWrapped($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Frontier State");
+        ImGui.TextWrapped(
+            $"Mode: {plugin.DungeonFrontierService.CurrentMode}  |  " +
+            $"Labels: {plugin.DungeonFrontierService.VisitedPoints} / {plugin.DungeonFrontierService.TotalPoints}  |  " +
+            $"Map XZ: {plugin.DungeonFrontierService.VisitedManualMapXzDestinations} / {plugin.DungeonFrontierService.ManualMapXzDestinationCount}  |  " +
+            $"XYZ: {plugin.DungeonFrontierService.VisitedManualXyzDestinations} / {plugin.DungeonFrontierService.ManualXyzDestinationCount}");
         if (plugin.DungeonFrontierService.CurrentTarget is { } frontierPoint)
         {
             var frontierTargetText = frontierPoint.IsManualXyzDestination
@@ -173,22 +294,14 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
         if (plugin.DungeonFrontierService.CurrentHeading is { } scoutHeading)
             ImGui.TextWrapped($"Frontier heading: {scoutHeading.X:0.00}, {scoutHeading.Z:0.00}");
-        ImGui.TextWrapped($"Objective: {planner.Objective}");
-        ImGui.TextWrapped($"Explanation: {planner.Explanation}");
-        if (planner.TargetDistance.HasValue || planner.TargetVerticalDelta.HasValue)
-            ImGui.TextWrapped($"Target distance / vertical: {planner.TargetDistance?.ToString("0.0") ?? "-"} / {planner.TargetVerticalDelta?.ToString("0.0") ?? "-"}");
-        ImGui.TextWrapped($"Execution phase summary: {execution.LastStatus}");
-        ImGui.TextWrapped($"Loot automation: {plugin.LootAutomationService.Status}");
 
-        if (context.InInstancedDuty && !execution.IsOwned)
-        {
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.98f, 0.82f, 0.34f, 1f));
-            ImGui.TextUnformatted("Observing only");
-            ImGui.PopStyleColor();
-        }
-
-        if (context.InInstancedDuty && !context.HasCatalogMetadata)
-            ImGui.TextWrapped("This instanced duty has no ADS catalog row yet. Runtime still keys off live instanced-duty truth, but family/readiness metadata is uncatalogued.");
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Treasure Follow State");
+        DrawTreasurePortalFollowState();
+        ImGui.Spacing();
+        DrawObservationSummary();
+        ImGui.Spacing();
+        DrawJsonButtons();
     }
 
     private void DrawTreasurePortalFollowState()
@@ -213,70 +326,121 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
     private void DrawActionRow()
     {
-        if (ImGui.Button("Start Outside"))
-            plugin.StartDutyFromOutside();
-        ImGui.SameLine();
-
         var canStartInside = plugin.DutyContextService.Current.InInstancedDuty;
-        using (new ImGuiDisabledBlock(!canStartInside))
+        if (ImGui.BeginTable("ADSPrimaryActions", 5, ImGuiTableFlags.SizingStretchSame))
         {
-            if (ImGui.Button("Start Inside"))
-                plugin.StartDutyFromInside();
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            if (ImGui.Button("Start Outside", new Vector2(-1f, 32f)))
+                plugin.StartDutyFromOutside();
+
+            ImGui.TableSetColumnIndex(1);
+            using (new ImGuiDisabledBlock(!canStartInside))
+            {
+                if (ImGui.Button("Start Inside", new Vector2(-1f, 32f)))
+                    plugin.StartDutyFromInside();
+            }
+
+            ImGui.TableSetColumnIndex(2);
+            using (new ImGuiDisabledBlock(!canStartInside))
+            {
+                if (ImGui.Button("Resume", new Vector2(-1f, 32f)))
+                    plugin.ResumeDutyFromInside();
+            }
+
+            ImGui.TableSetColumnIndex(3);
+            using (new ImGuiDisabledBlock(!plugin.ExecutionService.IsOwned))
+            {
+                if (ImGui.Button("Leave", new Vector2(-1f, 32f)))
+                    plugin.LeaveDuty();
+            }
+
+            ImGui.TableSetColumnIndex(4);
+            if (ImGui.Button("Stop", new Vector2(-1f, 32f)))
+                plugin.StopOwnership();
+            ImGui.EndTable();
         }
-
-        ImGui.SameLine();
-        using (new ImGuiDisabledBlock(!canStartInside))
-        {
-            if (ImGui.Button("Resume"))
-                plugin.ResumeDutyFromInside();
-        }
-
-        ImGui.SameLine();
-        using (new ImGuiDisabledBlock(!plugin.ExecutionService.IsOwned))
-        {
-            if (ImGui.Button("Leave"))
-                plugin.LeaveDuty();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Stop"))
-            plugin.StopOwnership();
-
-        var context = plugin.DutyContextService.Current;
-        if (context.InInstancedDuty && !context.HasCatalogMetadata)
-            ImGui.TextWrapped("Start/Resume stay enabled even without catalog metadata. ADS now trusts instanced-duty truth and treats catalog rows as maturity metadata only.");
     }
 
     private void DrawDutyCatalog()
     {
         ImGui.TextUnformatted("Instanced Duty Catalog");
+        ImGui.SetNextItemWidth(-1f);
+        ImGui.InputTextWithHint(
+            "##ADSDutyCatalogSearch",
+            "search duty, family, expansion, territory ID, or CFC ID",
+            ref dutyCatalogSearch,
+            160);
         DrawDutyCategoryFilters();
-        DrawRuleAtlas();
         DrawDutyCatalogStats();
+        DrawRuleAtlas();
 
         var visibleEntries = plugin.DutyCatalogService.Entries
             .Where(entry => dutyCategoryFilters.GetValueOrDefault(entry.Category, true))
+            .Where(DutyMatchesSearch)
             .ToList();
         var currentContext = plugin.DutyContextService.Current;
         var ruleCounts = BuildExplicitRuleCountsByDuty();
+        var selectedEntry = visibleEntries.FirstOrDefault(entry => BuildDutyCatalogKey(entry) == selectedDutyCatalogKey);
+        if (selectedEntry is null)
+        {
+            selectedEntry = visibleEntries.FirstOrDefault(entry => DutyMatchesCurrentContext(entry, currentContext))
+                            ?? visibleEntries.FirstOrDefault();
+            selectedDutyCatalogKey = selectedEntry is null ? null : BuildDutyCatalogKey(selectedEntry);
+        }
 
         ImGui.TextDisabled($"Rows shown: {visibleEntries.Count} / {plugin.DutyCatalogService.Entries.Count}");
-        if (!ImGui.BeginTable("AdsDutyCatalog", 10, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, 320f)))
+        if (visibleEntries.Count == 0)
+        {
+            ImGui.TextWrapped("No duties match the current search and family filters.");
             return;
+        }
+
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        if (availableWidth >= 1120f)
+        {
+            if (!ImGui.BeginTable("ADSDutyDashboard", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+                return;
+
+            ImGui.TableSetupColumn("Catalog", ImGuiTableColumnFlags.WidthStretch, 1.8f);
+            ImGui.TableSetupColumn("Duty Details", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            DrawDutyCatalogTable(visibleEntries, currentContext, ruleCounts, 420f);
+            ImGui.TableSetColumnIndex(1);
+            DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(BuildDutyCatalogKey(selectedEntry!)), 420f);
+            ImGui.EndTable();
+            return;
+        }
+
+        DrawDutyCatalogTable(visibleEntries, currentContext, ruleCounts, 300f);
+        ImGui.Spacing();
+        DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(BuildDutyCatalogKey(selectedEntry!)), 260f);
+    }
+
+    private void DrawDutyCatalogTable(
+        IReadOnlyList<DutyCatalogEntry> entries,
+        DutyContextSnapshot currentContext,
+        IReadOnlyDictionary<string, int> ruleCounts,
+        float height)
+    {
+        if (!ImGui.BeginTable(
+                "AdsDutyCatalog",
+                5,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
+                new Vector2(-1f, height)))
+        {
+            return;
+        }
 
         ImGui.TableSetupColumn("Duty");
-        ImGui.TableSetupColumn("Family", ImGuiTableColumnFlags.WidthFixed, 110f);
-        ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Terr", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("CFC", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Maturity", ImGuiTableColumnFlags.WidthFixed, 150f);
+        ImGui.TableSetupColumn("Family", ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn("Maturity", ImGuiTableColumnFlags.WidthFixed, 175f);
         ImGui.TableSetupColumn("Readiness", ImGuiTableColumnFlags.WidthFixed, 130f);
-        ImGui.TableSetupColumn("Level", ImGuiTableColumnFlags.WidthFixed, 60f);
-        ImGui.TableSetupColumn("Expansion", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Note");
+        ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 55f);
         ImGui.TableHeadersRow();
 
-        foreach (var entry in visibleEntries)
+        foreach (var entry in entries)
         {
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
@@ -286,7 +450,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 highlight = new Vector4(0.97f, 0.84f, 0.31f, 1f);
 
             ImGui.PushStyleColor(ImGuiCol.Text, highlight);
-            ImGui.TextUnformatted(entry.EnglishName);
+            var catalogKey = BuildDutyCatalogKey(entry);
+            if (ImGui.Selectable($"{entry.EnglishName}##DutyCatalog{catalogKey}", catalogKey == selectedDutyCatalogKey))
+                selectedDutyCatalogKey = catalogKey;
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(1);
@@ -296,7 +462,17 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(2);
-            var ruleCount = ruleCounts.GetValueOrDefault(BuildDutyCatalogKey(entry));
+            ImGui.PushStyleColor(ImGuiCol.Text, GetClearanceColor(entry.ClearanceStatus));
+            ImGui.TextUnformatted(GetClearanceLabel(entry.ClearanceStatus));
+            ImGui.PopStyleColor();
+
+            ImGui.TableSetColumnIndex(3);
+            ImGui.PushStyleColor(ImGuiCol.Text, GetSupportLevelColor(entry.SupportLevel));
+            ImGui.TextUnformatted(GetSupportLevelLabel(entry.SupportLevel));
+            ImGui.PopStyleColor();
+
+            ImGui.TableSetColumnIndex(4);
+            var ruleCount = ruleCounts.GetValueOrDefault(catalogKey);
             if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && ruleCount == 0)
                 ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.43f, 0.35f, 1f));
             else if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && ruleCount > 10)
@@ -305,50 +481,59 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TextUnformatted(ruleCount.ToString());
             if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && (ruleCount == 0 || ruleCount > 10))
                 ImGui.PopStyleColor();
-
-            ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(entry.TerritoryTypeId.ToString());
-
-            ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(entry.ContentFinderConditionId == 0 ? "-" : entry.ContentFinderConditionId.ToString());
-
-            ImGui.TableSetColumnIndex(5);
-            ImGui.PushStyleColor(ImGuiCol.Text, GetClearanceColor(entry.ClearanceStatus));
-            ImGui.TextUnformatted(GetClearanceLabel(entry.ClearanceStatus));
-            ImGui.PopStyleColor();
-
-            ImGui.TableSetColumnIndex(6);
-            ImGui.PushStyleColor(ImGuiCol.Text, GetSupportLevelColor(entry.SupportLevel));
-            ImGui.TextUnformatted(GetSupportLevelLabel(entry.SupportLevel));
-            ImGui.PopStyleColor();
-
-            ImGui.TableSetColumnIndex(7);
-            ImGui.TextUnformatted(entry.LevelRequired.ToString());
-
-            ImGui.TableSetColumnIndex(8);
-            ImGui.TextUnformatted(entry.ExpansionName);
-
-            ImGui.TableSetColumnIndex(9);
-            ImGui.TextWrapped(entry.SupportNote);
         }
 
         ImGui.EndTable();
     }
 
+    private static void DrawDutyDetail(DutyCatalogEntry entry, int ruleCount, float height)
+    {
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
+        if (ImGui.BeginChild("ADSDutyDetail", new Vector2(-1f, height), true))
+        {
+            ImGui.TextColored(GetClearanceColor(entry.ClearanceStatus), entry.EnglishName);
+            ImGui.TextColored(DutyCategoryDisplayCatalog.Get(entry.Category).Accent, DutyCategoryDisplayCatalog.Get(entry.Category).FilterLabel);
+            ImGui.Spacing();
+
+            if (ImGui.BeginTable("ADSDutyDetailFacts", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV))
+            {
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Level", entry.LevelRequired.ToString());
+                DrawDutyDetailFact(1, "Expansion", entry.ExpansionName);
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Party Size", entry.PartySize.ToString());
+                DrawDutyDetailFact(1, "Content Type", entry.ContentTypeName);
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Territory ID", entry.TerritoryTypeId.ToString());
+                DrawDutyDetailFact(1, "CFC ID", entry.ContentFinderConditionId == 0 ? "-" : entry.ContentFinderConditionId.ToString());
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Maturity", GetClearanceLabel(entry.ClearanceStatus));
+                DrawDutyDetailFact(1, "Readiness", GetSupportLevelLabel(entry.SupportLevel));
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Planned Test", entry.IsPlannedTest ? "YES" : "NO");
+                DrawDutyDetailFact(1, "Explicit Rules", ruleCount.ToString());
+                ImGui.EndTable();
+            }
+
+            ImGui.Spacing();
+            ImGui.TextDisabled("SUPPORT NOTE");
+            ImGui.TextWrapped(entry.SupportNote);
+        }
+
+        ImGui.EndChild();
+        ImGui.PopStyleVar();
+    }
+
+    private static void DrawDutyDetailFact(int column, string label, string value)
+    {
+        ImGui.TableSetColumnIndex(column);
+        ImGui.TextDisabled(label.ToUpperInvariant());
+        ImGui.TextWrapped(value);
+    }
+
     private void DrawDutyCategoryFilters()
     {
         ImGui.TextUnformatted("Families");
-        for (var index = 0; index < DutyCategoryDisplayCatalog.Entries.Count; index++)
-        {
-            var entry = DutyCategoryDisplayCatalog.Entries[index];
-            var enabled = dutyCategoryFilters.GetValueOrDefault(entry.Category, true);
-            if (ImGui.Checkbox($"{entry.FilterLabel}##DutyFamily{entry.Category}", ref enabled))
-                dutyCategoryFilters[entry.Category] = enabled;
-
-            if (index < DutyCategoryDisplayCatalog.Entries.Count - 1)
-                ImGui.SameLine();
-        }
-
         if (ImGui.SmallButton("All"))
         {
             foreach (var entry in DutyCategoryDisplayCatalog.Entries)
@@ -361,6 +546,27 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             foreach (var entry in DutyCategoryDisplayCatalog.Entries)
                 dutyCategoryFilters[entry.Category] = false;
         }
+
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        var columnCount = availableWidth >= 1040f ? 4 : availableWidth >= 620f ? 2 : 1;
+        if (!ImGui.BeginTable("ADSDutyFamilyFilters", columnCount, ImGuiTableFlags.SizingStretchSame))
+            return;
+
+        for (var index = 0; index < DutyCategoryDisplayCatalog.Entries.Count; index++)
+        {
+            if (index % columnCount == 0)
+                ImGui.TableNextRow();
+
+            ImGui.TableSetColumnIndex(index % columnCount);
+            var entry = DutyCategoryDisplayCatalog.Entries[index];
+            var enabled = dutyCategoryFilters.GetValueOrDefault(entry.Category, true);
+            ImGui.PushStyleColor(ImGuiCol.Text, entry.Accent);
+            if (ImGui.Checkbox($"{entry.FilterLabel}##DutyFamily{entry.Category}", ref enabled))
+                dutyCategoryFilters[entry.Category] = enabled;
+            ImGui.PopStyleColor();
+        }
+
+        ImGui.EndTable();
     }
 
     private void DrawDutyCatalogStats()
@@ -371,7 +577,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             (MaturityLevel: 0, Label: "Not Cleared", Count: CountStatus(DutyClearanceStatus.NotCleared), Accent: GetClearanceColor(DutyClearanceStatus.NotCleared)),
             (MaturityLevel: 1, Label: "1P Unsync Cleared", Count: CountStatus(DutyClearanceStatus.OnePlayerUnsyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerUnsyncCleared)),
             (MaturityLevel: 2, Label: "1P Duty Support", Count: CountStatus(DutyClearanceStatus.OnePlayerDutySupport), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerDutySupport)),
-            (MaturityLevel: 3, Label: "4P Sync Cleared", Count: CountStatus(DutyClearanceStatus.FourPlayerSyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.FourPlayerSyncCleared)),
+            (MaturityLevel: 3, Label: "Synced Party Cleared", Count: CountStatus(DutyClearanceStatus.FourPlayerSyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.FourPlayerSyncCleared)),
         };
         var availableWidth = ImGui.GetContentRegionAvail().X;
         var columnCount = availableWidth >= 880f ? 4 : 2;
@@ -403,6 +609,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
     private void DrawRuleAtlas()
     {
+        if (!ImGui.CollapsingHeader("Rule Atlas / Coverage"))
+            return;
+
         var rules = plugin.ObjectPriorityRuleService.Current.Rules;
         var totalRules = rules.Count;
         var enabledRules = rules.Count(x => x.Enabled);
@@ -418,51 +627,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(x => $"{x.Key} {x.Count()}"));
 
-        if (!ImGui.BeginTable("ADSRuleAtlas", 3, ImGuiTableFlags.SizingStretchSame))
-            return;
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        DrawInfoCard(
-            "Rule Atlas",
-            new Vector4(0.33f, 0.73f, 0.96f, 1f),
-            $"Grand total: {totalRules}\nEnabled: {enabledRules}\nGlobal: {globalRules}");
-
-        ImGui.TableSetColumnIndex(1);
-        DrawInfoCard(
-            "Coverage Signals",
-            new Vector4(1.0f, 0.82f, 0.29f, 1f),
-            $"Maturity > 0 with 0 rules: {dutiesWithNoRules}\nMaturity > 0 with >10 rules: {dutiesWithDenseRules}");
-
-        ImGui.TableSetColumnIndex(2);
-        DrawInfoCard(
-            "By Category",
-            new Vector4(0.47f, 0.90f, 0.64f, 1f),
-            string.IsNullOrWhiteSpace(classificationSummary) ? "No rules authored yet." : classificationSummary);
-
-        ImGui.EndTable();
-    }
-
-    private void DrawInfoCard(string title, Vector4 accent, string body)
-    {
-        var background = new Vector4(
-            MathF.Min(accent.X * 0.15f, 1f),
-            MathF.Min(accent.Y * 0.15f, 1f),
-            MathF.Min(accent.Z * 0.15f, 1f),
-            0.34f);
-
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, background);
-        ImGui.PushStyleColor(ImGuiCol.Border, accent);
-        if (ImGui.BeginChild($"##{title}", new Vector2(-1f, 88f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-        {
-            ImGui.TextColored(accent, title);
-            ImGui.TextWrapped(body);
-        }
-
-        ImGui.EndChild();
-        ImGui.PopStyleColor(2);
-        ImGui.PopStyleVar();
+        ImGui.TextWrapped($"Rules: {totalRules} total | {enabledRules} enabled | {globalRules} global");
+        ImGui.TextWrapped($"Coverage signals: {dutiesWithNoRules} matured duties with 0 rules | {dutiesWithDenseRules} matured duties with >10 rules");
+        ImGui.TextWrapped($"By category: {(string.IsNullOrWhiteSpace(classificationSummary) ? "No rules authored yet." : classificationSummary)}");
     }
 
     private Dictionary<string, int> BuildExplicitRuleCountsByDuty()
@@ -606,6 +773,21 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ? $"cfc:{entry.ContentFinderConditionId}"
             : $"terr:{entry.TerritoryTypeId}";
 
+    private bool DutyMatchesSearch(DutyCatalogEntry entry)
+    {
+        var search = dutyCatalogSearch.Trim();
+        if (search.Length == 0)
+            return true;
+
+        var family = DutyCategoryDisplayCatalog.Get(entry.Category).FilterLabel;
+        return entry.EnglishName.Contains(search, StringComparison.OrdinalIgnoreCase)
+               || entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+               || family.Contains(search, StringComparison.OrdinalIgnoreCase)
+               || entry.ExpansionName.Contains(search, StringComparison.OrdinalIgnoreCase)
+               || entry.TerritoryTypeId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
+               || entry.ContentFinderConditionId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool DutyMatchesCurrentContext(DutyCatalogEntry entry, DutyContextSnapshot context)
     {
         if (entry.ContentFinderConditionId != 0 && entry.ContentFinderConditionId == context.ContentFinderConditionId)
@@ -621,7 +803,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         {
             DutyClearanceStatus.OnePlayerUnsyncCleared => "[1P Unsync Cleared]",
             DutyClearanceStatus.OnePlayerDutySupport => "[1P Duty Support]",
-            DutyClearanceStatus.FourPlayerSyncCleared => "[4P Sync Cleared]",
+            DutyClearanceStatus.FourPlayerSyncCleared => "[Synced Party Cleared]",
             _ => "[Not Cleared]",
         };
 

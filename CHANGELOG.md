@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-09
+
+- Rebuilt Main around persistent operator controls and Overview, Duties, Tools, and Diagnostics tabs while preserving existing actions, disabled-state rules, catalog behavior, live truth, specialist launchers, updates, and JSON copies.
+- Replaced the dense Duties table with a searchable responsive catalog/detail dashboard, grouped family filters, and compact collapsible rule coverage; renamed the user-facing `FourPlayerSyncCleared` label to `[Synced Party Cleared]` without changing its enum or JSON value.
+- Reorganized Settings into General, Automation, Data & Rules, Advanced, and About tabs without changing configuration fields or data actions.
+- Rebuilt compact Controls with full action labels, shared inside/leave disabled rules, grouped shortcuts, concise live status, and unchanged debug-strafe release behavior.
+- Replaced the legacy tester-heavy README/GUIDE split with a product overview, operator manual, exhaustive command reference, rule-authoring guide, and troubleshooting/evidence guide.
+
 ## 2026-05-18
 
 - Matched treasure-follower door movement to map-opener door follow-through. Followers still never click TreasureDoor/coffer objectives, but they now use the shared through-point, stale-floor detection, and door-frame jiggle recovery before cycling failed same-room door candidates.
@@ -89,7 +97,7 @@
 - Moved rule-backed interactable-ghost recovery behind live monster, live progression, live follow-anchor, and frontier / Map XZ choices so stale ghosts no longer steal control from stronger live truth.
 - Kept selected manual `MapXzDestination` waypoints sticky during execution, so ADS no longer abandons them just because live monsters or interactables become visible before the configured X/Z arrival point.
 - Added a bounded 3-attempt stationary follow-through for `Required` interactables, with immediate cancellation if `Svc.Condition[BetweenAreas]` starts.
-- Reworked the duty-catalog readiness summary into four color-coded maturity cards for `[Not Cleared]`, `[1P Unsync Cleared]`, `[1P Duty Support]`, and `[4P Sync Cleared]`.
+- Reworked the duty-catalog readiness summary into four color-coded maturity cards for `[Not Cleared]`, `[1P Unsync Cleared]`, `[1P Duty Support]`, and `[Synced Party Cleared]`.
 - Stopped the frontier service from pre-ghosting manual `MapXzDestination` points during the background sweep; they now only ghost on the execution-side 1y X/Z arrival check or on `Svc.Condition[BetweenAreas]`.
 - Changed expendable interact follow-through so ADS keeps retrying the same live expendable from the same `<1y` `moveto` stand-off until the object actually disappears.
 - Marked Castrum Meridianum as `[1P Unsync Cleared]` and promoted it into the active pilot set after successful validation.
