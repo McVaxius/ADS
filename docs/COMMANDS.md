@@ -2,6 +2,18 @@
 
 ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-insensitive. An empty or unknown argument toggles Main.
 
+## Desynthesis
+
+| Command | Action |
+|---|---|
+| `/ads desynth` | Open desynthesis controls |
+| `/ads desynth run configured\|all\|whitelist\|last-duty\|skillups` | Start policy-driven desynthesis using configured source scope |
+| `/ads desynth run inventory-only` | Desynthesize inventory equipment directly |
+| `/ads desynth run everywhere-skip-gearsets` | Desynthesize inventory and armoury items while protecting gearsets |
+| `/ads desynth run everywhere` | Desynthesize inventory and armoury items, including gearset items |
+| `/ads desynth stop` | Stop active ADS utility |
+| `/ads desynthfrominventory` | Alias for `inventory-only` direct desynthesis |
+
 ## Windows
 
 | Command | Action |
@@ -58,7 +70,7 @@ Utility automation cannot start while ADS owns active duty execution or while in
 | `/ads npcrepair no-inn` | Alias for `/ads npcrepair noinn` |
 | `/ads npcrepair-no-teleport-no-inn` | NPC repair only when a mender is within `120y` |
 | `/ads extractmateria` | Extract ready materia from gear |
-| `/ads desynthfrominventory` | Desynthesize inventory-only items |
+| `/ads desynthfrominventory` | Desynthesize inventory equipment directly |
 
 Running `/ads repair` without a mode prints valid modes.
 

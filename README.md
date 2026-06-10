@@ -4,6 +4,10 @@ AI Duty Solver (ADS) is an operator-controlled Dalamud plugin for observing, pla
 
 ADS is observer-first. Entering a duty does not automatically grant ADS ownership unless the operator starts or resumes execution.
 
+## Desynthesis
+
+ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; direct runs are available from Main > Tools. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).
+
 ## Installation
 
 Add this custom repository in Dalamud:
@@ -39,7 +43,7 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 |---|---|
 | Main > Overview | Operator truth: duty, ownership, phase, objective, explanation, warnings, options, status |
 | Main > Duties | Searchable responsive duty dashboard with family filters, maturity cards, compact catalog, selected-duty details, and collapsible rule coverage |
-| Main > Tools | Authoring, treasure, diagnostics, settings, updates, support links |
+| Main > Tools | Authoring, treasure, desynthesis, diagnostics, settings, updates, support links |
 | Main > Diagnostics | Territory/map/CFC, frontier, treasure follow, observations, JSON evidence |
 | Settings | General, automation, data/rules, advanced display, about/support |
 | Compact Controls | Full-label primary actions, tool shortcuts, concise live status |

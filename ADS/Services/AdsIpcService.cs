@@ -15,8 +15,16 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> openLootUi,
         Func<bool> toggleLootUi,
         Func<string, bool> startRepair,
+        Func<string, bool> startDesynth,
+        Func<bool> cancelUtility,
+        Func<bool> openDesynthConfigUi,
         Func<string> getStatusJson,
-        Func<string> getCurrentAnalysisJson)
+        Func<string> getCurrentAnalysisJson,
+        Func<string> getCapabilitiesJson,
+        Func<string, string, string> invoke,
+        Func<string> getConfigurationJson,
+        Func<string, string> patchConfigurationJson,
+        Func<string> getDesynthStatusJson)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -25,8 +33,16 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.OpenLootUi", openLootUi);
         Register(pluginInterface, "ADS.ToggleLootUi", toggleLootUi);
         Register(pluginInterface, "ADS.StartRepair", startRepair);
+        Register(pluginInterface, "ADS.StartDesynth", startDesynth);
+        Register(pluginInterface, "ADS.CancelUtility", cancelUtility);
+        Register(pluginInterface, "ADS.OpenDesynthConfigUi", openDesynthConfigUi);
         Register(pluginInterface, "ADS.GetStatusJson", getStatusJson);
         Register(pluginInterface, "ADS.GetCurrentAnalysisJson", getCurrentAnalysisJson);
+        Register(pluginInterface, "ADS.GetCapabilitiesJson", getCapabilitiesJson);
+        Register(pluginInterface, "ADS.Invoke", invoke);
+        Register(pluginInterface, "ADS.GetConfigurationJson", getConfigurationJson);
+        Register(pluginInterface, "ADS.PatchConfigurationJson", patchConfigurationJson);
+        Register(pluginInterface, "ADS.GetDesynthStatusJson", getDesynthStatusJson);
     }
 
     public void Dispose()
@@ -45,6 +61,13 @@ public sealed class AdsIpcService : IDisposable
     private void Register<T, TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<T, TReturn> func)
     {
         var provider = pluginInterface.GetIpcProvider<T, TReturn>(name);
+        provider.RegisterFunc(func);
+        disposeActions.Add(provider.UnregisterFunc);
+    }
+
+    private void Register<T1, T2, TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<T1, T2, TReturn> func)
+    {
+        var provider = pluginInterface.GetIpcProvider<T1, T2, TReturn>(name);
         provider.RegisterFunc(func);
         disposeActions.Add(provider.UnregisterFunc);
     }

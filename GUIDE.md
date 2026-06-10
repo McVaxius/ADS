@@ -2,6 +2,14 @@
 
 This guide covers normal operation and the current Main, Settings, and compact Controls layouts. Rule creation and maturity-test detail live in [Rule Authoring](docs/RULE_AUTHORING.md). Failure investigation lives in [Troubleshooting](docs/TROUBLESHOOTING.md).
 
+## Desynthesis
+
+Use `/ads desynth` for run filter, source scope, preset, skill-up, context-menu, and ledger controls. Source scopes are inventory only, inventory plus armoury while skipping gearsets, and inventory plus armoury including gearsets.
+
+Run modes: `configured`, `all`, `whitelist`, `last-duty`, `skillups`, `inventory-only`, `everywhere-skip-gearsets`, and `everywhere`.
+
+`last-duty` requires configured source `LastDutyGains` before duty entry. See [Desynthesis](docs/DESYNTHESIS.md).
+
 ## Operating Model
 
 ADS separates live observation from owned execution.
@@ -73,6 +81,7 @@ Tools groups every Main launcher:
 
 - **Authoring:** Object Explorer, Object Rules, Dialog Rules, Frontier Labels.
 - **Treasure And Operations:** Loot Controls, Higher / Lower, Treasure Routes, Reflection.
+- **Desynthesis:** Desynth Controls, direct inventory-only run, direct everywhere run with gearset protection, direct everywhere run, Stop Utility.
 - **Diagnostics:** Ghost Inspector, Server Events, VFX Explorer.
 - **Windows And Settings:** Settings, compact Controls.
 - **Data Update:** remote JSON cache update and per-file status.

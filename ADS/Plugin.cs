@@ -4,11 +4,13 @@ using System.Text.Json;
 using ADS.Models;
 using ADS.Services;
 using ADS.Windows;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.DutyState;
 using Dalamud.Game.Gui;
+using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Gui.Dtr;
 using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Text.SeStringHandling;
@@ -19,6 +21,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
 using ECommons.GameHelpers;
+using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace ADS;
 
@@ -68,6 +71,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
     [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
+    [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -95,6 +99,11 @@ public sealed class Plugin : IDalamudPlugin
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
+    public DesynthPolicyService DesynthPolicyService { get; }
+    public DesynthPresetStore DesynthPresetStore { get; }
+    public DesynthDutyLedgerStore DesynthDutyLedgerStore { get; }
+    public DesynthContextMenuService DesynthContextMenuService { get; }
+    public AdsOperatorApiService AdsOperatorApiService { get; }
     public LootAutomationService LootAutomationService { get; }
     public TreasureFollowerDutyExitMonitorService TreasureFollowerDutyExitMonitorService { get; }
     public RemoteJsonUpdateService RemoteJsonUpdateService { get; }
@@ -125,6 +134,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ServerEventExplorerWindow serverEventExplorerWindow;
     private readonly VfxExplorerWindow vfxExplorerWindow;
     private readonly ReflectionWindow reflectionWindow;
+    private readonly DesynthesisWindow desynthesisWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
     private uint lastOwnedTreasureRoleInferenceDutyKey;
@@ -178,10 +188,15 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         DebugStrafeService = new DebugStrafeService(KeyState, Log);
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
-        UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
+        DesynthPolicyService = new DesynthPolicyService();
+        DesynthPresetStore = new DesynthPresetStore(configDirectory, Log);
+        DesynthDutyLedgerStore = new DesynthDutyLedgerStore(configDirectory, Log);
+        UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Configuration, DesynthPolicyService, DesynthPresetStore, DesynthDutyLedgerStore, Log);
+        DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
         TreasureFollowerDutyExitMonitorService = new TreasureFollowerDutyExitMonitorService(CommandManager, Log);
         BmrReflectionService = new BmrReflectionService(PluginInterface, Configuration, Log);
+        AdsOperatorApiService = new AdsOperatorApiService(this);
         AdsIpcService = new AdsIpcService(
             PluginInterface,
             StartDutyFromOutside,
@@ -199,8 +214,16 @@ public sealed class Plugin : IDalamudPlugin
                 return true;
             },
             StartRepair,
+            StartDesynth,
+            CancelUtility,
+            OpenDesynthConfigUiIpc,
             GetStatusJson,
-            GetCurrentAnalysisJson);
+            GetCurrentAnalysisJson,
+            GetCapabilitiesJson,
+            Invoke,
+            GetConfigurationJson,
+            PatchConfigurationJson,
+            GetDesynthStatusJson);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -217,6 +240,7 @@ public sealed class Plugin : IDalamudPlugin
         serverEventExplorerWindow = new ServerEventExplorerWindow(this);
         vfxExplorerWindow = new VfxExplorerWindow(this);
         reflectionWindow = new ReflectionWindow(this);
+        desynthesisWindow = new DesynthesisWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
@@ -231,6 +255,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(serverEventExplorerWindow);
         WindowSystem.AddWindow(vfxExplorerWindow);
         WindowSystem.AddWindow(reflectionWindow);
+        WindowSystem.AddWindow(desynthesisWindow);
 
         RegisterCommands();
 
@@ -268,6 +293,7 @@ public sealed class Plugin : IDalamudPlugin
 
         InnEntryService.Cancel("plugin dispose");
         UtilityAutomationService.Cancel("plugin dispose");
+        DesynthContextMenuService.Dispose();
         UnregisterCommands();
         HigherLowerServerEventTraceService.Dispose();
         HigherLowerVfxTraceService.Dispose();
@@ -293,6 +319,7 @@ public sealed class Plugin : IDalamudPlugin
         serverEventExplorerWindow.Dispose();
         vfxExplorerWindow.Dispose();
         reflectionWindow.Dispose();
+        desynthesisWindow.Dispose();
         ECommonsMain.Dispose();
     }
 
@@ -301,6 +328,15 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenConfigUi()
         => configWindow.IsOpen = true;
+
+    public void OpenDesynthConfigUi()
+        => desynthesisWindow.IsOpen = true;
+
+    private bool OpenDesynthConfigUiIpc()
+    {
+        OpenDesynthConfigUi();
+        return true;
+    }
 
     public void ToggleMainUi()
         => mainWindow.IsOpen = !mainWindow.IsOpen;
@@ -518,6 +554,7 @@ public sealed class Plugin : IDalamudPlugin
         serverEventExplorerWindow.QueueResetToOrigin();
         vfxExplorerWindow.QueueResetToOrigin();
         reflectionWindow.QueueResetToOrigin();
+        desynthesisWindow.QueueResetToOrigin();
     }
 
     public void JumpWindows()
@@ -536,6 +573,7 @@ public sealed class Plugin : IDalamudPlugin
         serverEventExplorerWindow.QueueRandomVisibleJump();
         vfxExplorerWindow.QueueRandomVisibleJump();
         reflectionWindow.QueueRandomVisibleJump();
+        desynthesisWindow.QueueRandomVisibleJump();
     }
 
     public string ObjectExplorerStatus
@@ -765,13 +803,161 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool StartDesynthFromInventory()
+        => StartDesynth("inventory-only");
+
+    public bool StartDesynth(string mode)
     {
-        if (!CanStartManualUtility("inventory desynthesis"))
+        if (!DesynthPolicyService.TryParseMode(mode, out var parsedMode))
+        {
+            PrintStatus("Desynthesis mode must be configured, all, whitelist, last-duty, skillups, inventory-only, everywhere-skip-gearsets, or everywhere.");
+            return false;
+        }
+
+        // IPC may arrive after duty exit but before ADS's next framework duty-context tick.
+        DesynthDutyLedgerStore.Update(
+            Condition[ConditionFlag.BoundByDuty] || Condition[ConditionFlag.BoundByDuty56],
+            ClientState.TerritoryType,
+            Configuration.DesynthSource == DesynthSource.LastDutyGains,
+            CaptureRegularInventoryCounts);
+
+        if (!CanStartManualUtility($"{mode} desynthesis"))
             return false;
 
-        var result = UtilityAutomationService.StartDesynthFromInventory();
-        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Inventory desynthesis not started: {UtilityAutomationService.StatusMessage}");
+        var result = UtilityAutomationService.StartDesynth(parsedMode);
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Desynthesis not started: {UtilityAutomationService.StatusMessage}");
         return result;
+    }
+
+    public bool CancelUtility()
+    {
+        var wasRunning = UtilityAutomationService.IsRunning;
+        UtilityAutomationService.Cancel("IPC/operator request");
+        return wasRunning;
+    }
+
+    public bool SelectDesynthPreset(string name, out string error)
+    {
+        var preset = DesynthPresetStore.Presets.FirstOrDefault(x => string.Equals(x.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (preset == null)
+        {
+            error = $"Preset '{name}' was not found.";
+            return false;
+        }
+
+        Configuration.DesynthActivePreset = preset.Name;
+        SaveConfiguration();
+        error = string.Empty;
+        return true;
+    }
+
+    public bool DeleteDesynthPreset(string name, out string error)
+    {
+        if (!DesynthPresetStore.Delete(name, out error))
+            return false;
+
+        if (string.Equals(Configuration.DesynthActivePreset, name, StringComparison.OrdinalIgnoreCase))
+        {
+            Configuration.DesynthActivePreset = DesynthPresetStore.DefaultPresetName;
+            SaveConfiguration();
+        }
+
+        return true;
+    }
+
+    public bool RenameDesynthPreset(string name, string newName, out string error)
+    {
+        var wasActive = string.Equals(Configuration.DesynthActivePreset, name, StringComparison.OrdinalIgnoreCase);
+        if (!DesynthPresetStore.Rename(name, newName, out error))
+            return false;
+
+        if (wasActive)
+        {
+            Configuration.DesynthActivePreset = DesynthPresetStore.Get(newName).Name;
+            SaveConfiguration();
+        }
+
+        return true;
+    }
+
+    public bool TryMutateActiveDesynthPresetItem(string value, bool add, out string error)
+    {
+        if (!TryResolveDesynthItemId(value, out var itemId))
+        {
+            error = $"Could not resolve item '{value}' by ID or exact name.";
+            return false;
+        }
+
+        return add
+            ? DesynthPresetStore.AddItem(Configuration.DesynthActivePreset, itemId, out error)
+            : DesynthPresetStore.RemoveItem(Configuration.DesynthActivePreset, itemId, out error);
+    }
+
+    public bool ImportDesynthPresetsRaw(string value, out string error)
+    {
+        if (!DesynthPresetStore.ImportRaw(value, out error))
+            return false;
+        NormalizeActiveDesynthPreset();
+        return true;
+    }
+
+    public bool ImportDesynthPresetsBase64(string value, out string error)
+    {
+        if (!DesynthPresetStore.ImportBase64(value, out error))
+            return false;
+        NormalizeActiveDesynthPreset();
+        return true;
+    }
+
+    public string GetCapabilitiesJson()
+        => AdsOperatorApiService.GetCapabilitiesJson();
+
+    public string Invoke(string action, string payloadJson)
+        => AdsOperatorApiService.Invoke(action, payloadJson);
+
+    public string GetConfigurationJson()
+        => AdsOperatorApiService.GetConfigurationJson();
+
+    public string PatchConfigurationJson(string patchJson)
+        => AdsOperatorApiService.PatchConfigurationJson(patchJson);
+
+    public string GetDesynthStatusJson()
+        => JsonSerializer.Serialize(new
+        {
+            running = UtilityAutomationService.IsDesynthRunning,
+            mode = UtilityAutomationService.ActiveDesynthModeName,
+            source = UtilityAutomationService.ActiveDesynthSourceName,
+            scope = UtilityAutomationService.ActiveDesynthScopeName,
+            preset = UtilityAutomationService.ActiveDesynthPresetName,
+            ledgerStatus = DesynthDutyLedgerStore.LastStatus,
+            eligible = UtilityAutomationService.DesynthEligibleCount,
+            completed = UtilityAutomationService.DesynthCompletedCount,
+            status = UtilityAutomationService.StatusMessage,
+            success = UtilityAutomationService.LastDesynthSuccessMessage,
+            failure = UtilityAutomationService.LastDesynthFailureMessage,
+        });
+
+    public bool TryResolveDesynthItemId(string value, out uint itemId)
+    {
+        if (uint.TryParse(value?.Trim(), out itemId) && itemId > 0)
+        {
+            itemId = DesynthPolicyService.NormalizeBaseItemId(itemId);
+            return true;
+        }
+
+        var name = value?.Trim() ?? string.Empty;
+        var match = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()
+            .FirstOrDefault(x => x.Name.ToString().Equals(name, StringComparison.OrdinalIgnoreCase));
+        itemId = match.RowId;
+        return itemId > 0;
+    }
+
+    private void NormalizeActiveDesynthPreset()
+    {
+        if (DesynthPresetStore.Presets.Any(x => string.Equals(x.Name, Configuration.DesynthActivePreset, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        Configuration.DesynthActivePreset = DesynthPresetStore.DefaultPresetName;
+        SaveConfiguration();
     }
 
     public string GetStatusJson()
@@ -917,6 +1103,15 @@ public sealed class Plugin : IDalamudPlugin
                 utilityCompletedAtUtc = UtilityAutomationService.LastCompletionUtc == DateTime.MinValue
                     ? null
                     : UtilityAutomationService.LastCompletionUtc.ToString("O"),
+                utilityExclusive = UtilityAutomationService.IsRunning,
+                desynthMode = UtilityAutomationService.ActiveDesynthModeName,
+                desynthSource = UtilityAutomationService.ActiveDesynthSourceName,
+                desynthScope = UtilityAutomationService.ActiveDesynthScopeName,
+                desynthPreset = UtilityAutomationService.ActiveDesynthPresetName,
+                desynthLedgerStatus = DesynthDutyLedgerStore.LastStatus,
+                desynthEligible = UtilityAutomationService.DesynthEligibleCount,
+                desynthCompleted = UtilityAutomationService.DesynthCompletedCount,
+                desynthFailure = UtilityAutomationService.LastDesynthFailureMessage,
                 duty = DutyContextService.Current.CurrentDuty?.EnglishName,
                 territoryTypeId = DutyContextService.Current.TerritoryTypeId,
                 mapId = DutyContextService.Current.MapId,
@@ -1431,6 +1626,11 @@ public sealed class Plugin : IDalamudPlugin
         {
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            Measure("desynth-ledger", () => DesynthDutyLedgerStore.Update(
+                DutyContextService.Current.InInstancedDuty,
+                DutyContextService.Current.TerritoryTypeId,
+                Configuration.DesynthSource == DesynthSource.LastDutyGains,
+                CaptureRegularInventoryCounts));
             Measure("debug-strafe", () => DebugStrafeService.Update(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled));
             Measure("remote-json-complete", QueueCompletedRemoteJsonReload);
             Measure("dialog", () => DialogAutomationService.Update(
@@ -1719,6 +1919,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnDutyCompleted(uint territoryId)
     {
+        DesynthDutyLedgerStore.MarkDutyCompleted();
         var context = DutyContextService.Current;
         var dutyName = context.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
         ClearTreasureDutyRecoveryMarker("duty completion");
@@ -1790,7 +1991,10 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads npcrepair-no-teleport-no-inn - NPC repair only if a mender is within 120y\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
-                "/ads desynthfrominventory - desynth inventory-only items\n" +
+                "/ads desynth - open desynthesis controls\n" +
+                "/ads desynth run configured|all|whitelist|last-duty|skillups|inventory-only|everywhere-skip-gearsets|everywhere - run policy-driven desynthesis\n" +
+                "/ads desynth stop - stop active utility\n" +
+                "/ads desynthfrominventory - desynth inventory equipment directly\n" +
                 "/ads lootoff|lootneed|lootgreed|lootpass - set loot rolling mode\n" +
                 "/ads lootregon|lootregoff - toggle Need missing registrables\n" +
                 "/ads td-monitor-on|td-monitor-off - arm/disarm treasure follower exit cleanup monitor\n" +
@@ -2050,6 +2254,24 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (trimmed.Equals("desynth", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenDesynthConfigUi();
+            return;
+        }
+
+        if (trimmed.Equals("desynth stop", StringComparison.OrdinalIgnoreCase))
+        {
+            CancelUtility();
+            return;
+        }
+
+        if (trimmed.StartsWith("desynth run ", StringComparison.OrdinalIgnoreCase))
+        {
+            StartDesynth(trimmed["desynth run ".Length..].Trim());
+            return;
+        }
+
         if (trimmed.Equals("hldebug trace", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("hldebug trace ", StringComparison.OrdinalIgnoreCase))
         {
@@ -2274,6 +2496,40 @@ public sealed class Plugin : IDalamudPlugin
         return true;
     }
 
+    private static unsafe Dictionary<uint, int> CaptureRegularInventoryCounts()
+    {
+        var result = new Dictionary<uint, int>();
+        var manager = InventoryManager.Instance();
+        if (manager == null)
+            return result;
+
+        var types = new[]
+        {
+            InventoryType.Inventory1,
+            InventoryType.Inventory2,
+            InventoryType.Inventory3,
+            InventoryType.Inventory4,
+        };
+        foreach (var type in types)
+        {
+            var container = manager->GetInventoryContainer(type);
+            if (container == null)
+                continue;
+
+            for (var index = 0; index < container->Size; index++)
+            {
+                var item = container->GetInventorySlot(index);
+                if (item == null || item->ItemId == 0 || item->Quantity == 0)
+                    continue;
+
+                var itemId = DesynthPolicyService.NormalizeBaseItemId(item->ItemId);
+                result[itemId] = result.GetValueOrDefault(itemId) + (int)item->Quantity;
+            }
+        }
+
+        return result;
+    }
+
     public void UpdateDtrBar()
     {
         if (dtrEntry is null)
@@ -2463,6 +2719,39 @@ public sealed class Plugin : IDalamudPlugin
             configuration.LootRegistrableBardingsEnabled = true;
             configuration.LootRegistrableTripleTriadCardsEnabled = true;
             configuration.Version = 17;
+            changed = true;
+        }
+
+        if (configuration.Version < 18)
+        {
+            configuration.DesynthSource = DesynthSource.ActiveWhitelist;
+            configuration.DesynthActivePreset = DesynthPresetStore.DefaultPresetName;
+            configuration.DesynthSkillUpFilterEnabled = false;
+            configuration.DesynthSkillUpThreshold = 50;
+            configuration.DesynthProtectGearsets = true;
+            configuration.DesynthCategories = ["InventoryEquipment"];
+            configuration.DesynthContextMenuEnabled = true;
+            configuration.Version = 18;
+            changed = true;
+        }
+
+        if (configuration.Version < 19)
+        {
+            configuration.DesynthInventoryScope = DesynthPolicyService.NormalizeScopeFromLegacyCategories(
+                configuration.DesynthCategories,
+                configuration.DesynthProtectGearsets);
+            configuration.Version = 19;
+            changed = true;
+        }
+
+        changed |= DesynthPolicyService.ApplyScopeToConfiguration(
+            configuration,
+            DesynthPolicyService.NormalizeScope(configuration.DesynthInventoryScope));
+
+        var clampedDesynthThreshold = Math.Clamp(configuration.DesynthSkillUpThreshold, 0, 1000);
+        if (configuration.DesynthSkillUpThreshold != clampedDesynthThreshold)
+        {
+            configuration.DesynthSkillUpThreshold = clampedDesynthThreshold;
             changed = true;
         }
 

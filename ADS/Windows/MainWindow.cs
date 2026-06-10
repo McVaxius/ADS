@@ -210,6 +210,16 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Reflection", plugin.ToggleReflectionUi));
 
         ImGui.Spacing();
+        ImGui.TextUnformatted("Desynthesis");
+        DrawLauncherGrid(
+            "ADSDesynthesisTools",
+            ("Desynth Controls", plugin.OpenDesynthConfigUi),
+            ("Inventory Only", () => plugin.StartDesynth("inventory-only")),
+            ("Everywhere, Skip Gearsets", () => plugin.StartDesynth("everywhere-skip-gearsets")),
+            ("Everywhere", () => plugin.StartDesynth("everywhere")),
+            ("Stop Utility", () => plugin.CancelUtility()));
+
+        ImGui.Spacing();
         ImGui.TextUnformatted("Diagnostics");
         DrawLauncherGrid(
             "ADSDiagnosticTools",

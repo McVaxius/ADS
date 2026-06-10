@@ -1,14 +1,17 @@
 using System.Globalization;
 using System.Numerics;
+using ADS.Models;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 
@@ -53,11 +56,7 @@ public sealed unsafe class UtilityAutomationService
     private const float NoInnRepairAetheryteRadiusSquared = NoInnRepairAetheryteRadius * NoInnRepairAetheryteRadius;
     private const int LastMaterializeCategory = 6;
     private const int FullyRepairedConditionPercent = 100;
-    private static readonly AgentSalvage.SalvageItemCategory[] DesynthInventoryCategories =
-    [
-        AgentSalvage.SalvageItemCategory.InventoryEquipment,
-        AgentSalvage.SalvageItemCategory.InventoryHousing,
-    ];
+    private static readonly AgentSalvage.SalvageItemCategory[] AllDesynthCategories = Enum.GetValues<AgentSalvage.SalvageItemCategory>();
 
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan NpcRepairTravelTimeout = TimeSpan.FromSeconds(75);
@@ -202,6 +201,10 @@ public sealed unsafe class UtilityAutomationService
     private readonly IClientState clientState;
     private readonly ICondition condition;
     private readonly IPluginLog log;
+    private readonly Configuration configuration;
+    private readonly DesynthPolicyService desynthPolicyService;
+    private readonly DesynthPresetStore desynthPresetStore;
+    private readonly DesynthDutyLedgerStore desynthDutyLedgerStore;
     private readonly Dictionary<uint, int?> repairIndexCache = [];
     private Lumina.Excel.ExcelSheet<Aetheryte>? aetheryteSheet;
     private Lumina.Excel.ExcelSheet<ENpcBase>? enpcBaseSheet;
@@ -246,6 +249,14 @@ public sealed unsafe class UtilityAutomationService
     private DateTime desynthCategorySeenUtc = DateTime.MinValue;
     private int desynthSettledCategoryIndex = -1;
     private bool desynthAttemptedAny;
+    private DesynthPolicy? activeDesynthPolicy;
+    private uint pendingDesynthItemId;
+    private float maximumDesynthLevel;
+    private HashSet<uint>? desynthGearsetItemIds;
+    private string lastDesynthModeName = string.Empty;
+    private string lastDesynthSourceName = string.Empty;
+    private string lastDesynthScopeName = string.Empty;
+    private string lastDesynthPresetName = string.Empty;
     private DateTime nextSlowUtilityLogUtc = DateTime.MinValue;
 
     public UtilityAutomationService(
@@ -255,6 +266,10 @@ public sealed unsafe class UtilityAutomationService
         ICommandManager commandManager,
         IClientState clientState,
         ICondition condition,
+        Configuration configuration,
+        DesynthPolicyService desynthPolicyService,
+        DesynthPresetStore desynthPresetStore,
+        DesynthDutyLedgerStore desynthDutyLedgerStore,
         IPluginLog log)
     {
         this.dataManager = dataManager;
@@ -263,6 +278,10 @@ public sealed unsafe class UtilityAutomationService
         this.commandManager = commandManager;
         this.clientState = clientState;
         this.condition = condition;
+        this.configuration = configuration;
+        this.desynthPolicyService = desynthPolicyService;
+        this.desynthPresetStore = desynthPresetStore;
+        this.desynthDutyLedgerStore = desynthDutyLedgerStore;
         this.log = log;
     }
 
@@ -295,6 +314,20 @@ public sealed unsafe class UtilityAutomationService
     public string LastSuccessMessage { get; private set; } = string.Empty;
     public string LastFailureMessage { get; private set; } = string.Empty;
     public DateTime LastCompletionUtc { get; private set; } = DateTime.MinValue;
+    public IReadOnlyList<string> DesynthCategoryNames { get; } = DesynthPolicyService.AllLegacyCategoryNames;
+    public string ActiveDesynthModeName => activeDesynthPolicy is { } policy ? GetDesynthModeName(policy.Mode) : lastDesynthModeName;
+    public string ActiveDesynthSourceName => activeDesynthPolicy?.Source.ToString() ?? (string.IsNullOrEmpty(lastDesynthSourceName) ? configuration.DesynthSource.ToString() : lastDesynthSourceName);
+    public string ActiveDesynthScopeName => activeDesynthPolicy is { } policy
+        ? DesynthPolicyService.GetScopeName(policy.Scope)
+        : string.IsNullOrEmpty(lastDesynthScopeName)
+            ? DesynthPolicyService.GetScopeName(configuration.DesynthInventoryScope)
+            : lastDesynthScopeName;
+    public string ActiveDesynthPresetName => activeDesynthPolicy?.PresetName ?? (string.IsNullOrEmpty(lastDesynthPresetName) ? configuration.DesynthActivePreset : lastDesynthPresetName);
+    public int DesynthEligibleCount { get; private set; }
+    public int DesynthCompletedCount { get; private set; }
+    public bool IsDesynthRunning => activeTask == UtilityTask.DesynthFromInventory;
+    public string LastDesynthSuccessMessage { get; private set; } = string.Empty;
+    public string LastDesynthFailureMessage { get; private set; } = string.Empty;
 
     public bool StartSelfRepair()
     {
@@ -472,11 +505,26 @@ public sealed unsafe class UtilityAutomationService
     }
 
     public bool StartDesynthFromInventory()
+        => StartDesynth(DesynthRunMode.InventoryOnly);
+
+    public bool StartDesynth(DesynthRunMode mode)
     {
         if (!TryStartTask(UtilityTask.DesynthFromInventory, "Starting inventory desynthesis."))
             return false;
 
-        log.Information("[ADS][Utility] Starting inventory desynthesis flow.");
+        activeDesynthPolicy = desynthPolicyService.Compose(mode, configuration, desynthPresetStore, desynthDutyLedgerStore);
+        lastDesynthModeName = GetDesynthModeName(mode);
+        lastDesynthSourceName = activeDesynthPolicy.Source.ToString();
+        lastDesynthScopeName = DesynthPolicyService.GetScopeName(activeDesynthPolicy.Scope);
+        lastDesynthPresetName = activeDesynthPolicy.PresetName;
+        DesynthEligibleCount = 0;
+        DesynthCompletedCount = 0;
+        LastDesynthSuccessMessage = string.Empty;
+        LastDesynthFailureMessage = string.Empty;
+        maximumDesynthLevel = GetMaximumDesynthLevel();
+        desynthGearsetItemIds = activeDesynthPolicy.ProtectGearsets ? GetGearsetItemIds() : null;
+        StatusMessage = $"Starting {mode.ToString().ToLowerInvariant()} desynthesis.";
+        log.Information($"[ADS][Utility] Starting {mode} desynthesis flow: source={activeDesynthPolicy.Source}, scope={activeDesynthPolicy.Scope}, preset={activeDesynthPolicy.PresetName}, categories={string.Join(",", activeDesynthPolicy.Categories)}.");
         return true;
     }
 
@@ -559,8 +607,11 @@ public sealed unsafe class UtilityAutomationService
         if (!IsRunning)
             return;
 
+        var cancelledTask = activeTask;
         var message = $"Cancelled {GetTaskLabel(activeTask)}: {reason}";
         LastFailureMessage = message;
+        if (cancelledTask == UtilityTask.DesynthFromInventory)
+            LastDesynthFailureMessage = message;
         LastCompletionUtc = DateTime.UtcNow;
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] Cancelled {GetTaskLabel(activeTask)}: {reason}");
@@ -588,6 +639,9 @@ public sealed unsafe class UtilityAutomationService
         ResetState();
         activeTask = task;
         startedAtUtc = DateTime.UtcNow;
+        LastSuccessMessage = string.Empty;
+        LastFailureMessage = string.Empty;
+        LastCompletionUtc = DateTime.MinValue;
         StatusMessage = statusMessage;
         return true;
     }
@@ -914,6 +968,13 @@ public sealed unsafe class UtilityAutomationService
         var salvageResult = GetVisibleAddon<AtkUnitBase>("SalvageResult");
         if (salvageResult != null)
         {
+            if (pendingDesynthItemId != 0)
+            {
+                if (activeDesynthPolicy?.Source == DesynthSource.LastDutyGains)
+                    desynthDutyLedgerStore.Consume(pendingDesynthItemId);
+                DesynthCompletedCount++;
+                pendingDesynthItemId = 0;
+            }
             salvageResult->Close(true);
             lastActionUtc = now;
             desynthCategorySeenUtc = now;
@@ -938,11 +999,12 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (desynthCategoryIndex >= DesynthInventoryCategories.Length)
+        var desynthCategories = GetActiveDesynthCategories();
+        if (desynthCategoryIndex >= desynthCategories.Count)
         {
             GameInteractionHelper.TryCloseAddon("SalvageItemSelector", log);
             Complete(desynthAttemptedAny
-                ? "Inventory desynthesis finished."
+                ? $"Desynthesis finished; completed {DesynthCompletedCount} item(s)."
                 : "No desynthable inventory items were found.");
             return;
         }
@@ -982,7 +1044,7 @@ public sealed unsafe class UtilityAutomationService
             desynthWindowSeenUtc = now;
 
         agent->ItemListRefresh(true);
-        var desiredCategory = DesynthInventoryCategories[desynthCategoryIndex];
+        var desiredCategory = desynthCategories[desynthCategoryIndex];
         if (agent->SelectedCategory != desiredCategory)
         {
             agent->SelectedCategory = desiredCategory;
@@ -1014,7 +1076,7 @@ public sealed unsafe class UtilityAutomationService
             lastActionUtc = now;
             desynthCategorySeenUtc = DateTime.MinValue;
             desynthSettledCategoryIndex = -1;
-            StatusMessage = desynthCategoryIndex < DesynthInventoryCategories.Length
+            StatusMessage = desynthCategoryIndex < desynthCategories.Count
                 ? $"No desynthable items remained in {GetDesynthCategoryLabel(desiredCategory)}; moving on."
                 : "No further desynthesis categories remain.";
             return;
@@ -1022,9 +1084,24 @@ public sealed unsafe class UtilityAutomationService
 
         if (now - lastActionUtc >= UiRetryCooldown)
         {
-            GameInteractionHelper.FireAddonCallback("SalvageItemSelector", true, 12, 0);
+            var eligibleIndex = FindEligibleDesynthItemIndex(agent, desiredCategory, out var eligibleItemId, out var eligibleCount);
+            DesynthEligibleCount = eligibleCount;
+            if (eligibleIndex >= 0)
+            {
+                pendingDesynthItemId = eligibleItemId;
+                GameInteractionHelper.FireAddonCallback("SalvageItemSelector", true, 12, eligibleIndex);
+                lastActionUtc = now;
+                StatusMessage = $"Selecting eligible item {eligibleItemId} from {GetDesynthCategoryLabel(desiredCategory)} for desynthesis.";
+                return;
+            }
+
+            desynthCategoryIndex++;
             lastActionUtc = now;
-            StatusMessage = $"Selecting the next item from {GetDesynthCategoryLabel(desiredCategory)} for desynthesis.";
+            desynthCategorySeenUtc = DateTime.MinValue;
+            desynthSettledCategoryIndex = -1;
+            StatusMessage = desynthCategoryIndex < desynthCategories.Count
+                ? $"No policy-eligible items remained in {GetDesynthCategoryLabel(desiredCategory)}; moving on."
+                : "No further policy-eligible desynthesis categories remain.";
             return;
         }
 
@@ -2053,9 +2130,15 @@ public sealed unsafe class UtilityAutomationService
 
     private void Complete(string message)
     {
+        var completedTask = activeTask;
         StopMovementIfNpcRepair();
         log.Information($"[ADS][Utility] {message}");
         LastSuccessMessage = message;
+        if (completedTask == UtilityTask.DesynthFromInventory)
+        {
+            LastDesynthSuccessMessage = message;
+            LastDesynthFailureMessage = string.Empty;
+        }
         LastCompletionUtc = DateTime.UtcNow;
         ResetState();
         StatusMessage = message;
@@ -2063,9 +2146,12 @@ public sealed unsafe class UtilityAutomationService
 
     private void Fail(string message)
     {
+        var failedTask = activeTask;
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] {message}");
         LastFailureMessage = message;
+        if (failedTask == UtilityTask.DesynthFromInventory)
+            LastDesynthFailureMessage = message;
         LastCompletionUtc = DateTime.UtcNow;
         ResetState();
         StatusMessage = message;
@@ -2097,6 +2183,10 @@ public sealed unsafe class UtilityAutomationService
         desynthCategorySeenUtc = DateTime.MinValue;
         desynthSettledCategoryIndex = -1;
         desynthAttemptedAny = false;
+        activeDesynthPolicy = null;
+        pendingDesynthItemId = 0;
+        maximumDesynthLevel = 0;
+        desynthGearsetItemIds = null;
         if (StatusMessage == "Idle")
             return;
 
@@ -2121,6 +2211,91 @@ public sealed unsafe class UtilityAutomationService
             AgentSalvage.SalvageItemCategory.InventoryHousing => "inventory housing",
             _ => category.ToString(),
         };
+
+    private IReadOnlyList<AgentSalvage.SalvageItemCategory> GetActiveDesynthCategories()
+    {
+        if (activeDesynthPolicy == null)
+            return [];
+
+        return AllDesynthCategories.Where(x => activeDesynthPolicy.Categories.Contains(x.ToString())).ToArray();
+    }
+
+    private static string GetDesynthModeName(DesynthRunMode mode)
+        => DesynthPolicyService.GetModeName(mode);
+
+    private int FindEligibleDesynthItemIndex(
+        AgentSalvage* agent,
+        AgentSalvage.SalvageItemCategory category,
+        out uint eligibleItemId,
+        out int eligibleCount)
+    {
+        eligibleItemId = 0;
+        eligibleCount = 0;
+        if (activeDesynthPolicy == null)
+            return -1;
+
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+            return -1;
+
+        var firstIndex = -1;
+        for (var index = 0; index < agent->ItemCount; index++)
+        {
+            var salvageItem = agent->ItemList[index];
+            var inventoryItem = inventoryManager->GetInventorySlot(salvageItem.InventoryType, (int)salvageItem.InventorySlot);
+            if (inventoryItem == null || inventoryItem->ItemId == 0)
+                continue;
+
+            var itemId = DesynthPolicyService.NormalizeBaseItemId(inventoryItem->ItemId);
+            if (!dataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item) || item.Desynth == 0)
+                continue;
+
+            var candidate = new DesynthCandidate(
+                itemId,
+                category.ToString(),
+                item.LevelItem.RowId,
+                PlayerState.Instance()->GetDesynthesisLevel(salvageItem.ClassJob),
+                maximumDesynthLevel,
+                desynthGearsetItemIds?.Contains(itemId) == true);
+            if (!activeDesynthPolicy.IsEligible(candidate))
+                continue;
+
+            eligibleCount++;
+            if (firstIndex >= 0)
+                continue;
+
+            firstIndex = index;
+            eligibleItemId = itemId;
+        }
+
+        return firstIndex;
+    }
+
+    private float GetMaximumDesynthLevel()
+        => dataManager.GetExcelSheet<Item>()
+            .Where(x => x.Desynth > 0)
+            .Select(x => (float)x.LevelItem.RowId)
+            .DefaultIfEmpty(1)
+            .Max();
+
+    private static HashSet<uint> GetGearsetItemIds()
+    {
+        var result = new HashSet<uint>();
+        var module = RaptureGearsetModule.Instance();
+        if (module == null)
+            return result;
+
+        foreach (var entry in module->Entries)
+        {
+            foreach (var item in entry.Items)
+            {
+                if (item.ItemId > 0)
+                    result.Add(DesynthPolicyService.NormalizeBaseItemId(item.ItemId));
+            }
+        }
+
+        return result;
+    }
 
     private static unsafe void ClickButtonIfEnabled(AtkComponentButton* button, AtkUnitBase* addon)
     {

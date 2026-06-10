@@ -8,7 +8,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 17;
+    public int Version { get; set; } = 19;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
@@ -46,6 +46,14 @@ public sealed class Configuration : IPluginConfiguration
     public DateTime TreasureDutyRecoveryUtc { get; set; } = DateTime.MinValue;
     public string TreasureDutyRecoveryRole { get; set; } = string.Empty;
     public bool BmraiTreasureFollowCleanupPending { get; set; } = false;
+    public DesynthSource DesynthSource { get; set; } = DesynthSource.ActiveWhitelist;
+    public DesynthInventoryScope DesynthInventoryScope { get; set; } = DesynthInventoryScope.InventoryOnly;
+    public string DesynthActivePreset { get; set; } = "DEFAULT";
+    public bool DesynthSkillUpFilterEnabled { get; set; } = false;
+    public int DesynthSkillUpThreshold { get; set; } = 50;
+    public bool DesynthProtectGearsets { get; set; } = true;
+    public List<string> DesynthCategories { get; set; } = ["InventoryEquipment"];
+    public bool DesynthContextMenuEnabled { get; set; } = true;
 
     public void Save()
         => Plugin.PluginInterface.SavePluginConfig(this);
