@@ -6,7 +6,7 @@ ADS is observer-first. Entering a duty does not automatically grant ADS ownershi
 
 ## Desynthesis
 
-ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; direct runs are available from Main > Tools. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).
+ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; Main > Tools > Treasure And Operations has compact Desynth Controls and Extract Materia launchers. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).
 
 ## Installation
 

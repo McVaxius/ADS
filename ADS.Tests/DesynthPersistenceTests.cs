@@ -34,6 +34,60 @@ public sealed class DesynthPersistenceTests
     }
 
     [Fact]
+    public void PresetClipboardImportAcceptsJsonAndLegacyBase64AndPreservesDescription()
+    {
+        using var sourceDirectory = new TempDirectory();
+        var source = new DesynthPresetStore(sourceDirectory.Path);
+        Assert.True(source.Create("Raid", "legacy description", out _));
+        Assert.True(source.AddItem("Raid", 77, out _));
+
+        using var jsonDirectory = new TempDirectory();
+        var jsonTarget = new DesynthPresetStore(jsonDirectory.Path);
+        Assert.True(jsonTarget.ImportClipboard(source.ExportRaw(), out _));
+        Assert.Equal("legacy description", jsonTarget.Get("Raid").Description);
+        Assert.Equal([(uint)77], jsonTarget.Get("Raid").ItemIds);
+
+        using var base64Directory = new TempDirectory();
+        var base64Target = new DesynthPresetStore(base64Directory.Path);
+        Assert.True(base64Target.ImportClipboard(source.ExportBase64(), out _));
+        base64Target.Reload();
+        Assert.Equal("legacy description", base64Target.Get("Raid").Description);
+        Assert.Equal([(uint)77], base64Target.Get("Raid").ItemIds);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not JSON or base64")]
+    public void InvalidClipboardImportLeavesPresetsUnchanged(string clipboard)
+    {
+        using var temp = new TempDirectory();
+        var store = new DesynthPresetStore(temp.Path);
+        Assert.True(store.Create("Keep", "unchanged", out _));
+        Assert.True(store.AddItem("Keep", 42, out _));
+        var before = store.ExportRaw();
+
+        Assert.False(store.ImportClipboard(clipboard, out var error));
+        Assert.NotEmpty(error);
+        Assert.Equal(before, store.ExportRaw());
+    }
+
+    [Fact]
+    public void PresetItemAddAndRemovePersistAcrossReload()
+    {
+        using var temp = new TempDirectory();
+        var store = new DesynthPresetStore(temp.Path);
+        Assert.True(store.Create("Keep", string.Empty, out _));
+        Assert.True(store.AddItem("Keep", 1001234, out _));
+
+        store.Reload();
+        Assert.Equal([(uint)1234], store.Get("Keep").ItemIds);
+
+        Assert.True(store.RemoveItem("Keep", 1001234, out _));
+        store.Reload();
+        Assert.Empty(store.Get("Keep").ItemIds);
+    }
+
+    [Fact]
     public void LedgerFinalizesPositiveCompletedDutyDeltasAndConsumes()
     {
         using var temp = new TempDirectory();
@@ -67,6 +121,7 @@ public sealed class DesynthPersistenceTests
 
     [Theory]
     [InlineData("utility.start-desynth", true)]
+    [InlineData("utility.start-extract-materia", true)]
     [InlineData("configuration.patch", true)]
     [InlineData("unknown.action", false)]
     [InlineData("", false)]

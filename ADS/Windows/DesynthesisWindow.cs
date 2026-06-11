@@ -9,13 +9,23 @@ namespace ADS.Windows;
 
 public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 {
-    private static readonly DesynthRunMode[] PolicyRunModes =
+    private static readonly DesynthRunMode[] RunModes =
     [
         DesynthRunMode.Configured,
         DesynthRunMode.All,
         DesynthRunMode.Whitelist,
         DesynthRunMode.LastDuty,
         DesynthRunMode.Skillups,
+        DesynthRunMode.InventoryOnly,
+        DesynthRunMode.EverywhereSkipGearsets,
+        DesynthRunMode.Everywhere,
+    ];
+
+    private static readonly (DesynthSource Source, string Label)[] SourceOptions =
+    [
+        (DesynthSource.ActiveWhitelist, "Items in active preset"),
+        (DesynthSource.AllInventory, "All eligible items"),
+        (DesynthSource.LastDutyGains, "Items gained in last completed duty"),
     ];
 
     private static readonly (DesynthInventoryScope Scope, string Label)[] ScopeOptions =
@@ -27,14 +37,12 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private readonly Plugin plugin;
     private string newPresetName = string.Empty;
-    private string newPresetDescription = string.Empty;
     private string renamePresetName = string.Empty;
-    private string itemText = string.Empty;
     private string itemSearch = string.Empty;
     private uint selectedItemId;
     private string selectedItemName = string.Empty;
-    private string importExportText = string.Empty;
     private string status = string.Empty;
+    private int runModeIndex;
     private bool itemsLoaded;
     private readonly List<(uint Id, string Name)> desynthableItems = [];
 
@@ -71,65 +79,59 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawRunControls()
     {
+        ImGui.TextUnformatted("Run");
         ImGui.TextUnformatted($"Status: {plugin.UtilityAutomationService.StatusMessage}");
-        ImGui.TextDisabled($"Mode: {plugin.UtilityAutomationService.ActiveDesynthModeName}; scope {plugin.UtilityAutomationService.ActiveDesynthScopeName}; eligible {plugin.UtilityAutomationService.DesynthEligibleCount}; completed {plugin.UtilityAutomationService.DesynthCompletedCount}");
+        ImGui.TextDisabled($"Mode: {plugin.UtilityAutomationService.ActiveDesynthModeName}");
+        ImGui.TextDisabled($"Scope: {plugin.UtilityAutomationService.ActiveDesynthScopeName}");
+        ImGui.TextDisabled($"Eligible: {plugin.UtilityAutomationService.DesynthEligibleCount}; completed: {plugin.UtilityAutomationService.DesynthCompletedCount}");
 
-        if (ImGui.Button("Run inventory only"))
-            plugin.StartDesynth("inventory-only");
+        var modeLabels = RunModes.Select(ModeDisplayLabel).ToArray();
+        ImGui.SetNextItemWidth(300f);
+        ImGui.Combo("Run mode", ref runModeIndex, modeLabels, modeLabels.Length);
+        if (ImGui.Button("Start"))
+            plugin.StartDesynth(ModeLabel(RunModes[runModeIndex]));
         ImGui.SameLine();
-        if (ImGui.Button("Run everywhere, skip gearsets"))
-            plugin.StartDesynth("everywhere-skip-gearsets");
-        ImGui.SameLine();
-        if (ImGui.Button("Run everywhere"))
-            plugin.StartDesynth("everywhere");
-        ImGui.SameLine();
-        if (ImGui.Button("Stop utility"))
+        ImGui.BeginDisabled(!plugin.UtilityAutomationService.IsDesynthRunning);
+        if (ImGui.Button("Stop Desynthesis"))
             plugin.CancelUtility();
-
-        foreach (var mode in PolicyRunModes)
-        {
-            if (ImGui.Button($"Run {ModeLabel(mode)}"))
-                plugin.StartDesynth(ModeLabel(mode));
-            if (mode != DesynthRunMode.Skillups)
-                ImGui.SameLine();
-        }
+        ImGui.EndDisabled();
     }
 
     private void DrawPolicy()
     {
-        ImGui.TextUnformatted("Configured policy");
-        var sources = Enum.GetNames<DesynthSource>();
-        var sourceIndex = Array.IndexOf(sources, plugin.Configuration.DesynthSource.ToString());
-        if (ImGui.Combo("Run filter source", ref sourceIndex, sources, sources.Length))
+        ImGui.TextUnformatted("Policy");
+        var sourceIndex = Math.Max(0, Array.FindIndex(SourceOptions, x => x.Source == plugin.Configuration.DesynthSource));
+        var sourceLabels = SourceOptions.Select(x => x.Label).ToArray();
+        if (ImGui.Combo("Choose items from", ref sourceIndex, sourceLabels, sourceLabels.Length))
         {
-            plugin.Configuration.DesynthSource = Enum.Parse<DesynthSource>(sources[sourceIndex]);
+            plugin.Configuration.DesynthSource = SourceOptions[sourceIndex].Source;
             plugin.SaveConfiguration();
         }
 
         var scopeIndex = Math.Max(0, Array.FindIndex(ScopeOptions, x => x.Scope == plugin.Configuration.DesynthInventoryScope));
         var scopeLabels = ScopeOptions.Select(x => x.Label).ToArray();
-        if (ImGui.Combo("Source scope", ref scopeIndex, scopeLabels, scopeLabels.Length))
+        if (ImGui.Combo("Search these inventories", ref scopeIndex, scopeLabels, scopeLabels.Length))
         {
             DesynthPolicyService.ApplyScopeToConfiguration(plugin.Configuration, ScopeOptions[scopeIndex].Scope);
             plugin.SaveConfiguration();
         }
 
         var skillups = plugin.Configuration.DesynthSkillUpFilterEnabled;
-        if (ImGui.Checkbox("Skill-up filter", ref skillups))
+        if (ImGui.Checkbox("Only desynthesize items that can grant skill", ref skillups))
         {
             plugin.Configuration.DesynthSkillUpFilterEnabled = skillups;
             plugin.SaveConfiguration();
         }
 
         var threshold = plugin.Configuration.DesynthSkillUpThreshold;
-        if (ImGui.InputInt("Skill-up threshold", ref threshold))
+        if (ImGui.InputInt("Skill-up item-level allowance", ref threshold))
         {
             plugin.Configuration.DesynthSkillUpThreshold = Math.Clamp(threshold, 0, 1000);
             plugin.SaveConfiguration();
         }
 
         var contextMenu = plugin.Configuration.DesynthContextMenuEnabled;
-        if (ImGui.Checkbox("Inventory context-menu preset action", ref contextMenu))
+        if (ImGui.Checkbox("Show preset action in inventory context menu", ref contextMenu))
         {
             plugin.Configuration.DesynthContextMenuEnabled = contextMenu;
             plugin.SaveConfiguration();
@@ -138,19 +140,23 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawPresets()
     {
-        ImGui.TextUnformatted("Local presets");
+        ImGui.TextUnformatted("Presets");
         var presetNames = plugin.DesynthPresetStore.Presets.Select(x => x.Name).ToArray();
         var presetIndex = Math.Max(0, Array.FindIndex(presetNames, x => string.Equals(x, plugin.Configuration.DesynthActivePreset, StringComparison.OrdinalIgnoreCase)));
         if (ImGui.Combo("Active preset", ref presetIndex, presetNames, presetNames.Length))
             SetStatus(plugin.SelectDesynthPreset(presetNames[presetIndex], out var error), error);
 
         var active = plugin.DesynthPresetStore.Get(plugin.Configuration.DesynthActivePreset);
-        ImGui.TextDisabled($"{active.ItemIds.Count} item(s): {string.Join(", ", active.ItemIds.Take(20).Select(FormatItem))}{(active.ItemIds.Count > 20 ? "..." : string.Empty)}");
+        ImGui.TextDisabled($"{active.ItemIds.Count} item(s) in {active.Name}");
 
         ImGui.InputText("New preset", ref newPresetName, 80);
-        ImGui.InputText("Description", ref newPresetDescription, 200);
         if (ImGui.Button("Create preset"))
-            SetStatus(plugin.DesynthPresetStore.Create(newPresetName, newPresetDescription, out var error), error);
+        {
+            var success = plugin.DesynthPresetStore.Create(newPresetName, string.Empty, out var error);
+            SetStatus(success, error);
+            if (success)
+                newPresetName = string.Empty;
+        }
 
         ImGui.InputText("Rename active to", ref renamePresetName, 80);
         if (ImGui.Button("Rename active"))
@@ -163,33 +169,36 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         if (ImGui.Button("Delete active"))
             SetStatus(plugin.DeleteDesynthPreset(active.Name, out var error), error);
 
-        if (DrawItemSearchDropdown("Desynth item", ref itemSearch, desynthableItems, ref selectedItemId, ref selectedItemName))
-            itemText = selectedItemId.ToString();
+        DrawItemSearchDropdown("Desynth item", ref itemSearch, desynthableItems, ref selectedItemId, ref selectedItemName);
+        ImGui.BeginDisabled(selectedItemId == 0);
+        if (ImGui.Button("Add Selected Item"))
+        {
+            var success = plugin.TryMutateActiveDesynthPresetItem(selectedItemId.ToString(), true, out var error);
+            SetStatus(success, error);
+            if (success)
+            {
+                selectedItemId = 0;
+                selectedItemName = string.Empty;
+                itemSearch = string.Empty;
+            }
+        }
+        ImGui.EndDisabled();
 
-        ImGui.InputText("Item ID or exact name", ref itemText, 160);
-        if (ImGui.Button("Add item"))
-            SetStatus(plugin.TryMutateActiveDesynthPresetItem(GetSelectedItemValue(), true, out var error), error);
-        ImGui.SameLine();
-        if (ImGui.Button("Remove item"))
-            SetStatus(plugin.TryMutateActiveDesynthPresetItem(GetSelectedItemValue(), false, out var error), error);
+        DrawActivePresetItems(active);
 
-        ImGui.InputTextMultiline("JSON / base64", ref importExportText, 262144, new Vector2(-1f, 130f));
-        if (ImGui.Button("Export JSON"))
-            importExportText = plugin.DesynthPresetStore.ExportRaw();
+        if (ImGui.Button("Copy Presets"))
+        {
+            ImGui.SetClipboardText(plugin.DesynthPresetStore.ExportRaw());
+            status = "Copied formatted preset JSON to clipboard.";
+        }
         ImGui.SameLine();
-        if (ImGui.Button("Export base64"))
-            importExportText = plugin.DesynthPresetStore.ExportBase64();
-        ImGui.SameLine();
-        if (ImGui.Button("Import JSON"))
-            SetStatus(plugin.ImportDesynthPresetsRaw(importExportText, out var rawError), rawError);
-        ImGui.SameLine();
-        if (ImGui.Button("Import base64"))
-            SetStatus(plugin.ImportDesynthPresetsBase64(importExportText, out var base64Error), base64Error);
+        if (ImGui.Button("Import Presets"))
+            SetStatus(plugin.ImportDesynthPresetsClipboard(ImGui.GetClipboardText() ?? string.Empty, out var error), error);
     }
 
     private void DrawLedger()
     {
-        ImGui.TextUnformatted("Last-duty ledger");
+        ImGui.TextUnformatted("Last-Duty Ledger");
         ImGui.TextWrapped(plugin.DesynthDutyLedgerStore.LastStatus);
         if (ImGui.Button("Clear ledger"))
             plugin.DesynthDutyLedgerStore.Clear();
@@ -201,13 +210,61 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
     private static string ModeLabel(DesynthRunMode mode)
         => DesynthPolicyService.GetModeName(mode);
 
-    private string GetSelectedItemValue()
-        => selectedItemId > 0 ? selectedItemId.ToString() : itemText;
+    private static string ModeDisplayLabel(DesynthRunMode mode)
+        => mode switch
+        {
+            DesynthRunMode.Configured => "Configured policy",
+            DesynthRunMode.All => "All eligible items",
+            DesynthRunMode.Whitelist => "Active preset items",
+            DesynthRunMode.LastDuty => "Last-duty gains",
+            DesynthRunMode.Skillups => "Skill-up items",
+            DesynthRunMode.InventoryOnly => "Inventory only",
+            DesynthRunMode.EverywhereSkipGearsets => "Inventory + armoury, skip gearsets",
+            DesynthRunMode.Everywhere => "Inventory + armoury, include gearsets",
+            _ => ModeLabel(mode),
+        };
 
-    private string FormatItem(uint itemId)
+    private string GetItemName(uint itemId)
     {
         var item = desynthableItems.FirstOrDefault(x => x.Id == itemId);
-        return string.IsNullOrEmpty(item.Name) ? itemId.ToString() : $"{item.Name} ({itemId})";
+        return string.IsNullOrEmpty(item.Name) ? "Unknown item" : item.Name;
+    }
+
+    private void DrawActivePresetItems(DesynthPreset active)
+    {
+        ImGui.TextUnformatted("Active preset contents");
+        if (active.ItemIds.Count == 0)
+        {
+            ImGui.TextDisabled("No items in active preset.");
+            return;
+        }
+
+        if (!ImGui.BeginTable(
+                "ADSDesynthPresetItems",
+                3,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
+                new Vector2(-1f, 190f)))
+        {
+            return;
+        }
+
+        ImGui.TableSetupColumn("Item");
+        ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 80f);
+        ImGui.TableHeadersRow();
+        foreach (var itemId in active.ItemIds.ToArray())
+        {
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.TextUnformatted(GetItemName(itemId));
+            ImGui.TableSetColumnIndex(1);
+            ImGui.TextUnformatted(itemId.ToString());
+            ImGui.TableSetColumnIndex(2);
+            if (ImGui.SmallButton($"Remove##ADSDesynthPresetRemove{itemId}"))
+                SetStatus(plugin.DesynthPresetStore.RemoveItem(active.Name, itemId, out var error), error);
+        }
+
+        ImGui.EndTable();
     }
 
     private void EnsureDesynthItemsLoaded()

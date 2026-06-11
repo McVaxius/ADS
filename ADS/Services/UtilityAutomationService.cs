@@ -244,6 +244,12 @@ public sealed unsafe class UtilityAutomationService
     private bool materializeCategoryArmed;
     private bool materializeAttemptPending;
     private bool extractAttemptedAny;
+    private bool extractMateriaDone;
+    private bool? extractMateriaSucceeded;
+    private string extractMateriaStatusMessage = "No materia extraction has been started.";
+    private string extractMateriaSuccessMessage = string.Empty;
+    private string extractMateriaFailureMessage = string.Empty;
+    private DateTime extractMateriaCompletedUtc = DateTime.MinValue;
     private int desynthCategoryIndex;
     private DateTime desynthWindowSeenUtc = DateTime.MinValue;
     private DateTime desynthCategorySeenUtc = DateTime.MinValue;
@@ -328,6 +334,13 @@ public sealed unsafe class UtilityAutomationService
     public bool IsDesynthRunning => activeTask == UtilityTask.DesynthFromInventory;
     public string LastDesynthSuccessMessage { get; private set; } = string.Empty;
     public string LastDesynthFailureMessage { get; private set; } = string.Empty;
+    public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
+    public bool ExtractMateriaDone => extractMateriaDone;
+    public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
+    public string ExtractMateriaStatusMessage => IsExtractMateriaRunning ? StatusMessage : extractMateriaStatusMessage;
+    public string ExtractMateriaSuccessMessage => extractMateriaSuccessMessage;
+    public string ExtractMateriaFailureMessage => extractMateriaFailureMessage;
+    public DateTime ExtractMateriaCompletedUtc => extractMateriaCompletedUtc;
 
     public bool StartSelfRepair()
     {
@@ -500,6 +513,12 @@ public sealed unsafe class UtilityAutomationService
         if (!TryStartTask(UtilityTask.ExtractMateria, "Starting materia extraction."))
             return false;
 
+        extractMateriaDone = false;
+        extractMateriaSucceeded = null;
+        extractMateriaStatusMessage = StatusMessage;
+        extractMateriaSuccessMessage = string.Empty;
+        extractMateriaFailureMessage = string.Empty;
+        extractMateriaCompletedUtc = DateTime.MinValue;
         log.Information("[ADS][Utility] Starting materia extraction flow.");
         return true;
     }
@@ -610,6 +629,8 @@ public sealed unsafe class UtilityAutomationService
         var cancelledTask = activeTask;
         var message = $"Cancelled {GetTaskLabel(activeTask)}: {reason}";
         LastFailureMessage = message;
+        if (cancelledTask == UtilityTask.ExtractMateria)
+            RecordExtractMateriaCompletion(false, message);
         if (cancelledTask == UtilityTask.DesynthFromInventory)
             LastDesynthFailureMessage = message;
         LastCompletionUtc = DateTime.UtcNow;
@@ -2134,6 +2155,8 @@ public sealed unsafe class UtilityAutomationService
         StopMovementIfNpcRepair();
         log.Information($"[ADS][Utility] {message}");
         LastSuccessMessage = message;
+        if (completedTask == UtilityTask.ExtractMateria)
+            RecordExtractMateriaCompletion(true, message);
         if (completedTask == UtilityTask.DesynthFromInventory)
         {
             LastDesynthSuccessMessage = message;
@@ -2150,11 +2173,23 @@ public sealed unsafe class UtilityAutomationService
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] {message}");
         LastFailureMessage = message;
+        if (failedTask == UtilityTask.ExtractMateria)
+            RecordExtractMateriaCompletion(false, message);
         if (failedTask == UtilityTask.DesynthFromInventory)
             LastDesynthFailureMessage = message;
         LastCompletionUtc = DateTime.UtcNow;
         ResetState();
         StatusMessage = message;
+    }
+
+    private void RecordExtractMateriaCompletion(bool succeeded, string message)
+    {
+        extractMateriaDone = true;
+        extractMateriaSucceeded = succeeded;
+        extractMateriaStatusMessage = message;
+        extractMateriaSuccessMessage = succeeded ? message : string.Empty;
+        extractMateriaFailureMessage = succeeded ? string.Empty : message;
+        extractMateriaCompletedUtc = DateTime.UtcNow;
     }
 
     private void ResetState()

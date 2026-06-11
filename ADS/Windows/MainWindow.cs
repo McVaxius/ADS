@@ -207,17 +207,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Loot Controls", plugin.ToggleLootUi),
             ("Higher / Lower", plugin.ToggleHigherLowerUi),
             ("Treasure Routes", plugin.OpenTreasureRouteEditorUi),
-            ("Reflection", plugin.ToggleReflectionUi));
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Desynthesis");
-        DrawLauncherGrid(
-            "ADSDesynthesisTools",
+            ("Reflection", plugin.ToggleReflectionUi),
             ("Desynth Controls", plugin.OpenDesynthConfigUi),
-            ("Inventory Only", () => plugin.StartDesynth("inventory-only")),
-            ("Everywhere, Skip Gearsets", () => plugin.StartDesynth("everywhere-skip-gearsets")),
-            ("Everywhere", () => plugin.StartDesynth("everywhere")),
-            ("Stop Utility", () => plugin.CancelUtility()));
+            ("Extract Materia", () => plugin.StartExtractMateria()));
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Diagnostics");

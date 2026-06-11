@@ -2,6 +2,8 @@
 
 Open controls with `/ads desynth`.
 
+The window separates run, policy, preset, and last-duty ledger controls. Choose one run mode, select **Start**, or select **Stop Desynthesis** while a desynthesis run is active.
+
 ## Run Modes
 
 - `configured`: configured run filter, source scope, skill-up filter, and active preset.
@@ -31,9 +33,11 @@ Presets live only in local plugin config as `desynth-presets.json`, schema versi
 
 - `DEFAULT` cannot be renamed or deleted.
 - IDs normalize to distinct base item IDs.
-- The Desynthesis window has Lumina-backed search for desynthable item add/remove actions.
-- Raw JSON and UTF-8 JSON base64 import/export are supported.
-- Invalid imports and duplicate names leave current data unchanged.
+- The Desynthesis window has Lumina-backed search, **Add Selected Item**, and scrollable active-preset rows with per-item **Remove** actions.
+- **Copy Presets** writes formatted JSON to the clipboard.
+- **Import Presets** reads the clipboard, tries JSON first, then legacy UTF-8 JSON base64.
+- Empty/invalid clipboard imports and duplicate names leave current data unchanged.
+- The persisted `Description` field remains accepted and preserved for legacy preset compatibility, but is no longer edited in the window.
 - Inventory context menus add/remove valid desynthable items from active preset.
 
 ## Last-Duty Ledger
@@ -48,6 +52,6 @@ ADS does not begin new tracking after mid-duty reload. Persisted active tracking
 
 1. Run `inventory-only`, `everywhere-skip-gearsets`, `everywhere`, `all`, `whitelist`, `last-duty`, and `skillups`; verify expected items.
 2. Verify gearset items are skipped only by `InventoryAndArmourySkipGearsets`, and item `10146` is always skipped.
-3. Verify context-menu add/remove persists immediately.
-4. Verify invalid raw/base64 import leaves presets unchanged.
+3. Verify selected-item add, per-row remove, and context-menu add/remove update immediately and survive reload.
+4. Verify JSON/base64 clipboard import, legacy descriptions, and invalid/empty import atomicity.
 5. Complete and exit duty with `LastDutyGains`; verify gains and consumption.

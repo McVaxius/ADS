@@ -6,7 +6,7 @@ public static class AdsIpcValidation
     {
         "duty.start-outside", "duty.start-inside", "duty.resume-inside", "duty.leave",
         "window.open-loot", "window.toggle-loot", "window.open-desynth",
-        "utility.start-repair", "utility.start-desynth", "utility.cancel",
+        "utility.start-repair", "utility.start-extract-materia", "utility.start-desynth", "utility.cancel",
         "preset.create", "preset.rename", "preset.delete", "preset.select", "preset.add-item",
         "preset.remove-item", "preset.import-raw", "preset.import-base64", "preset.export-raw",
         "preset.export-base64", "ledger.clear", "configuration.patch",

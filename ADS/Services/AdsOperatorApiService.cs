@@ -24,7 +24,7 @@ public sealed class AdsOperatorApiService
             {
                 "duty.start-outside", "duty.start-inside", "duty.resume-inside", "duty.leave",
                 "window.open-loot", "window.toggle-loot", "window.open-desynth",
-                "utility.start-repair", "utility.start-desynth", "utility.cancel",
+                "utility.start-repair", "utility.start-extract-materia", "utility.start-desynth", "utility.cancel",
                 "preset.create", "preset.rename", "preset.delete", "preset.select", "preset.add-item",
                 "preset.remove-item", "preset.import-raw", "preset.import-base64", "preset.export-raw",
                 "preset.export-base64", "ledger.clear", "configuration.patch",
@@ -66,6 +66,7 @@ public sealed class AdsOperatorApiService
                 "window.toggle-loot" => Result(action, Open(plugin.ToggleLootUi)),
                 "window.open-desynth" => Result(action, Open(plugin.OpenDesynthConfigUi)),
                 "utility.start-repair" => Result(action, plugin.StartRepair(GetString(payload, "mode"))),
+                "utility.start-extract-materia" => Result(action, plugin.StartExtractMateria()),
                 "utility.start-desynth" => Result(action, plugin.StartDesynth(GetString(payload, "mode"))),
                 "utility.cancel" => Result(action, plugin.CancelUtility()),
                 "preset.create" => PresetResult(action, plugin.DesynthPresetStore.Create(GetString(payload, "name"), GetString(payload, "description"), out var createError), createError),

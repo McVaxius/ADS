@@ -134,6 +134,32 @@ public sealed class DesynthPresetStore
         }
     }
 
+    public bool ImportClipboard(string value, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            error = "Clipboard was empty; presets were not changed.";
+            LastStatus = error;
+            return false;
+        }
+
+        if (ImportRaw(value, out var rawError))
+        {
+            error = string.Empty;
+            return true;
+        }
+
+        if (ImportBase64(value, out var base64Error))
+        {
+            error = string.Empty;
+            return true;
+        }
+
+        error = $"Clipboard preset import failed; expected JSON or legacy base64 JSON. JSON error: {rawError} Base64 error: {base64Error}";
+        LastStatus = error;
+        return false;
+    }
+
     public void Reload()
     {
         try

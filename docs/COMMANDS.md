@@ -74,6 +74,8 @@ Utility automation cannot start while ADS owns active duty execution or while in
 
 Running `/ads repair` without a mode prints valid modes.
 
+Main > Tools > Treasure And Operations also exposes compact **Desynth Controls** and **Extract Materia** launchers. **Extract Materia** starts the same no-configuration automation as `/ads extractmateria`.
+
 ## Loot
 
 | Command | Action |

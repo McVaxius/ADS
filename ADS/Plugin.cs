@@ -214,6 +214,7 @@ public sealed class Plugin : IDalamudPlugin
                 return true;
             },
             StartRepair,
+            StartExtractMateria,
             StartDesynth,
             CancelUtility,
             OpenDesynthConfigUiIpc,
@@ -223,7 +224,8 @@ public sealed class Plugin : IDalamudPlugin
             Invoke,
             GetConfigurationJson,
             PatchConfigurationJson,
-            GetDesynthStatusJson);
+            GetDesynthStatusJson,
+            GetExtractMateriaStatusJson);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -908,6 +910,14 @@ public sealed class Plugin : IDalamudPlugin
         return true;
     }
 
+    public bool ImportDesynthPresetsClipboard(string value, out string error)
+    {
+        if (!DesynthPresetStore.ImportClipboard(value, out error))
+            return false;
+        NormalizeActiveDesynthPreset();
+        return true;
+    }
+
     public string GetCapabilitiesJson()
         => AdsOperatorApiService.GetCapabilitiesJson();
 
@@ -934,6 +944,20 @@ public sealed class Plugin : IDalamudPlugin
             status = UtilityAutomationService.StatusMessage,
             success = UtilityAutomationService.LastDesynthSuccessMessage,
             failure = UtilityAutomationService.LastDesynthFailureMessage,
+        });
+
+    public string GetExtractMateriaStatusJson()
+        => JsonSerializer.Serialize(new
+        {
+            running = UtilityAutomationService.IsExtractMateriaRunning,
+            done = UtilityAutomationService.ExtractMateriaDone,
+            succeeded = UtilityAutomationService.ExtractMateriaSucceeded,
+            status = UtilityAutomationService.ExtractMateriaStatusMessage,
+            success = UtilityAutomationService.ExtractMateriaSuccessMessage,
+            failure = UtilityAutomationService.ExtractMateriaFailureMessage,
+            completedAtUtc = UtilityAutomationService.ExtractMateriaCompletedUtc == DateTime.MinValue
+                ? null
+                : UtilityAutomationService.ExtractMateriaCompletedUtc.ToString("O"),
         });
 
     public bool TryResolveDesynthItemId(string value, out uint itemId)

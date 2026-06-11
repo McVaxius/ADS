@@ -4,7 +4,7 @@ This guide covers normal operation and the current Main, Settings, and compact C
 
 ## Desynthesis
 
-Use `/ads desynth` for run filter, source scope, preset, skill-up, context-menu, and ledger controls. Source scopes are inventory only, inventory plus armoury while skipping gearsets, and inventory plus armoury including gearsets.
+Use `/ads desynth` for the run-mode selector, configured policy, preset contents, skill-up, context-menu, clipboard transfer, and ledger controls. Source scopes are inventory only, inventory plus armoury while skipping gearsets, and inventory plus armoury including gearsets.
 
 Run modes: `configured`, `all`, `whitelist`, `last-duty`, `skillups`, `inventory-only`, `everywhere-skip-gearsets`, and `everywhere`.
 
@@ -80,8 +80,7 @@ Maturity colors:
 Tools groups every Main launcher:
 
 - **Authoring:** Object Explorer, Object Rules, Dialog Rules, Frontier Labels.
-- **Treasure And Operations:** Loot Controls, Higher / Lower, Treasure Routes, Reflection.
-- **Desynthesis:** Desynth Controls, direct inventory-only run, direct everywhere run with gearset protection, direct everywhere run, Stop Utility.
+- **Treasure And Operations:** Loot Controls, Higher / Lower, Treasure Routes, Reflection, Desynth Controls, Extract Materia.
 - **Diagnostics:** Ghost Inspector, Server Events, VFX Explorer.
 - **Windows And Settings:** Settings, compact Controls.
 - **Data Update:** remote JSON cache update and per-file status.
