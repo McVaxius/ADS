@@ -60,6 +60,7 @@ public sealed class ExecutionService
     private const float ManualDestinationNoProgressDistance = 0.5f;
     private const float InteractableRetryIdentityPositionBucketSize = 5.0f;
     private static readonly TimeSpan InteractAttemptCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan PreInteractMovementSettleDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
     private static readonly TimeSpan RequiredInteractionRetryDelay = TimeSpan.FromSeconds(2.5);
     private static readonly TimeSpan ForceMarchFollowThroughDuration = TimeSpan.FromSeconds(8.0);
@@ -129,6 +130,7 @@ public sealed class ExecutionService
     private DateTime committedForceMarchManualDestinationUntilUtc;
     private string? interactArrivalWaitKey;
     private DateTime interactArrivalWaitUntilUtc;
+    private bool interactArrivalWaitIncludesMovementSettle;
     private string? treasureCofferRouteKey;
     private DateTime treasureCofferRouteStartedUtc;
     private DateTime treasureCofferLastProgressUtc;
@@ -806,6 +808,16 @@ public sealed class ExecutionService
             SetPhase(
                 ExecutionPhase.AttemptingInteractableObjective,
                 $"{prefix} {BuildSelectYesnoHoldStatus("SelectYesno is visible; ADS is holding movement while dialog automation resolves the prompt.")}");
+            return;
+        }
+
+        var settlingInteractable = ResolveCommittedInteractable(context, observation);
+        if (settlingInteractable is not null && IsInteractMovementSettleActive(settlingInteractable))
+        {
+            TryAdvanceInteractableObjective(
+                context,
+                settlingInteractable,
+                $"{prefix} Retaining the committed target during the pre-interact movement settle.");
             return;
         }
 
@@ -3144,16 +3156,30 @@ public sealed class ExecutionService
             return;
         }
 
+        var movementWasActive =
+            navigationActive
+            || mapFlagNavigationActive
+            || movementTargetGameObjectId != 0;
         StopMovementAssists();
-        if (TryHoldConfiguredArrivalWait(
+        if (TryHoldInteractArrivalWait(
                 observedInteractable,
                 waitBeforeInteractSeconds,
+                movementWasActive,
                 targetHorizontalDistance,
                 targetDistance,
                 targetVerticalDelta,
                 prefix,
                 now))
         {
+            return;
+        }
+
+        if (context.IsInteractionOccupied)
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Interaction is already active; ADS is retaining {observedInteractable.Name} and will not send another direct interact until it finishes.");
             return;
         }
 
@@ -3875,6 +3901,15 @@ public sealed class ExecutionService
             return true;
         }
 
+        if (context.IsInteractionOccupied)
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Interaction is active for {pendingInteractable.Name}; ADS is retaining the pending target without retrying or replanning.");
+            return true;
+        }
+
         var isTreasureFollowerLootFollowThrough = pendingTreasureFollowerLootFollowThrough
             && pendingInteractable.Classification == InteractableClass.TreasureCoffer
             && IsTreasureFollowerLootSackName(pendingInteractable.Name);
@@ -4343,38 +4378,60 @@ public sealed class ExecutionService
             doorPosition.Z + (flatDirection.Z * TreasureDoorFollowThroughDistance));
     }
 
-    private bool TryHoldConfiguredArrivalWait(
+    private bool TryHoldInteractArrivalWait(
         ObservedInteractable observedInteractable,
         float waitBeforeInteractSeconds,
+        bool movementWasActive,
         float targetHorizontalDistance,
         float targetDistance,
         float targetVerticalDelta,
         string prefix,
         DateTime now)
     {
-        if (waitBeforeInteractSeconds <= 0f)
-            return false;
-
         if (!string.Equals(interactArrivalWaitKey, observedInteractable.Key, StringComparison.Ordinal))
         {
+            var configuredWait = waitBeforeInteractSeconds > 0f
+                ? TimeSpan.FromSeconds(waitBeforeInteractSeconds)
+                : TimeSpan.Zero;
+            var movementSettle = movementWasActive
+                ? PreInteractMovementSettleDelay
+                : TimeSpan.Zero;
+            var arrivalWait = configuredWait > movementSettle
+                ? configuredWait
+                : movementSettle;
+            if (arrivalWait <= TimeSpan.Zero)
+                return false;
+
             interactArrivalWaitKey = observedInteractable.Key;
-            interactArrivalWaitUntilUtc = now + TimeSpan.FromSeconds(waitBeforeInteractSeconds);
+            interactArrivalWaitUntilUtc = now + arrivalWait;
+            interactArrivalWaitIncludesMovementSettle = movementWasActive;
         }
 
         if (now >= interactArrivalWaitUntilUtc)
             return false;
 
         StopMovementAssists();
+        var waitReason = interactArrivalWaitIncludesMovementSettle
+            ? waitBeforeInteractSeconds > PreInteractMovementSettleDelay.TotalSeconds
+                ? "pre-interact movement settle and configured wait"
+                : "pre-interact movement settle"
+            : "configured pre-interact wait";
         SetPhase(
             ExecutionPhase.AttemptingInteractableObjective,
-            $"{prefix} Holding configured pre-interact wait on {observedInteractable.Name} for another {(interactArrivalWaitUntilUtc - now).TotalSeconds:0.0}s after arriving in range (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).");
+            $"{prefix} Holding {waitReason} on {observedInteractable.Name} for another {(interactArrivalWaitUntilUtc - now).TotalSeconds:0.0}s after arriving in range (XZ {targetHorizontalDistance:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).");
         return true;
     }
+
+    private bool IsInteractMovementSettleActive(ObservedInteractable interactable)
+        => interactArrivalWaitIncludesMovementSettle
+           && string.Equals(interactArrivalWaitKey, interactable.Key, StringComparison.Ordinal)
+           && DateTime.UtcNow < interactArrivalWaitUntilUtc;
 
     private void ResetInteractArrivalWait()
     {
         interactArrivalWaitKey = null;
         interactArrivalWaitUntilUtc = DateTime.MinValue;
+        interactArrivalWaitIncludesMovementSettle = false;
     }
 
     private string BuildSelectYesnoHoldStatus(string fallback)

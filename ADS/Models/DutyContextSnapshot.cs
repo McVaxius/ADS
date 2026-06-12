@@ -11,6 +11,8 @@ public sealed class DutyContextSnapshot
     public required bool Jumping { get; init; }
     public required bool Jumping61 { get; init; }
     public required bool Occupied33 { get; init; }
+    public required bool OccupiedInQuestEvent { get; init; }
+    public required bool OccupiedInEvent { get; init; }
     public required bool OccupiedInCutSceneEvent { get; init; }
     public required bool WatchingCutscene { get; init; }
     public required bool InCombat { get; init; }
@@ -25,6 +27,9 @@ public sealed class DutyContextSnapshot
 
     public bool IsUnsafeTransition
         => BetweenAreas || BetweenAreas51;
+
+    public bool IsInteractionOccupied
+        => OccupiedInQuestEvent || OccupiedInEvent;
 
     public bool IsTreasureRouteTransitHold
         => BetweenAreas

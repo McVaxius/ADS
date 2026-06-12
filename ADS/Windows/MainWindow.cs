@@ -656,6 +656,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             Jumping = false,
             Jumping61 = false,
             Occupied33 = false,
+            OccupiedInQuestEvent = false,
+            OccupiedInEvent = false,
             OccupiedInCutSceneEvent = false,
             WatchingCutscene = false,
             InCombat = false,
