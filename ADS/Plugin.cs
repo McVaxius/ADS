@@ -1401,6 +1401,45 @@ public sealed class Plugin : IDalamudPlugin
         ApplyTreasureDungeonRole(inference, $"inference for {reason}", resetFollowerProgressForOwnership);
     }
 
+    private void UpdateDutyRoleSegmentation()
+    {
+        var context = DutyContextService.Current;
+        var supportedTreasureTerritory = TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId);
+        if (TreasureDungeonRoleInference.IsStableRegularDuty(context, supportedTreasureTerritory))
+        {
+            if (ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular)
+            {
+                var inferred = TreasureDungeonRoleDetector.Infer();
+                var regular = TreasureDungeonRoleInference.SegmentForDuty(inferred, context, supportedTreasureTerritory);
+                ApplyTreasureDungeonRole(regular, "stable regular duty classification");
+            }
+
+            if (BossModMultiboxFollowService.EnterRegularDuty($"entering regular duty '{context.CurrentDuty!.EnglishName}'"))
+            {
+                TreasurePortalOpenerTracker.ClearPendingOpener("regular duty entry");
+                TreasurePortalOpenerRelayService.Clear("regular duty entry");
+            }
+
+            return;
+        }
+
+        var stableNonRegularContext = context.IsLoggedIn
+                                      && !context.IsUnsafeTransition
+                                      && (!context.InInstancedDuty || IsSupportedTreasureDutyContext(context));
+        if (!stableNonRegularContext
+            || (!BossModMultiboxFollowService.RegularDutyActive
+                && ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular))
+        {
+            return;
+        }
+
+        BossModMultiboxFollowService.LeaveRegularDuty(
+            context.InInstancedDuty ? "entering treasure duty" : "leaving duty");
+        TreasurePortalOpenerTracker.BeginEntryCycle("regular duty exit");
+        InferAndApplyTreasureDungeonRole(
+            context.InInstancedDuty ? "stable treasure duty after regular duty" : "stable outside state after regular duty");
+    }
+
     private void EnsureTreasureDungeonRoleInferredForOwnedDuty()
     {
         var context = DutyContextService.Current;
@@ -1669,6 +1708,7 @@ public sealed class Plugin : IDalamudPlugin
                 CleanupTreasureDutyRuntimeOutsideDuty();
                 TryRecoverTreasureDutyOwnership();
                 EnsureTreasureDungeonRoleInferredForOwnedDuty();
+                UpdateDutyRoleSegmentation();
                 WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
             });
 
@@ -1720,20 +1760,24 @@ public sealed class Plugin : IDalamudPlugin
             var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
             Measure("treasure-witness", () =>
             {
-                DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
-                var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
-                if (directWitnessOpener is not null)
-                    BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(
-                        directWitnessOpener,
-                        DutyContextService.Current,
-                        "interaction witness");
-                var followOpener = TreasurePortalOpenerTracker.CurrentOrRecentDirect;
-                if (followOpener is not null)
+                TreasurePortalOpenerSnapshot? followOpener = null;
+                if (ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular)
                 {
-                    BossModMultiboxFollowService.ReapplyDirectTreasurePortalOpenerIfNeeded(
-                        followOpener,
-                        DutyContextService.Current,
-                        "stable follower duty truth");
+                    DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
+                    var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
+                    if (directWitnessOpener is not null)
+                        BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(
+                            directWitnessOpener,
+                            DutyContextService.Current,
+                            "interaction witness");
+                    followOpener = TreasurePortalOpenerTracker.CurrentOrRecentDirect;
+                    if (followOpener is not null)
+                    {
+                        BossModMultiboxFollowService.ReapplyDirectTreasurePortalOpenerIfNeeded(
+                            followOpener,
+                            DutyContextService.Current,
+                            "stable follower duty truth");
+                    }
                 }
 
                 BossModMultiboxFollowService.Update(
@@ -1925,7 +1969,13 @@ public sealed class Plugin : IDalamudPlugin
     private void OnChatMessage(IHandleableChatMessage message)
     {
         var text = message.Message.TextValue;
-        if (TreasurePortalOpenerTracker.HandleChatMessage(text)
+        var context = DutyContextService.Current;
+        var stableRegularDuty = TreasureDungeonRoleInference.IsStableRegularDuty(
+            context,
+            TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
+        if (!stableRegularDuty
+            && ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular
+            && TreasurePortalOpenerTracker.HandleChatMessage(text)
             && TreasurePortalOpenerTracker.Current is { } portalChatOpener)
         {
             BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(
