@@ -119,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
     public HigherLowerAutomationService HigherLowerAutomationService { get; }
     public TreasureDoorStrafeInputService TreasureDoorStrafeInputService { get; }
     public DebugStrafeService DebugStrafeService { get; }
+    public QstCompanionWarningService QstCompanionWarningService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -187,6 +188,16 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         DebugStrafeService = new DebugStrafeService(KeyState, Log);
+        QstCompanionWarningService = new QstCompanionWarningService(
+            () => PluginInterface.InstalledPlugins.Any(plugin =>
+                plugin.IsLoaded
+                && string.Equals(
+                    plugin.InternalName,
+                    QstCompanionWarningService.InternalName,
+                    StringComparison.OrdinalIgnoreCase)),
+            message => ToastGui.ShowNormal(message),
+            command => CommandManager.ProcessCommand(command),
+            message => Log.Warning(message));
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         DesynthPolicyService = new DesynthPolicyService();
         DesynthPresetStore = new DesynthPresetStore(configDirectory, Log);
@@ -265,6 +276,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         Framework.Update += OnFrameworkUpdate;
+        ClientState.TerritoryChanged += OnTerritoryChanged;
         DutyState.DutyCompleted += OnDutyCompleted;
         ChatGui.ChatMessage += OnChatMessage;
 
@@ -287,6 +299,7 @@ public sealed class Plugin : IDalamudPlugin
         DebugStrafeService.Release("plugin dispose");
         ExecutionService.ReleaseHeldMovementKeys("plugin dispose");
         Framework.Update -= OnFrameworkUpdate;
+        ClientState.TerritoryChanged -= OnTerritoryChanged;
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
@@ -368,6 +381,11 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenLootUi()
         => lootWindow.IsOpen = true;
+
+    public void DisableQstCompanion()
+        => PrintStatus(QstCompanionWarningService.Disable()
+            ? "Questionable Companion disable command sent."
+            : "Questionable Companion disable command failed.");
 
     public void OpenFrontierLabelUi()
         => frontierLabelWindow.IsOpen = true;
@@ -1990,6 +2008,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnDutyCompleted(IDutyStateEventArgs args)
         => OnDutyCompleted(args.TerritoryType.RowId);
+
+    private void OnTerritoryChanged(uint territoryType)
+        => QstCompanionWarningService.HandleTerritoryChanged();
 
     private void OnDutyCompleted(uint territoryId)
     {

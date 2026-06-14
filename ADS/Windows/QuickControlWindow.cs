@@ -1,4 +1,5 @@
 using System.Numerics;
+using ADS.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 
@@ -14,10 +15,10 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(460f, 300f),
-            MaximumSize = new Vector2(680f, 620f),
+            MinimumSize = new Vector2(400f, 220f),
+            MaximumSize = new Vector2(620f, 620f),
         };
-        Size = new Vector2(520f, 390f);
+        Size = new Vector2(460f, 300f);
     }
 
     public void Dispose()
@@ -33,24 +34,33 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
     {
         FinalizePendingWindowPlacement();
 
-        DrawPrimaryActions();
+        DrawStatusSummary();
         ImGui.Spacing();
-        DrawToolShortcuts();
+        DrawPrimaryActions();
 
-        if (plugin.DebugStrafeService.Enabled)
+        if (ImGui.CollapsingHeader("Tools", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.Spacing();
+            DrawToolShortcuts();
+        }
+
+        if (plugin.DebugStrafeService.Enabled
+            && ImGui.CollapsingHeader("Debug Strafe"))
+        {
             DrawDebugStrafeControls();
         }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        DrawLiveStatus();
+        if (ImGui.CollapsingHeader("Details"))
+            DrawDetails();
+    }
+
+    private void DrawStatusSummary()
+    {
+        ImGui.TextUnformatted($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");
+        ImGui.TextWrapped(plugin.ExecutionService.LastStatus);
     }
 
     private void DrawPrimaryActions()
     {
-        ImGui.TextUnformatted("Primary Actions");
         var canStartInside = plugin.DutyContextService.Current.InInstancedDuty;
         if (!ImGui.BeginTable("ADSQuickPrimaryActions", 3, ImGuiTableFlags.SizingStretchSame))
             return;
@@ -88,31 +98,39 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
     private void DrawToolShortcuts()
     {
-        ImGui.TextUnformatted("Tool Shortcuts");
-        if (!ImGui.BeginTable("ADSQuickToolShortcuts", 4, ImGuiTableFlags.SizingStretchSame))
+        if (!ImGui.BeginTable("ADSQuickToolShortcuts", 3, ImGuiTableFlags.SizingStretchSame))
             return;
 
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
+        if (ImGui.Button("Loot", new Vector2(-1f, 28f)))
+            plugin.OpenLootUi();
+        ImGui.TableSetColumnIndex(1);
         if (ImGui.Button("Rules", new Vector2(-1f, 28f)))
             plugin.OpenRuleEditorUi();
-        ImGui.TableSetColumnIndex(1);
+        ImGui.TableSetColumnIndex(2);
         if (ImGui.Button("Objects", new Vector2(-1f, 28f)))
             plugin.OpenObjectExplorerUi();
-        ImGui.TableSetColumnIndex(2);
+
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
         if (ImGui.Button("Dialogs", new Vector2(-1f, 28f)))
             plugin.OpenDialogRuleEditorUi();
-        ImGui.TableSetColumnIndex(3);
+        ImGui.TableSetColumnIndex(1);
         ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
         if (ImGui.Button("Update", new Vector2(-1f, 28f)))
             plugin.ForceRemoteJsonUpdate();
         ImGui.EndDisabled();
+        ImGui.TableSetColumnIndex(2);
+        if (ImGui.Button("Disable QSTcomp", new Vector2(-1f, 28f)))
+            plugin.DisableQstCompanion();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(QstCompanionWarningService.DisableCommand);
         ImGui.EndTable();
     }
 
     private void DrawDebugStrafeControls()
     {
-        ImGui.TextUnformatted("Debug Strafe");
         var leftLabel = plugin.DebugStrafeService.IsHoldingLeft ? "Release Left" : "Strafe Left";
         if (ImGui.Button(leftLabel, new Vector2(140f, 28f)))
             plugin.ToggleDebugStrafeLeft();
@@ -123,17 +141,14 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped(plugin.DebugStrafeService.Status);
     }
 
-    private void DrawLiveStatus()
+    private void DrawDetails()
     {
         var context = plugin.DutyContextService.Current;
         var planner = plugin.ObjectivePlannerService.Current;
         var duty = context.CurrentDuty?.EnglishName ?? (context.InInstancedDuty ? $"Territory {context.TerritoryTypeId}" : "No duty");
-        ImGui.TextUnformatted("Live Status");
-        ImGui.TextWrapped($"{plugin.ExecutionService.CurrentMode} / {plugin.ExecutionService.CurrentPhase}");
         ImGui.TextWrapped($"Duty: {duty}");
         ImGui.TextWrapped($"Objective: {planner.Objective}");
         DrawTreasureFollowSummary();
-        ImGui.TextWrapped(plugin.ExecutionService.LastStatus);
 
         if (plugin.InnEntryService.IsRunning)
             ImGui.TextWrapped($"Inn: {plugin.InnEntryService.StatusMessage}");
