@@ -183,6 +183,16 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 3. Wait for completion status and refreshed file/byte lines.
 4. Inspect load/sync status if runtime data does not reflect the update.
 
+### Author An Object Rule
+
+1. Open Object Explorer and select **RULE** on the live object.
+2. In Object Rules, choose the goal-matching **Class**.
+3. Fill red required fields first, then amber recommended identity/scope fields.
+4. Save `DEFAULT`.
+5. Retest immediately.
+
+Field cues are class-specific: red is required, amber recommended, normal optional, and dim ignored. Class selection and cues never clear ignored stored values. Use the row `?` button for focused class help or `[GUIDE]` for the full goal/class matrix and advanced JSON field reference.
+
 ## Specialist Windows
 
 | Window | Primary use |

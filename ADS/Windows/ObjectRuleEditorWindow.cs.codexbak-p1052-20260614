@@ -71,8 +71,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
 
-        ImGui.TextWrapped("Quick start: Object Explorer -> RULE -> choose Class -> fill relevant colored fields -> save DEFAULT -> retest.");
-        ImGui.TextWrapped("Field cues: red required (bright red means missing), amber recommended, normal optional, dim ignored. Cues never clear ignored stored values.");
+        ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
+        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination / MapXzForceMarch versus XYZ / XYZForceMarch. ForceMarch rows are authored inside-duty bypass waypoints that can stay committed through incidental combat; they are not Praetorium-mounted-only rows. On ordinary rows, Coords is the positional selector and R is its optional radius.");
+        ImGui.TextWrapped("Wait-before holds after ADS arrives in interact range and before the first interact send. Wait-after holds after a successful interact send before ADS retries or moves on.");
         ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
         DrawCurrentScopeBanner();
         if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
@@ -377,8 +378,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         foreach (var ruleIndex in BuildVisibleRuleIndices())
         {
             var rule = draft.Rules[ruleIndex];
-            var semantics = RuleSemanticsCatalog.Find(rule.Classification ?? string.Empty);
-            var missingRequiredFields = RuleSemanticsCatalog.GetMissingRequiredFields(rule).ToHashSet(StringComparer.Ordinal);
             ImGui.PushID(ruleIndex);
             ImGui.TableNextRow();
             if (unsavedNewRules.Contains(rule))
@@ -388,7 +387,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(0);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Enabled), missingRequiredFields);
             var enabled = rule.Enabled;
             if (ImGui.Checkbox("##Enabled", ref enabled))
             {
@@ -402,12 +400,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(1);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.DutyEnglishName), missingRequiredFields);
             if (DrawDutyCell(ruleIndex, rule))
                 dirty = true;
 
             ImGui.TableSetColumnIndex(2);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.TerritoryTypeId), missingRequiredFields);
             if (EditUintCell("##TerritoryTypeId", rule.TerritoryTypeId, out var territoryTypeId))
             {
                 rule.TerritoryTypeId = territoryTypeId;
@@ -415,7 +411,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(3);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.ContentFinderConditionId), missingRequiredFields);
             if (EditUintCell("##ContentFinderConditionId", rule.ContentFinderConditionId, out var contentFinderConditionId))
             {
                 rule.ContentFinderConditionId = contentFinderConditionId;
@@ -423,12 +418,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(4);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectKind), missingRequiredFields);
             if (DrawObjectKindCell(rule, ruleIndex))
                 dirty = true;
 
             ImGui.TableSetColumnIndex(5);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectName), missingRequiredFields);
             if (EditTextCell("##ObjectName", rule.ObjectName, 128, out var objectName))
             {
                 rule.ObjectName = objectName;
@@ -436,7 +429,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(6);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.NameMatchMode), missingRequiredFields);
             var matchModeIndex = Math.Max(0, Array.IndexOf(NameMatchModes, string.IsNullOrWhiteSpace(rule.NameMatchMode) ? "Exact" : rule.NameMatchMode));
             if (ImGui.Combo("##NameMatchMode", ref matchModeIndex, NameMatchModes, NameMatchModes.Length))
             {
@@ -445,40 +437,29 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(7);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Classification), missingRequiredFields);
             var classificationIndex = Math.Max(0, Array.IndexOf(ClassificationValues, rule.Classification ?? string.Empty));
-            ImGui.SetNextItemWidth(-30f);
             if (ImGui.Combo("##Classification", ref classificationIndex, ClassificationLabels, ClassificationLabels.Length))
             {
                 rule.Classification = ClassificationValues[classificationIndex];
                 dirty = true;
             }
-            var classificationHovered = ImGui.IsItemHovered();
-            var classificationSemantics = RuleSemanticsCatalog.Find(rule.Classification ?? string.Empty);
-            ImGui.SameLine();
-            if (ImGui.SmallButton("?"))
-                ImGui.OpenPopup("ADSClassHelp");
-            DrawClassHelpPopup(classificationSemantics);
-            if (classificationHovered && classificationSemantics is not null)
+            if (ImGui.IsItemHovered()
+                && RuleSemanticsCatalog.Find(rule.Classification ?? string.Empty) is { } classificationSemantics)
             {
                 ImGui.BeginTooltip();
                 ImGui.PushTextWrapPos(ImGui.GetFontSize() * 35f);
                 ImGui.TextUnformatted(classificationSemantics.Behavior);
-                ImGui.Separator();
-                ImGui.TextWrapped($"Relevant visible fields: {string.Join(", ", RuleSemanticsCatalog.GetRelevantEditorFieldLabels(classificationSemantics))}");
                 ImGui.PopTextWrapPos();
                 ImGui.EndTooltip();
             }
 
             ImGui.TableSetColumnIndex(8);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Layer), missingRequiredFields);
             if (DrawLayerCell(rule, ruleIndex))
             {
                 dirty = true;
             }
 
             ImGui.TableSetColumnIndex(9);
-            DrawFieldCue(semantics, GetCoordinateSemanticsField(rule), missingRequiredFields);
             var unifiedCoordinates = GetUnifiedCoordinatesValue(rule);
             if (EditTextCell("##Coords", unifiedCoordinates, 48, out var editedCoordinates))
             {
@@ -487,7 +468,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(10);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectMatchRadius), missingRequiredFields);
             using (new ImGuiDisabledBlock(IsManualDestinationRule(rule) || IsCardinalHoldRule(rule)))
             {
                 if (EditNullableFloatCell("##ObjectMatchRadius", rule.ObjectMatchRadius, out var objectMatchRadius))
@@ -498,7 +478,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(11);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Priority), missingRequiredFields);
             if (EditIntCell("##Priority", rule.Priority, out var priority))
             {
                 rule.Priority = priority;
@@ -506,7 +485,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(12);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.PriorityVerticalRadius), missingRequiredFields);
             if (EditFloatCell("##PriorityVerticalRadius", rule.PriorityVerticalRadius, out var priorityVerticalRadius))
             {
                 rule.PriorityVerticalRadius = priorityVerticalRadius;
@@ -514,7 +492,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(13);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.MaxDistance), missingRequiredFields);
             if (EditNullableFloatCell("##MaxDistance", rule.MaxDistance, out var maxDistance))
             {
                 rule.MaxDistance = maxDistance;
@@ -522,7 +499,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(14);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.WaitAtDestinationSeconds), missingRequiredFields);
             if (EditFloatCell("##WaitAtDestinationSeconds", rule.WaitAtDestinationSeconds, out var waitAtDestinationSeconds))
             {
                 rule.WaitAtDestinationSeconds = waitAtDestinationSeconds;
@@ -530,7 +506,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(15);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.WaitAfterInteractSeconds), missingRequiredFields);
             if (EditFloatCell("##WaitAfterInteractSeconds", rule.WaitAfterInteractSeconds, out var waitAfterInteractSeconds))
             {
                 rule.WaitAfterInteractSeconds = waitAfterInteractSeconds;
@@ -538,7 +513,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(16);
-            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Notes), missingRequiredFields);
             if (EditTextCell("##Notes", rule.Notes, 512, out var notes))
             {
                 rule.Notes = notes;
@@ -611,28 +585,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private static bool IsCardinalHoldRule(ObjectPriorityRule rule)
         => CardinalHoldPolicy.TryParseDirection(rule.Classification, out _);
-
-    private static string GetCoordinateSemanticsField(ObjectPriorityRule rule)
-    {
-        if (IsCardinalHoldRule(rule)
-            || string.Equals(rule.Classification, nameof(InteractableClass.XYZ), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(rule.Classification, nameof(InteractableClass.XYZForceMarch), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(rule.DestinationType, "XYZ", StringComparison.OrdinalIgnoreCase))
-        {
-            return nameof(ObjectPriorityRule.WorldCoordinates);
-        }
-
-        if (string.Equals(rule.Classification, nameof(InteractableClass.MapXzDestination), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(rule.Classification, nameof(InteractableClass.MapXzForceMarch), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(rule.DestinationType, "MapXZ", StringComparison.OrdinalIgnoreCase))
-        {
-            return nameof(ObjectPriorityRule.MapCoordinates);
-        }
-
-        return !string.IsNullOrWhiteSpace(rule.ObjectWorldCoordinates)
-            ? nameof(ObjectPriorityRule.ObjectWorldCoordinates)
-            : nameof(ObjectPriorityRule.ObjectMapCoordinates);
-    }
 
     private static string GetUnifiedCoordinatesValue(ObjectPriorityRule rule)
     {
@@ -715,60 +667,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted(tooltip);
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
-    }
-
-    private static void DrawFieldCue(
-        RuleClassificationSemantics? semantics,
-        string field,
-        IReadOnlySet<string> missingRequiredFields)
-    {
-        var use = semantics?.Fields.GetValueOrDefault(field, RuleFieldUse.Ignored) ?? RuleFieldUse.Ignored;
-        var color = use switch
-        {
-            RuleFieldUse.Required when missingRequiredFields.Contains(field) => new Vector4(0.72f, 0.12f, 0.12f, 0.70f),
-            RuleFieldUse.Required => new Vector4(0.40f, 0.10f, 0.10f, 0.52f),
-            RuleFieldUse.Recommended => new Vector4(0.45f, 0.31f, 0.05f, 0.50f),
-            RuleFieldUse.Ignored => new Vector4(0.10f, 0.10f, 0.10f, 0.62f),
-            _ => Vector4.Zero,
-        };
-
-        if (color.W > 0)
-            ImGui.TableSetBgColor(ImGuiTableBgTarget.CellBg, ImGui.ColorConvertFloat4ToU32(color));
-    }
-
-    private static void DrawClassHelpPopup(RuleClassificationSemantics? semantics)
-    {
-        if (!ImGui.BeginPopup("ADSClassHelp"))
-            return;
-
-        if (semantics is null)
-        {
-            ImGui.TextWrapped("Unknown class. Choose a listed class before authoring this row.");
-            ImGui.EndPopup();
-            return;
-        }
-
-        ImGui.TextUnformatted(semantics.Label);
-        ImGui.TextWrapped(semantics.Goal);
-        ImGui.TextWrapped(semantics.Behavior);
-        ImGui.Separator();
-        DrawClassHelpFieldLine(semantics, RuleFieldUse.Required, "Required");
-        DrawClassHelpFieldLine(semantics, RuleFieldUse.Recommended, "Recommended");
-        DrawClassHelpFieldLine(semantics, RuleFieldUse.Optional, "Optional");
-        ImGui.TextWrapped("Ignored fields stay stored; class selection and cues never clear them.");
-        ImGui.EndPopup();
-    }
-
-    private static void DrawClassHelpFieldLine(
-        RuleClassificationSemantics semantics,
-        RuleFieldUse use,
-        string label)
-    {
-        var fields = semantics.Fields
-            .Where(x => x.Value == use)
-            .Select(x => x.Key)
-            .ToList();
-        ImGui.TextWrapped($"{label}: {(fields.Count == 0 ? "(none)" : string.Join(", ", fields))}");
     }
 
     private bool DrawDutyCell(int ruleIndex, ObjectPriorityRule rule)

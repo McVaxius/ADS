@@ -3,6 +3,8 @@
 ## 2026-06-14
 
 - Added authoritative `ADS.IsDutyOwned()` IPC for cross-plugin movement ownership. It reports owned/leaving modes only while live instanced-duty truth is active.
+- Rebuilt the object-rules guide around the Object Explorer `RULE` workflow, goal-based class selection, rule-resolution order, common examples, and advanced JSON reference.
+- Added class-specific row help, relevant-field tooltips, required/recommended/optional/ignored metadata, red/amber/dim table cues, and missing-required-field validation without clearing ignored stored values.
 
 ## 2026-06-09
 

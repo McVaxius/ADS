@@ -39,16 +39,32 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 
 ## Object Rule Workflow
 
-1. Open Main > Diagnostics, Object Explorer, and Object Rules.
-2. Start/resume ADS and let the wrong choice or stuck state occur once.
-3. Capture Status JSON and Analysis JSON.
-4. In Object Explorer, confirm exact name, object kind, base ID, position, distance/Y delta, targetability, duty, and layer.
-5. Use **CREATE RULE** or `+ Row`.
-6. Author the narrowest row that explains the desired behavior.
-7. Save `DEFAULT`.
-8. Retest immediately from clean enough state to prove the row.
-9. Check Ghost Inspector and Frontier Labels if behavior still looks stale or layer-dependent.
-10. Promote to maintainer data only after repeatable validation.
+1. Open Object Explorer and select **RULE** on the live object.
+2. In Object Rules, choose the **Class** matching the goal.
+3. Fill red required fields, then amber recommended scope/identity fields.
+4. Save `DEFAULT`.
+5. Retest immediately from clean enough state to prove the row.
+6. Check Ghost Inspector, Frontier Labels, Status JSON, and Analysis JSON if behavior remains wrong.
+7. Promote to maintainer data only after repeatable validation.
+
+Editor field cues:
+
+| Cue | Meaning |
+|---|---|
+| Red | Required by selected class; bright red means value is missing |
+| Amber | Recommended for a narrow, understandable row |
+| Normal | Optional behavior, scope, gate, or timing |
+| Dim | Ignored by selected class |
+
+Ignored fields remain stored. Selecting a class and showing cues never clears them. Use the row `?` button for focused class help or `[GUIDE]` for the full matrix.
+
+## Rule Resolution Order
+
+1. Scope: duty, territory, CFC, then layer.
+2. Object match: kind, base ID, name/match mode, then optional positional selector.
+3. Gates: distance and vertical eligibility.
+4. Priority: lower value wins among eligible matching candidates.
+5. Behavior/timing: class, wait-before, and wait-after control execution.
 
 ## Important Object Rule Fields
 
@@ -91,6 +107,22 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 | `XYZForceMarch` | Manual 3D force-march waypoint |
 
 `BossFight` and `Follow` are BattleNpc-only. Invalid non-BattleNpc rows migrate to `Ignored`.
+
+## Choose Class By Goal
+
+| Goal | Class |
+|---|---|
+| Hide stale/decorative object | `Ignored` |
+| Follow moving BattleNpc | `Follow` |
+| Prefer known boss in combat | `BossFight` |
+| Force progression interact | `Required` |
+| Use only when stronger truth is absent | `Optional` |
+| Retry until object disappears | `Expendable` |
+| Talk/interact during combat | `CombatFriendly` |
+| Mark treasure loot or passage | `TreasureCoffer` / `TreasureDoor` |
+| Stage at authored waypoint | `MapXzDestination` / `XYZ` |
+| Push through incidental combat | `MapXzForceMarch` / `XYZForceMarch` |
+| Hold direct cardinal movement | `CardinalHoldNorth/East/South/West` |
 
 ## Scope And Layer
 
@@ -158,6 +190,48 @@ For ordinary positional matching:
 Non-treasure manual destinations have no-progress recovery. Inspect Main > Diagnostics and Ghost Inspector for active target, remembered target, distance/progress age, and last ghost reason.
 
 Current limitation: player-relative `PriorityVerticalRadius` and `MaxDistance` are not enforced for manual destinations.
+
+## Common Examples
+
+Required object:
+
+```json
+{
+  "dutyEnglishName": "Copperbell Mines",
+  "objectKind": "EventObj",
+  "objectName": "Lift Lever",
+  "nameMatchMode": "Exact",
+  "classification": "Required",
+  "priority": 100
+}
+```
+
+Precise staging point:
+
+```json
+{
+  "dutyEnglishName": "The Praetorium",
+  "classification": "XYZ",
+  "worldCoordinates": "154.1,101.9,-34.2",
+  "priority": 90
+}
+```
+
+Cardinal hold:
+
+```json
+{
+  "classification": "CardinalHoldNorth",
+  "worldCoordinates": "123.4,-56.7",
+  "maxDistance": 3.0,
+  "waitAtDestinationSeconds": 1.5,
+  "priority": 100
+}
+```
+
+## Advanced JSON Reference
+
+The in-plugin `[GUIDE]` window is the authoritative class/field matrix. It lists every stored JSON field as required, recommended, optional, or ignored for each class. Runtime JSON schema and stored fields remain unchanged; the spreadsheet combines destination/object selector coordinates into the visible `Coords` cell while JSON keeps the existing separate fields.
 
 ## Dialog Yes/No Rules
 
