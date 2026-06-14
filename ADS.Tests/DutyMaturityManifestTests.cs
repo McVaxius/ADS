@@ -12,6 +12,7 @@ public sealed class DutyMaturityManifestTests
         source.ClearanceStatus = DutyClearanceStatus.OnePlayerUnsyncCleared;
         source.SupportLevel = DutySupportLevel.ActiveSupported;
         source.IsPlannedTest = true;
+        source.IsMainScenario = true;
         source.SupportNote = "tried it, last map bit tricky, do later";
 
         var manifest = DutyCatalogService.BuildMaturityManifest([source]);
@@ -23,6 +24,7 @@ public sealed class DutyMaturityManifestTests
         Assert.Equal(source.ClearanceStatus, row.ClearanceStatus);
         Assert.Equal(source.SupportLevel, row.SupportLevel);
         Assert.True(row.IsPlannedTest);
+        Assert.True(row.IsMainScenario);
         Assert.Equal(source.SupportNote, row.SupportNote);
 
         var target = CreateDuty();
@@ -32,6 +34,7 @@ public sealed class DutyMaturityManifestTests
         Assert.Equal(source.ClearanceStatus, target.ClearanceStatus);
         Assert.Equal(source.SupportLevel, target.SupportLevel);
         Assert.True(target.IsPlannedTest);
+        Assert.True(target.IsMainScenario);
         Assert.Equal(source.SupportNote, target.SupportNote);
     }
 
@@ -42,11 +45,54 @@ public sealed class DutyMaturityManifestTests
         source.ClearanceStatus = DutyClearanceStatus.NotCleared;
         source.SupportLevel = DutySupportLevel.PassiveOnly;
         source.IsPlannedTest = false;
+        source.IsMainScenario = false;
         source.SupportNote = DutyCatalogService.DefaultSupportNote;
 
         var manifest = DutyCatalogService.BuildMaturityManifest([source]);
 
         Assert.Empty(manifest.Duties);
+    }
+
+    [Fact]
+    public void MainScenarioOnlyRowIsSavedAndApplied()
+    {
+        var source = CreateDuty();
+        source.IsMainScenario = true;
+
+        var manifest = DutyCatalogService.BuildMaturityManifest([source]);
+
+        var row = Assert.Single(manifest.Duties);
+        Assert.True(row.IsMainScenario);
+
+        var target = CreateDuty();
+        var applied = DutyCatalogService.ApplyMaturityManifest([target], manifest);
+
+        Assert.Equal(1, applied);
+        Assert.True(target.IsMainScenario);
+    }
+
+    [Fact]
+    public void MissingMainScenarioFlagDefaultsFalse()
+    {
+        var manifest = new DutyMaturityManifest
+        {
+            Duties =
+            [
+                new DutyMaturityRow
+                {
+                    ContentFinderConditionId = 101,
+                    TerritoryTypeId = 202,
+                    DutyEnglishName = "Test Duty",
+                    SupportLevel = DutySupportLevel.ActiveSupported,
+                },
+            ],
+        };
+
+        var target = CreateDuty();
+        var applied = DutyCatalogService.ApplyMaturityManifest([target], manifest);
+
+        Assert.Equal(1, applied);
+        Assert.False(target.IsMainScenario);
     }
 
     private static DutyCatalogEntry CreateDuty()
@@ -69,5 +115,6 @@ public sealed class DutyMaturityManifestTests
             SupportLevel = DutySupportLevel.PassiveOnly,
             ClearanceStatus = DutyClearanceStatus.NotCleared,
             IsPlannedTest = false,
+            IsMainScenario = false,
         };
 }

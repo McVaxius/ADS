@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ADS.Models;
 
 public sealed class DutyMaturityManifest
@@ -14,6 +16,9 @@ public sealed class DutyMaturityRow
     public string DutyEnglishName { get; set; } = string.Empty;
     public DutyClearanceStatus ClearanceStatus { get; set; } = DutyClearanceStatus.NotCleared;
     public DutySupportLevel SupportLevel { get; set; } = DutySupportLevel.PassiveOnly;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsPlannedTest { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsMainScenario { get; set; }
     public string SupportNote { get; set; } = string.Empty;
 }

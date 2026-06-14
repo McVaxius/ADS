@@ -10,7 +10,7 @@ namespace ADS.Services;
 public sealed class DutyCatalogService
 {
     private const string MaturityFileName = "duty-maturity.json";
-    internal const string DefaultSupportNote = "Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion.";
+    internal const string DefaultSupportNote = DutyMaturityCatalog.DefaultSupportNote;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -92,6 +92,7 @@ public sealed class DutyCatalogService
                 SupportLevel = DutySupportLevel.PassiveOnly,
                 ClearanceStatus = DutyClearanceStatus.NotCleared,
                 IsPlannedTest = false,
+                IsMainScenario = false,
             };
 
             entries.Add(entry);
@@ -163,6 +164,12 @@ public sealed class DutyCatalogService
     }
 
     public bool SaveMaturityOverrides()
+        => SaveMaturityOverridesFromRows(entries, applySavedRows: false);
+
+    public bool SaveMaturityOverrides(IReadOnlyList<DutyMaturityDraftRow> draftRows)
+        => SaveMaturityOverridesFromRows(draftRows, applySavedRows: true);
+
+    private bool SaveMaturityOverridesFromRows(IEnumerable<IDutyMaturityCatalogRow> sourceRows, bool applySavedRows)
     {
         try
         {
@@ -170,9 +177,13 @@ public sealed class DutyCatalogService
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
 
-            var manifest = BuildMaturityManifest(entries);
+            var sourceList = sourceRows.ToList();
+            var manifest = BuildMaturityManifest(sourceList);
             var json = JsonSerializer.Serialize(manifest, JsonOptions);
             File.WriteAllText(maturityPath, json + Environment.NewLine);
+            if (applySavedRows)
+                ApplyMaturityRowsToLiveEntries(sourceList);
+
             LastMaturityLoadStatus = $"Saved duty maturity overlay to {maturityPath}: {manifest.Duties.Count} override row(s).";
             log.Information($"[ADS] {LastMaturityLoadStatus}");
             return true;
@@ -203,6 +214,7 @@ public sealed class DutyCatalogService
             entry.ClearanceStatus = DutyClearanceStatus.NotCleared;
             entry.SupportLevel = DutySupportLevel.PassiveOnly;
             entry.IsPlannedTest = false;
+            entry.IsMainScenario = false;
             entry.SupportNote = DefaultSupportNote;
         }
     }
@@ -218,7 +230,7 @@ public sealed class DutyCatalogService
         log.Warning($"[ADS] {LastMaturityLoadStatus}");
     }
 
-    internal static DutyMaturityManifest BuildMaturityManifest(IReadOnlyList<DutyCatalogEntry> sourceEntries)
+    internal static DutyMaturityManifest BuildMaturityManifest(IEnumerable<IDutyMaturityCatalogRow> sourceEntries)
         => new()
         {
             SchemaVersion = 1,
@@ -241,22 +253,20 @@ public sealed class DutyCatalogService
             entry.ClearanceStatus = row.ClearanceStatus;
             entry.SupportLevel = row.SupportLevel;
             entry.IsPlannedTest = row.IsPlannedTest;
+            entry.IsMainScenario = row.IsMainScenario;
             entry.SupportNote = string.IsNullOrWhiteSpace(row.SupportNote)
                 ? DefaultSupportNote
-                : NormalizeName(row.SupportNote);
+                : DutyMaturityCatalog.NormalizeText(row.SupportNote);
             applied++;
         }
 
         return applied;
     }
 
-    internal static bool IsDefaultMaturityEntry(DutyCatalogEntry entry)
-        => entry.ClearanceStatus == DutyClearanceStatus.NotCleared
-           && entry.SupportLevel == DutySupportLevel.PassiveOnly
-           && !entry.IsPlannedTest
-           && IsDefaultSupportNote(entry.SupportNote);
+    internal static bool IsDefaultMaturityEntry(IDutyMaturityCatalogRow entry)
+        => DutyMaturityCatalog.IsDefaultMaturityEntry(entry);
 
-    private static DutyMaturityRow CreateMaturityRow(DutyCatalogEntry entry)
+    private static DutyMaturityRow CreateMaturityRow(IDutyMaturityCatalogRow entry)
         => new()
         {
             ContentFinderConditionId = entry.ContentFinderConditionId,
@@ -265,10 +275,28 @@ public sealed class DutyCatalogService
             ClearanceStatus = entry.ClearanceStatus,
             SupportLevel = entry.SupportLevel,
             IsPlannedTest = entry.IsPlannedTest,
-            SupportNote = IsDefaultSupportNote(entry.SupportNote)
+            IsMainScenario = entry.IsMainScenario,
+            SupportNote = DutyMaturityCatalog.IsDefaultSupportNote(entry.SupportNote)
                 ? string.Empty
                 : entry.SupportNote.Trim(),
         };
+
+    private void ApplyMaturityRowsToLiveEntries(IReadOnlyList<IDutyMaturityCatalogRow> sourceRows)
+    {
+        foreach (var sourceRow in sourceRows)
+        {
+            if (!TryFindMaturityEntry(entries, CreateMaturityRow(sourceRow), out var entry))
+                continue;
+
+            entry.ClearanceStatus = sourceRow.ClearanceStatus;
+            entry.SupportLevel = sourceRow.SupportLevel;
+            entry.IsPlannedTest = sourceRow.IsPlannedTest;
+            entry.IsMainScenario = sourceRow.IsMainScenario;
+            entry.SupportNote = string.IsNullOrWhiteSpace(sourceRow.SupportNote)
+                ? DefaultSupportNote
+                : DutyMaturityCatalog.NormalizeText(sourceRow.SupportNote);
+        }
+    }
 
     private static bool TryFindMaturityEntry(IReadOnlyList<DutyCatalogEntry> sourceEntries, DutyMaturityRow row, out DutyCatalogEntry entry)
     {
@@ -295,10 +323,6 @@ public sealed class DutyCatalogService
         entry = null!;
         return false;
     }
-
-    private static bool IsDefaultSupportNote(string supportNote)
-        => string.IsNullOrWhiteSpace(supportNote)
-           || string.Equals(NormalizeName(supportNote), DefaultSupportNote, StringComparison.Ordinal);
 
     private void AddSyntheticTreasureDutyEntries(IDataManager dataManager)
     {
@@ -337,6 +361,7 @@ public sealed class DutyCatalogService
                 SupportLevel = DutySupportLevel.PassiveOnly,
                 ClearanceStatus = DutyClearanceStatus.NotCleared,
                 IsPlannedTest = false,
+                IsMainScenario = false,
             };
 
             entries.Add(entry);
@@ -345,7 +370,7 @@ public sealed class DutyCatalogService
     }
 
     private static string NormalizeName(string name)
-        => string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        => DutyMaturityCatalog.NormalizeText(name);
 
     private static DutyCategory ClassifyDutyCategory(
         uint territoryTypeId,

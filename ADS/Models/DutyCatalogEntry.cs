@@ -1,6 +1,6 @@
 namespace ADS.Models;
 
-public sealed class DutyCatalogEntry
+public sealed class DutyCatalogEntry : IDutyMaturityCatalogRow
 {
     public required uint ContentFinderConditionId { get; init; }
     public required uint TerritoryTypeId { get; init; }
@@ -19,4 +19,8 @@ public sealed class DutyCatalogEntry
     public required DutySupportLevel SupportLevel { get; set; }
     public required DutyClearanceStatus ClearanceStatus { get; set; }
     public required bool IsPlannedTest { get; set; }
+    public required bool IsMainScenario { get; set; }
+
+    public bool IsChanged
+        => false;
 }

@@ -232,6 +232,7 @@ public sealed class Plugin : IDalamudPlugin
             StartDesynth,
             CancelUtility,
             OpenDesynthConfigUiIpc,
+            IsDutyOwned,
             GetStatusJson,
             GetCurrentAnalysisJson,
             GetCapabilitiesJson,
@@ -1064,6 +1065,11 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.DesynthActivePreset = DesynthPresetStore.DefaultPresetName;
         SaveConfiguration();
     }
+
+    public bool IsDutyOwned()
+        => DutyOwnershipPolicy.IsDutyOwned(
+            DutyContextService.Current.InInstancedDuty,
+            ExecutionService.CurrentMode);
 
     public string GetStatusJson()
         => JsonSerializer.Serialize(

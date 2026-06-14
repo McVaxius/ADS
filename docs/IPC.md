@@ -13,7 +13,10 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartDesynth(string mode) -> bool`
 - `ADS.CancelUtility() -> bool`
 - `ADS.OpenDesynthConfigUi() -> bool`
+- `ADS.IsDutyOwned() -> bool`
 - `ADS.GetDesynthStatusJson() -> string`
+
+`ADS.IsDutyOwned` is authoritative runtime duty ownership. It returns `true` only while live instanced-duty truth is active and ADS mode is `OwnedStartOutside`, `OwnedStartInside`, `OwnedResumeInside`, or `Leaving`. It returns `false` for `Idle`, `Observing`, `Failed`, and queued outside-duty ownership.
 
 `ADS.StartDesynth` accepts legacy modes `configured`, `all`, `whitelist`, `last-duty`, and `skillups`, plus direct source-scope aliases `inventory-only`, `everywhere-skip-gearsets`, and `everywhere`.
 

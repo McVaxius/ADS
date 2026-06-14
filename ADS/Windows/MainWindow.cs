@@ -14,6 +14,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         .ToDictionary(x => x.Category, _ => true);
     private string dutyCatalogSearch = string.Empty;
     private string? selectedDutyCatalogKey;
+    private bool dutyCatalogMsqOnly;
 
     public MainWindow(Plugin plugin)
         : base("AI Duty Solver###ADSMain")
@@ -128,11 +129,13 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableNextRow();
             DrawOverviewCell(0, "Duty", GetCurrentDutyLabel(context));
             DrawOverviewCell(1, "Family", dutyDisplay?.FilterLabel ?? "Uncatalogued");
-            DrawOverviewCell(2, "Readiness", currentDuty is not null ? GetSupportLevelLabel(currentDuty.SupportLevel) : "No catalog row");
+            DrawOverviewCell(2, "Readiness", currentDuty is not null ? DutyMaturityDisplayCatalog.GetSupportLevelLabel(currentDuty.SupportLevel) : "No catalog row");
             ImGui.TableNextRow();
-            DrawOverviewCell(0, "Maturity", currentDuty is not null ? GetClearanceLabel(currentDuty.ClearanceStatus) : "No catalog row");
+            DrawOverviewCell(0, "Maturity", currentDuty is not null ? DutyMaturityDisplayCatalog.GetClearanceLabel(currentDuty.ClearanceStatus) : "No catalog row");
             DrawOverviewCell(1, "Instanced / Catalog", $"{(context.InInstancedDuty ? "YES" : "NO")} / {(context.HasCatalogMetadata ? "YES" : "NO")}");
-            DrawOverviewCell(2, "Unsafe Transition", context.IsUnsafeTransition ? "YES" : "NO");
+            DrawOverviewCell(2, "MSQ", currentDuty is not null && currentDuty.IsMainScenario ? "YES" : "NO");
+            ImGui.TableNextRow();
+            DrawOverviewCell(0, "Unsafe Transition", context.IsUnsafeTransition ? "YES" : "NO");
             ImGui.EndTable();
         }
 
@@ -377,22 +380,29 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             "search duty, family, expansion, territory ID, or CFC ID",
             ref dutyCatalogSearch,
             160);
+        ImGui.Checkbox("MSQ only", ref dutyCatalogMsqOnly);
         DrawDutyCategoryFilters();
         DrawDutyCatalogStats();
         DrawRuleAtlas();
 
-        var visibleEntries = plugin.DutyCatalogService.Entries
-            .Where(entry => dutyCategoryFilters.GetValueOrDefault(entry.Category, true))
-            .Where(DutyMatchesSearch)
-            .ToList();
         var currentContext = plugin.DutyContextService.Current;
-        var ruleCounts = BuildExplicitRuleCountsByDuty();
-        var selectedEntry = visibleEntries.FirstOrDefault(entry => BuildDutyCatalogKey(entry) == selectedDutyCatalogKey);
+        var ruleCounts = DutyRuleCoverageHelper.BuildExplicitRuleCountsByDuty(
+            plugin.DutyCatalogService.Entries,
+            plugin.ObjectPriorityRuleService);
+        var dashboardFilters = BuildDutyDashboardFilters();
+        var visibleEntries = plugin.DutyCatalogService.Entries
+            .Where(entry => DutyMaturityFilterHelper.Matches(
+                entry,
+                dashboardFilters,
+                currentContext,
+                ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(entry))))
+            .ToList();
+        var selectedEntry = visibleEntries.FirstOrDefault(entry => DutyMaturityCatalog.BuildDutyCatalogKey(entry) == selectedDutyCatalogKey);
         if (selectedEntry is null)
         {
-            selectedEntry = visibleEntries.FirstOrDefault(entry => DutyMatchesCurrentContext(entry, currentContext))
+            selectedEntry = visibleEntries.FirstOrDefault(entry => DutyMaturityCatalog.DutyMatchesCurrentContext(entry, currentContext))
                             ?? visibleEntries.FirstOrDefault();
-            selectedDutyCatalogKey = selectedEntry is null ? null : BuildDutyCatalogKey(selectedEntry);
+            selectedDutyCatalogKey = selectedEntry is null ? null : DutyMaturityCatalog.BuildDutyCatalogKey(selectedEntry);
         }
 
         ImGui.TextDisabled($"Rows shown: {visibleEntries.Count} / {plugin.DutyCatalogService.Entries.Count}");
@@ -414,14 +424,31 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(0);
             DrawDutyCatalogTable(visibleEntries, currentContext, ruleCounts, 420f);
             ImGui.TableSetColumnIndex(1);
-            DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(BuildDutyCatalogKey(selectedEntry!)), 420f);
+            DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(selectedEntry!)), 420f);
             ImGui.EndTable();
             return;
         }
 
         DrawDutyCatalogTable(visibleEntries, currentContext, ruleCounts, 300f);
         ImGui.Spacing();
-        DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(BuildDutyCatalogKey(selectedEntry!)), 260f);
+        DrawDutyDetail(selectedEntry!, ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(selectedEntry!)), 260f);
+    }
+
+    private DutyMaturityFilterState BuildDutyDashboardFilters()
+    {
+        var filters = new DutyMaturityFilterState
+        {
+            Search = dutyCatalogSearch,
+            MainScenarioOnly = dutyCatalogMsqOnly,
+        };
+        filters.SetAllFamilies(enabled: false);
+        foreach (var entry in DutyCategoryDisplayCatalog.Entries)
+        {
+            if (dutyCategoryFilters.GetValueOrDefault(entry.Category, true))
+                filters.Families.Add(entry.Category);
+        }
+
+        return filters;
     }
 
     private void DrawDutyCatalogTable(
@@ -432,7 +459,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     {
         if (!ImGui.BeginTable(
                 "AdsDutyCatalog",
-                5,
+                6,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
                 new Vector2(-1f, height)))
         {
@@ -441,6 +468,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
         ImGui.TableSetupColumn("Duty");
         ImGui.TableSetupColumn("Family", ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn("MSQ", ImGuiTableColumnFlags.WidthFixed, 48f);
         ImGui.TableSetupColumn("Maturity", ImGuiTableColumnFlags.WidthFixed, 175f);
         ImGui.TableSetupColumn("Readiness", ImGuiTableColumnFlags.WidthFixed, 130f);
         ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 55f);
@@ -451,12 +479,12 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
 
-            var highlight = GetClearanceColor(entry.ClearanceStatus);
-            if (DutyMatchesCurrentContext(entry, currentContext))
+            var highlight = DutyMaturityDisplayCatalog.GetClearanceColor(entry.ClearanceStatus);
+            if (DutyMaturityCatalog.DutyMatchesCurrentContext(entry, currentContext))
                 highlight = new Vector4(0.97f, 0.84f, 0.31f, 1f);
 
             ImGui.PushStyleColor(ImGuiCol.Text, highlight);
-            var catalogKey = BuildDutyCatalogKey(entry);
+            var catalogKey = DutyMaturityCatalog.BuildDutyCatalogKey(entry);
             if (ImGui.Selectable($"{entry.EnglishName}##DutyCatalog{catalogKey}", catalogKey == selectedDutyCatalogKey))
                 selectedDutyCatalogKey = catalogKey;
             ImGui.PopStyleColor();
@@ -468,25 +496,33 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.PushStyleColor(ImGuiCol.Text, GetClearanceColor(entry.ClearanceStatus));
-            ImGui.TextUnformatted(GetClearanceLabel(entry.ClearanceStatus));
+            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetMsqColor(entry.IsMainScenario));
+            ImGui.TextUnformatted(entry.IsMainScenario ? "MSQ" : "-");
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.PushStyleColor(ImGuiCol.Text, GetSupportLevelColor(entry.SupportLevel));
-            ImGui.TextUnformatted(GetSupportLevelLabel(entry.SupportLevel));
+            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetClearanceColor(entry.ClearanceStatus));
+            ImGui.TextUnformatted(DutyMaturityDisplayCatalog.GetClearanceLabel(entry.ClearanceStatus));
             ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(4);
+            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetSupportLevelColor(entry.SupportLevel));
+            ImGui.TextUnformatted(DutyMaturityDisplayCatalog.GetSupportLevelLabel(entry.SupportLevel));
+            ImGui.PopStyleColor();
+
+            ImGui.TableSetColumnIndex(5);
             var ruleCount = ruleCounts.GetValueOrDefault(catalogKey);
-            if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && ruleCount == 0)
+            if (!DutyMaturityCatalog.IsDefaultMaturityEntry(entry) && ruleCount == 0)
                 ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.43f, 0.35f, 1f));
-            else if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && ruleCount > 10)
+            else if (!DutyMaturityCatalog.IsDefaultMaturityEntry(entry) && ruleCount > DutyMaturityCatalog.DenseRuleThreshold)
                 ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.86f, 0.24f, 1f));
 
             ImGui.TextUnformatted(ruleCount.ToString());
-            if (entry.ClearanceStatus != DutyClearanceStatus.NotCleared && (ruleCount == 0 || ruleCount > 10))
+            if (!DutyMaturityCatalog.IsDefaultMaturityEntry(entry)
+                && (ruleCount == 0 || ruleCount > DutyMaturityCatalog.DenseRuleThreshold))
+            {
                 ImGui.PopStyleColor();
+            }
         }
 
         ImGui.EndTable();
@@ -497,7 +533,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
         if (ImGui.BeginChild("ADSDutyDetail", new Vector2(-1f, height), true))
         {
-            ImGui.TextColored(GetClearanceColor(entry.ClearanceStatus), entry.EnglishName);
+            ImGui.TextColored(DutyMaturityDisplayCatalog.GetClearanceColor(entry.ClearanceStatus), entry.EnglishName);
+            ImGui.SameLine();
+            ImGui.TextColored(DutyMaturityDisplayCatalog.GetMsqColor(entry.IsMainScenario), entry.IsMainScenario ? "MSQ" : "non-MSQ");
             ImGui.TextColored(DutyCategoryDisplayCatalog.Get(entry.Category).Accent, DutyCategoryDisplayCatalog.Get(entry.Category).FilterLabel);
             ImGui.Spacing();
 
@@ -513,11 +551,14 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 DrawDutyDetailFact(0, "Territory ID", entry.TerritoryTypeId.ToString());
                 DrawDutyDetailFact(1, "CFC ID", entry.ContentFinderConditionId == 0 ? "-" : entry.ContentFinderConditionId.ToString());
                 ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Maturity", GetClearanceLabel(entry.ClearanceStatus));
-                DrawDutyDetailFact(1, "Readiness", GetSupportLevelLabel(entry.SupportLevel));
+                DrawDutyDetailFact(0, "Maturity", DutyMaturityDisplayCatalog.GetClearanceLabel(entry.ClearanceStatus));
+                DrawDutyDetailFact(1, "Readiness", DutyMaturityDisplayCatalog.GetSupportLevelLabel(entry.SupportLevel));
                 ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Planned Test", entry.IsPlannedTest ? "YES" : "NO");
-                DrawDutyDetailFact(1, "Explicit Rules", ruleCount.ToString());
+                DrawDutyDetailFact(0, "MSQ", entry.IsMainScenario ? "YES" : "NO");
+                DrawDutyDetailFact(1, "Planned Test", entry.IsPlannedTest ? "YES" : "NO");
+                ImGui.TableNextRow();
+                DrawDutyDetailFact(0, "Explicit Rules", ruleCount.ToString());
+                DrawDutyDetailFact(1, "Override", DutyMaturityCatalog.IsDefaultMaturityEntry(entry) ? "NO" : "YES");
                 ImGui.EndTable();
             }
 
@@ -580,10 +621,10 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var entries = plugin.DutyCatalogService.Entries;
         var cards = new[]
         {
-            (MaturityLevel: 0, Label: "Not Cleared", Count: CountStatus(DutyClearanceStatus.NotCleared), Accent: GetClearanceColor(DutyClearanceStatus.NotCleared)),
-            (MaturityLevel: 1, Label: "1P Unsync Cleared", Count: CountStatus(DutyClearanceStatus.OnePlayerUnsyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerUnsyncCleared)),
-            (MaturityLevel: 2, Label: "1P Duty Support", Count: CountStatus(DutyClearanceStatus.OnePlayerDutySupport), Accent: GetClearanceColor(DutyClearanceStatus.OnePlayerDutySupport)),
-            (MaturityLevel: 3, Label: "Synced Party Cleared", Count: CountStatus(DutyClearanceStatus.FourPlayerSyncCleared), Accent: GetClearanceColor(DutyClearanceStatus.FourPlayerSyncCleared)),
+            (MaturityLevel: 0, Label: "Not Cleared", Count: CountStatus(DutyClearanceStatus.NotCleared), Accent: DutyMaturityDisplayCatalog.GetClearanceColor(DutyClearanceStatus.NotCleared)),
+            (MaturityLevel: 1, Label: "1P Unsync Cleared", Count: CountStatus(DutyClearanceStatus.OnePlayerUnsyncCleared), Accent: DutyMaturityDisplayCatalog.GetClearanceColor(DutyClearanceStatus.OnePlayerUnsyncCleared)),
+            (MaturityLevel: 2, Label: "1P Duty Support", Count: CountStatus(DutyClearanceStatus.OnePlayerDutySupport), Accent: DutyMaturityDisplayCatalog.GetClearanceColor(DutyClearanceStatus.OnePlayerDutySupport)),
+            (MaturityLevel: 3, Label: "Synced Party Cleared", Count: CountStatus(DutyClearanceStatus.FourPlayerSyncCleared), Accent: DutyMaturityDisplayCatalog.GetClearanceColor(DutyClearanceStatus.FourPlayerSyncCleared)),
         };
         var availableWidth = ImGui.GetContentRegionAvail().X;
         var columnCount = availableWidth >= 880f ? 4 : 2;
@@ -605,8 +646,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             "  |  ",
             DutyCategoryDisplayCatalog.Entries.Select(x => $"{x.FilterLabel} {entries.Count(y => y.Category == x.Category)}"));
         var plannedTests = entries.Count(x => x.IsPlannedTest);
+        var mainScenarioDuties = entries.Count(x => x.IsMainScenario);
         ImGui.TextDisabled(categorySummary);
-        ImGui.TextDisabled($"{plannedTests} planned test{(plannedTests == 1 ? string.Empty : "s")} flagged in the catalog.");
+        ImGui.TextDisabled($"{mainScenarioDuties} MSQ dut{(mainScenarioDuties == 1 ? "y" : "ies")} | {plannedTests} planned test{(plannedTests == 1 ? string.Empty : "s")} flagged in the catalog.");
         ImGui.TextDisabled(plugin.DutyCatalogService.LastMaturityLoadStatus);
 
         int CountStatus(DutyClearanceStatus status)
@@ -621,72 +663,24 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var rules = plugin.ObjectPriorityRuleService.Current.Rules;
         var totalRules = rules.Count;
         var enabledRules = rules.Count(x => x.Enabled);
-        var globalRules = rules.Count(IsGlobalRule);
-        var explicitRuleCounts = BuildExplicitRuleCountsByDuty();
+        var globalRules = rules.Count(DutyRuleCoverageHelper.IsGlobalRule);
+        var explicitRuleCounts = DutyRuleCoverageHelper.BuildExplicitRuleCountsByDuty(
+            plugin.DutyCatalogService.Entries,
+            plugin.ObjectPriorityRuleService);
         var maturedEntries = plugin.DutyCatalogService.Entries.Where(x => x.ClearanceStatus != DutyClearanceStatus.NotCleared).ToList();
-        var dutiesWithNoRules = maturedEntries.Count(x => explicitRuleCounts.GetValueOrDefault(BuildDutyCatalogKey(x)) == 0);
-        var dutiesWithDenseRules = maturedEntries.Count(x => explicitRuleCounts.GetValueOrDefault(BuildDutyCatalogKey(x)) > 10);
+        var dutiesWithNoRules = maturedEntries.Count(x => explicitRuleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(x)) == 0);
+        var dutiesWithDenseRules = maturedEntries.Count(x => explicitRuleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(x)) > DutyMaturityCatalog.DenseRuleThreshold);
         var classificationSummary = string.Join(
             "  |  ",
-            rules.GroupBy(GetRuleCategoryLabel)
+            rules.GroupBy(DutyRuleCoverageHelper.GetRuleCategoryLabel)
                 .OrderByDescending(x => x.Count())
                 .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(x => $"{x.Key} {x.Count()}"));
 
         ImGui.TextWrapped($"Rules: {totalRules} total | {enabledRules} enabled | {globalRules} global");
-        ImGui.TextWrapped($"Coverage signals: {dutiesWithNoRules} matured duties with 0 rules | {dutiesWithDenseRules} matured duties with >10 rules");
+        ImGui.TextWrapped($"Coverage signals: {dutiesWithNoRules} matured duties with 0 rules | {dutiesWithDenseRules} matured duties with >{DutyMaturityCatalog.DenseRuleThreshold} rules");
         ImGui.TextWrapped($"By category: {(string.IsNullOrWhiteSpace(classificationSummary) ? "No rules authored yet." : classificationSummary)}");
     }
-
-    private Dictionary<string, int> BuildExplicitRuleCountsByDuty()
-    {
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var entry in plugin.DutyCatalogService.Entries)
-            counts[BuildDutyCatalogKey(entry)] = CountExplicitRulesForDuty(entry);
-
-        return counts;
-    }
-
-    private int CountExplicitRulesForDuty(DutyCatalogEntry entry)
-    {
-        var context = new DutyContextSnapshot
-        {
-            PluginEnabled = true,
-            IsLoggedIn = true,
-            BoundByDuty = true,
-            BoundByDuty56 = false,
-            BetweenAreas = false,
-            BetweenAreas51 = false,
-            Jumping = false,
-            Jumping61 = false,
-            Occupied33 = false,
-            OccupiedInQuestEvent = false,
-            OccupiedInEvent = false,
-            OccupiedInCutSceneEvent = false,
-            WatchingCutscene = false,
-            InCombat = false,
-            Mounted = false,
-            TerritoryTypeId = entry.TerritoryTypeId,
-            MapId = 0,
-            ContentFinderConditionId = entry.ContentFinderConditionId,
-            CurrentDuty = entry,
-        };
-
-        return plugin.ObjectPriorityRuleService.Current.Rules.Count(rule =>
-            IsExplicitDutyRule(rule)
-            && plugin.ObjectPriorityRuleService.MatchesCurrentDutyScopeForEditor(rule, context));
-    }
-
-    private static bool IsGlobalRule(ObjectPriorityRule rule)
-        => !IsExplicitDutyRule(rule);
-
-    private static bool IsExplicitDutyRule(ObjectPriorityRule rule)
-        => rule.ContentFinderConditionId != 0
-           || rule.TerritoryTypeId != 0
-           || !string.IsNullOrWhiteSpace(rule.DutyEnglishName);
-
-    private static string GetRuleCategoryLabel(ObjectPriorityRule rule)
-        => string.IsNullOrWhiteSpace(rule.Classification) ? "(none)" : rule.Classification;
 
     private static void DrawDutyCatalogStatCard(int maturityLevel, string label, int count, Vector4 accent)
     {
@@ -775,70 +769,6 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ? $"territory {context.TerritoryTypeId}"
             : "None";
     }
-
-    private static string BuildDutyCatalogKey(DutyCatalogEntry entry)
-        => entry.ContentFinderConditionId != 0
-            ? $"cfc:{entry.ContentFinderConditionId}"
-            : $"terr:{entry.TerritoryTypeId}";
-
-    private bool DutyMatchesSearch(DutyCatalogEntry entry)
-    {
-        var search = dutyCatalogSearch.Trim();
-        if (search.Length == 0)
-            return true;
-
-        var family = DutyCategoryDisplayCatalog.Get(entry.Category).FilterLabel;
-        return entry.EnglishName.Contains(search, StringComparison.OrdinalIgnoreCase)
-               || entry.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-               || family.Contains(search, StringComparison.OrdinalIgnoreCase)
-               || entry.ExpansionName.Contains(search, StringComparison.OrdinalIgnoreCase)
-               || entry.TerritoryTypeId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
-               || entry.ContentFinderConditionId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool DutyMatchesCurrentContext(DutyCatalogEntry entry, DutyContextSnapshot context)
-    {
-        if (entry.ContentFinderConditionId != 0 && entry.ContentFinderConditionId == context.ContentFinderConditionId)
-            return true;
-
-        return entry.ContentFinderConditionId == 0
-               && entry.TerritoryTypeId != 0
-               && entry.TerritoryTypeId == context.TerritoryTypeId;
-    }
-
-    private static string GetClearanceLabel(DutyClearanceStatus status)
-        => status switch
-        {
-            DutyClearanceStatus.OnePlayerUnsyncCleared => "[1P Unsync Cleared]",
-            DutyClearanceStatus.OnePlayerDutySupport => "[1P Duty Support]",
-            DutyClearanceStatus.FourPlayerSyncCleared => "[Synced Party Cleared]",
-            _ => "[Not Cleared]",
-        };
-
-    private static Vector4 GetClearanceColor(DutyClearanceStatus status)
-        => status switch
-        {
-            DutyClearanceStatus.OnePlayerUnsyncCleared => new Vector4(0.35f, 0.62f, 1.0f, 1f),
-            DutyClearanceStatus.OnePlayerDutySupport => new Vector4(1.0f, 0.86f, 0.24f, 1f),
-            DutyClearanceStatus.FourPlayerSyncCleared => new Vector4(0.42f, 0.94f, 0.64f, 1f),
-            _ => new Vector4(1.0f, 0.36f, 0.32f, 1f),
-        };
-
-    private static string GetSupportLevelLabel(DutySupportLevel supportLevel)
-        => supportLevel switch
-        {
-            DutySupportLevel.ActiveSupported => "Pilot active",
-            DutySupportLevel.PassiveOnly => "Catalog test lane",
-            _ => "Metadata only",
-        };
-
-    private static Vector4 GetSupportLevelColor(DutySupportLevel supportLevel)
-        => supportLevel switch
-        {
-            DutySupportLevel.ActiveSupported => new Vector4(0.42f, 0.94f, 0.64f, 1f),
-            DutySupportLevel.PassiveOnly => new Vector4(1.0f, 0.86f, 0.24f, 1f),
-            _ => new Vector4(0.86f, 0.86f, 0.86f, 1f),
-        };
 
     private static void DrawNameList(string label, IEnumerable<string> names)
     {

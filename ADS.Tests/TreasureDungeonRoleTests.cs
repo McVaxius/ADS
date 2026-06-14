@@ -110,6 +110,7 @@ public sealed class TreasureDungeonRoleTests
             SupportLevel = DutySupportLevel.PassiveOnly,
             ClearanceStatus = DutyClearanceStatus.NotCleared,
             IsPlannedTest = false,
+            IsMainScenario = false,
         };
 
     private static DutyContextSnapshot CreateContext(

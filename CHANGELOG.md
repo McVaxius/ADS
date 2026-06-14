@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14
+
+- Added authoritative `ADS.IsDutyOwned()` IPC for cross-plugin movement ownership. It reports owned/leaving modes only while live instanced-duty truth is active.
+
 ## 2026-06-09
 
 - Rebuilt Main around persistent operator controls and Overview, Duties, Tools, and Diagnostics tabs while preserving existing actions, disabled-state rules, catalog behavior, live truth, specialist launchers, updates, and JSON copies.
