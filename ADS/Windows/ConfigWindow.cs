@@ -212,6 +212,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         DrawActionGrid(
             "ADSDutyMaturityActions",
             ("Open duty maturity JSON", () => plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath)),
+            ("Open maturity editor", plugin.OpenDutyMaturityEditorUi),
             ("Reload duty maturity JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
         ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
     }

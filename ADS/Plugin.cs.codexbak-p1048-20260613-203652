@@ -19,11 +19,9 @@ using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility;
 using ECommons;
 using ECommons.GameHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using LuminaMap = Lumina.Excel.Sheets.Map;
 
 namespace ADS;
 
@@ -132,7 +130,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly LootWindow lootWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
-    private readonly DutyMaturityEditorWindow dutyMaturityEditorWindow;
     private readonly HigherLowerWindow higherLowerWindow;
     private readonly TreasureRouteEditorWindow treasureRouteEditorWindow;
     private readonly ServerEventExplorerWindow serverEventExplorerWindow;
@@ -251,7 +248,6 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow = new LootWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
-        dutyMaturityEditorWindow = new DutyMaturityEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
         treasureRouteEditorWindow = new TreasureRouteEditorWindow(this);
         serverEventExplorerWindow = new ServerEventExplorerWindow(this);
@@ -267,7 +263,6 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(lootWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
-        WindowSystem.AddWindow(dutyMaturityEditorWindow);
         WindowSystem.AddWindow(higherLowerWindow);
         WindowSystem.AddWindow(treasureRouteEditorWindow);
         WindowSystem.AddWindow(serverEventExplorerWindow);
@@ -334,7 +329,6 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
-        dutyMaturityEditorWindow.Dispose();
         higherLowerWindow.Dispose();
         treasureRouteEditorWindow.Dispose();
         serverEventExplorerWindow.Dispose();
@@ -407,9 +401,6 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenDialogRuleEditorUi()
         => dialogRuleEditorWindow.IsOpen = true;
-
-    public void OpenDutyMaturityEditorUi()
-        => dutyMaturityEditorWindow.IsOpen = true;
 
     public void ToggleHigherLowerUi()
         => higherLowerWindow.IsOpen = !higherLowerWindow.IsOpen;
@@ -578,7 +569,6 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
-        dutyMaturityEditorWindow.QueueResetToOrigin();
         higherLowerWindow.QueueResetToOrigin();
         treasureRouteEditorWindow.QueueResetToOrigin();
         serverEventExplorerWindow.QueueResetToOrigin();
@@ -598,7 +588,6 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
-        dutyMaturityEditorWindow.QueueRandomVisibleJump();
         higherLowerWindow.QueueRandomVisibleJump();
         treasureRouteEditorWindow.QueueRandomVisibleJump();
         serverEventExplorerWindow.QueueRandomVisibleJump();
@@ -650,74 +639,22 @@ public sealed class Plugin : IDalamudPlugin
         seededRule.TerritoryTypeId = context.TerritoryTypeId;
         seededRule.ContentFinderConditionId = context.ContentFinderConditionId;
         seededRule.ObjectKind = objectKind;
-        seededRule.BaseId = 0;
+        seededRule.BaseId = baseId;
         seededRule.ObjectName = objectName;
         seededRule.NameMatchMode = "Exact";
         seededRule.Classification = classificationOverride;
         seededRule.Layer = context.InInstancedDuty
             ? ObjectPriorityRuleService.GetActiveLayerName(context) ?? string.Empty
             : string.Empty;
-
-        System.Numerics.Vector2? mapCoordinates = null;
-        var mapCoordinateStatus = string.Empty;
-        if (TryGetExplorerMapCoordinates(context, worldPosition, out var resolvedMapCoordinates, out mapCoordinateStatus))
-            mapCoordinates = resolvedMapCoordinates;
-
-        ObjectRuleSeedHelper.ApplyCoordinates(
-            seededRule,
-            classificationOverride,
-            worldPosition,
-            Configuration.RuleEditorSeedObjectPosition,
-            mapCoordinates,
-            out var coordinateNote);
-
         var classificationNote = string.IsNullOrWhiteSpace(classificationOverride)
             ? "Auto classification left blank."
             : $"Classification override: {classificationOverride}.";
-        var baseIdNote = $"Observed BaseId {baseId}.";
-        if (ObjectRuleSeedHelper.IsMapXzDestinationClassification(classificationOverride)
-            && !string.IsNullOrWhiteSpace(mapCoordinateStatus))
-        {
-            coordinateNote = $"{coordinateNote} {mapCoordinateStatus}";
-        }
-
         seededRule.Notes = context.InInstancedDuty
-            ? $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0} on layer {seededRule.Layer}. {baseIdNote} {coordinateNote} {classificationNote}"
-            : $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0}. {baseIdNote} {coordinateNote} {classificationNote}";
+            ? $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0} on layer {seededRule.Layer}. {classificationNote}"
+            : $"Seeded from Object Explorer at {worldPosition.X:0.0},{worldPosition.Y:0.0},{worldPosition.Z:0.0}. {classificationNote}";
 
         objectRuleEditorWindow.CreateRuleFromExplorer(seededRule);
         objectRuleEditorWindow.IsOpen = true;
-    }
-
-    private bool TryGetExplorerMapCoordinates(
-        DutyContextSnapshot context,
-        System.Numerics.Vector3 worldPosition,
-        out System.Numerics.Vector2 mapCoordinates,
-        out string status)
-    {
-        mapCoordinates = default;
-        if (context.MapId == 0)
-        {
-            status = "Current map row is unknown.";
-            return false;
-        }
-
-        var mapSheet = DataManager.GetExcelSheet<LuminaMap>();
-        if (mapSheet is null || !mapSheet.TryGetRow(context.MapId, out var map))
-        {
-            status = $"Current map row {context.MapId} was unavailable.";
-            return false;
-        }
-
-        if (context.TerritoryTypeId != 0 && map.TerritoryType.RowId != context.TerritoryTypeId)
-        {
-            status = $"Current map row {context.MapId} did not match territory {context.TerritoryTypeId}.";
-            return false;
-        }
-
-        mapCoordinates = MapUtil.WorldToMap(new System.Numerics.Vector2(worldPosition.X, worldPosition.Z), map);
-        status = $"Map row {map.RowId}.";
-        return true;
     }
 
     public bool StartDutyFromOutside()
@@ -2902,16 +2839,6 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
-        if (configuration.Version < 20)
-        {
-            configuration.RuleEditorNewRowCurrentArea = true;
-            configuration.RuleEditorNewRowCurrentLabel = false;
-            configuration.RuleEditorFilterMode = 0;
-            configuration.RuleEditorSeedObjectPosition = false;
-            configuration.Version = 20;
-            changed = true;
-        }
-
         changed |= DesynthPolicyService.ApplyScopeToConfiguration(
             configuration,
             DesynthPolicyService.NormalizeScope(configuration.DesynthInventoryScope));
@@ -2927,13 +2854,6 @@ public sealed class Plugin : IDalamudPlugin
         if (configuration.DtrBarMode != clampedDtrBarMode)
         {
             configuration.DtrBarMode = clampedDtrBarMode;
-            changed = true;
-        }
-
-        var clampedRuleEditorFilterMode = Math.Clamp(configuration.RuleEditorFilterMode, 0, 4);
-        if (configuration.RuleEditorFilterMode != clampedRuleEditorFilterMode)
-        {
-            configuration.RuleEditorFilterMode = clampedRuleEditorFilterMode;
             changed = true;
         }
 

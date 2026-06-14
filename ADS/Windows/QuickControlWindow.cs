@@ -61,7 +61,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
     private void DrawPrimaryActions()
     {
-        var canStartInside = plugin.DutyContextService.Current.InInstancedDuty;
+        var inInstancedDuty = plugin.DutyContextService.Current.InInstancedDuty;
         if (!ImGui.BeginTable("ADSQuickPrimaryActions", 3, ImGuiTableFlags.SizingStretchSame))
             return;
 
@@ -71,20 +71,20 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             plugin.StartDutyFromOutside();
 
         ImGui.TableSetColumnIndex(1);
-        ImGui.BeginDisabled(!canStartInside);
+        ImGui.BeginDisabled(!inInstancedDuty);
         if (ImGui.Button("Start Inside", new Vector2(-1f, 30f)))
             plugin.StartDutyFromInside();
         ImGui.EndDisabled();
 
         ImGui.TableSetColumnIndex(2);
-        ImGui.BeginDisabled(!canStartInside);
+        ImGui.BeginDisabled(!inInstancedDuty);
         if (ImGui.Button("Resume", new Vector2(-1f, 30f)))
             plugin.ResumeDutyFromInside();
         ImGui.EndDisabled();
 
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
-        ImGui.BeginDisabled(!plugin.ExecutionService.IsOwned);
+        ImGui.BeginDisabled(!inInstancedDuty);
         if (ImGui.Button("Leave", new Vector2(-1f, 30f)))
             plugin.LeaveDuty();
         ImGui.EndDisabled();

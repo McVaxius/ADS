@@ -54,31 +54,18 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     ];
 
     private static readonly string[] ObjectKindLabels = BuildObjectKindLabels();
-    private static readonly string[] FilterModeLabels =
-    [
-        "All",
-        "Global only",
-        "Current area only",
-        "Global + current area",
-        "Effective current label",
-    ];
-
-    private const int FilterModeGlobalOnly = 1;
-    private const int FilterModeCurrentAreaOnly = 2;
-    private const int FilterModeGlobalAndCurrentArea = 3;
-    private const int FilterModeEffectiveCurrentLabel = 4;
 
     private readonly Plugin plugin;
     private readonly HashSet<ObjectPriorityRule> unsavedNewRules = [];
     private ObjectPriorityRuleManifest draft = new();
     private bool draftLoaded;
     private bool dirty;
+    private bool filterCurrentAreaAndGlobal;
     private bool sortByDutyName = true;
     private string selectedPresetName = ObjectPriorityRuleService.DefaultPresetName;
     private string pendingPresetName = string.Empty;
     private string diskTransferPath = string.Empty;
     private string dutySearch = string.Empty;
-    private string ruleTextFilter = string.Empty;
     private int dutySearchRow = -1;
     private ObjectPriorityRule? pendingScrollRule;
     private string editorStatus = "Rules not loaded.";
@@ -105,10 +92,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         EnsureDraftLoaded();
 
         ImGui.TextWrapped("Spreadsheet-style editor for duty-object-rules.json. Use the duty dropdown for catalog duties, leave it on GLOBAL for wildcard rows, and use row base64 export/import for quick duplication or sharing.");
-        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination / MapXzForceMarch versus XYZ / XYZForceMarch. ForceMarch rows are authored inside-duty bypass waypoints that can stay committed through incidental combat; they are not Praetorium-mounted-only rows. On ordinary rows, Coords is the positional selector and R is its optional radius.");
+        ImGui.TextWrapped("Coords is now the single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows, Coords drives MapXzDestination / MapXzForceMarch versus XYZ / XYZForceMarch. ForceMarch rows are authored inside-duty bypass waypoints that can stay committed through incidental combat; they are not Praetorium-mounted-only rows. On ordinary rows, Coords is the positional selector and R is its optional radius. BaseId is the stable sheet/base object id, not the per-instance GameObjectId.");
         ImGui.TextWrapped("Wait-before holds after ADS arrives in interact range and before the first interact send. Wait-after holds after a successful interact send before ADS retries or moves on.");
         ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
-        DrawCurrentScopeBanner();
         if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
             ImGui.TextWrapped("Runtime ADS still reads DEFAULT/live rules. Non-default presets are parked datasets until you import or copy them back into DEFAULT.");
         ImGui.TextWrapped(editorStatus);
@@ -131,26 +117,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("+ Row"))
         {
-            AddDraftRule(CreateNewDraftRule(out var status), status);
-        }
-
-        ImGui.SameLine();
-        var newRowsUseCurrentArea = plugin.Configuration.RuleEditorNewRowCurrentArea;
-        if (ImGui.Checkbox("New rows use current area", ref newRowsUseCurrentArea))
-        {
-            plugin.Configuration.RuleEditorNewRowCurrentArea = newRowsUseCurrentArea;
-            plugin.SaveConfiguration();
-        }
-
-        ImGui.SameLine();
-        using (new ImGuiDisabledBlock(!plugin.Configuration.RuleEditorNewRowCurrentArea))
-        {
-            var newRowsUseCurrentLabel = plugin.Configuration.RuleEditorNewRowCurrentLabel;
-            if (ImGui.Checkbox("also current label", ref newRowsUseCurrentLabel))
-            {
-                plugin.Configuration.RuleEditorNewRowCurrentLabel = newRowsUseCurrentLabel;
-                plugin.SaveConfiguration();
-            }
+            AddDraftRule(plugin.ObjectPriorityRuleService.CreateBlankRule(), "Added a new blank rule row.");
         }
 
         ImGui.SameLine();
@@ -179,92 +146,14 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (ImGui.Button("Open JSON"))
             plugin.OpenPath(plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName));
 
-        var filterMode = Math.Clamp(plugin.Configuration.RuleEditorFilterMode, 0, FilterModeLabels.Length - 1);
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(190f);
-        if (ImGui.Combo("Rows", ref filterMode, FilterModeLabels, FilterModeLabels.Length))
-        {
-            plugin.Configuration.RuleEditorFilterMode = filterMode;
-            plugin.SaveConfiguration();
-        }
+        ImGui.Checkbox("Current Area + Global", ref filterCurrentAreaAndGlobal);
 
         ImGui.SameLine();
         ImGui.Checkbox("Sort By Duty", ref sortByDutyName);
 
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(260f);
-        ImGui.InputTextWithHint("##ADSRuleTextFilter", "filter duty/name/class/layer/notes", ref ruleTextFilter, 128);
-
         var rowsShown = BuildVisibleRuleIndices().Count;
         ImGui.TextUnformatted($"Rows shown: {rowsShown} / {draft.Rules.Count}");
-    }
-
-    private void DrawCurrentScopeBanner()
-    {
-        var context = plugin.DutyContextService.Current;
-        var duty = context.CurrentDuty?.EnglishName ?? (context.InInstancedDuty ? "(uncataloged duty)" : "GLOBAL / outside duty");
-        var activeLabel = context.InInstancedDuty
-            ? plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "(unknown)"
-            : "(none)";
-        ImGui.TextWrapped($"Current scope: duty {duty} | Terr {context.TerritoryTypeId} | CFC {context.ContentFinderConditionId} | Label {activeLabel}");
-    }
-
-    private ObjectPriorityRule CreateNewDraftRule(out string status)
-    {
-        var rule = plugin.ObjectPriorityRuleService.CreateBlankRule();
-        if (!plugin.Configuration.RuleEditorNewRowCurrentArea)
-        {
-            status = "Added a new global rule row.";
-            return rule;
-        }
-
-        var context = plugin.DutyContextService.Current;
-        if (!TrySeedCurrentArea(rule, context, out var areaStatus))
-        {
-            status = $"Added a new global rule row. {areaStatus}";
-            return rule;
-        }
-
-        if (!plugin.Configuration.RuleEditorNewRowCurrentLabel)
-        {
-            status = $"Added a new rule row scoped to current area. {areaStatus}";
-            return rule;
-        }
-
-        var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context);
-        if (string.IsNullOrWhiteSpace(activeLayer))
-        {
-            status = $"Added a new rule row scoped to current area. {areaStatus} Active label unavailable; Layer left blank.";
-            return rule;
-        }
-
-        rule.Layer = activeLayer;
-        status = $"Added a new rule row scoped to current area and label '{activeLayer}'. {areaStatus}";
-        return rule;
-    }
-
-    private static bool TrySeedCurrentArea(ObjectPriorityRule rule, DutyContextSnapshot context, out string status)
-    {
-        if (!context.InInstancedDuty)
-        {
-            status = "Current area unavailable outside duty.";
-            return false;
-        }
-
-        if (context.TerritoryTypeId == 0
-            && context.ContentFinderConditionId == 0
-            && context.CurrentDuty is null)
-        {
-            status = "Current area context is missing.";
-            return false;
-        }
-
-        rule.DutyEnglishName = context.CurrentDuty?.EnglishName ?? string.Empty;
-        rule.TerritoryTypeId = context.TerritoryTypeId;
-        rule.ContentFinderConditionId = context.ContentFinderConditionId;
-        var duty = string.IsNullOrWhiteSpace(rule.DutyEnglishName) ? "uncataloged duty" : rule.DutyEnglishName;
-        status = $"Scope: {duty}, Terr {rule.TerritoryTypeId}, CFC {rule.ContentFinderConditionId}.";
-        return true;
     }
 
     private void DrawPresetToolbar()
@@ -378,7 +267,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.SizingFixedFit;
 
-        if (!ImGui.BeginTable("ADSRulesEditorTable", 20, tableFlags, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSRulesEditorTable", 21, tableFlags, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 40f);
@@ -386,6 +275,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Terr", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("CFC", ImGuiTableColumnFlags.WidthFixed, 48f);
         ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("BaseId", ImGuiTableColumnFlags.WidthFixed, 88f);
         ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 170f);
@@ -452,13 +342,20 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
 
             ImGui.TableSetColumnIndex(5);
+            if (EditUintCell("##BaseId", rule.BaseId, out var baseId))
+            {
+                rule.BaseId = baseId;
+                dirty = true;
+            }
+
+            ImGui.TableSetColumnIndex(6);
             if (EditTextCell("##ObjectName", rule.ObjectName, 128, out var objectName))
             {
                 rule.ObjectName = objectName;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(7);
             var matchModeIndex = Math.Max(0, Array.IndexOf(NameMatchModes, string.IsNullOrWhiteSpace(rule.NameMatchMode) ? "Exact" : rule.NameMatchMode));
             if (ImGui.Combo("##NameMatchMode", ref matchModeIndex, NameMatchModes, NameMatchModes.Length))
             {
@@ -466,7 +363,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(7);
+            ImGui.TableSetColumnIndex(8);
             var classificationIndex = Math.Max(0, Array.IndexOf(ClassificationValues, rule.Classification ?? string.Empty));
             if (ImGui.Combo("##Classification", ref classificationIndex, ClassificationLabels, ClassificationLabels.Length))
             {
@@ -474,13 +371,13 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(8);
+            ImGui.TableSetColumnIndex(9);
             if (DrawLayerCell(rule, ruleIndex))
             {
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(9);
+            ImGui.TableSetColumnIndex(10);
             var unifiedCoordinates = GetUnifiedCoordinatesValue(rule);
             if (EditTextCell("##Coords", unifiedCoordinates, 48, out var editedCoordinates))
             {
@@ -488,7 +385,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(10);
+            ImGui.TableSetColumnIndex(11);
             using (new ImGuiDisabledBlock(IsManualDestinationRule(rule)))
             {
                 if (EditNullableFloatCell("##ObjectMatchRadius", rule.ObjectMatchRadius, out var objectMatchRadius))
@@ -498,57 +395,57 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 }
             }
 
-            ImGui.TableSetColumnIndex(11);
+            ImGui.TableSetColumnIndex(12);
             if (EditIntCell("##Priority", rule.Priority, out var priority))
             {
                 rule.Priority = priority;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(12);
+            ImGui.TableSetColumnIndex(13);
             if (EditFloatCell("##PriorityVerticalRadius", rule.PriorityVerticalRadius, out var priorityVerticalRadius))
             {
                 rule.PriorityVerticalRadius = priorityVerticalRadius;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(13);
+            ImGui.TableSetColumnIndex(14);
             if (EditNullableFloatCell("##MaxDistance", rule.MaxDistance, out var maxDistance))
             {
                 rule.MaxDistance = maxDistance;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(14);
+            ImGui.TableSetColumnIndex(15);
             if (EditFloatCell("##WaitAtDestinationSeconds", rule.WaitAtDestinationSeconds, out var waitAtDestinationSeconds))
             {
                 rule.WaitAtDestinationSeconds = waitAtDestinationSeconds;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(15);
+            ImGui.TableSetColumnIndex(16);
             if (EditFloatCell("##WaitAfterInteractSeconds", rule.WaitAfterInteractSeconds, out var waitAfterInteractSeconds))
             {
                 rule.WaitAfterInteractSeconds = waitAfterInteractSeconds;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(16);
+            ImGui.TableSetColumnIndex(17);
             if (EditTextCell("##Notes", rule.Notes, 512, out var notes))
             {
                 rule.Notes = notes;
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(17);
+            ImGui.TableSetColumnIndex(18);
             if (ImGui.SmallButton("B64"))
                 ExportRuleAsBase64(rule);
 
-            ImGui.TableSetColumnIndex(18);
+            ImGui.TableSetColumnIndex(19);
             if (ImGui.SmallButton("Paste") && ImportRuleFromClipboard(ruleIndex))
                 dirty = true;
 
-            ImGui.TableSetColumnIndex(19);
+            ImGui.TableSetColumnIndex(20);
             if (ImGui.SmallButton("-"))
                 rowToRemove = ruleIndex;
 
@@ -575,21 +472,22 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(2, "Terr", "TerritoryTypeId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
         DrawHeaderCell(3, "CFC", "ContentFinderConditionId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
         DrawHeaderCell(4, "Kind", "Live ObjectKind match. Use blank for wildcard. This is the game object category, not a unique instance id.");
-        DrawHeaderCell(5, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
-        DrawHeaderCell(6, "Match", "Exact or substring name matching.");
-        DrawHeaderCell(7, "Class", "Planner/execution behavior override such as Required, CombatFriendly, TreasureDoor, BossFight, MapXzDestination, MapXzForceMarch, XYZ, or XYZForceMarch. ForceMarch rows are generic authored bypass destinations, not mounted-only rows.");
-        DrawHeaderCell(8, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
-        DrawHeaderCell(9, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
-        DrawHeaderCell(10, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
-        DrawHeaderCell(11, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
-        DrawHeaderCell(12, "Y", "Priority vertical radius gate. Zero means no Y gate.");
-        DrawHeaderCell(13, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
-        DrawHeaderCell(14, "Wait-before", "Seconds to hold after ADS arrives in interact range and before it sends the first direct interact for this commitment.");
-        DrawHeaderCell(15, "Wait-after", "Seconds to hold after a successful direct interact send before ADS retries the same target or moves on to new planner truth.");
-        DrawHeaderCell(16, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
-        DrawHeaderCell(17, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
-        DrawHeaderCell(18, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
-        DrawHeaderCell(19, "-", "Delete this row.");
+        DrawHeaderCell(5, "BaseId", "Stable base sheet/object id. Useful when names collide, but not unique per live spawn. This is not GameObjectId.");
+        DrawHeaderCell(6, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
+        DrawHeaderCell(7, "Match", "Exact or substring name matching.");
+        DrawHeaderCell(8, "Class", "Planner/execution behavior override such as Required, CombatFriendly, TreasureDoor, BossFight, MapXzDestination, MapXzForceMarch, XYZ, or XYZForceMarch. ForceMarch rows are generic authored bypass destinations, not mounted-only rows.");
+        DrawHeaderCell(9, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
+        DrawHeaderCell(10, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
+        DrawHeaderCell(11, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
+        DrawHeaderCell(12, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
+        DrawHeaderCell(13, "Y", "Priority vertical radius gate. Zero means no Y gate.");
+        DrawHeaderCell(14, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
+        DrawHeaderCell(15, "Wait-before", "Seconds to hold after ADS arrives in interact range and before it sends the first direct interact for this commitment.");
+        DrawHeaderCell(16, "Wait-after", "Seconds to hold after a successful direct interact send before ADS retries the same target or moves on to new planner truth.");
+        DrawHeaderCell(17, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
+        DrawHeaderCell(18, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
+        DrawHeaderCell(19, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
+        DrawHeaderCell(20, "-", "Delete this row.");
     }
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
@@ -800,13 +698,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private IReadOnlyList<int> BuildVisibleRuleIndices()
     {
-        var context = plugin.DutyContextService.Current;
-        var filterMode = Math.Clamp(plugin.Configuration.RuleEditorFilterMode, 0, FilterModeLabels.Length - 1);
         IEnumerable<int> indices = Enumerable.Range(0, draft.Rules.Count);
-        indices = indices.Where(index => MatchesScopeFilter(draft.Rules[index], context, filterMode));
-
-        if (!string.IsNullOrWhiteSpace(ruleTextFilter))
-            indices = indices.Where(index => MatchesRuleTextFilter(draft.Rules[index]));
+        if (filterCurrentAreaAndGlobal)
+        {
+            var context = plugin.DutyContextService.Current;
+            indices = indices.Where(index => plugin.ObjectPriorityRuleService.MatchesCurrentDutyScopeForEditor(draft.Rules[index], context));
+        }
 
         if (!sortByDutyName)
             return indices.ToList();
@@ -819,72 +716,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             .ThenBy(index => draft.Rules[index].Priority)
             .ToList();
     }
-
-    private bool MatchesScopeFilter(ObjectPriorityRule rule, DutyContextSnapshot context, int filterMode)
-    {
-        var isGlobal = IsGlobalAreaRule(rule);
-        var matchesCurrentArea = plugin.ObjectPriorityRuleService.MatchesCurrentDutyScopeForEditor(rule, context);
-        return filterMode switch
-        {
-            FilterModeGlobalOnly => isGlobal,
-            FilterModeCurrentAreaOnly => !isGlobal && matchesCurrentArea,
-            FilterModeGlobalAndCurrentArea => matchesCurrentArea,
-            FilterModeEffectiveCurrentLabel => isGlobal || (matchesCurrentArea && MatchesCurrentLabelFilter(rule, context)),
-            _ => true,
-        };
-    }
-
-    private bool MatchesCurrentLabelFilter(ObjectPriorityRule rule, DutyContextSnapshot context)
-    {
-        var selector = GetLayerSelectorForEditor(rule);
-        if (string.IsNullOrWhiteSpace(selector))
-            return true;
-
-        if (context.MapId == 0)
-            return false;
-
-        if (uint.TryParse(selector, out var mapId))
-            return mapId == context.MapId;
-
-        var activeLabel = plugin.ObjectPriorityRuleService.GetActiveLayerName(context);
-        return !string.IsNullOrWhiteSpace(activeLabel)
-               && string.Equals(selector, activeLabel, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool MatchesRuleTextFilter(ObjectPriorityRule rule)
-    {
-        var filter = ruleTextFilter.Trim();
-        return ContainsFilterText(GetDutySelectionLabel(rule), filter)
-               || ContainsFilterText(rule.ObjectName, filter)
-               || ContainsFilterText(rule.Classification, filter)
-               || ContainsFilterText(GetLayerSelectorForEditor(rule), filter)
-               || ContainsFilterText(rule.Notes, filter);
-    }
-
-    private static bool IsGlobalAreaRule(ObjectPriorityRule rule)
-        => string.IsNullOrWhiteSpace(rule.DutyEnglishName)
-           && rule.TerritoryTypeId == 0
-           && rule.ContentFinderConditionId == 0;
-
-    private static bool ContainsFilterText(string value, string filter)
-        => !string.IsNullOrWhiteSpace(value)
-           && value.Contains(filter, StringComparison.OrdinalIgnoreCase);
-
-    private static string GetLayerSelectorForEditor(ObjectPriorityRule rule)
-    {
-        var explicitLayer = NormalizeEditorText(rule.Layer);
-        if (!string.IsNullOrWhiteSpace(explicitLayer))
-            return explicitLayer;
-
-        var legacyLayer = NormalizeEditorText(rule.DestinationType);
-        return string.Equals(legacyLayer, "MapXZ", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(legacyLayer, "XYZ", StringComparison.OrdinalIgnoreCase)
-            ? string.Empty
-            : legacyLayer;
-    }
-
-    private static string NormalizeEditorText(string? value)
-        => string.Join(' ', (value ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static string GetDutySelectionLabel(ObjectPriorityRule rule)
         => string.IsNullOrWhiteSpace(rule.DutyEnglishName)

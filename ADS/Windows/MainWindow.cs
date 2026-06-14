@@ -328,7 +328,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
     private void DrawActionRow()
     {
-        var canStartInside = plugin.DutyContextService.Current.InInstancedDuty;
+        var inInstancedDuty = plugin.DutyContextService.Current.InInstancedDuty;
         if (ImGui.BeginTable("ADSPrimaryActions", 5, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextRow();
@@ -337,21 +337,21 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 plugin.StartDutyFromOutside();
 
             ImGui.TableSetColumnIndex(1);
-            using (new ImGuiDisabledBlock(!canStartInside))
+            using (new ImGuiDisabledBlock(!inInstancedDuty))
             {
                 if (ImGui.Button("Start Inside", new Vector2(-1f, 32f)))
                     plugin.StartDutyFromInside();
             }
 
             ImGui.TableSetColumnIndex(2);
-            using (new ImGuiDisabledBlock(!canStartInside))
+            using (new ImGuiDisabledBlock(!inInstancedDuty))
             {
                 if (ImGui.Button("Resume", new Vector2(-1f, 32f)))
                     plugin.ResumeDutyFromInside();
             }
 
             ImGui.TableSetColumnIndex(3);
-            using (new ImGuiDisabledBlock(!plugin.ExecutionService.IsOwned))
+            using (new ImGuiDisabledBlock(!inInstancedDuty))
             {
                 if (ImGui.Button("Leave", new Vector2(-1f, 32f)))
                     plugin.LeaveDuty();
@@ -367,6 +367,10 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private void DrawDutyCatalog()
     {
         ImGui.TextUnformatted("Instanced Duty Catalog");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Edit Maturity"))
+            plugin.OpenDutyMaturityEditorUi();
+
         ImGui.SetNextItemWidth(-1f);
         ImGui.InputTextWithHint(
             "##ADSDutyCatalogSearch",

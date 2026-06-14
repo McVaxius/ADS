@@ -73,17 +73,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        var seedObjectPosition = plugin.Configuration.RuleEditorSeedObjectPosition;
-        if (ImGui.Checkbox("Pin rule to XYZ", ref seedObjectPosition))
-        {
-            plugin.Configuration.RuleEditorSeedObjectPosition = seedObjectPosition;
-            plugin.SaveConfiguration();
-        }
-
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("When enabled, RULE seeds object XYZ coordinates plus a 6y radius. BaseId remains 0; observed BaseId is kept in Notes.");
-
-        ImGui.SameLine();
         if (ImGui.SmallButton("Clear"))
         {
             textFilter = string.Empty;

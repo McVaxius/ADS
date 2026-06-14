@@ -10,7 +10,7 @@ namespace ADS.Services;
 public sealed class DutyCatalogService
 {
     private const string MaturityFileName = "duty-maturity.json";
-    private const string DefaultSupportNote = "Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion.";
+    internal const string DefaultSupportNote = "Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -148,19 +148,7 @@ public sealed class DutyCatalogService
             manifest.Duties ??= [];
             var applied = 0;
 
-            foreach (var row in manifest.Duties)
-            {
-                if (!TryFindMaturityEntry(row, out var entry))
-                    continue;
-
-                entry.ClearanceStatus = row.ClearanceStatus;
-                entry.SupportLevel = row.SupportLevel;
-                entry.IsPlannedTest = row.IsPlannedTest;
-                entry.SupportNote = string.IsNullOrWhiteSpace(row.SupportNote)
-                    ? DefaultSupportNote
-                    : NormalizeName(row.SupportNote);
-                applied++;
-            }
+            applied = ApplyMaturityManifest(entries, manifest);
 
             LastMaturityLoadStatus = $"Loaded duty maturity overlay from {maturityPath}: applied {applied}/{manifest.Duties.Count} row(s).";
             log.Information($"[ADS] {LastMaturityLoadStatus}");
@@ -169,6 +157,29 @@ public sealed class DutyCatalogService
         catch (Exception ex)
         {
             LastMaturityLoadStatus = $"Failed to load duty maturity overlay from {maturityPath}: {ex.Message}. Using default untested maturity for all catalog rows.";
+            log.Warning(ex, $"[ADS] {LastMaturityLoadStatus}");
+            return false;
+        }
+    }
+
+    public bool SaveMaturityOverrides()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(maturityPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+
+            var manifest = BuildMaturityManifest(entries);
+            var json = JsonSerializer.Serialize(manifest, JsonOptions);
+            File.WriteAllText(maturityPath, json + Environment.NewLine);
+            LastMaturityLoadStatus = $"Saved duty maturity overlay to {maturityPath}: {manifest.Duties.Count} override row(s).";
+            log.Information($"[ADS] {LastMaturityLoadStatus}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastMaturityLoadStatus = $"Failed to save duty maturity overlay to {maturityPath}: {ex.Message}.";
             log.Warning(ex, $"[ADS] {LastMaturityLoadStatus}");
             return false;
         }
@@ -207,24 +218,87 @@ public sealed class DutyCatalogService
         log.Warning($"[ADS] {LastMaturityLoadStatus}");
     }
 
-    private bool TryFindMaturityEntry(DutyMaturityRow row, out DutyCatalogEntry entry)
-    {
-        if (row.ContentFinderConditionId != 0 && entriesByCfc.TryGetValue(row.ContentFinderConditionId, out entry!))
-            return true;
+    internal static DutyMaturityManifest BuildMaturityManifest(IReadOnlyList<DutyCatalogEntry> sourceEntries)
+        => new()
+        {
+            SchemaVersion = 1,
+            Description = "Human-edited ADS duty maturity overlay. Rows absent from this file use built-in untested defaults.",
+            Duties = sourceEntries
+                .Where(entry => !IsDefaultMaturityEntry(entry))
+                .Select(CreateMaturityRow)
+                .ToList(),
+        };
 
-        if (row.TerritoryTypeId != 0 && entriesByTerritory.TryGetValue(row.TerritoryTypeId, out entry!))
-            return true;
+    internal static int ApplyMaturityManifest(IReadOnlyList<DutyCatalogEntry> targetEntries, DutyMaturityManifest manifest)
+    {
+        manifest.Duties ??= [];
+        var applied = 0;
+        foreach (var row in manifest.Duties)
+        {
+            if (!TryFindMaturityEntry(targetEntries, row, out var entry))
+                continue;
+
+            entry.ClearanceStatus = row.ClearanceStatus;
+            entry.SupportLevel = row.SupportLevel;
+            entry.IsPlannedTest = row.IsPlannedTest;
+            entry.SupportNote = string.IsNullOrWhiteSpace(row.SupportNote)
+                ? DefaultSupportNote
+                : NormalizeName(row.SupportNote);
+            applied++;
+        }
+
+        return applied;
+    }
+
+    internal static bool IsDefaultMaturityEntry(DutyCatalogEntry entry)
+        => entry.ClearanceStatus == DutyClearanceStatus.NotCleared
+           && entry.SupportLevel == DutySupportLevel.PassiveOnly
+           && !entry.IsPlannedTest
+           && IsDefaultSupportNote(entry.SupportNote);
+
+    private static DutyMaturityRow CreateMaturityRow(DutyCatalogEntry entry)
+        => new()
+        {
+            ContentFinderConditionId = entry.ContentFinderConditionId,
+            TerritoryTypeId = entry.TerritoryTypeId,
+            DutyEnglishName = entry.EnglishName,
+            ClearanceStatus = entry.ClearanceStatus,
+            SupportLevel = entry.SupportLevel,
+            IsPlannedTest = entry.IsPlannedTest,
+            SupportNote = IsDefaultSupportNote(entry.SupportNote)
+                ? string.Empty
+                : entry.SupportNote.Trim(),
+        };
+
+    private static bool TryFindMaturityEntry(IReadOnlyList<DutyCatalogEntry> sourceEntries, DutyMaturityRow row, out DutyCatalogEntry entry)
+    {
+        if (row.ContentFinderConditionId != 0)
+        {
+            entry = sourceEntries.FirstOrDefault(x => x.ContentFinderConditionId == row.ContentFinderConditionId)!;
+            if (entry is not null)
+                return true;
+        }
+
+        if (row.TerritoryTypeId != 0)
+        {
+            entry = sourceEntries.FirstOrDefault(x => x.TerritoryTypeId == row.TerritoryTypeId)!;
+            if (entry is not null)
+                return true;
+        }
 
         if (!string.IsNullOrWhiteSpace(row.DutyEnglishName))
         {
-            entry = entries.FirstOrDefault(x => x.EnglishName.Equals(row.DutyEnglishName, StringComparison.OrdinalIgnoreCase))!;
-            if (entry is not null)
-                return true;
+            entry = sourceEntries.FirstOrDefault(x => x.EnglishName.Equals(row.DutyEnglishName, StringComparison.OrdinalIgnoreCase))!;
+            return entry is not null;
         }
 
         entry = null!;
         return false;
     }
+
+    private static bool IsDefaultSupportNote(string supportNote)
+        => string.IsNullOrWhiteSpace(supportNote)
+           || string.Equals(NormalizeName(supportNote), DefaultSupportNote, StringComparison.Ordinal);
 
     private void AddSyntheticTreasureDutyEntries(IDataManager dataManager)
     {
