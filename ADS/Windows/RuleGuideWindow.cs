@@ -33,9 +33,10 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
         DrawSection("How A Rule Wins");
         ImGui.BulletText("1. Scope: Duty, Terr, CFC, then Layer.");
         ImGui.BulletText("2. Object match: Kind, BaseId, Name/Match, then optional positional selector.");
-        ImGui.BulletText("3. Gates: Dist and Y must pass when that class uses them.");
+        ImGui.BulletText("3. Gates: candidates failing Dist or Y are removed before a winner is selected.");
         ImGui.BulletText("4. Priority: lower Pri wins among eligible matching candidates.");
         ImGui.BulletText("5. Behavior and timing: Class, Wait-before, and Wait-after control execution.");
+        ImGui.TextWrapped("A failed higher-ranked candidate cannot shadow a lower eligible rule. Failed Required/BossFight/CombatFriendly BattleNpc rules are non-blocking; failed Ignored/Follow BattleNpc rules keep generic monster fallback.");
 
         DrawSection("Choose Class By Goal");
         if (ImGui.BeginTable("ADSRuleGuideGoals", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))

@@ -12,6 +12,7 @@ namespace ADS.Services;
 public sealed class ObjectPriorityRuleService
 {
     internal const int DefaultPriority = 1000;
+    internal const float BattleNpcPlanningVerticalSanityCap = 100f;
     public const string DefaultPresetName = "DEFAULT";
     private const string FileName = "duty-object-rules.json";
     private const string PresetDirectoryName = "rule-presets";
@@ -518,6 +519,31 @@ public sealed class ObjectPriorityRuleService
             && TryParseClassification(rule.Classification, out classification);
     }
 
+    public bool TryGetEffectiveBattleNpcClassificationOverride(
+        DutyContextSnapshot context,
+        uint baseId,
+        string objectName,
+        Vector3 objectPosition,
+        uint objectMapId,
+        float? distance,
+        float? verticalDelta,
+        out InteractableClass classification)
+    {
+        classification = default;
+        var rule = ResolveObjectRule(
+                context,
+                ObjectKind.BattleNpc,
+                baseId,
+                objectName,
+                objectPosition,
+                objectMapId,
+                distance,
+                verticalDelta)
+            .EffectiveRule;
+        return rule is not null
+               && TryParseClassification(rule.Classification, out classification);
+    }
+
     public int GetEffectivePriority(
         DutyContextSnapshot context,
         ObservedInteractable interactable,
@@ -533,26 +559,32 @@ public sealed class ObjectPriorityRuleService
         ObservedInteractable interactable,
         float? distance,
         float? verticalDelta)
-    {
-        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId);
-        if (rule is null)
-            return null;
-
-        return RulePassesDistanceGates(rule, distance, verticalDelta) ? rule : null;
-    }
+        => ResolveObjectRule(
+                context,
+                interactable.ObjectKind,
+                interactable.DataId,
+                interactable.Name,
+                interactable.Position,
+                interactable.MapId,
+                distance,
+                verticalDelta)
+            .EffectiveRule;
 
     public ObjectPriorityRule? GetEffectiveBattleNpcRule(
         DutyContextSnapshot context,
         ObservedMonster monster,
         float? distance,
         float? verticalDelta)
-    {
-        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name, monster.Position, monster.MapId);
-        if (rule is null)
-            return null;
-
-        return RulePassesDistanceGates(rule, distance, verticalDelta) ? rule : null;
-    }
+        => ResolveObjectRule(
+                context,
+                ObjectKind.BattleNpc,
+                monster.DataId,
+                monster.Name,
+                monster.Position,
+                monster.MapId,
+                distance,
+                verticalDelta)
+            .EffectiveRule;
 
     public int GetEffectiveBattleNpcPriority(
         DutyContextSnapshot context,
@@ -582,18 +614,60 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, ObjectKind.BattleNpc, monster.DataId, monster.Name, monster.Position, monster.MapId);
-        if (rule is null || RulePassesDistanceGates(rule, distance, verticalDelta))
-            return false;
-
-        if (TryParseClassification(rule.Classification, out var classification)
-            && classification is InteractableClass.Ignored or InteractableClass.Follow)
-        {
-            return false;
-        }
-
-        return true;
+        var resolution = ResolveObjectRule(
+            context,
+            ObjectKind.BattleNpc,
+            monster.DataId,
+            monster.Name,
+            monster.Position,
+            monster.MapId,
+            distance,
+            verticalDelta);
+        return IsBattleNpcSuppressedByRuleGates(resolution);
     }
+
+    internal BattleNpcPlanningEligibility EvaluateBattleNpcPlanningEligibility(
+        DutyContextSnapshot context,
+        ObservedMonster monster,
+        Vector3? playerPosition)
+    {
+        var distance = playerPosition.HasValue
+            ? Vector3.Distance(playerPosition.Value, monster.Position)
+            : (float?)null;
+        var verticalDelta = playerPosition.HasValue
+            ? MathF.Abs(playerPosition.Value.Y - monster.Position.Y)
+            : (float?)null;
+        var resolution = ResolveObjectRule(
+            context,
+            ObjectKind.BattleNpc,
+            monster.DataId,
+            monster.Name,
+            monster.Position,
+            monster.MapId,
+            distance,
+            verticalDelta);
+        var effectiveClassification = resolution.EffectiveRule is not null
+                                      && TryParseClassification(resolution.EffectiveRule.Classification, out var classification)
+            ? classification
+            : (InteractableClass?)null;
+
+        return new BattleNpcPlanningEligibility(
+            monster,
+            distance,
+            verticalDelta,
+            resolution.EffectiveRule,
+            effectiveClassification,
+            !verticalDelta.HasValue || verticalDelta.Value <= BattleNpcPlanningVerticalSanityCap,
+            IsBattleNpcSuppressedByRuleGates(resolution));
+    }
+
+    internal IReadOnlyList<BattleNpcPlanningEligibility> EvaluateBattleNpcPlanningEligibility(
+        DutyContextSnapshot context,
+        IEnumerable<ObservedMonster> monsters,
+        Vector3? playerPosition)
+        => monsters
+            .Select(monster => EvaluateBattleNpcPlanningEligibility(context, monster, playerPosition))
+            .ToList();
 
     public bool IsSuppressedByRuleGates(
         DutyContextSnapshot context,
@@ -601,8 +675,16 @@ public sealed class ObjectPriorityRuleService
         float? distance,
         float? verticalDelta)
     {
-        var rule = MatchObjectRule(context, interactable.ObjectKind, interactable.DataId, interactable.Name, interactable.Position, interactable.MapId);
-        return rule is not null && !RulePassesDistanceGates(rule, distance, verticalDelta);
+        var resolution = ResolveObjectRule(
+            context,
+            interactable.ObjectKind,
+            interactable.DataId,
+            interactable.Name,
+            interactable.Position,
+            interactable.MapId,
+            distance,
+            verticalDelta);
+        return resolution.MatchedRule is not null && resolution.EffectiveRule is null;
     }
 
     public ObjectPriorityRule? GetMatchedRule(DutyContextSnapshot context, ObservedInteractable interactable)
@@ -616,10 +698,9 @@ public sealed class ObjectPriorityRuleService
         float? distance = null,
         float? verticalDelta = null)
     {
-        var rule = MatchObjectRule(context, objectKind, baseId, objectName);
+        var rule = ResolveObjectRule(context, objectKind, baseId, objectName, null, 0, distance, verticalDelta).EffectiveRule;
         return rule is not null
-            && IsIgnoredRule(rule)
-            && RulePassesDistanceGates(rule, distance, verticalDelta);
+            && IsIgnoredRule(rule);
     }
 
     public bool ShouldIgnoreObject(
@@ -632,10 +713,9 @@ public sealed class ObjectPriorityRuleService
         float? distance = null,
         float? verticalDelta = null)
     {
-        var rule = MatchObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId);
+        var rule = ResolveObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId, distance, verticalDelta).EffectiveRule;
         return rule is not null
-            && IsIgnoredRule(rule)
-            && RulePassesDistanceGates(rule, distance, verticalDelta);
+            && IsIgnoredRule(rule);
     }
 
     public bool ShouldIgnoreInteractable(
@@ -676,10 +756,9 @@ public sealed class ObjectPriorityRuleService
         if (objectKind != ObjectKind.BattleNpc)
             return false;
 
-        var rule = MatchObjectRule(context, objectKind, baseId, objectName);
+        var rule = ResolveObjectRule(context, objectKind, baseId, objectName, null, 0, distance, verticalDelta).EffectiveRule;
         return rule is not null
-            && IsFollowRule(rule)
-            && RulePassesDistanceGates(rule, distance, verticalDelta);
+            && IsFollowRule(rule);
     }
 
     public bool ShouldFollowObject(
@@ -695,10 +774,9 @@ public sealed class ObjectPriorityRuleService
         if (objectKind != ObjectKind.BattleNpc)
             return false;
 
-        var rule = MatchObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId);
+        var rule = ResolveObjectRule(context, objectKind, baseId, objectName, objectPosition, objectMapId, distance, verticalDelta).EffectiveRule;
         return rule is not null
-            && IsFollowRule(rule)
-            && RulePassesDistanceGates(rule, distance, verticalDelta);
+            && IsFollowRule(rule);
     }
 
     private static bool RulePassesDistanceGates(ObjectPriorityRule rule, float? distance, float? verticalDelta)
@@ -711,6 +789,42 @@ public sealed class ObjectPriorityRuleService
 
         return true;
     }
+
+    private ObjectRuleResolution ResolveObjectRule(
+        DutyContextSnapshot context,
+        ObjectKind objectKind,
+        uint baseId,
+        string objectName,
+        Vector3? objectPosition,
+        uint objectMapId,
+        float? distance,
+        float? verticalDelta)
+    {
+        var matchingRules = GetMatchingObjectRules(
+                context,
+                objectKind,
+                baseId,
+                objectName,
+                objectPosition,
+                objectMapId)
+            .ToList();
+        return new ObjectRuleResolution(
+            matchingRules.FirstOrDefault(),
+            matchingRules.FirstOrDefault(rule => RulePassesDistanceGates(rule, distance, verticalDelta)));
+    }
+
+    private static bool IsBattleNpcSuppressedByRuleGates(ObjectRuleResolution resolution)
+    {
+        if (resolution.MatchedRule is null || resolution.EffectiveRule is not null)
+            return false;
+
+        return !TryParseClassification(resolution.MatchedRule.Classification, out var classification)
+               || classification is not (InteractableClass.Ignored or InteractableClass.Follow);
+    }
+
+    private readonly record struct ObjectRuleResolution(
+        ObjectPriorityRule? MatchedRule,
+        ObjectPriorityRule? EffectiveRule);
 
     private void EnsureSeeded()
     {

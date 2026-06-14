@@ -14,8 +14,6 @@ public sealed class ObjectivePlannerService
     private const float TreasureCofferMaterialLead = 8f;
     private const float TreasureCofferMaxHorizontalDistance = 100f;
     private const float TreasureCofferVerticalCap = 5f;
-    private const float BattleNpcVerticalSanityCap = 100f;
-
     private readonly IObjectTable objectTable;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
     private readonly DungeonFrontierService dungeonFrontierService;
@@ -104,9 +102,11 @@ public sealed class ObjectivePlannerService
 
         var playerPosition = objectTable.LocalPlayer?.Position;
         var isRawTreasureFollower = dungeonFrontierService.TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
-        var nearestBossFightMonster = GetBestBossFightBattleNpc(observation.LiveMonsters, playerPosition, context);
-        var nearestMonster = GetBestBattleNpc(observation.LiveMonsters, playerPosition, context);
-        var nearestFollowTarget = GetBestBattleNpc(observation.LiveFollowTargets, playerPosition, context);
+        var liveMonsterEligibility = objectPriorityRuleService.EvaluateBattleNpcPlanningEligibility(context, observation.LiveMonsters, playerPosition);
+        var liveFollowTargetEligibility = objectPriorityRuleService.EvaluateBattleNpcPlanningEligibility(context, observation.LiveFollowTargets, playerPosition);
+        var nearestBossFightMonster = GetBestBossFightBattleNpc(liveMonsterEligibility);
+        var nearestMonster = GetBestBattleNpc(liveMonsterEligibility);
+        var nearestFollowTarget = GetBestBattleNpc(liveFollowTargetEligibility);
 
         var nearestRequiredInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(IsProgressionInteractable),
@@ -587,12 +587,7 @@ public sealed class ObjectivePlannerService
             Mode = ownershipMode == OwnershipMode.Observing ? PlannerMode.IdleObserve : PlannerMode.Progression,
             ObjectiveKind = PlannerObjectiveKind.None,
             Objective = "Await new duty state",
-            Explanation = observation.LiveMonsters.Any(x =>
-                objectPriorityRuleService.IsBattleNpcSuppressedByRuleGates(
-                    context,
-                    x,
-                    GetDistance(playerPosition, x.Position),
-                    GetVerticalDelta(playerPosition, x.Position)))
+            Explanation = liveMonsterEligibility.Any(x => x.SuppressedByRuleGates)
                 ? "Live monsters are visible, but all currently fail the active BattleNpc distance/Y rule gates, so ADS is holding until one becomes eligible again."
                 : observation.LiveInteractables.Any(IsProgressionInteractable)
                 ? "Live progression interactables are visible, but all currently fail the active distance/Y rule gates, so ADS is holding until a manual destination, live monster, or eligible interactable becomes available."
@@ -602,37 +597,12 @@ public sealed class ObjectivePlannerService
     }
 
     private ObservedMonster? GetBestBattleNpc(
-        IEnumerable<ObservedMonster> monsters,
-        Vector3? playerPosition,
-        DutyContextSnapshot context)
+        IEnumerable<BattleNpcPlanningEligibility> candidates)
     {
-        return monsters
-            .Select(x => new
-            {
-                Monster = x,
-                Distance = GetDistance(playerPosition, x.Position),
-                VerticalDelta = GetVerticalDelta(playerPosition, x.Position),
-            })
-            .Select(x => new
-            {
-                x.Monster,
-                x.Distance,
-                x.VerticalDelta,
-                Rule = objectPriorityRuleService.GetEffectiveBattleNpcRule(
-                    context,
-                    x.Monster,
-                    x.Distance,
-                    x.VerticalDelta),
-                SuppressedByRuleGates = objectPriorityRuleService.IsBattleNpcSuppressedByRuleGates(
-                    context,
-                    x.Monster,
-                    x.Distance,
-                    x.VerticalDelta),
-            })
-            .Where(x => !x.VerticalDelta.HasValue || x.VerticalDelta.Value <= BattleNpcVerticalSanityCap)
-            .Where(x => !x.SuppressedByRuleGates)
-            .OrderBy(x => x.Rule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
-            .ThenBy(x => x.Rule is null ? 1 : 0)
+        return candidates
+            .Where(x => x.IsEligibleBlocker)
+            .OrderBy(x => x.EffectiveRule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
+            .ThenBy(x => x.EffectiveRule is null ? 1 : 0)
             .ThenBy(x => x.Distance ?? float.MaxValue)
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .Select(x => x.Monster)
@@ -640,42 +610,12 @@ public sealed class ObjectivePlannerService
     }
 
     private ObservedMonster? GetBestBossFightBattleNpc(
-        IEnumerable<ObservedMonster> monsters,
-        Vector3? playerPosition,
-        DutyContextSnapshot context)
+        IEnumerable<BattleNpcPlanningEligibility> candidates)
     {
-        return monsters
-            .Select(x => new
-            {
-                Monster = x,
-                Distance = GetDistance(playerPosition, x.Position),
-                VerticalDelta = GetVerticalDelta(playerPosition, x.Position),
-            })
-            .Select(x => new
-            {
-                x.Monster,
-                x.Distance,
-                x.VerticalDelta,
-                Rule = objectPriorityRuleService.GetEffectiveBattleNpcRule(
-                    context,
-                    x.Monster,
-                    x.Distance,
-                    x.VerticalDelta),
-                Classification = objectPriorityRuleService.GetEffectiveBattleNpcClassification(
-                    context,
-                    x.Monster,
-                    x.Distance,
-                    x.VerticalDelta),
-                SuppressedByRuleGates = objectPriorityRuleService.IsBattleNpcSuppressedByRuleGates(
-                    context,
-                    x.Monster,
-                    x.Distance,
-                    x.VerticalDelta),
-            })
-            .Where(x => !x.VerticalDelta.HasValue || x.VerticalDelta.Value <= BattleNpcVerticalSanityCap)
-            .Where(x => !x.SuppressedByRuleGates)
-            .Where(x => x.Classification == InteractableClass.BossFight)
-            .OrderBy(x => x.Rule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
+        return candidates
+            .Where(x => x.IsEligibleBlocker)
+            .Where(x => x.EffectiveClassification == InteractableClass.BossFight)
+            .OrderBy(x => x.EffectiveRule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
             .ThenBy(x => x.Distance ?? float.MaxValue)
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .Select(x => x.Monster)

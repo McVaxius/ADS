@@ -23,6 +23,7 @@ Capture evidence while failure state is still visible:
 - Relevant Object Explorer row
 - Relevant Ghost Inspector state
 - Relevant Frontier Labels state for map/layer issues
+- Analysis JSON `rawLiveMonsterCount`, `eligibleMonsterBlockerCount`, and `gateSuppressedMonsterNames`
 
 Enable Settings > Advanced > **Show debug sections in the Main window** for formatted Analysis JSON preview and short live-object samples.
 
@@ -97,6 +98,7 @@ Manual update bypasses the normal stale-age gate and uses cache-busted remote re
 - Capture Status/Analysis JSON.
 - Compare active rules and priorities for both candidates.
 - Verify duty, layer, kind, base ID, exact name, positional selector, Y gate, and distance gate.
+- Remember failed gate candidates are removed before specificity/priority winner selection; inspect the next eligible matching row.
 - Remember lower priority wins; equal priorities fall back to distance/Y heuristics.
 
 ### Expected Object Is Missing
@@ -112,6 +114,13 @@ Manual update bypasses the normal stale-age gate and uses cache-busted remote re
 - Check whether object fails its own distance/Y gates.
 - Check for stronger live monster/follow truth.
 - Check manual/frontier target state and stale follow-through.
+
+### Visible Monster Blocks Or Does Not Block Frontier
+
+- Inspect Analysis JSON raw, eligible-blocker, and gate-suppressed monster counts/names.
+- Failed `Required`, `BossFight`, and `CombatFriendly` BattleNpc rules are non-blocking.
+- Failed `Ignored` and `Follow` BattleNpc rules fall back to generic monster-first blocking.
+- Unruled monsters remain blockers; large Y mismatches fail the shared vertical sanity check.
 
 ### Manual Destination Runs Into A Wall Or Repeats
 

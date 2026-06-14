@@ -12,7 +12,6 @@ public sealed class DungeonFrontierService
     private const uint PraetoriumTerritoryTypeId = 1044;
     private const float FrontierVisitRadius = 8f;
     private const float FrontierVisitVerticalCap = 12f;
-    private const float FrontierBlockingVerticalSanityCap = 100f;
     private const float ManualMapXzDestinationVisitRadius = 1f;
     private const float ManualXyzDestinationVisitRadius = 2.5f;
     private const float HeadingSampleMinDistance = 6f;
@@ -225,6 +224,14 @@ public sealed class DungeonFrontierService
 
     public int LiveTreasureDoorCandidateCount { get; private set; }
 
+    public int RawLiveMonsterCount { get; private set; }
+
+    public int EligibleMonsterBlockerCount { get; private set; }
+
+    public int GateSuppressedMonsterCount { get; private set; }
+
+    public IReadOnlyList<string> GateSuppressedMonsterNames { get; private set; } = [];
+
     public string CurrentTreasureRouteSource
         => CurrentTarget?.TreasureRouteSource ?? "None";
 
@@ -428,6 +435,17 @@ public sealed class DungeonFrontierService
             treasureFollowerDoorChaseGateState = "Inactive";
 
         var playerPosition = objectTable.LocalPlayer?.Position;
+        var liveMonsterEligibility = objectPriorityRuleService.EvaluateBattleNpcPlanningEligibility(context, observation.LiveMonsters, playerPosition);
+        var liveFollowTargetEligibility = objectPriorityRuleService.EvaluateBattleNpcPlanningEligibility(context, observation.LiveFollowTargets, playerPosition);
+        RawLiveMonsterCount = observation.LiveMonsters.Count;
+        EligibleMonsterBlockerCount = liveMonsterEligibility.Count(x => x.IsEligibleBlocker);
+        GateSuppressedMonsterCount = liveMonsterEligibility.Count(x => x.SuppressedByRuleGates);
+        GateSuppressedMonsterNames = liveMonsterEligibility
+            .Where(x => x.SuppressedByRuleGates)
+            .Select(x => x.Monster.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         ObserveTreasureFollowerCandidateTransit(context);
         ObserveTreasureFollowerEntryProofTransit(context, previousTarget);
         ObserveTreasureFollowerDoorSeekCombatGate(context);
@@ -477,7 +495,12 @@ public sealed class DungeonFrontierService
             .ToList();
 
         UpdateTreasureFollowerEntryMapOpenerRole();
-        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(context, observation, playerPosition);
+        var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(
+            context,
+            observation,
+            playerPosition,
+            liveMonsterEligibility,
+            liveFollowTargetEligibility);
         if (hasActiveMap
             && context.InCombat
             && heldTreasureFollowerCandidateKey is not null
@@ -490,23 +513,31 @@ public sealed class DungeonFrontierService
             context,
             observation,
             playerPosition,
-            manualDestinations);
+            manualDestinations,
+            liveMonsterEligibility,
+            liveFollowTargetEligibility);
         var selectedCombatBypassManualDestination = SelectPraetoriumOnFootCombatBypassManualDestination(
                 context,
                 observation,
                 playerPosition,
                 manualDestinations,
-                previousTarget)
+                previousTarget,
+                liveMonsterEligibility,
+                liveFollowTargetEligibility)
             ?? SelectCombatBypassManualDestinationAgainstLiveBlockers(
                 context,
                 observation,
                 playerPosition,
-                manualDestinations)
+                manualDestinations,
+                liveMonsterEligibility,
+                liveFollowTargetEligibility)
             ?? SelectPraetoriumMountedCombatBypassManualDestination(
                 context,
                 observation,
                 playerPosition,
-                manualDestinations);
+                manualDestinations,
+                liveMonsterEligibility,
+                liveFollowTargetEligibility);
         if (noFrontierBlockingLiveObjects
             || manualDestinationCanBeatLiveProgression
             || selectedCombatBypassManualDestination is not null)
@@ -607,6 +638,10 @@ public sealed class DungeonFrontierService
         LastGhostedManualDestinationUtc = null;
         LastGhostedManualDestinationReason = string.Empty;
         LiveTreasureDoorCandidateCount = 0;
+        RawLiveMonsterCount = 0;
+        EligibleMonsterBlockerCount = 0;
+        GateSuppressedMonsterCount = 0;
+        GateSuppressedMonsterNames = [];
         ResetTreasureFollowerProgress();
         loggedCombatBypassManualSelections.Clear();
     }
@@ -3341,22 +3376,29 @@ public sealed class DungeonFrontierService
             lastValidManualDestination = null;
     }
 
-    private bool HasNoFrontierBlockingLiveObjects(DutyContextSnapshot context, ObservationSnapshot observation, Vector3? playerPosition)
-        => !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-           && !observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
+    private bool HasNoFrontierBlockingLiveObjects(
+        DutyContextSnapshot context,
+        ObservationSnapshot observation,
+        Vector3? playerPosition,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveMonsterEligibility,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveFollowTargetEligibility)
+        => !liveMonsterEligibility.Any(x => x.IsEligibleBlocker)
+           && !liveFollowTargetEligibility.Any(x => x.IsEligibleBlocker)
            && !observation.LiveInteractables.Any(x => IsEligibleFrontierBlockingInteractable(context, x, playerPosition));
 
     private bool ShouldPrioritizeManualDestinationBeforeLiveProgression(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveMonsterEligibility,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveFollowTargetEligibility)
     {
         if (manualDestinations.Count == 0)
             return false;
 
-        if (observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-            || observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (liveMonsterEligibility.Any(x => x.IsEligibleBlocker)
+            || liveFollowTargetEligibility.Any(x => x.IsEligibleBlocker))
         {
             return false;
         }
@@ -3407,7 +3449,9 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveMonsterEligibility,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveFollowTargetEligibility)
     {
         var bestManualDestination = manualDestinations
             .Where(point => point.AllowCombatBypass && !visitedFrontierKeys.Contains(point.Key))
@@ -3425,32 +3469,20 @@ public sealed class DungeonFrontierService
         if (bestManualDestination is null)
             return null;
 
-        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (liveFollowTargetEligibility.Any(x => x.IsEligibleBlocker))
             return null;
 
-        var bestMonster = observation.LiveMonsters
-            .Where(x => IsSaneVerticalBlocker(playerPosition, x.Position))
-            .Select(x => new
-            {
-                Monster = x,
-                Distance = playerPosition.HasValue ? Vector3.Distance(playerPosition.Value, x.Position) : (float?)null,
-                VerticalDelta = playerPosition.HasValue ? MathF.Abs(x.Position.Y - playerPosition.Value.Y) : (float?)null,
-            })
-            .Select(x => new
-            {
-                x.Monster,
-                x.Distance,
-                x.VerticalDelta,
-                Priority = objectPriorityRuleService.GetEffectiveBattleNpcPriority(context, x.Monster, x.Distance, x.VerticalDelta),
-            })
-            .OrderBy(x => x.Priority)
+        var bestMonster = liveMonsterEligibility
+            .Where(x => x.IsEligibleBlocker)
+            .OrderBy(x => x.EffectiveRule?.Priority ?? ObjectPriorityRuleService.DefaultPriority)
             .ThenBy(x => x.Distance ?? float.MaxValue)
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .FirstOrDefault();
         if (bestMonster is null)
             return null;
 
-        if (bestManualDestination.Point.Priority > bestMonster.Priority)
+        var bestMonsterPriority = bestMonster.EffectiveRule?.Priority ?? ObjectPriorityRuleService.DefaultPriority;
+        if (bestManualDestination.Point.Priority > bestMonsterPriority)
             return null;
 
         var bestLiveProgressionInteractable = observation.LiveInteractables
@@ -3483,7 +3515,7 @@ public sealed class DungeonFrontierService
 
         var selectionLogKey = string.Create(
             CultureInfo.InvariantCulture,
-            $"{bestManualDestination.Point.Key}:{bestMonster.Monster.Name}:{bestMonster.Priority}:{bestLiveProgressionInteractable?.Interactable.Name}:{bestLiveProgressionInteractable?.Priority}:{bestLiveProgressionInteractable?.Interactable.Classification}");
+            $"{bestManualDestination.Point.Key}:{bestMonster.Monster.Name}:{bestMonsterPriority}:{bestLiveProgressionInteractable?.Interactable.Name}:{bestLiveProgressionInteractable?.Priority}:{bestLiveProgressionInteractable?.Interactable.Classification}");
         if (loggedCombatBypassManualSelections.Add(selectionLogKey))
         {
             var manualLabel = bestManualDestination.Point.IsManualXyzDestination ? "XYZ" : "map XZ";
@@ -3491,7 +3523,7 @@ public sealed class DungeonFrontierService
                 ? "no stronger live progression blocker was visible"
                 : $"live progression interactable {bestLiveProgressionInteractable.Interactable.Name} ({bestLiveProgressionInteractable.Interactable.Classification}) at {FormatVector(bestLiveProgressionInteractable.Interactable.Position)} on map {bestLiveProgressionInteractable.Interactable.MapId} resolved at priority {bestLiveProgressionInteractable.Priority} and was intentionally ignored because {DescribeManualDestinationProgressionOverride(bestManualDestination.Point, bestLiveProgressionInteractable.Interactable, bestLiveProgressionInteractable.Priority)}";
             log.Information(
-                $"[ADS] Selected force-march {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} while live monster pressure remains because manual priority {bestManualDestination.Point.Priority} beat/tied live monster {bestMonster.Monster.Name} ({bestMonster.Priority}) and {progressSummary}.");
+                $"[ADS] Selected force-march {manualLabel} destination {bestManualDestination.Point.Name} at {FormatVector(bestManualDestination.Point.Position)} while live monster pressure remains because manual priority {bestManualDestination.Point.Priority} beat/tied live monster {bestMonster.Monster.Name} ({bestMonsterPriority}) and {progressSummary}.");
         }
 
         return BuildNavigationPoint(bestManualDestination.Point, playerPosition);
@@ -3502,19 +3534,21 @@ public sealed class DungeonFrontierService
         ObservationSnapshot observation,
         Vector3? playerPosition,
         IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        DungeonFrontierPoint? previousTarget)
+        DungeonFrontierPoint? previousTarget,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveMonsterEligibility,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveFollowTargetEligibility)
     {
         //if (context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
         if (context.Mounted) //because the AI was too stupid to understand
             return null;
 
         if (!context.InCombat
-            && !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+            && !liveMonsterEligibility.Any(x => x.IsEligibleBlocker))
         {
             return null;
         }
 
-        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (liveFollowTargetEligibility.Any(x => x.IsEligibleBlocker))
             return null;
 
         var currentForceMarchAnchor = GetCurrentAuthoredForceMarchAnchor(manualDestinations, previousTarget);
@@ -3574,19 +3608,21 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         ObservationSnapshot observation,
         Vector3? playerPosition,
-        IReadOnlyList<DungeonFrontierPoint> manualDestinations)
+        IReadOnlyList<DungeonFrontierPoint> manualDestinations,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveMonsterEligibility,
+        IReadOnlyList<BattleNpcPlanningEligibility> liveFollowTargetEligibility)
     {
         //if (!context.Mounted || context.TerritoryTypeId != PraetoriumTerritoryTypeId)
         if (!context.Mounted) //because the AI was too stupid to understand
             return null;
 
         if (!context.InCombat
-            && !observation.LiveMonsters.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+            && !liveMonsterEligibility.Any(x => x.IsEligibleBlocker))
         {
             return null;
         }
 
-        if (observation.LiveFollowTargets.Any(x => IsSaneVerticalBlocker(playerPosition, x.Position)))
+        if (liveFollowTargetEligibility.Any(x => x.IsEligibleBlocker))
             return null;
 
         var bestManualDestination = manualDestinations
@@ -3754,10 +3790,6 @@ public sealed class DungeonFrontierService
 
     private static bool IsLowerValueProgressionInteractable(ObservedInteractable interactable)
         => interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
-
-    private static bool IsSaneVerticalBlocker(Vector3? playerPosition, Vector3 targetPosition)
-        => !playerPosition.HasValue
-           || MathF.Abs(targetPosition.Y - playerPosition.Value.Y) <= FrontierBlockingVerticalSanityCap;
 
     private static bool MatchesCurrentMap(uint activeMapId, uint candidateMapId)
         => activeMapId == 0

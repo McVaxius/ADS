@@ -66,6 +66,8 @@ Ignored fields remain stored. Selecting a class and showing cues never clears th
 4. Priority: lower value wins among eligible matching candidates.
 5. Behavior/timing: class, wait-before, and wait-after control execution.
 
+ADS removes every identity/scope match that fails `Dist` or `Y` before selecting the effective rule. A more specific or better-priority failed candidate cannot shadow a lower eligible candidate.
+
 ## Important Object Rule Fields
 
 | Editor field | Meaning |
@@ -144,7 +146,9 @@ For BattleNpc truth, layer-scoped rows can act as a truth gate: if a visible mob
 - `PriorityVerticalRadius` and `MaxDistance` gate normal monster/interactable rules.
 - `WaitAtDestinationSeconds` delays first interact after arrival.
 - `WaitAfterInteractSeconds` extends post-interact follow-through.
-- An `Ignored` or `Follow` BattleNpc row whose own gates fail does not suppress that mob into planner limbo.
+- A BattleNpc with only failed actionable rules such as `Required`, `BossFight`, or `CombatFriendly` is not a planner/frontier blocker until one rule becomes eligible.
+- An `Ignored` or `Follow` BattleNpc row whose own gates fail preserves generic-monster fallback instead of suppressing that mob into planner limbo.
+- Unruled BattleNpc objects remain normal monster-first blockers.
 
 ## Coords And Positional Matching
 

@@ -1400,6 +1400,10 @@ public sealed class Plugin : IDalamudPlugin
                 },
                 observations = new
                 {
+                    rawLiveMonsterCount = DungeonFrontierService.RawLiveMonsterCount,
+                    eligibleMonsterBlockerCount = DungeonFrontierService.EligibleMonsterBlockerCount,
+                    gateSuppressedMonsterCount = DungeonFrontierService.GateSuppressedMonsterCount,
+                    gateSuppressedMonsterNames = DungeonFrontierService.GateSuppressedMonsterNames,
                     liveMonsters = ObservationMemoryService.Current.LiveMonsters.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),
                     liveFollowTargets = ObservationMemoryService.Current.LiveFollowTargets.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),
                     monsterGhosts = ObservationMemoryService.Current.MonsterGhosts.Select(x => new { x.Name, x.DataId, x.MapId, Position = BuildPositionPayload(x.Position) }),

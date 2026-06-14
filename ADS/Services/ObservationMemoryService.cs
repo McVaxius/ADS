@@ -734,7 +734,16 @@ public sealed class ObservationMemoryService
         out InteractableClass classification)
     {
         classification = default;
-        return objectPriorityRuleService.TryGetClassificationOverride(context, gameObject.ObjectKind, gameObject.BaseId, name, out classification, gameObject.Position, context.MapId)
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        return objectPriorityRuleService.TryGetEffectiveBattleNpcClassificationOverride(
+                   context,
+                   gameObject.BaseId,
+                   name,
+                   gameObject.Position,
+                   context.MapId,
+                   GetDistance(playerPosition, gameObject.Position),
+                   GetVerticalDelta(playerPosition, gameObject.Position),
+                   out classification)
                && classification == InteractableClass.CombatFriendly;
     }
 
