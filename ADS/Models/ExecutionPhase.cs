@@ -28,4 +28,5 @@ public enum ExecutionPhase
     MountedDutyCombat = 23,
     NavigatingToXyzDestination = 24,
     XyzDestinationHint = 25,
+    CardinalHold = 26,
 }

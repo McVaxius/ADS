@@ -441,6 +441,16 @@ public sealed class ObjectPriorityRuleService
             .ThenBy(x => x.Priority)
             .ToList();
 
+    public CardinalHoldRule? GetActiveCardinalHoldRule(
+        DutyContextSnapshot context,
+        Vector3 playerPosition,
+        Func<string, bool> isGhosted)
+        => CardinalHoldPolicy.SelectActive(
+            Current.Rules,
+            playerPosition,
+            rule => MatchesDutyScope(rule, context, includeLayerScope: true),
+            isGhosted);
+
     public bool DestinationRulePassesDistanceGates(ObjectPriorityRule rule, Vector3 playerPosition, Vector3 destinationPosition)
     {
         var distance = Vector3.Distance(destinationPosition, playerPosition);
@@ -831,7 +841,7 @@ public sealed class ObjectPriorityRuleService
     {
         return Current.Rules
             .Where(x => x.Enabled)
-            .Where(x => !IsManualDestinationRule(x))
+            .Where(x => !IsManualDestinationRule(x) && !IsCardinalHoldRule(x))
             .Where(x => Matches(x, context, objectKind, baseId, objectName, objectPosition, objectMapId, includeLayerScope))
             .OrderByDescending(GetSpecificityScore)
             .ThenBy(x => x.Priority);
@@ -994,6 +1004,9 @@ public sealed class ObjectPriorityRuleService
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
         => IsMapXzDestinationRule(rule) || IsXyzDestinationRule(rule);
+
+    private static bool IsCardinalHoldRule(ObjectPriorityRule rule)
+        => CardinalHoldPolicy.TryParseDirection(rule.Classification, out _);
 
     private bool MatchesObjectSpatialScope(
         ObjectPriorityRule rule,

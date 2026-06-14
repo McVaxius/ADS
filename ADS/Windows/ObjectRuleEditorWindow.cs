@@ -17,41 +17,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         "Contains",
     ];
 
-    private static readonly string[] ClassificationLabels =
-    [
-        "(none)",
-        "Ignored",
-        "Follow",
-        "BossFight",
-        "Required",
-        "Optional",
-        "Expendable",
-        "CombatFriendly",
-        "TreasureCoffer",
-        "TreasureDoor",
-        "MapXzDestination",
-        "XYZ",
-        "MapXzForceMarch",
-        "XYZForceMarch",
-    ];
-
-    private static readonly string[] ClassificationValues =
-    [
-        "",
-        "Ignored",
-        "Follow",
-        "BossFight",
-        "Required",
-        "Optional",
-        "Expendable",
-        "CombatFriendly",
-        "TreasureCoffer",
-        "TreasureDoor",
-        "MapXzDestination",
-        "XYZ",
-        "MapXzForceMarch",
-        "XYZForceMarch",
-    ];
+    internal static readonly string[] ClassificationLabels = RuleSemanticsCatalog.ClassificationLabels;
+    internal static readonly string[] ClassificationValues = RuleSemanticsCatalog.ClassificationValues;
 
     private static readonly string[] ObjectKindLabels = BuildObjectKindLabels();
     private static readonly string[] FilterModeLabels =
@@ -126,6 +93,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawToolbar()
     {
+        if (ImGui.Button("[GUIDE]"))
+            plugin.OpenRuleGuideUi();
+        ImGui.SameLine();
         DrawPresetToolbar();
 
         ImGui.SameLine();
@@ -473,6 +443,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 rule.Classification = ClassificationValues[classificationIndex];
                 dirty = true;
             }
+            if (ImGui.IsItemHovered()
+                && RuleSemanticsCatalog.Find(rule.Classification ?? string.Empty) is { } classificationSemantics)
+            {
+                ImGui.BeginTooltip();
+                ImGui.PushTextWrapPos(ImGui.GetFontSize() * 35f);
+                ImGui.TextUnformatted(classificationSemantics.Behavior);
+                ImGui.PopTextWrapPos();
+                ImGui.EndTooltip();
+            }
 
             ImGui.TableSetColumnIndex(8);
             if (DrawLayerCell(rule, ruleIndex))
@@ -489,7 +468,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(10);
-            using (new ImGuiDisabledBlock(IsManualDestinationRule(rule)))
+            using (new ImGuiDisabledBlock(IsManualDestinationRule(rule) || IsCardinalHoldRule(rule)))
             {
                 if (EditNullableFloatCell("##ObjectMatchRadius", rule.ObjectMatchRadius, out var objectMatchRadius))
                 {
@@ -604,8 +583,14 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         => string.Equals(rule.Classification, "MapXzForceMarch", StringComparison.OrdinalIgnoreCase)
            || string.Equals(rule.Classification, "XYZForceMarch", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsCardinalHoldRule(ObjectPriorityRule rule)
+        => CardinalHoldPolicy.TryParseDirection(rule.Classification, out _);
+
     private static string GetUnifiedCoordinatesValue(ObjectPriorityRule rule)
     {
+        if (IsCardinalHoldRule(rule))
+            return rule.WorldCoordinates;
+
         if (IsManualDestinationRule(rule))
             return !string.IsNullOrWhiteSpace(rule.WorldCoordinates) ? rule.WorldCoordinates : rule.MapCoordinates;
 
@@ -617,6 +602,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         var normalized = NormalizeCoordinateText(value);
         var partCount = CountCoordinateParts(normalized);
         var isWorldCoordinates = partCount == 3;
+
+        if (IsCardinalHoldRule(rule))
+        {
+            rule.WorldCoordinates = normalized;
+            rule.MapCoordinates = string.Empty;
+            rule.ObjectMapCoordinates = string.Empty;
+            rule.ObjectWorldCoordinates = string.Empty;
+            return;
+        }
 
         if (IsManualDestinationRule(rule))
         {

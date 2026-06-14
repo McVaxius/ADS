@@ -15,4 +15,8 @@ public enum InteractableClass
     MapXzForceMarch = 10,
     XYZForceMarch = 11,
     TreasureDoor = 12,
+    CardinalHoldNorth = 13,
+    CardinalHoldEast = 14,
+    CardinalHoldSouth = 15,
+    CardinalHoldWest = 16,
 }

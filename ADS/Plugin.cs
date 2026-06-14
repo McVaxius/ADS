@@ -120,6 +120,7 @@ public sealed class Plugin : IDalamudPlugin
     public HigherLowerCardVfxSolverService HigherLowerCardVfxSolverService { get; }
     public HigherLowerAutomationService HigherLowerAutomationService { get; }
     public TreasureDoorStrafeInputService TreasureDoorStrafeInputService { get; }
+    public CardinalHoldInputService CardinalHoldInputService { get; }
     public DebugStrafeService DebugStrafeService { get; }
     public QstCompanionWarningService QstCompanionWarningService { get; }
 
@@ -131,6 +132,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly QuickControlWindow quickControlWindow;
     private readonly LootWindow lootWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
+    private readonly RuleGuideWindow ruleGuideWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
     private readonly DutyMaturityEditorWindow dutyMaturityEditorWindow;
     private readonly HigherLowerWindow higherLowerWindow;
@@ -182,7 +184,8 @@ public sealed class Plugin : IDalamudPlugin
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, ObservationMemoryService);
         MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         TreasureDoorStrafeInputService = new TreasureDoorStrafeInputService(KeyState, Log);
-        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, Configuration, Log);
+        CardinalHoldInputService = new CardinalHoldInputService(KeyState, Log);
+        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, CardinalHoldInputService, Configuration, Log);
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
@@ -251,6 +254,7 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow = new QuickControlWindow(this);
         lootWindow = new LootWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
+        ruleGuideWindow = new RuleGuideWindow();
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         dutyMaturityEditorWindow = new DutyMaturityEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
@@ -267,6 +271,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(quickControlWindow);
         WindowSystem.AddWindow(lootWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
+        WindowSystem.AddWindow(ruleGuideWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
         WindowSystem.AddWindow(dutyMaturityEditorWindow);
         WindowSystem.AddWindow(higherLowerWindow);
@@ -303,6 +308,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         DebugStrafeService.Release("plugin dispose");
+        CardinalHoldInputService.Release("plugin dispose");
         ExecutionService.ReleaseHeldMovementKeys("plugin dispose");
         Framework.Update -= OnFrameworkUpdate;
         ClientState.TerritoryChanged -= OnTerritoryChanged;
@@ -334,6 +340,7 @@ public sealed class Plugin : IDalamudPlugin
         quickControlWindow.Dispose();
         lootWindow.Dispose();
         objectRuleEditorWindow.Dispose();
+        ruleGuideWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
         dutyMaturityEditorWindow.Dispose();
         higherLowerWindow.Dispose();
@@ -402,6 +409,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenRuleEditorUi()
         => objectRuleEditorWindow.IsOpen = true;
+
+    public void OpenRuleGuideUi()
+        => ruleGuideWindow.IsOpen = true;
 
     public void ToggleDialogRuleEditorUi()
         => dialogRuleEditorWindow.IsOpen = !dialogRuleEditorWindow.IsOpen;
@@ -2084,6 +2094,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnDutyCompleted(uint territoryId)
     {
         DesynthDutyLedgerStore.MarkDutyCompleted();
+        ExecutionService.ResetCardinalHoldGhosts("duty completion event");
         var context = DutyContextService.Current;
         var dutyName = context.CurrentDuty?.EnglishName ?? $"territory {territoryId}";
         ClearTreasureDutyRecoveryMarker("duty completion");

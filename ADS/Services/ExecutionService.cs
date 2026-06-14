@@ -99,6 +99,7 @@ public sealed class ExecutionService
     private readonly MapFlagService mapFlagService;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
     private readonly TreasureDoorStrafeInputService treasureDoorStrafeInputService;
+    private readonly CardinalHoldInputService cardinalHoldInputService;
     private readonly Configuration configuration;
     private readonly IPluginLog? log;
     private readonly Dictionary<uint, MountedCombatAction[]> mountedCombatActionCache = [];
@@ -213,6 +214,9 @@ public sealed class ExecutionService
     private string lastTreasureFollowerAdsNavFallbackLogKey = string.Empty;
     private string lastTreasureFollowerSelectYesnoPreserveLogKey = string.Empty;
     private string lastTreasureFollowerDoorFollowThroughRetargetLogKey = string.Empty;
+    private readonly CardinalHoldGhostTracker cardinalHoldGhosts = new();
+    private CardinalHoldRule? activeCardinalHold;
+    private DateTime activeCardinalHoldUntilUtc = DateTime.MinValue;
 
     public ExecutionService(
         IDataManager dataManager,
@@ -224,6 +228,7 @@ public sealed class ExecutionService
         MapFlagService mapFlagService,
         ObjectPriorityRuleService objectPriorityRuleService,
         TreasureDoorStrafeInputService treasureDoorStrafeInputService,
+        CardinalHoldInputService cardinalHoldInputService,
         Configuration configuration,
         IPluginLog? log = null)
     {
@@ -236,6 +241,7 @@ public sealed class ExecutionService
         this.mapFlagService = mapFlagService;
         this.objectPriorityRuleService = objectPriorityRuleService;
         this.treasureDoorStrafeInputService = treasureDoorStrafeInputService;
+        this.cardinalHoldInputService = cardinalHoldInputService;
         this.configuration = configuration;
         this.log = log;
     }
@@ -450,6 +456,7 @@ public sealed class ExecutionService
 
     public void ReleaseHeldMovementKeys(string reason)
     {
+        InterruptCardinalHold(reason);
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
         var hadAquapolisWiggle = aquapolisRouteWiggleTargetKey != null || aquapolisRouteWiggleUntilUtc != DateTime.MinValue;
         ClearBossFightCombatGhost(reason);
@@ -494,6 +501,7 @@ public sealed class ExecutionService
 
     public bool StartDutyFromOutside()
     {
+        InterruptCardinalHold("outside start");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("outside start");
@@ -505,6 +513,7 @@ public sealed class ExecutionService
 
     public bool StartDutyFromInside(DutyContextSnapshot context)
     {
+        InterruptCardinalHold("inside start");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside start");
@@ -527,6 +536,7 @@ public sealed class ExecutionService
 
     public bool ResumeDutyFromInside(DutyContextSnapshot context)
     {
+        InterruptCardinalHold("inside resume");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside resume");
@@ -549,6 +559,7 @@ public sealed class ExecutionService
 
     public bool LeaveDuty(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
+        InterruptCardinalHold("leave request");
         if (!context.InInstancedDuty)
         {
             SetPhase(CurrentPhase, "Leave requires being inside duty.");
@@ -597,6 +608,7 @@ public sealed class ExecutionService
 
     public void Stop(DutyContextSnapshot context)
     {
+        InterruptCardinalHold("stop");
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -614,6 +626,7 @@ public sealed class ExecutionService
 
     public void CompleteDuty(string dutyName)
     {
+        ResetCardinalHolds("duty complete");
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -627,6 +640,9 @@ public sealed class ExecutionService
             $"Duty completed: {dutyName}. ADS stopped automation and cleared recovery follow-through; use Start/Resume for another run.");
     }
 
+    public void ResetCardinalHoldGhosts(string reason)
+        => ResetCardinalHolds(reason);
+
     public void Update(
         DutyContextSnapshot context,
         PlannerSnapshot planner,
@@ -636,6 +652,7 @@ public sealed class ExecutionService
         string dialogAutomationStatus)
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
+        UpdateCardinalGhostRecovery(context);
         UpdateUnsafeTransitionNavigationStop(context);
         UpdateTreasureFollowerRouteTransitClearStop(context, planner);
         ResetTreasureDungeonCombatNavigationStopLatchIfClear(context, planner);
@@ -644,6 +661,7 @@ public sealed class ExecutionService
 
         if (!pluginEnabled)
         {
+            InterruptCardinalHold("plugin disabled");
             StopMovementAssists();
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
@@ -657,16 +675,21 @@ public sealed class ExecutionService
 
         if (context.IsUnsafeTransition)
         {
+            InterruptCardinalHold("unsafe transition");
             ClearBossFightCombatGhost("unsafe transition");
             UpdateUnsafeTransitionHold(context);
             return;
         }
+
+        if (TryUpdateCardinalHold(context))
+            return;
 
         switch (CurrentMode)
         {
             case OwnershipMode.OwnedStartOutside:
                 if (!context.InInstancedDuty)
                 {
+                    ResetCardinalHolds("outside start waiting outside duty");
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
@@ -683,6 +706,7 @@ public sealed class ExecutionService
             case OwnershipMode.OwnedResumeInside:
                 if (!context.InInstancedDuty)
                 {
+                    ResetCardinalHolds("duty ended");
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
@@ -700,6 +724,7 @@ public sealed class ExecutionService
             case OwnershipMode.Leaving:
                 if (!context.InInstancedDuty)
                 {
+                    ResetCardinalHolds("duty exit detected");
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
@@ -719,6 +744,7 @@ public sealed class ExecutionService
             case OwnershipMode.Failed:
                 if (!context.InInstancedDuty)
                 {
+                    ResetCardinalHolds("failure cleared outside duty");
                     StopMovementAssists();
                     ClearInteractableCommitment();
                     ClearCommittedForceMarchManualDestination();
@@ -735,6 +761,7 @@ public sealed class ExecutionService
 
         if (context.InInstancedDuty)
         {
+            InterruptCardinalHold("ownership observing");
             StopMovementAssists();
             ClearInteractableCommitment();
             ClearCommittedForceMarchManualDestination();
@@ -747,6 +774,7 @@ public sealed class ExecutionService
         }
 
         StopMovementAssists();
+        ResetCardinalHolds("ownership idle");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("ownership idle");
@@ -5674,6 +5702,7 @@ public sealed class ExecutionService
 
     private void StopMovementAssists(bool preserveTreasureFollowerDoorFollowThrough = false)
     {
+        cardinalHoldInputService.Release("movement assists stopped");
         StopNavigationIfNeeded();
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
@@ -5885,6 +5914,7 @@ public sealed class ExecutionService
 
     private void StopNavigationForUnsafeTransition(DutyContextSnapshot context)
     {
+        InterruptCardinalHold("unsafe transition navigation stop");
         if (unsafeTransitionNavigationStopLatched)
             return;
 
@@ -5921,6 +5951,98 @@ public sealed class ExecutionService
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
+    }
+
+    private bool TryUpdateCardinalHold(DutyContextSnapshot context)
+    {
+        if (!IsActiveOwnedDutyMode() || !context.InInstancedDuty || !context.IsLoggedIn)
+        {
+            InterruptCardinalHold("duty ownership unavailable");
+            return false;
+        }
+
+        var player = objectTable.LocalPlayer;
+        if (player is null)
+        {
+            InterruptCardinalHold("local player unavailable");
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        if (activeCardinalHold is { } active)
+        {
+            if (now >= activeCardinalHoldUntilUtc)
+            {
+                cardinalHoldInputService.Release("cardinal hold complete");
+                cardinalHoldGhosts.Consume(active.Key);
+                activeCardinalHold = null;
+                activeCardinalHoldUntilUtc = DateTime.MinValue;
+                log?.Information($"[ADS][CardinalHold] Completed and ghosted {active.Direction} hold '{active.Key}'.");
+                return false;
+            }
+
+            StopNavigationIfNeeded();
+            if (!cardinalHoldInputService.Hold(active.Direction, player.Rotation, out var status))
+            {
+                InterruptCardinalHold($"input failure: {status}");
+                return false;
+            }
+
+            SetPhase(
+                ExecutionPhase.CardinalHold,
+                $"Holding world-{active.Direction.ToString().ToLowerInvariant()} for {(activeCardinalHoldUntilUtc - now).TotalSeconds:0.0}s. {status}");
+            return true;
+        }
+
+        var selected = objectPriorityRuleService.GetActiveCardinalHoldRule(context, player.Position, cardinalHoldGhosts.IsGhosted);
+        if (selected is null)
+            return false;
+
+        StopMovementAssists();
+        TrySendCommand("/vnav stop");
+        if (!cardinalHoldInputService.Hold(selected.Value.Direction, player.Rotation, out var startStatus))
+        {
+            InterruptCardinalHold($"input failure: {startStatus}");
+            return false;
+        }
+
+        activeCardinalHold = selected;
+        activeCardinalHoldUntilUtc = now + selected.Value.Duration;
+        log?.Information(
+            $"[ADS][CardinalHold] Started {selected.Value.Direction} for {selected.Value.Duration.TotalSeconds:0.###}s from radius {selected.Value.ActivationRadius:0.###}y; priority={selected.Value.Rule.Priority}.");
+        SetPhase(ExecutionPhase.CardinalHold, $"Started world-{selected.Value.Direction.ToString().ToLowerInvariant()} hold. {startStatus}");
+        return true;
+    }
+
+    private void UpdateCardinalGhostRecovery(DutyContextSnapshot context)
+    {
+        if (!context.InInstancedDuty || !context.IsLoggedIn)
+            return;
+        if (context.IsUnsafeTransition || objectTable.LocalPlayer is not { } player)
+            return;
+
+        var resetCount = cardinalHoldGhosts.ObserveStableDutyPosition(player.Position);
+        if (resetCount > 0)
+            log?.Information($"[ADS][CardinalHold] Reset {resetCount} cardinal ghost(s) after stable in-duty relocation of at least {CardinalHoldPolicy.RecoveryRelocationDistance:0}y.");
+    }
+
+    private void InterruptCardinalHold(string reason)
+    {
+        cardinalHoldInputService.Release(reason);
+        if (activeCardinalHold is null)
+            return;
+
+        log?.Information($"[ADS][CardinalHold] Interrupted unconsumed hold during {reason}.");
+        activeCardinalHold = null;
+        activeCardinalHoldUntilUtc = DateTime.MinValue;
+    }
+
+    private void ResetCardinalHolds(string reason)
+    {
+        InterruptCardinalHold(reason);
+        var count = cardinalHoldGhosts.Reset();
+        if (count > 0)
+            log?.Information($"[ADS][CardinalHold] Reset {count} cardinal ghost(s) during {reason}.");
     }
 
     private void StopNavigationForTreasureRouteNudge()
