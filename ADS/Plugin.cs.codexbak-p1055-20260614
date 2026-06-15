@@ -32,7 +32,6 @@ public sealed class Plugin : IDalamudPlugin
     private static readonly TimeSpan TreasureDutyRecoveryTtl = TimeSpan.FromHours(8);
     private static readonly TimeSpan TreasureDutyRecoveryRefreshInterval = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan FrameworkSlowLogCooldown = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan ObjectExplorerMapFlagInspectionInterval = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan HigherLowerRecentSignalWindow = TimeSpan.FromSeconds(20);
     private const double FrameworkSlowLogThresholdMs = 100d;
 
@@ -144,8 +143,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly DesynthesisWindow desynthesisWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
-    private readonly MapFlagMonitorPolicy mapFlagMonitorPolicy = new();
-    private DateTime nextObjectExplorerMapFlagInspectionUtc = DateTime.MinValue;
     private uint lastOwnedTreasureRoleInferenceDutyKey;
     private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
     private bool treasureDutyRecoveryAttemptedThisLoad;
@@ -185,7 +182,7 @@ public sealed class Plugin : IDalamudPlugin
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, ObservationMemoryService);
-        MapFlagService = new MapFlagService(PluginInterface, DataManager, ClientState, Condition, Log);
+        MapFlagService = new MapFlagService(DataManager, ClientState, Condition, Log);
         TreasureDoorStrafeInputService = new TreasureDoorStrafeInputService(KeyState, Log);
         CardinalHoldInputService = new CardinalHoldInputService(KeyState, Log);
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, CardinalHoldInputService, Configuration, Log);
@@ -631,21 +628,6 @@ public sealed class Plugin : IDalamudPlugin
             : ClientState.TerritoryType;
 
         var result = MapFlagService.TryPlaceFlag(territoryId, worldPosition, objectName, out var status);
-        if (result)
-        {
-            var queryAvailable = MapFlagService.TryQueryFlagDestination(out var destination, out var destinationStatus);
-            status = $"{status} {destinationStatus}";
-
-            var observation = MapFlagService.ReadCurrentFlag();
-            if (observation.Kind == MapFlagObservationKind.Present)
-            {
-                mapFlagMonitorPolicy.RecordBaseline(
-                    observation.Snapshot!.Value,
-                    GetMapFlagDestinationQueryResult(queryAvailable, destination),
-                    DateTime.UtcNow);
-            }
-        }
-
         objectExplorerStatus = status;
         return result;
     }
@@ -1808,7 +1790,6 @@ public sealed class Plugin : IDalamudPlugin
         {
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
-            Measure("object-explorer-flag", UpdateObjectExplorerMapFlagMonitor);
             Measure("desynth-ledger", () => DesynthDutyLedgerStore.Update(
                 DutyContextService.Current.InInstancedDuty,
                 DutyContextService.Current.TerritoryTypeId,
@@ -1960,41 +1941,6 @@ public sealed class Plugin : IDalamudPlugin
             ReportFrameworkSlowUpdate(updateStopwatch.Elapsed.TotalMilliseconds, slowestSection, slowestMs);
         }
     }
-
-    private void UpdateObjectExplorerMapFlagMonitor()
-    {
-        if (!objectExplorerWindow.IsOpen)
-            return;
-
-        var now = DateTime.UtcNow;
-        if (now < nextObjectExplorerMapFlagInspectionUtc)
-            return;
-
-        nextObjectExplorerMapFlagInspectionUtc = now + ObjectExplorerMapFlagInspectionInterval;
-        var observation = MapFlagService.ReadCurrentFlag();
-        var decision = mapFlagMonitorPolicy.Observe(observation, now);
-        if (decision == MapFlagMonitorDecision.ReportCleared)
-        {
-            objectExplorerStatus = "Map flag cleared.";
-            return;
-        }
-
-        if (decision != MapFlagMonitorDecision.QueryDestination)
-            return;
-
-        var queryAvailable = MapFlagService.TryQueryFlagDestination(out var destination, out var destinationStatus);
-        mapFlagMonitorPolicy.RecordQueryResult(GetMapFlagDestinationQueryResult(queryAvailable, destination), now);
-        objectExplorerStatus = MapFlagMonitorPolicy.BuildDetectedStatus(observation.Snapshot!.Value, destinationStatus);
-    }
-
-    private static MapFlagDestinationQueryResult GetMapFlagDestinationQueryResult(
-        bool queryAvailable,
-        System.Numerics.Vector3? destination)
-        => destination.HasValue
-            ? MapFlagDestinationQueryResult.Resolved
-            : queryAvailable
-                ? MapFlagDestinationQueryResult.Unresolved
-                : MapFlagDestinationQueryResult.Unavailable;
 
     private void QueueCompletedRemoteJsonReload()
     {
