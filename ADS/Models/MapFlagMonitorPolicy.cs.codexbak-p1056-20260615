@@ -70,8 +70,6 @@ internal sealed class MapFlagMonitorPolicy
     private MapFlagSnapshot? observedFlag;
     private bool destinationResolved;
     private DateTime nextRetryUtc = DateTime.MinValue;
-    private Vector3? resolvedDestination;
-    private string destinationStatus = "Flag destination resolution pending.";
 
     public MapFlagMonitorDecision Observe(MapFlagObservation observation, DateTime utcNow)
     {
@@ -83,7 +81,8 @@ internal sealed class MapFlagMonitorPolicy
             var reportCleared = hasObservation && observedFlag.HasValue;
             hasObservation = true;
             observedFlag = null;
-            ResetDestination();
+            destinationResolved = false;
+            nextRetryUtc = DateTime.MinValue;
             return reportCleared
                 ? MapFlagMonitorDecision.ReportCleared
                 : MapFlagMonitorDecision.None;
@@ -96,7 +95,8 @@ internal sealed class MapFlagMonitorPolicy
         {
             hasObservation = true;
             observedFlag = snapshot;
-            ResetDestination();
+            destinationResolved = false;
+            nextRetryUtc = DateTime.MinValue;
             return MapFlagMonitorDecision.QueryDestination;
         }
 
@@ -107,92 +107,27 @@ internal sealed class MapFlagMonitorPolicy
     }
 
     public void RecordQueryResult(MapFlagDestinationQueryResult result, DateTime utcNow)
-        => RecordQueryResult(result, null, string.Empty, utcNow);
-
-    public void RecordQueryResult(
-        MapFlagDestinationQueryResult result,
-        Vector3? destination,
-        string status,
-        DateTime utcNow)
     {
         destinationResolved = result == MapFlagDestinationQueryResult.Resolved;
-        resolvedDestination = destinationResolved && IsFinite(destination)
-            ? destination
-            : null;
-        destinationStatus = string.IsNullOrWhiteSpace(status)
-            ? destinationStatus
-            : status;
         nextRetryUtc = destinationResolved ? DateTime.MaxValue : utcNow + RetryInterval;
     }
 
     public void RecordBaseline(MapFlagSnapshot snapshot, MapFlagDestinationQueryResult result, DateTime utcNow)
-        => RecordBaseline(snapshot, result, null, string.Empty, utcNow);
-
-    public void RecordBaseline(
-        MapFlagSnapshot snapshot,
-        MapFlagDestinationQueryResult result,
-        Vector3? destination,
-        string status,
-        DateTime utcNow)
     {
         hasObservation = true;
         observedFlag = snapshot;
-        RecordQueryResult(result, destination, status, utcNow);
+        RecordQueryResult(result, utcNow);
     }
 
     public static string BuildDetectedStatus(MapFlagSnapshot snapshot, string destinationStatus)
-        => BuildDetectedStatus(snapshot, destinationStatus, null, null);
-
-    public string BuildCurrentStatus(Vector3? playerPosition)
     {
-        if (!hasObservation)
-            return "Map flag not inspected.";
-
-        if (!observedFlag.HasValue)
-            return "Map flag cleared.";
-
-        return BuildDetectedStatus(observedFlag.Value, destinationStatus, playerPosition, resolvedDestination);
-    }
-
-    public static string BuildDetectedStatus(
-        MapFlagSnapshot snapshot,
-        string destinationStatus,
-        Vector3? playerPosition,
-        Vector3? resolvedDestination)
-    {
-        var distance = GetResolvedDistance(playerPosition, resolvedDestination);
-        var distanceStatus = distance.HasValue
-            ? string.Create(CultureInfo.InvariantCulture, $" Current full-3D distance: {distance.Value:0.00}y.")
-            : string.Empty;
         if (snapshot.MapCoordinates is { } mapCoordinates)
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"Detected map flag on map {snapshot.MapId} at map X/Y {mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}. {destinationStatus}{distanceStatus}");
+                $"Detected map flag on map {snapshot.MapId} at map X/Y {mapCoordinates.X:0.0}, {mapCoordinates.Y:0.0}. {destinationStatus}");
         }
 
-        return $"Detected map flag on map {snapshot.MapId}; map X/Y unavailable: {snapshot.MapCoordinateUnavailableReason}. {destinationStatus}{distanceStatus}";
-    }
-
-    public static float? GetResolvedDistance(Vector3? playerPosition, Vector3? resolvedDestination)
-    {
-        if (!IsFinite(playerPosition) || !IsFinite(resolvedDestination))
-            return null;
-
-        return Vector3.Distance(playerPosition!.Value, resolvedDestination!.Value);
-    }
-
-    internal static bool IsFinite(Vector3? value)
-        => value.HasValue
-           && float.IsFinite(value.Value.X)
-           && float.IsFinite(value.Value.Y)
-           && float.IsFinite(value.Value.Z);
-
-    private void ResetDestination()
-    {
-        destinationResolved = false;
-        resolvedDestination = null;
-        destinationStatus = "Flag destination resolution pending.";
-        nextRetryUtc = DateTime.MinValue;
+        return $"Detected map flag on map {snapshot.MapId}; map X/Y unavailable: {snapshot.MapCoordinateUnavailableReason}. {destinationStatus}";
     }
 }

@@ -116,6 +116,74 @@ public sealed class MapFlagMonitorPolicyTests
             status);
     }
 
+    [Fact]
+    public void ResolvedFlagDistanceUsesFullVector3Distance()
+    {
+        var status = MapFlagMonitorPolicy.BuildDetectedStatus(
+            Flag(),
+            "Resolved /vnav moveflag destination at 1, 2, 2.",
+            Vector3.Zero,
+            new Vector3(1, 2, 2));
+
+        Assert.EndsWith("Current full-3D distance: 3.00y.", status);
+    }
+
+    [Fact]
+    public void PlayerMovementUpdatesDistanceWithoutNewDestinationQuery()
+    {
+        var policy = new MapFlagMonitorPolicy();
+        policy.Observe(Present(Flag()), Start);
+        policy.RecordQueryResult(
+            MapFlagDestinationQueryResult.Resolved,
+            new Vector3(10, 0, 0),
+            "Resolved /vnav moveflag destination at 10, 0, 0.",
+            Start);
+
+        Assert.Contains("Current full-3D distance: 10.00y.", policy.BuildCurrentStatus(Vector3.Zero));
+        Assert.Contains("Current full-3D distance: 5.00y.", policy.BuildCurrentStatus(new Vector3(5, 0, 0)));
+        Assert.Equal(MapFlagMonitorDecision.None, policy.Observe(Present(Flag()), Start.AddHours(1)));
+    }
+
+    [Fact]
+    public void UnresolvedNoPlayerAndNonFiniteDestinationOmitDistance()
+    {
+        var unresolved = MapFlagMonitorPolicy.BuildDetectedStatus(
+            Flag(),
+            "/vnav moveflag destination unavailable: navmesh has no resolved floor/query.",
+            Vector3.Zero,
+            null);
+        var noPlayer = MapFlagMonitorPolicy.BuildDetectedStatus(
+            Flag(),
+            "Resolved /vnav moveflag destination at 10, 0, 0.",
+            null,
+            new Vector3(10, 0, 0));
+        var nonFinite = MapFlagMonitorPolicy.BuildDetectedStatus(
+            Flag(),
+            "/vnav moveflag destination unavailable: navmesh returned non-finite coordinates.",
+            Vector3.Zero,
+            new Vector3(float.NaN, 0, 0));
+
+        Assert.DoesNotContain("Current full-3D distance", unresolved);
+        Assert.DoesNotContain("Current full-3D distance", noPlayer);
+        Assert.DoesNotContain("Current full-3D distance", nonFinite);
+    }
+
+    [Fact]
+    public void FlagClearResetsResolvedDistance()
+    {
+        var policy = new MapFlagMonitorPolicy();
+        policy.Observe(Present(Flag()), Start);
+        policy.RecordQueryResult(
+            MapFlagDestinationQueryResult.Resolved,
+            new Vector3(10, 0, 0),
+            "Resolved /vnav moveflag destination at 10, 0, 0.",
+            Start);
+
+        policy.Observe(MapFlagObservation.Cleared(), Start.AddMilliseconds(250));
+
+        Assert.Equal("Map flag cleared.", policy.BuildCurrentStatus(Vector3.Zero));
+    }
+
     private static MapFlagObservation Present(MapFlagSnapshot snapshot)
         => MapFlagObservation.Present(snapshot);
 

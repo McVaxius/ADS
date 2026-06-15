@@ -40,8 +40,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         if (localPlayer is null)
         {
-            ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
-            ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
             ImGui.TextUnformatted("No local player is available.");
             return;
         }
@@ -58,8 +56,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
         ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
         ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
-        ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
-        ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
+        ImGui.TextWrapped($"Status: {plugin.ObjectExplorerStatus}");
 
         ImGui.SetNextItemWidth(260f);
         ImGui.InputTextWithHint("##ADSObjectTextFilter", "filter text / base id / object kind", ref textFilter, 128);

@@ -520,8 +520,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 rule.MaxDistance = maxDistance;
                 dirty = true;
             }
-            if (ImGui.IsItemHovered())
-                DrawDistancePreviewTooltip(rule);
 
             ImGui.TableSetColumnIndex(14);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.WaitAtDestinationSeconds), missingRequiredFields);
@@ -736,85 +734,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         if (color.W > 0)
             ImGui.TableSetBgColor(ImGuiTableBgTarget.CellBg, ImGui.ColorConvertFloat4ToU32(color));
-    }
-
-    private void DrawDistancePreviewTooltip(ObjectPriorityRule rule)
-    {
-        try
-        {
-            var localPlayer = Plugin.ObjectTable.LocalPlayer;
-            if (localPlayer is null)
-                return;
-
-            var context = plugin.DutyContextService.Current;
-            var liveObjects = Plugin.ObjectTable
-                .Where(x => x is not null && x.GameObjectId != localPlayer.GameObjectId)
-                .Select(x => new RuleDistancePreviewObject(
-                    x.ObjectKind,
-                    x.BaseId,
-                    x.Name.TextValue.Trim(),
-                    x.Position,
-                    context.MapId))
-                .ToList();
-            var preview = RuleDistancePreviewResolver.Resolve(
-                rule,
-                localPlayer.Position,
-                (coordinates, playerY) => plugin.ObjectPriorityRuleService.ResolveEditorDistancePreviewMapCoordinates(
-                    context,
-                    coordinates,
-                    playerY),
-                liveObjects,
-                (candidateRule, liveObject) => plugin.ObjectPriorityRuleService.MatchesEditorDistancePreviewObject(
-                    candidateRule,
-                    context,
-                    liveObject));
-            if (preview is null)
-                return;
-
-            ImGui.BeginTooltip();
-            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 42f);
-            ImGui.TextUnformatted(preview.ExactDistance.HasValue
-                ? $"{preview.ExactDistanceLabel}: {preview.ExactDistance.Value:0.00}y"
-                : $"{preview.ExactDistanceLabel}: unavailable; no matching live object.");
-            DrawDistanceComparison(preview);
-
-            if (preview.Kind == RuleDistancePreviewKind.OrdinaryObject)
-            {
-                ImGui.TextUnformatted($"Live matches: {preview.LiveMatchCount}");
-                if (preview.LiveMatchCount > 1)
-                {
-                    ImGui.TextUnformatted(
-                        $"Live distance range: {preview.LiveMatchNearestDistance!.Value:0.00}y - {preview.LiveMatchFarthestDistance!.Value:0.00}y");
-                }
-
-                ImGui.Separator();
-                ImGui.TextUnformatted($"Planning aid; not ordinary-row Dist gate: {preview.PlanningAidDistance!.Value:0.00}y");
-            }
-
-            ImGui.PopTextWrapPos();
-            ImGui.EndTooltip();
-        }
-        catch
-        {
-            // Hover preview is best effort and must never break the editor draw.
-        }
-    }
-
-    private static void DrawDistanceComparison(RuleDistancePreview preview)
-    {
-        if (!preview.ConfiguredDistance.HasValue)
-        {
-            ImGui.TextUnformatted("Configured Dist: blank (no distance cap).");
-            return;
-        }
-
-        var result = preview.PassesConfiguredDistance switch
-        {
-            true => "PASS",
-            false => "FAIL",
-            null => "unavailable",
-        };
-        ImGui.TextUnformatted($"Configured Dist: {preview.ConfiguredDistance.Value:0.00}y -> {result}");
     }
 
     private static void DrawClassHelpPopup(RuleClassificationSemantics? semantics)

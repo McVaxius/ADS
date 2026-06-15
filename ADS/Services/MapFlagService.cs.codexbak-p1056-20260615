@@ -42,13 +42,6 @@ public sealed class MapFlagService
         try
         {
             destination = pluginInterface.GetIpcSubscriber<Vector3?>(FlagToPointIpc).InvokeFunc();
-            if (destination.HasValue && !MapFlagMonitorPolicy.IsFinite(destination))
-            {
-                destination = null;
-                status = "/vnav moveflag destination unavailable: navmesh returned non-finite coordinates.";
-                return true;
-            }
-
             status = destination.HasValue
                 ? string.Create(
                     CultureInfo.InvariantCulture,

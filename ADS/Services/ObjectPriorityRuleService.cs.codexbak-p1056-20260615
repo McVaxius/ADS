@@ -363,35 +363,6 @@ public sealed class ObjectPriorityRuleService
     public bool MatchesCurrentDutyScopeForEditor(ObjectPriorityRule rule, DutyContextSnapshot context)
         => MatchesDutyScope(rule, context, includeLayerScope: false);
 
-    internal bool MatchesEditorDistancePreviewObject(
-        ObjectPriorityRule rule,
-        DutyContextSnapshot context,
-        RuleDistancePreviewObject liveObject)
-        => !IsManualDestinationRule(rule)
-           && !IsCardinalHoldRule(rule)
-           && Matches(
-               rule,
-               context,
-               liveObject.ObjectKind,
-               liveObject.BaseId,
-               liveObject.Name,
-               liveObject.Position,
-               liveObject.MapId);
-
-    internal Vector3? ResolveEditorDistancePreviewMapCoordinates(
-        DutyContextSnapshot context,
-        Vector2 mapCoordinates,
-        float playerY)
-    {
-        if (context.MapId == 0
-            || !TryResolveMapRow(context.MapId, context.TerritoryTypeId, out var map))
-        {
-            return null;
-        }
-
-        return ConvertMapCoordinatesToWorld(mapCoordinates, map, playerY);
-    }
-
     public ObjectPriorityRule? MatchObjectRule(
         DutyContextSnapshot context,
         ObjectKind objectKind,

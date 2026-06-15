@@ -624,9 +624,6 @@ public sealed class Plugin : IDalamudPlugin
     public string ObjectExplorerStatus
         => objectExplorerStatus;
 
-    public string ObjectExplorerMapFlagStatus
-        => mapFlagMonitorPolicy.BuildCurrentStatus(ObjectTable.LocalPlayer?.Position);
-
     public bool TryPlaceObjectFlag(string objectName, System.Numerics.Vector3 worldPosition)
     {
         var territoryId = DutyContextService.Current.TerritoryTypeId != 0
@@ -637,6 +634,7 @@ public sealed class Plugin : IDalamudPlugin
         if (result)
         {
             var queryAvailable = MapFlagService.TryQueryFlagDestination(out var destination, out var destinationStatus);
+            status = $"{status} {destinationStatus}";
 
             var observation = MapFlagService.ReadCurrentFlag();
             if (observation.Kind == MapFlagObservationKind.Present)
@@ -644,8 +642,6 @@ public sealed class Plugin : IDalamudPlugin
                 mapFlagMonitorPolicy.RecordBaseline(
                     observation.Snapshot!.Value,
                     GetMapFlagDestinationQueryResult(queryAvailable, destination),
-                    destination,
-                    destinationStatus,
                     DateTime.UtcNow);
             }
         }
@@ -1967,7 +1963,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void UpdateObjectExplorerMapFlagMonitor()
     {
-        if (!objectExplorerWindow.IsOpen && !frontierLabelWindow.IsOpen)
+        if (!objectExplorerWindow.IsOpen)
             return;
 
         var now = DateTime.UtcNow;
@@ -1978,23 +1974,23 @@ public sealed class Plugin : IDalamudPlugin
         var observation = MapFlagService.ReadCurrentFlag();
         var decision = mapFlagMonitorPolicy.Observe(observation, now);
         if (decision == MapFlagMonitorDecision.ReportCleared)
+        {
+            objectExplorerStatus = "Map flag cleared.";
             return;
+        }
 
         if (decision != MapFlagMonitorDecision.QueryDestination)
             return;
 
         var queryAvailable = MapFlagService.TryQueryFlagDestination(out var destination, out var destinationStatus);
-        mapFlagMonitorPolicy.RecordQueryResult(
-            GetMapFlagDestinationQueryResult(queryAvailable, destination),
-            destination,
-            destinationStatus,
-            now);
+        mapFlagMonitorPolicy.RecordQueryResult(GetMapFlagDestinationQueryResult(queryAvailable, destination), now);
+        objectExplorerStatus = MapFlagMonitorPolicy.BuildDetectedStatus(observation.Snapshot!.Value, destinationStatus);
     }
 
     private static MapFlagDestinationQueryResult GetMapFlagDestinationQueryResult(
         bool queryAvailable,
         System.Numerics.Vector3? destination)
-        => MapFlagMonitorPolicy.IsFinite(destination)
+        => destination.HasValue
             ? MapFlagDestinationQueryResult.Resolved
             : queryAvailable
                 ? MapFlagDestinationQueryResult.Unresolved
