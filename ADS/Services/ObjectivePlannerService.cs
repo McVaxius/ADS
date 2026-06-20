@@ -109,7 +109,7 @@ public sealed class ObjectivePlannerService
         var nearestFollowTarget = GetBestBattleNpc(liveFollowTargetEligibility);
 
         var nearestRequiredInteractable = GetBestInteractable(
-            observation.LiveInteractables.Where(IsProgressionInteractable),
+            observation.LiveInteractables.Where(x => IsProgressionInteractable(context, x, playerPosition)),
             playerPosition,
             context);
         var nearestCombatFriendlyInteractable = GetBestInteractable(
@@ -132,7 +132,7 @@ public sealed class ObjectivePlannerService
         var nearestRuleBackedInteractableGhost = GetBestRuleBackedInteractableGhost(
             observation.InteractableGhosts
                 .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
-                .Where(IsProgressionInteractable),
+                .Where(x => IsProgressionInteractable(context, x, playerPosition)),
             playerPosition,
             context);
         var currentForceMarchManualDestination = dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
@@ -382,37 +382,6 @@ public sealed class ObjectivePlannerService
             return;
         }
 
-        if (nearestMonster is null
-            && nearestFollowTarget is null
-            && dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
-            && dungeonFrontierService.CurrentTarget is { } manualDestinationTarget
-            && ShouldPrioritizeManualDestinationBeforeProgression(context, manualDestinationTarget, nearestRequiredInteractable, playerPosition))
-        {
-            var distance = playerPosition.HasValue
-                ? GetManualDestinationDistance(playerPosition.Value, manualDestinationTarget)
-                : (float?)null;
-            var verticalDelta = playerPosition.HasValue ? MathF.Abs(manualDestinationTarget.Position.Y - playerPosition.Value.Y) : (float?)null;
-            var isXyzDestination = manualDestinationTarget.IsManualXyzDestination;
-            Current = new PlannerSnapshot
-            {
-                Mode = PlannerMode.Progression,
-                ObjectiveKind = GetManualDestinationObjectiveKind(manualDestinationTarget),
-                Objective = manualDestinationTarget.AllowCombatBypass
-                    ? isXyzDestination
-                        ? $"Force-march toward XYZ destination: {manualDestinationTarget.Name}"
-                        : $"Force-march toward map XZ destination: {manualDestinationTarget.Name}"
-                    : isXyzDestination
-                        ? $"Advance toward XYZ destination: {manualDestinationTarget.Name}"
-                        : $"Advance toward map XZ destination: {manualDestinationTarget.Name}",
-                Explanation = BuildManualDestinationPriorityExplanation(context, manualDestinationTarget, nearestRequiredInteractable, playerPosition),
-                TargetName = manualDestinationTarget.Name,
-                TargetDistance = distance,
-                TargetVerticalDelta = verticalDelta,
-                CapturedAtUtc = now,
-            };
-            return;
-        }
-
         if (nearestRequiredInteractable is not null)
         {
             var distance = playerPosition.HasValue
@@ -456,7 +425,8 @@ public sealed class ObjectivePlannerService
         if (nearestMonster is null
             && nearestFollowTarget is null
             && nearestRequiredInteractable is null
-            && dungeonFrontierService.CurrentTarget is { } frontierPoint)
+            && dungeonFrontierService.CurrentTarget is { } frontierPoint
+            && IsAuthoredFrontierTarget(frontierPoint))
         {
             Current = BuildFrontierSnapshot(context, observation, frontierPoint, playerPosition, now);
             return;
@@ -582,6 +552,15 @@ public sealed class ObjectivePlannerService
             return;
         }
 
+        if (nearestMonster is null
+            && nearestFollowTarget is null
+            && nearestRequiredInteractable is null
+            && dungeonFrontierService.CurrentTarget is { } generatedFrontierPoint)
+        {
+            Current = BuildFrontierSnapshot(context, observation, generatedFrontierPoint, playerPosition, now);
+            return;
+        }
+
         Current = new PlannerSnapshot
         {
             Mode = ownershipMode == OwnershipMode.Observing ? PlannerMode.IdleObserve : PlannerMode.Progression,
@@ -589,7 +568,7 @@ public sealed class ObjectivePlannerService
             Objective = "Await new duty state",
             Explanation = liveMonsterEligibility.Any(x => x.SuppressedByRuleGates)
                 ? "Live monsters are visible, but all currently fail the active BattleNpc distance/Y rule gates, so ADS is holding until one becomes eligible again."
-                : observation.LiveInteractables.Any(IsProgressionInteractable)
+                : observation.LiveInteractables.Any(x => IsProgressionInteractable(context, x, playerPosition))
                 ? "Live progression interactables are visible, but all currently fail the active distance/Y rule gates, so ADS is holding until a manual destination, live monster, or eligible interactable becomes available."
                 : "No live monsters or interactables are currently visible. ADS is holding until the duty state changes again.",
             CapturedAtUtc = now,
@@ -685,6 +664,11 @@ public sealed class ObjectivePlannerService
                 Interactable = x,
                 Distance = GetDistance(playerPosition, x.Position),
                 VerticalDelta = GetVerticalDelta(playerPosition, x.Position),
+                AuthoredRule = objectPriorityRuleService.GetEligibleAuthoredLiveObjectRule(
+                    context,
+                    x,
+                    GetDistance(playerPosition, x.Position),
+                    GetVerticalDelta(playerPosition, x.Position)),
                 Priority = objectPriorityRuleService.GetEffectivePriority(
                     context,
                     x,
@@ -696,24 +680,41 @@ public sealed class ObjectivePlannerService
                 x.Interactable,
                 x.Distance,
                 x.VerticalDelta))
-            .OrderBy(x => x.Priority)
+            .OrderBy(x => x.AuthoredRule is not null ? 0 : 1)
+            .ThenBy(x => x.Priority)
             .ThenBy(x => x.Distance ?? float.MaxValue)
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .Select(x => x.Interactable)
             .FirstOrDefault();
     }
 
-    private bool IsProgressionInteractable(ObservedInteractable interactable)
-        => interactable.Classification is InteractableClass.Required
+    private bool IsProgressionInteractable(
+        DutyContextSnapshot context,
+        ObservedInteractable interactable,
+        Vector3? playerPosition)
+    {
+        if (interactable.Classification is InteractableClass.Required
             or InteractableClass.CombatFriendly
             or InteractableClass.Expendable
             || (interactable.Classification == InteractableClass.TreasureDoor
-                && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower);
+                && dungeonFrontierService.TreasureDungeonRole != ADS.Models.TreasureDungeonRole.Follower))
+        {
+            return true;
+        }
+
+        if (interactable.Classification != InteractableClass.Optional)
+            return false;
+
+        var distance = GetDistance(playerPosition, interactable.Position);
+        var verticalDelta = GetVerticalDelta(playerPosition, interactable.Position);
+        return objectPriorityRuleService.GetEligibleAuthoredLiveObjectRule(context, interactable, distance, verticalDelta) is not null;
+    }
 
     private static PlannerObjectiveKind GetProgressionInteractableObjectiveKind(ObservedInteractable interactable)
         => interactable.Classification switch
         {
             InteractableClass.CombatFriendly => PlannerObjectiveKind.CombatFriendlyInteractable,
+            InteractableClass.Optional => PlannerObjectiveKind.OptionalInteractable,
             InteractableClass.Expendable => PlannerObjectiveKind.ExpendableInteractable,
             InteractableClass.TreasureDoor => PlannerObjectiveKind.TreasureDoor,
             _ => PlannerObjectiveKind.RequiredInteractable,
@@ -744,57 +745,13 @@ public sealed class ObjectivePlannerService
             .FirstOrDefault();
     }
 
-    private bool ShouldPrioritizeManualDestinationBeforeProgression(
-        DutyContextSnapshot context,
-        DungeonFrontierPoint manualDestinationTarget,
-        ObservedInteractable? nearestRequiredInteractable,
-        Vector3? playerPosition)
-    {
-        if (!manualDestinationTarget.IsManualDestination)
-            return false;
-
-        if (nearestRequiredInteractable is null)
-            return false;
-
-        var distance = GetDistance(playerPosition, nearestRequiredInteractable.Position);
-        var verticalDelta = GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position);
-        var nearestRequiredPriority = objectPriorityRuleService.GetEffectivePriority(
-            context,
-            nearestRequiredInteractable,
-            distance,
-            verticalDelta);
-        return ShouldManualDestinationBeatProgressionInteractable(
-            manualDestinationTarget.Priority,
-            nearestRequiredInteractable,
-            nearestRequiredPriority);
-    }
-
     private bool ShouldForceMarchManualDestinationBypassProgression(
         DutyContextSnapshot context,
         DungeonFrontierPoint manualDestinationTarget,
         ObservedInteractable? nearestRequiredInteractable,
         Vector3? playerPosition)
     {
-        if (nearestRequiredInteractable is null)
-            return true;
-
-        var distance = GetDistance(playerPosition, nearestRequiredInteractable.Position);
-        var verticalDelta = GetVerticalDelta(playerPosition, nearestRequiredInteractable.Position);
-        var nearestRequiredPriority = objectPriorityRuleService.GetEffectivePriority(
-            context,
-            nearestRequiredInteractable,
-            distance,
-            verticalDelta);
-        if (manualDestinationTarget.Priority < nearestRequiredPriority)
-            return true;
-
-        if (manualDestinationTarget.Priority > nearestRequiredPriority)
-            return false;
-
-        if (nearestRequiredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
-            return true;
-
-        return manualDestinationTarget.AllowCombatBypass;
+        return nearestRequiredInteractable is null;
     }
 
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)
@@ -905,46 +862,6 @@ public sealed class ObjectivePlannerService
             : "a priority rule";
 
         return $"No live monsters, follow anchors, or progression interactables are currently visible, but {priorityText} still matches the ghost of {interactable.Name} within the configured distance/Y gates ({distance:0.0}y, Y {verticalDelta:0.0}). ADS is using that rule-backed ghost as a recovery objective instead of toggling away from stronger live truth.";
-    }
-
-    private string BuildManualDestinationPriorityExplanation(
-        DutyContextSnapshot context,
-        DungeonFrontierPoint frontierPoint,
-        ObservedInteractable? deferredInteractable,
-        Vector3? playerPosition)
-    {
-        if (deferredInteractable is null)
-            return BuildFrontierExplanation(context, frontierPoint, ObservationSnapshot.Empty);
-
-        var distance = GetDistance(playerPosition, deferredInteractable.Position);
-        var verticalDelta = GetVerticalDelta(playerPosition, deferredInteractable.Position);
-        var deferredPriority = objectPriorityRuleService.GetEffectivePriority(
-            context,
-            deferredInteractable,
-            distance,
-            verticalDelta);
-        var manualLabel = GetManualDestinationLabel(frontierPoint);
-        if (frontierPoint.Priority == deferredPriority
-            && deferredInteractable.Classification is InteractableClass.Expendable or InteractableClass.Optional)
-        {
-            return $"Human-authored {manualLabel} {frontierPoint.Name} ties the currently visible {deferredInteractable.Classification} progression interactable {deferredInteractable.Name} at priority ({deferredPriority}), so ADS spends the tie on the staging waypoint instead of the lower-value live interactable.";
-        }
-
-        return $"Human-authored {manualLabel} {frontierPoint.Name} has better priority ({frontierPoint.Priority}) than the best currently visible progression interactable {deferredInteractable.Name} ({deferredPriority}), so ADS is using the staging waypoint first instead of going directly to that interactable.";
-    }
-
-    private static bool ShouldManualDestinationBeatProgressionInteractable(
-        int manualPriority,
-        ObservedInteractable interactable,
-        int interactablePriority)
-    {
-        if (manualPriority < interactablePriority)
-            return true;
-
-        if (manualPriority > interactablePriority)
-            return false;
-
-        return interactable.Classification is InteractableClass.Expendable or InteractableClass.Optional;
     }
 
     private static bool ShouldSelectTreasureCoffer(
@@ -1327,6 +1244,12 @@ public sealed class ObjectivePlannerService
         => frontierPoint.IsManualDestination
             ? GetManualDestinationDistance(playerPosition, frontierPoint)
             : GetHorizontalDistance(playerPosition, frontierPoint.Position) ?? 0f;
+
+    private static bool IsAuthoredFrontierTarget(DungeonFrontierPoint frontierPoint)
+        => frontierPoint.IsManualDestination
+           || frontierPoint.IsTreasureRoutePoint
+           || frontierPoint.IsLiveTreasureDoorCandidate
+           || frontierPoint.IsTreasureFollowerStagingPoint;
 
     private static bool MatchesCurrentMap(uint activeMapId, uint candidateMapId)
         => activeMapId == 0

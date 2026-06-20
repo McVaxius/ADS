@@ -599,6 +599,18 @@ public sealed class ObjectPriorityRuleService
                 verticalDelta)
             .EffectiveRule;
 
+    internal ObjectPriorityRule? GetEligibleAuthoredLiveObjectRule(
+        DutyContextSnapshot context,
+        ObservedInteractable interactable,
+        float? distance,
+        float? verticalDelta)
+    {
+        var rule = GetEffectiveRule(context, interactable, distance, verticalDelta);
+        return rule is not null && IsAuthoredLiveObjectTruthRule(rule)
+            ? rule
+            : null;
+    }
+
     public ObjectPriorityRule? GetEffectiveBattleNpcRule(
         DutyContextSnapshot context,
         ObservedMonster monster,
@@ -1130,6 +1142,12 @@ public sealed class ObjectPriorityRuleService
     private static bool IsIgnoredRule(ObjectPriorityRule rule)
         => TryParseClassification(rule.Classification, out var classification)
            && classification == InteractableClass.Ignored;
+
+    internal static bool IsAuthoredLiveObjectTruthRule(ObjectPriorityRule rule)
+        => !IsManualDestinationRule(rule)
+           && !IsCardinalHoldRule(rule)
+           && TryParseClassification(rule.Classification, out var classification)
+           && classification != InteractableClass.Ignored;
 
     private static bool IsFollowRule(ObjectPriorityRule rule)
         => TryParseClassification(rule.Classification, out var classification)

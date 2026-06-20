@@ -150,6 +150,15 @@ For BattleNpc truth, layer-scoped rows can act as a truth gate: if a visible mob
 - An `Ignored` or `Follow` BattleNpc row whose own gates fail preserves generic-monster fallback instead of suppressing that mob into planner limbo.
 - Unruled BattleNpc objects remain normal monster-first blockers.
 
+## Planner And Frontier Precedence
+
+- Entered live object rules are first-tier truth once identity, duty/layer, distance, and Y gates pass.
+- `Ignored`, manual destination, and cardinal-hold rows are not live object truth.
+- Numeric `Priority` only sorts inside the same tier; generated Lumina labels cannot beat eligible live authored object rules.
+- Non-combat `MapXzDestination` / `XYZ` waypoints run only when no eligible live progression object is being skipped.
+- `MapXzForceMarch` / `XYZForceMarch` can still bypass incidental combat pressure when no eligible live progression object is skipped.
+- Lumina label and heading-scout frontiers are last fallback, after live objects, authored manual/treasure route points, follow anchors, and recovery ghosts.
+
 ## Coords And Positional Matching
 
 The editor uses one `Coords` field:
