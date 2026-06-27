@@ -65,6 +65,10 @@ public sealed class HigherLowerAutomationService
     private ulong pendingDirectionBaselineServerRowSequence;
     private bool pendingDirectionHasBaselineServerRowSequence;
     private bool pendingDirectionTimeoutLogged;
+    private int pendingDirectionInteractAttempts;
+    private DateTime pendingDirectionLastInteractUtc = DateTime.MinValue;
+    private DateTime pendingDirectionNextRetryUtc = DateTime.MinValue;
+    private string pendingDirectionLastRetryReason = "none";
     private string lastDirectionTerminalProof = "none";
     private PendingCallbackAction pendingCallbackAction = PendingCallbackAction.None;
     private PendingCallbackPhase pendingCallbackPhase = PendingCallbackPhase.None;
@@ -139,6 +143,13 @@ public sealed class HigherLowerAutomationService
             PendingDirectionPhase: FormatPendingDirectionPhase(pendingDirectionPhase),
             PendingDirectionAgeSeconds: GetPendingDirectionAgeSeconds(now),
             PendingDirectionPhaseAgeSeconds: GetPendingDirectionPhaseAgeSeconds(now),
+            PendingDirectionInteractAttempts: pendingDirectionInteractAttempts,
+            PendingDirectionMaxInteractAttempts: HigherLowerPendingDirectionRetryPolicy.MaxInteractAttempts,
+            PendingDirectionLastInteractUtc: pendingDirectionLastInteractUtc == DateTime.MinValue ? null : pendingDirectionLastInteractUtc,
+            PendingDirectionLastInteractAgeSeconds: GetPendingDirectionLastInteractAgeSeconds(now),
+            PendingDirectionNextRetryUtc: pendingDirectionNextRetryUtc == DateTime.MinValue ? null : pendingDirectionNextRetryUtc,
+            PendingDirectionNextRetryInSeconds: GetPendingDirectionNextRetryInSeconds(now),
+            PendingDirectionLastRetryReason: pendingDirectionLastRetryReason,
             PendingDirectionBaselineServerRowSequence: pendingDirectionHasBaselineServerRowSequence ? pendingDirectionBaselineServerRowSequence : null,
             PendingDirectionTerminalProof: lastDirectionTerminalProof,
             PendingCallbackAction: FormatPendingCallbackAction(pendingCallbackAction),
@@ -1120,10 +1131,27 @@ public sealed class HigherLowerAutomationService
     private IGameObject? FindDirectionTarget(string name)
         => objectTable
             .Where(x => x != null
-                        && x.IsTargetable
-                        && string.Equals(x.Name.TextValue.Trim(), name, StringComparison.OrdinalIgnoreCase))
+                        && IsDirectionTarget(x, name))
             .OrderBy(x => objectTable.LocalPlayer == null ? float.MaxValue : Vector3.Distance(objectTable.LocalPlayer.Position, x.Position))
             .FirstOrDefault();
+
+    private IGameObject? FindPendingDirectionRetryTarget(string name)
+    {
+        if (pendingDirectionGameObjectId != 0)
+        {
+            var original = objectTable.FirstOrDefault(x => x != null
+                                                           && x.GameObjectId == pendingDirectionGameObjectId
+                                                           && IsDirectionTarget(x, name));
+            if (original is not null)
+                return original;
+        }
+
+        return FindDirectionTarget(name);
+    }
+
+    private static bool IsDirectionTarget(IGameObject obj, string name)
+        => obj.IsTargetable
+           && string.Equals(obj.Name.TextValue.Trim(), name, StringComparison.OrdinalIgnoreCase);
 
     private AutomationDecision? GetRetainedCurrentStepDecision()
         => retainedDecision is { } decision && decision.Step == currentGambleStep
@@ -1285,6 +1313,20 @@ public sealed class HigherLowerAutomationService
         pendingDirectionPhase = phase;
         pendingDirectionTimedOutPhase = PendingDirectionPhase.None;
         pendingDirectionTimeoutLogged = false;
+        if (phase == PendingDirectionPhase.WaitingSelectYesno)
+        {
+            pendingDirectionInteractAttempts = 1;
+            pendingDirectionLastInteractUtc = now;
+            pendingDirectionNextRetryUtc = HigherLowerPendingDirectionRetryPolicy.GetInitialNextRetryUtc(now);
+            pendingDirectionLastRetryReason = "initial-interact-sent";
+        }
+        else
+        {
+            pendingDirectionInteractAttempts = 0;
+            pendingDirectionLastInteractUtc = DateTime.MinValue;
+            pendingDirectionNextRetryUtc = DateTime.MinValue;
+            pendingDirectionLastRetryReason = "none";
+        }
         lastDirectionTerminalProof = "none";
         lastDirectionDecisionSource = phase == PendingDirectionPhase.WaitingSelectYesno
             ? "pending-target"
@@ -1342,9 +1384,92 @@ public sealed class HigherLowerAutomationService
             return true;
         }
 
+        if (TryRetryPendingDirectionInteract(state, pending, now))
+            return true;
+
         Status = BuildStatus(state, $"waiting: direction proof {pendingDirectionName}");
         return true;
     }
+
+    private bool TryRetryPendingDirectionInteract(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        AutomationDecision decision,
+        DateTime now)
+    {
+        if (pendingDirectionPhase != PendingDirectionPhase.WaitingSelectYesno)
+            return false;
+
+        var target = FindPendingDirectionRetryTarget(pendingDirectionName);
+        float? distance = target is null ? null : DistanceToLocalPlayer(target);
+        lastDirectionTargetName = string.IsNullOrWhiteSpace(pendingDirectionName) ? "none" : pendingDirectionName;
+        lastDirectionTargetDistance = distance.HasValue && float.IsFinite(distance.Value) ? distance.Value : null;
+
+        var retryDecision = HigherLowerPendingDirectionRetryPolicy.Evaluate(new HigherLowerPendingDirectionRetryPolicy.RetryState(
+            WaitingSelectYesno: pendingDirectionPhase == PendingDirectionPhase.WaitingSelectYesno,
+            HigherLowerPromptVisible: state.SelectYesnoVisible && IsHigherLowerPrompt(state.SelectYesnoPrompt),
+            TrustedServerProofAvailable: false,
+            PendingTimedOut: IsPendingDirectionTimedOut(now),
+            PendingStartedUtc: pendingDirectionStartedUtc,
+            NextRetryUtc: pendingDirectionNextRetryUtc,
+            InteractAttempts: pendingDirectionInteractAttempts,
+            TargetAvailable: target is not null,
+            TargetDistance: distance,
+            InteractRange: DirectionInteractRange,
+            NowUtc: now));
+
+        if (!retryDecision.ShouldRetry)
+        {
+            if (now >= retryDecision.NextRetryUtc && IsPendingDirectionRetryTargetGateReason(retryDecision.Reason))
+            {
+                SchedulePendingDirectionRetry(now, retryDecision.Reason);
+                var attempt = pendingDirectionInteractAttempts + 1;
+                Status = BuildStatus(state, $"waiting: direction retry {retryDecision.Reason} {pendingDirectionName}");
+                LogWarning($"hlauto direction-retry-target-missing target={EscapeToken(pendingDirectionName)} reason={EscapeToken(retryDecision.Reason)} {BuildRetryTargetLogFields(target, distance)} {BuildPendingDirectionRetryLogFields(attempt, now)} {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "pending-target")} {BuildPendingDirectionLogFields()}");
+                return true;
+            }
+
+            return false;
+        }
+
+        var retryTarget = target;
+        if (retryTarget is null || !distance.HasValue || !float.IsFinite(distance.Value))
+            return false;
+
+        var nextAttempt = pendingDirectionInteractAttempts + 1;
+        TryStopVnav($"direction-retry-{pendingDirectionName}", force: true);
+        if (GameInteractionHelper.TryInteractWithObject(targetManager, retryTarget, log))
+        {
+            RecordPendingDirectionRetryAttempt(nextAttempt, now, "interact-sent");
+            MarkHigherLowerActivity(now, $"hlauto-retry-interact:{pendingDirectionName}");
+            Status = BuildStatus(state, $"direction-retry-interact-sent {pendingDirectionName} attempt {nextAttempt}/{HigherLowerPendingDirectionRetryPolicy.MaxInteractAttempts}");
+            LogAction($"hlauto direction-retry-interact-sent target={EscapeToken(pendingDirectionName)} {BuildRetryTargetLogFields(retryTarget, distance)} {BuildPendingDirectionRetryLogFields(nextAttempt, now)} {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "pending-target")} {BuildPendingDirectionLogFields()}");
+            return true;
+        }
+
+        RecordPendingDirectionRetryAttempt(nextAttempt, now, "interact-failed");
+        Status = BuildStatus(state, $"waiting: direction retry interact failed {pendingDirectionName} attempt {nextAttempt}/{HigherLowerPendingDirectionRetryPolicy.MaxInteractAttempts}");
+        LogWarning($"hlauto direction-retry-interact-failed target={EscapeToken(pendingDirectionName)} {BuildRetryTargetLogFields(retryTarget, distance)} {BuildPendingDirectionRetryLogFields(nextAttempt, now)} {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "pending-target")} {BuildPendingDirectionLogFields()}");
+        return true;
+    }
+
+    private void RecordPendingDirectionRetryAttempt(int attempt, DateTime now, string reason)
+    {
+        pendingDirectionInteractAttempts = Math.Max(pendingDirectionInteractAttempts, attempt);
+        pendingDirectionLastInteractUtc = now;
+        pendingDirectionNextRetryUtc = HigherLowerPendingDirectionRetryPolicy.GetNextRetryUtc(now);
+        pendingDirectionLastRetryReason = reason;
+    }
+
+    private void SchedulePendingDirectionRetry(DateTime now, string reason)
+    {
+        pendingDirectionNextRetryUtc = HigherLowerPendingDirectionRetryPolicy.GetNextRetryUtc(now);
+        pendingDirectionLastRetryReason = reason;
+    }
+
+    private static bool IsPendingDirectionRetryTargetGateReason(string reason)
+        => string.Equals(reason, "target-missing", StringComparison.Ordinal)
+           || string.Equals(reason, "target-distance-unavailable", StringComparison.Ordinal)
+           || string.Equals(reason, "target-out-of-range", StringComparison.Ordinal);
 
     private void TryAnswerPendingDirectionConfirm(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
@@ -1489,6 +1614,10 @@ public sealed class HigherLowerAutomationService
         pendingDirectionBaselineServerRowSequence = 0;
         pendingDirectionHasBaselineServerRowSequence = false;
         pendingDirectionTimeoutLogged = false;
+        pendingDirectionInteractAttempts = 0;
+        pendingDirectionLastInteractUtc = DateTime.MinValue;
+        pendingDirectionNextRetryUtc = DateTime.MinValue;
+        pendingDirectionLastRetryReason = "none";
         nextStopCommandUtc = DateTime.MinValue;
         lastStopLogKey = string.Empty;
         if (!clearTarget)
@@ -1750,17 +1879,17 @@ public sealed class HigherLowerAutomationService
         };
 
     private string BuildStatus(TreasureHighLowDiagnosticService.HigherLowerRuntimeState state, string suffix)
-        => $"Higher/Lower automation {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} card={FormatCard(lastDecision?.Card)} action={lastDecision?.Action.ToString() ?? "None"} source='{lastDecision?.Source ?? "none"}' directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{lastBlockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} knownCards={state.KnownCardCount}.";
+        => $"Higher/Lower automation {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} card={FormatCard(lastDecision?.Card)} action={lastDecision?.Action.ToString() ?? "None"} source='{lastDecision?.Source ?? "none"}' directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} {BuildPendingDirectionRetryStatusFields(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{lastBlockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} knownCards={state.KnownCardCount}.";
 
     private string BuildBlockedStatus(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
         HigherLowerCardVfxSolverService.SolverState solverState,
         string suffix,
         string blockedReason)
-        => $"Higher/Lower solver {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{blockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} decodedCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} solverChoice={solverState.RecommendedChoice} confidence={solverState.Confidence.ToString().ToLowerInvariant()} reason='{solverState.Reason}' source='{solverState.CardSource}' slot={solverState.Slot} textureIndex={(solverState.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}.";
+        => $"Higher/Lower solver {suffix}; surface={lastSurfaceSource} dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={lastDirectionDecisionSource} directionTarget={lastDirectionTargetName}@{FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : pendingDirectionName)} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} {BuildPendingDirectionRetryStatusFields(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} blockedReason='{blockedReason}' active={state.Active} addonCurrentCard={state.AddonCurrentCardText} addonOtherCard={state.AddonOtherCardText} decodedCard={(solverState.CurrentCard?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} solverChoice={solverState.RecommendedChoice} confidence={solverState.Confidence.ToString().ToLowerInvariant()} reason='{solverState.Reason}' source='{solverState.CardSource}' slot={solverState.Slot} textureIndex={(solverState.TextureIndex?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}.";
 
     private string BuildSessionLogFields()
-        => $"dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={EscapeToken(lastDirectionDecisionSource)} directionTarget={EscapeToken(lastDirectionTargetName)} directionDistance={FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : EscapeToken(pendingDirectionName))} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} retained={(retainedDecision is not null).ToString().ToLowerInvariant()} retainedStep={(retainedDecision?.Step.ToString(CultureInfo.InvariantCulture) ?? "none")} retainedCard={FormatCard(retainedDecision?.Card)} retainedAction={(retainedDecision?.Action.ToString() ?? "None")}";
+        => $"dutyKey={activeDutyKey} step={currentGambleStep} playsCompleted={completedPlayCount} directionSource={EscapeToken(lastDirectionDecisionSource)} directionTarget={EscapeToken(lastDirectionTargetName)} directionDistance={FormatDistance(lastDirectionTargetDistance)} pendingTarget={(pendingDirectionDecision is null ? "none" : EscapeToken(pendingDirectionName))} pendingPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} pendingAge={FormatPendingAgeSeconds()} pendingPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} {BuildPendingDirectionRetryStatusFields(DateTime.UtcNow)} pendingBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} terminalProof={EscapeToken(lastDirectionTerminalProof)} callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} blocksDutyExit={BlocksDutyExit.ToString().ToLowerInvariant()} exitGrace={FormatDutyExitGraceRemainingSeconds()} lastActivity={EscapeToken(lastHigherLowerActivitySource)} retained={(retainedDecision is not null).ToString().ToLowerInvariant()} retainedStep={(retainedDecision?.Step.ToString(CultureInfo.InvariantCulture) ?? "none")} retainedCard={FormatCard(retainedDecision?.Card)} retainedAction={(retainedDecision?.Action.ToString() ?? "None")}";
 
     private static string BuildAddonLogFields(TreasureHighLowDiagnosticService.HigherLowerRuntimeState state)
         => $"addonCurrentCard={EscapeToken(state.AddonCurrentCardText)} addonOtherCard={EscapeToken(state.AddonOtherCardText)}";
@@ -1785,6 +1914,17 @@ public sealed class HigherLowerAutomationService
             target.Position.Y,
             target.Position.Z);
 
+    private static string BuildRetryTargetLogFields(IGameObject? target, float? distance)
+    {
+        var targetId = target is null
+            ? "none"
+            : string.Create(CultureInfo.InvariantCulture, $"0x{target.GameObjectId:X}");
+        return $"targetId={targetId} distance={FormatDistance(distance)} range={DirectionInteractRange.ToString("0.00", CultureInfo.InvariantCulture)}";
+    }
+
+    private string BuildPendingDirectionRetryLogFields(int attempt, DateTime now)
+        => $"attempt={attempt.ToString(CultureInfo.InvariantCulture)} maxAttempts={HigherLowerPendingDirectionRetryPolicy.MaxInteractAttempts.ToString(CultureInfo.InvariantCulture)} pendingAge={FormatPendingAgeSeconds(now)} phaseAge={FormatPendingDirectionPhaseAgeSeconds(now)} nextRetryIn={FormatPendingDirectionNextRetryInSeconds(now)} nextRetryAt={FormatPendingDirectionNextRetryUtc()} lastRetryReason={EscapeToken(pendingDirectionLastRetryReason)}";
+
     private float DistanceToLocalPlayer(IGameObject obj)
     {
         var player = objectTable.LocalPlayer;
@@ -1800,6 +1940,16 @@ public sealed class HigherLowerAutomationService
         => pendingDirectionDecision is null || pendingDirectionPhaseStartedUtc == DateTime.MinValue
             ? null
             : Math.Max(0, (now - pendingDirectionPhaseStartedUtc).TotalSeconds);
+
+    private double? GetPendingDirectionLastInteractAgeSeconds(DateTime now)
+        => pendingDirectionDecision is null || pendingDirectionLastInteractUtc == DateTime.MinValue
+            ? null
+            : Math.Max(0, (now - pendingDirectionLastInteractUtc).TotalSeconds);
+
+    private double? GetPendingDirectionNextRetryInSeconds(DateTime now)
+        => pendingDirectionDecision is null || pendingDirectionNextRetryUtc == DateTime.MinValue
+            ? null
+            : Math.Max(0, (pendingDirectionNextRetryUtc - now).TotalSeconds);
 
     private double? GetPendingCallbackAgeSeconds(DateTime now)
         => !HasPendingCallback() || pendingCallbackPhaseStartedUtc == DateTime.MinValue
@@ -1824,8 +1974,11 @@ public sealed class HigherLowerAutomationService
     }
 
     private string FormatPendingAgeSeconds()
+        => FormatPendingAgeSeconds(DateTime.UtcNow);
+
+    private string FormatPendingAgeSeconds(DateTime now)
     {
-        var age = GetPendingDirectionAgeSeconds(DateTime.UtcNow);
+        var age = GetPendingDirectionAgeSeconds(now);
         return age.HasValue
             ? age.Value.ToString("0.0", CultureInfo.InvariantCulture)
             : "none";
@@ -1839,6 +1992,27 @@ public sealed class HigherLowerAutomationService
             : "none";
     }
 
+    private string FormatPendingDirectionLastInteractAgeSeconds(DateTime now)
+    {
+        var age = GetPendingDirectionLastInteractAgeSeconds(now);
+        return age.HasValue
+            ? age.Value.ToString("0.0", CultureInfo.InvariantCulture)
+            : "none";
+    }
+
+    private string FormatPendingDirectionNextRetryInSeconds(DateTime now)
+    {
+        var remaining = GetPendingDirectionNextRetryInSeconds(now);
+        return remaining.HasValue
+            ? remaining.Value.ToString("0.0", CultureInfo.InvariantCulture)
+            : "none";
+    }
+
+    private string FormatPendingDirectionNextRetryUtc()
+        => pendingDirectionNextRetryUtc == DateTime.MinValue
+            ? "none"
+            : pendingDirectionNextRetryUtc.ToString("O", CultureInfo.InvariantCulture);
+
     private string FormatPendingCallbackAgeSeconds(DateTime now)
     {
         var age = GetPendingCallbackAgeSeconds(now);
@@ -1851,7 +2025,13 @@ public sealed class HigherLowerAutomationService
         => $"callbackAction={FormatPendingCallbackAction(pendingCallbackAction)} callbackPhase={FormatPendingCallbackPhase(pendingCallbackPhase)} callbackAge={FormatPendingCallbackAgeSeconds(DateTime.UtcNow)} callbackSentAge={FormatPendingCallbackSentAgeSeconds(DateTime.UtcNow)} callbackBaselineServerRowSeq={(pendingCallbackHasBaselineServerRowSequence ? pendingCallbackBaselineServerRowSequence.ToString(CultureInfo.InvariantCulture) : "none")}";
 
     private string BuildPendingDirectionLogFields()
-        => $"directionPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} directionAge={FormatPendingAgeSeconds()} directionPhaseAge={FormatPendingDirectionPhaseAgeSeconds(DateTime.UtcNow)} directionBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} directionTerminalProof={EscapeToken(lastDirectionTerminalProof)}";
+    {
+        var now = DateTime.UtcNow;
+        return $"directionPhase={FormatPendingDirectionPhase(pendingDirectionPhase)} directionAge={FormatPendingAgeSeconds(now)} directionPhaseAge={FormatPendingDirectionPhaseAgeSeconds(now)} {BuildPendingDirectionRetryStatusFields(now)} directionBaselineServerRowSeq={FormatPendingDirectionBaselineServerRowSequence()} directionTerminalProof={EscapeToken(lastDirectionTerminalProof)}";
+    }
+
+    private string BuildPendingDirectionRetryStatusFields(DateTime now)
+        => $"directionAttempts={pendingDirectionInteractAttempts.ToString(CultureInfo.InvariantCulture)}/{HigherLowerPendingDirectionRetryPolicy.MaxInteractAttempts.ToString(CultureInfo.InvariantCulture)} directionLastInteractAge={FormatPendingDirectionLastInteractAgeSeconds(now)} directionNextRetryIn={FormatPendingDirectionNextRetryInSeconds(now)} directionNextRetryAt={FormatPendingDirectionNextRetryUtc()} directionRetryReason={EscapeToken(pendingDirectionLastRetryReason)}";
 
     private string FormatPendingDirectionBaselineServerRowSequence()
         => pendingDirectionHasBaselineServerRowSequence
@@ -1982,6 +2162,13 @@ public sealed class HigherLowerAutomationService
         string PendingDirectionPhase,
         double? PendingDirectionAgeSeconds,
         double? PendingDirectionPhaseAgeSeconds,
+        int PendingDirectionInteractAttempts,
+        int PendingDirectionMaxInteractAttempts,
+        DateTime? PendingDirectionLastInteractUtc,
+        double? PendingDirectionLastInteractAgeSeconds,
+        DateTime? PendingDirectionNextRetryUtc,
+        double? PendingDirectionNextRetryInSeconds,
+        string PendingDirectionLastRetryReason,
         ulong? PendingDirectionBaselineServerRowSequence,
         string PendingDirectionTerminalProof,
         string PendingCallbackAction,
