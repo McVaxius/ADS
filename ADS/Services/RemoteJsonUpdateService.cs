@@ -25,6 +25,9 @@ public sealed class RemoteJsonUpdateService : IDisposable
         new(TreasureRoutesFileName, RemoteJsonKind.TreasureRoutes),
     ];
 
+    internal static IReadOnlyList<string> RemoteCacheFileNames
+        => Files.Select(file => file.FileName).ToList();
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -100,6 +103,17 @@ public sealed class RemoteJsonUpdateService : IDisposable
         return TryStartUpdate(force: true, $"{reason}; missing {string.Join(", ", missing)}");
     }
 
+    public bool TryStartStartupRefresh(string reason)
+    {
+        if (!NeedsStaleRefresh(out var status))
+        {
+            LastUpdateStatus = $"Remote config update skipped at startup: {status}.";
+            return false;
+        }
+
+        return TryStartUpdate(force: true, $"{reason}; {status}");
+    }
+
     public bool TryStartStaleUpdate(string reason)
     {
         if (!NeedsStaleRefresh(out var status))
@@ -147,36 +161,68 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
     private bool NeedsStaleRefresh(out string status)
     {
+        var decision = GetRefreshDecision(DateTime.UtcNow);
+        status = decision.Status;
+        return decision.ShouldRefresh;
+    }
+
+    private RemoteJsonRefreshDecision GetRefreshDecision(DateTime utcNow)
+        => DecideRefresh(
+            Files.Select(file =>
+            {
+                var path = GetConfigPath(file.FileName);
+                return File.Exists(path)
+                    ? new RemoteJsonCacheFileState(file.FileName, true, File.GetLastWriteTimeUtc(path))
+                    : new RemoteJsonCacheFileState(file.FileName, false, DateTime.MinValue);
+            }),
+            utcNow,
+            RefreshInterval);
+
+    internal static RemoteJsonRefreshDecision DecideRefresh(
+        IEnumerable<RemoteJsonCacheFileState> fileStates,
+        DateTime utcNow,
+        TimeSpan refreshInterval)
+    {
         var missing = new List<string>();
         var stale = new List<string>();
-        foreach (var file in Files)
+        var staleDetails = new List<string>();
+
+        foreach (var state in fileStates)
         {
-            var path = GetConfigPath(file.FileName);
-            if (!File.Exists(path))
+            if (!state.Exists)
             {
-                missing.Add(file.FileName);
+                missing.Add(state.FileName);
                 continue;
             }
 
-            var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(path);
-            if (age > RefreshInterval)
-                stale.Add($"{file.FileName} {FormatAge(age)} old");
+            var age = utcNow - state.LastWriteUtc;
+            if (age > refreshInterval)
+            {
+                stale.Add(state.FileName);
+                staleDetails.Add($"{state.FileName} {FormatAge(age)} old");
+            }
         }
 
+        if (missing.Count == 0 && stale.Count == 0)
+        {
+            return new RemoteJsonRefreshDecision(
+                false,
+                "cache files are younger than 24h",
+                missing,
+                stale);
+        }
+
+        var statusParts = new List<string>();
         if (missing.Count > 0)
-        {
-            status = $"missing {string.Join(", ", missing)}";
-            return true;
-        }
+            statusParts.Add($"missing {string.Join(", ", missing)}");
+        if (staleDetails.Count > 0)
+            statusParts.Add($"stale cache {string.Join(", ", staleDetails)}");
 
-        if (stale.Count > 0)
-        {
-            status = $"stale cache {string.Join(", ", stale)}";
-            return true;
-        }
-
-        status = "cache files are younger than 24h";
-        return false;
+        return new RemoteJsonRefreshDecision(
+            true,
+            string.Join("; ", statusParts),
+            missing,
+            stale);
     }
 
     private async Task RunUpdateAsync(string reason)
@@ -318,3 +364,11 @@ public sealed class RemoteJsonUpdateService : IDisposable
         TreasureRoutes,
     }
 }
+
+internal sealed record RemoteJsonCacheFileState(string FileName, bool Exists, DateTime LastWriteUtc);
+
+internal sealed record RemoteJsonRefreshDecision(
+    bool ShouldRefresh,
+    string Status,
+    IReadOnlyList<string> MissingFiles,
+    IReadOnlyList<string> StaleFiles);

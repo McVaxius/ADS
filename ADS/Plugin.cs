@@ -176,7 +176,7 @@ public sealed class Plugin : IDalamudPlugin
         BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
         TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
-        RemoteJsonUpdateService.TryStartMissingUpdate("startup");
+        RemoteJsonUpdateService.TryStartStartupRefresh("startup");
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
