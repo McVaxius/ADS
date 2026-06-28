@@ -286,6 +286,8 @@ public sealed class Plugin : IDalamudPlugin
 
         RegisterCommands();
 
+        // ADS diagnostic windows should remain available when opened by slash command during cutscenes.
+        PluginInterface.UiBuilder.DisableCutsceneUiHide = true;
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
