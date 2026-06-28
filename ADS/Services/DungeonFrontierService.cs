@@ -24,6 +24,10 @@ public sealed class DungeonFrontierService
     private const float TreasureFollowerStagingArrivalRadius = 3f;
     private const float TreasureFollowerStagingCofferRoomMatchRange = 70f;
     private const float TreasureFollowerStagingProgressDistance = 0.5f;
+    public const string ForceMarchMapXzArrivedReason = "ForceMarchMapXzArrived";
+    public const string ForceMarchXyzArrivedReason = "ForceMarchXyzArrived";
+    public const string ForceMarchXyzXzFallbackArrivedReason = "ForceMarchXyzXzFallbackArrived";
+    public const string ForceMarchTransitionReason = "ForceMarchTransition";
     private static readonly TimeSpan TreasureFollowerStagingNoProgressTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan TreasureFollowerDoorChaseSettleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TreasureFollowerDoorInteractionWitnessTtl = TimeSpan.FromSeconds(15);
@@ -504,6 +508,17 @@ public sealed class DungeonFrontierService
             .Concat(manualXyzDestinations)
             .ToList();
 
+        CurrentTarget = SelectCurrentForceMarchManualDestination(manualDestinations, playerPosition, previousTarget);
+        if (CurrentTarget is not null)
+        {
+            CurrentMode = CurrentTarget.IsManualXyzDestination
+                ? FrontierMode.XyzDestination
+                : FrontierMode.MapXzDestination;
+            ClearTreasureFollowerCandidateHold("force-march manual destination selected");
+            RememberManualDestination(CurrentTarget);
+            return;
+        }
+
         UpdateTreasureFollowerEntryMapOpenerRole();
         var noFrontierBlockingLiveObjects = HasNoFrontierBlockingLiveObjects(
             context,
@@ -974,6 +989,12 @@ public sealed class DungeonFrontierService
         if (TryEstablishTreasureFollowerEntryProof(point, "route point reached"))
             return;
 
+        if (point.IsForceMarchManualDestination)
+        {
+            log.Information($"[ADS] Ignored generic visited mark for {GetManualDestinationLabel(point)} {point.Name}; force-march destinations can only complete through the force-march completion gate.");
+            return;
+        }
+
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
@@ -1026,6 +1047,13 @@ public sealed class DungeonFrontierService
 
     public void RetireManualDestination(DungeonFrontierPoint point, string reason, string detail)
     {
+        if (point.IsForceMarchManualDestination && !IsAllowedForceMarchCompletionReason(reason))
+        {
+            log.Information(
+                $"[ADS] Rejected force-march retirement for {GetManualDestinationLabel(point)} {point.Name} ({reason}); force-march destinations remain active until arrival or transition completion. {detail}");
+            return;
+        }
+
         if (!visitedFrontierKeys.Add(point.Key))
             return;
 
@@ -2311,6 +2339,49 @@ public sealed class DungeonFrontierService
         return BuildNavigationPoint(selected, playerPosition);
     }
 
+    private DungeonFrontierPoint? SelectCurrentForceMarchManualDestination(
+        IReadOnlyList<DungeonFrontierPoint> points,
+        Vector3? playerPosition,
+        DungeonFrontierPoint? previousTarget)
+    {
+        if (points.Count == 0)
+            return null;
+
+        var unvisitedForceMarchPoints = points
+            .Where(point => point.IsForceMarchManualDestination && !visitedFrontierKeys.Contains(point.Key))
+            .ToList();
+        if (unvisitedForceMarchPoints.Count == 0)
+            return null;
+
+        if (previousTarget is { IsForceMarchManualDestination: true }
+            && unvisitedForceMarchPoints.Any(point => string.Equals(point.Key, previousTarget.Key, StringComparison.Ordinal)))
+        {
+            return BuildNavigationPoint(previousTarget, playerPosition);
+        }
+
+        if (!playerPosition.HasValue)
+            return unvisitedForceMarchPoints
+                .OrderBy(point => point.Priority)
+                .ThenBy(point => point.Name, StringComparer.OrdinalIgnoreCase)
+                .First();
+
+        return BuildNavigationPoint(
+            unvisitedForceMarchPoints
+                .Select(point => new
+                {
+                    Point = point,
+                    Distance = GetManualDestinationDistance(playerPosition.Value, point),
+                    VerticalDelta = MathF.Abs(point.Position.Y - playerPosition.Value.Y),
+                })
+                .OrderBy(x => x.Point.Priority)
+                .ThenBy(x => x.Distance)
+                .ThenBy(x => x.VerticalDelta)
+                .ThenBy(x => x.Point.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Point)
+                .First(),
+            playerPosition);
+    }
+
     private DungeonFrontierPoint? SelectCurrentManualDestination(IReadOnlyList<DungeonFrontierPoint> points, Vector3? playerPosition)
     {
         if (points.Count == 0)
@@ -3341,6 +3412,15 @@ public sealed class DungeonFrontierService
         if (pointToGhost is null)
             return;
 
+        if (pointToGhost.IsForceMarchManualDestination)
+        {
+            RetireManualDestination(
+                pointToGhost,
+                ForceMarchTransitionReason,
+                $"after {reason} transition.");
+            return;
+        }
+
         if (!visitedFrontierKeys.Add(pointToGhost.Key))
         {
             ClearRememberedManualDestination(pointToGhost);
@@ -3383,6 +3463,12 @@ public sealed class DungeonFrontierService
 
         return flags.Count == 0 ? "TreasureRouteTransitHold" : string.Join("/", flags);
     }
+
+    private static bool IsAllowedForceMarchCompletionReason(string reason)
+        => string.Equals(reason, ForceMarchMapXzArrivedReason, StringComparison.Ordinal)
+           || string.Equals(reason, ForceMarchXyzArrivedReason, StringComparison.Ordinal)
+           || string.Equals(reason, ForceMarchXyzXzFallbackArrivedReason, StringComparison.Ordinal)
+           || string.Equals(reason, ForceMarchTransitionReason, StringComparison.Ordinal);
 
     private void RememberGhostedManualDestination(DungeonFrontierPoint point, string reason)
     {

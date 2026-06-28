@@ -136,9 +136,22 @@ public sealed class ObjectivePlannerService
             playerPosition,
             context);
         var currentForceMarchManualDestination = dungeonFrontierService.CurrentMode is FrontierMode.MapXzDestination or FrontierMode.XyzDestination
-            && dungeonFrontierService.CurrentTarget is { IsManualDestination: true, AllowCombatBypass: true } forceMarchManualDestination
+            && dungeonFrontierService.CurrentTarget is { IsForceMarchManualDestination: true } forceMarchManualDestination
                 ? forceMarchManualDestination
                 : null;
+
+        if (currentForceMarchManualDestination is not null)
+        {
+            Current = BuildForceMarchMonsterBypassSnapshot(
+                context,
+                currentForceMarchManualDestination,
+                nearestMonster,
+                nearestRequiredInteractable,
+                playerPosition,
+                now,
+                inCombat: context.InCombat);
+            return;
+        }
 
         if (context.InCombat)
         {
@@ -178,20 +191,6 @@ public sealed class ObjectivePlannerService
                     TargetVerticalDelta = verticalDelta,
                     CapturedAtUtc = now,
                 };
-                return;
-            }
-
-            if (currentForceMarchManualDestination is not null
-                && ShouldForceMarchManualDestinationBypassProgression(context, currentForceMarchManualDestination, nearestRequiredInteractable, playerPosition))
-            {
-                Current = BuildForceMarchMonsterBypassSnapshot(
-                    context,
-                    currentForceMarchManualDestination,
-                    nearestMonster,
-                    nearestRequiredInteractable,
-                    playerPosition,
-                    now,
-                    inCombat: true);
                 return;
             }
 
@@ -309,20 +308,6 @@ public sealed class ObjectivePlannerService
                 };
                 return;
             }
-        }
-
-        if (currentForceMarchManualDestination is not null
-            && ShouldForceMarchManualDestinationBypassProgression(context, currentForceMarchManualDestination, nearestRequiredInteractable, playerPosition))
-        {
-            Current = BuildForceMarchMonsterBypassSnapshot(
-                context,
-                currentForceMarchManualDestination,
-                nearestMonster,
-                nearestRequiredInteractable,
-                playerPosition,
-                now,
-                inCombat: false);
-            return;
         }
 
         if (nearestMonster is not null && nearestRequiredInteractable is not null && playerPosition.HasValue)
@@ -743,15 +728,6 @@ public sealed class ObjectivePlannerService
             .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
             .Select(x => x.Interactable)
             .FirstOrDefault();
-    }
-
-    private bool ShouldForceMarchManualDestinationBypassProgression(
-        DutyContextSnapshot context,
-        DungeonFrontierPoint manualDestinationTarget,
-        ObservedInteractable? nearestRequiredInteractable,
-        Vector3? playerPosition)
-    {
-        return nearestRequiredInteractable is null;
     }
 
     private static float? GetDistance(Vector3? playerPosition, Vector3? targetPosition)

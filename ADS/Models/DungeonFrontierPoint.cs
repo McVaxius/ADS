@@ -20,6 +20,8 @@ public sealed class DungeonFrontierPoint
     public bool IsManualXyzDestination
         => ManualDestinationKind == ManualDestinationKind.Xyz;
     public bool AllowCombatBypass { get; init; }
+    public bool IsForceMarchManualDestination
+        => IsManualDestination && AllowCombatBypass;
     public float ArrivalRadiusXz { get; init; } = 8f;
     public float ArrivalRadius3d { get; init; }
     public int TreasureRouteIndex { get; init; } = -1;

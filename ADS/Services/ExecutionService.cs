@@ -24,6 +24,7 @@ public sealed class ExecutionService
     private const float PreferredFollowArrivalRange = 3.0f;
     private const float PreferredRecoveryArrivalRange = 2.0f;
     private const float PreferredFrontierArrivalRange = 4.0f;
+    private const float ForceMarchArrivalRange = 1.0f;
     private const float TreasureFollowerRouteVerticalCap = 5.0f;
     private const float BossFightCombatGhostRange = 5.0f;
     private const float RequiredInteractionConsumedRelocationRange = 20.0f;
@@ -63,7 +64,6 @@ public sealed class ExecutionService
     private static readonly TimeSpan PreInteractMovementSettleDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan CloseRangeInteractFallbackNoProgressTimeout = TimeSpan.FromSeconds(3.0);
     private static readonly TimeSpan RequiredInteractionRetryDelay = TimeSpan.FromSeconds(2.5);
-    private static readonly TimeSpan ForceMarchFollowThroughDuration = TimeSpan.FromSeconds(8.0);
     private static readonly TimeSpan NavigationRetryCooldown = TimeSpan.FromSeconds(2.0);
     private static readonly TimeSpan MapFlagNavigationRetryCooldown = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan MountedCombatAttemptCooldown = TimeSpan.FromMilliseconds(250);
@@ -128,7 +128,6 @@ public sealed class ExecutionService
     private int pendingRequiredInteractionAttemptsSent;
     private bool pendingTreasureFollowerLootFollowThrough;
     private DungeonFrontierPoint? committedForceMarchManualDestination;
-    private DateTime committedForceMarchManualDestinationUntilUtc;
     private string? interactArrivalWaitKey;
     private DateTime interactArrivalWaitUntilUtc;
     private bool interactArrivalWaitIncludesMovementSettle;
@@ -796,7 +795,7 @@ public sealed class ExecutionService
             }
 
             ClearInteractableCommitment();
-            ClearCommittedForceMarchManualDestination();
+            CompleteOrClearCommittedForceMarchForUnsafeTransition(context, "unsafe transition");
             ClearBossFightCombatGhost("unsafe transition");
             ResetRecoveryHold();
             StopMovementAssists(preserveTreasureFollowerDoorFollowThrough: ShouldPreserveTreasureFollowerDoorFollowThroughForTransit(context));
@@ -827,6 +826,20 @@ public sealed class ExecutionService
             return;
         }
 
+        if (committedForceMarchManualDestination is not null)
+        {
+            TryFirePraetoriumMountedCombatAction(context, observation, prefix, preserveMovement: true);
+            if (TryAdvanceCommittedForceMarchManualDestination(context, planner, prefix))
+                return;
+        }
+
+        if (IsForceMarchPlannerObjective(planner.ObjectiveKind))
+        {
+            TryFirePraetoriumMountedCombatAction(context, observation, prefix, preserveMovement: true);
+            TryAdvanceFrontierObjective(context, planner, $"{prefix}");
+            return;
+        }
+
         if (TryHoldPendingProgressionInteractResult(context, planner, observation, prefix))
             return;
 
@@ -848,15 +861,6 @@ public sealed class ExecutionService
                 $"{prefix} Retaining the committed target during the pre-interact movement settle.");
             return;
         }
-
-        if (IsForceMarchPlannerObjective(planner.ObjectiveKind)
-            || committedForceMarchManualDestination is not null)
-        {
-            TryFirePraetoriumMountedCombatAction(context, observation, prefix, preserveMovement: true);
-        }
-
-        if (TryAdvanceCommittedForceMarchManualDestination(context, planner, prefix))
-            return;
 
         if (TryHoldTreasureFollowerCombatYield(context, planner, observation, prefix))
             return;
@@ -1052,13 +1056,30 @@ public sealed class ExecutionService
         }
 
         ClearInteractableCommitment();
-        ClearCommittedForceMarchManualDestination();
+        CompleteOrClearCommittedForceMarchForUnsafeTransition(context, "unsafe transition hold");
         ClearBossFightCombatGhost("unsafe transition hold");
         ResetRecoveryHold();
         StopMovementAssists(preserveTreasureFollowerDoorFollowThrough: ShouldPreserveTreasureFollowerDoorFollowThroughForTransit(context));
         SetPhase(
             ExecutionPhase.TransitionHold,
             $"Unsafe transition active ({FormatUnsafeTransitionFlags(context)}); ADS stopped navigation and is waiting for stable post-transition duty truth.");
+    }
+
+    private void CompleteOrClearCommittedForceMarchForUnsafeTransition(DutyContextSnapshot context, string reason)
+    {
+        var committedDestination = committedForceMarchManualDestination;
+        if (committedDestination is null)
+            return;
+
+        if (context.BetweenAreas || context.BetweenAreas51)
+        {
+            dungeonFrontierService.RetireManualDestination(
+                committedDestination,
+                DungeonFrontierService.ForceMarchTransitionReason,
+                $"after {FormatUnsafeTransitionFlags(context)} transition while force-march was committed during {reason}.");
+        }
+
+        ClearCommittedForceMarchManualDestination();
     }
 
     private void TryAdvanceRecoveryObjective(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -1889,56 +1910,22 @@ public sealed class ExecutionService
         if (committedDestination is null)
             return false;
 
-        if (planner.Mode == PlannerMode.Progression
-            && ShouldRetireCommittedForceMarchForLiveProgression(context, planner.ObjectiveKind))
-        {
-            RetireCommittedForceMarchManualDestination(
-                "LiveProgressionAppeared",
-                $"because planner promoted live progression objective {planner.ObjectiveKind} ({planner.TargetName ?? planner.Objective}).");
-            return false;
-        }
-
-        var now = DateTime.UtcNow;
-        if (now >= committedForceMarchManualDestinationUntilUtc)
-        {
-            if (PlannerStillSelectsForceMarchDestination(planner, committedDestination))
-            {
-                committedForceMarchManualDestinationUntilUtc = now + ForceMarchFollowThroughDuration;
-            }
-            else
-            {
-                RetireCommittedForceMarchManualDestination("TimedOut", "because no live progression handoff appeared before the bounded follow-through window expired.");
-                return false;
-            }
-        }
-
         var playerPosition = objectTable.LocalPlayer?.Position;
         var navigationPoint = RebuildCommittedForceMarchManualDestination(committedDestination, playerPosition);
         if (playerPosition.HasValue
-            && IsFrontierDestinationReached(
-                navigationPoint,
+            && TryGetForceMarchCompletionReason(
+                committedDestination,
                 playerPosition.Value,
-                navigationPoint.IsManualMapXzDestination,
-                navigationPoint.IsManualXyzDestination,
-                enforceVerticalArrivalCap: false,
-                forcedArrivalRangeXz: null,
-                forcedVerticalArrivalCap: null,
-                out _,
-                out _,
+                out var completionReason,
                 out _,
                 out _,
                 out _))
         {
-            if (navigationPoint.IsManualMapXzDestination || navigationPoint.IsManualXyzDestination)
-                dungeonFrontierService.MarkVisited(navigationPoint, playerPosition.Value);
-
+            dungeonFrontierService.RetireManualDestination(
+                navigationPoint,
+                completionReason,
+                BuildForceMarchCompletionDetail(committedDestination, playerPosition.Value, completionReason));
             ClearCommittedForceMarchManualDestinationIfMatches(navigationPoint);
-
-            if (planner.Mode == PlannerMode.Progression
-                && IsLiveProgressionPlannerObjective(planner.ObjectiveKind))
-            {
-                return false;
-            }
 
             StopMovementAssists();
             var destinationLabel = navigationPoint.IsManualXyzDestination ? "force-march XYZ destination" : "force-march map XZ destination";
@@ -1959,35 +1946,21 @@ public sealed class ExecutionService
 
     private void RefreshCommittedForceMarchManualDestination(DungeonFrontierPoint point, string detail)
     {
-        var now = DateTime.UtcNow;
         var wasNewCommit = committedForceMarchManualDestination is null
             || !string.Equals(committedForceMarchManualDestination.Key, point.Key, StringComparison.Ordinal);
 
         committedForceMarchManualDestination = point;
-        committedForceMarchManualDestinationUntilUtc = now + ForceMarchFollowThroughDuration;
 
         if (wasNewCommit)
         {
             log?.Information(
-                $"[ADS] Committed force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} for bounded handoff follow-through because {detail}.");
+                $"[ADS] Committed force-march {(point.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {point.Name} at {FormatVector(point.Position)} because {detail}; ADS will keep navigating it until the force-march completion gate succeeds.");
         }
-    }
-
-    private void RetireCommittedForceMarchManualDestination(string reason, string detail)
-    {
-        var committedDestination = committedForceMarchManualDestination;
-        if (committedDestination is null)
-            return;
-
-        log?.Information(
-            $"[ADS] Retired committed force-march {(committedDestination.IsManualXyzDestination ? "XYZ" : "map XZ")} destination {committedDestination.Name} ({reason}) {detail}");
-        ClearCommittedForceMarchManualDestination();
     }
 
     private void ClearCommittedForceMarchManualDestination()
     {
         committedForceMarchManualDestination = null;
-        committedForceMarchManualDestinationUntilUtc = DateTime.MinValue;
         lastMountedCombatYieldObjective = string.Empty;
     }
 
@@ -2001,50 +1974,8 @@ public sealed class ExecutionService
             ClearCommittedForceMarchManualDestination();
     }
 
-    private bool PlannerStillSelectsForceMarchDestination(PlannerSnapshot planner, DungeonFrontierPoint point)
-    {
-        if (!IsForceMarchPlannerObjective(planner.ObjectiveKind))
-            return false;
-
-        if (string.Equals(planner.TargetName, point.Name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(planner.Objective, point.Name, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return dungeonFrontierService.CurrentTarget is { AllowCombatBypass: true } currentTarget
-               && string.Equals(currentTarget.Key, point.Key, StringComparison.Ordinal);
-    }
-
     private static bool IsForceMarchPlannerObjective(PlannerObjectiveKind objectiveKind)
         => objectiveKind is PlannerObjectiveKind.MapXzForceMarchDestination or PlannerObjectiveKind.XyzForceMarchDestination;
-
-    private static bool ShouldRetireCommittedForceMarchForLiveProgression(DutyContextSnapshot context, PlannerObjectiveKind objectiveKind)
-    {
-        if (!IsLiveProgressionPlannerObjective(objectiveKind))
-            return false;
-
-//        if (context.TerritoryTypeId == PraetoriumTerritoryTypeId //because AI is too stupid to understand
-//            && objectiveKind is PlannerObjectiveKind.Monster or PlannerObjectiveKind.BossFightMonster)  //because AI is too stupid to understand
-		  if (objectiveKind is PlannerObjectiveKind.Monster or PlannerObjectiveKind.BossFightMonster)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool IsLiveProgressionPlannerObjective(PlannerObjectiveKind objectiveKind)
-        => objectiveKind is PlannerObjectiveKind.Monster
-            or PlannerObjectiveKind.BossFightMonster
-            or PlannerObjectiveKind.FollowTarget
-            or PlannerObjectiveKind.RequiredInteractable
-            or PlannerObjectiveKind.CombatFriendlyInteractable
-            or PlannerObjectiveKind.ExpendableInteractable
-            or PlannerObjectiveKind.OptionalInteractable
-            or PlannerObjectiveKind.TreasureDoor
-            or PlannerObjectiveKind.TreasureCoffer
-            or PlannerObjectiveKind.TreasureFollowerLoot;
 
     private static bool IsFrontierLikePlannerObjective(PlannerObjectiveKind objectiveKind)
         => objectiveKind is PlannerObjectiveKind.Frontier
@@ -2157,6 +2088,72 @@ public sealed class ExecutionService
             : targetHorizontalDistance <= arrivalRange;
     }
 
+    private static bool TryGetForceMarchCompletionReason(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        out string reason,
+        out float targetHorizontalDistance,
+        out float targetDistance,
+        out float targetVerticalDelta)
+    {
+        reason = string.Empty;
+        targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition);
+        targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition);
+        targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Y);
+
+        if (!frontierPoint.IsForceMarchManualDestination)
+            return false;
+
+        if (frontierPoint.IsManualMapXzDestination && targetHorizontalDistance <= ForceMarchArrivalRange)
+        {
+            reason = DungeonFrontierService.ForceMarchMapXzArrivedReason;
+            return true;
+        }
+
+        if (!frontierPoint.IsManualXyzDestination)
+            return false;
+
+        if (targetDistance <= ForceMarchArrivalRange)
+        {
+            reason = DungeonFrontierService.ForceMarchXyzArrivedReason;
+            return true;
+        }
+
+        if (IsForceMarchYUnreliable(frontierPoint, playerPosition)
+            && targetHorizontalDistance <= ForceMarchArrivalRange)
+        {
+            reason = DungeonFrontierService.ForceMarchXyzXzFallbackArrivedReason;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsForceMarchYUnreliable(DungeonFrontierPoint frontierPoint, Vector3 playerPosition)
+        => frontierPoint.UsePlayerYForNavigation
+           || !float.IsFinite(frontierPoint.Position.Y)
+           || !float.IsFinite(playerPosition.Y);
+
+    private static string BuildForceMarchCompletionDetail(
+        DungeonFrontierPoint frontierPoint,
+        Vector3 playerPosition,
+        string reason)
+    {
+        var targetHorizontalDistance = GetHorizontalDistance(frontierPoint.Position, playerPosition);
+        var targetDistance = Vector3.Distance(frontierPoint.Position, playerPosition);
+        var targetVerticalDelta = MathF.Abs(frontierPoint.Position.Y - playerPosition.Y);
+        return reason switch
+        {
+            var value when value == DungeonFrontierService.ForceMarchMapXzArrivedReason
+                => $"after force-march Map XZ arrival (XZ {targetHorizontalDistance:0.0}y <= {ForceMarchArrivalRange:0.0}y, Y {targetVerticalDelta:0.0}y).",
+            var value when value == DungeonFrontierService.ForceMarchXyzArrivedReason
+                => $"after force-march XYZ arrival (3D {targetDistance:0.0}y <= {ForceMarchArrivalRange:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}y).",
+            var value when value == DungeonFrontierService.ForceMarchXyzXzFallbackArrivedReason
+                => $"after force-march XYZ XZ-fallback arrival with unreliable Y (XZ {targetHorizontalDistance:0.0}y <= {ForceMarchArrivalRange:0.0}y, 3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}y).",
+            _ => $"after force-march arrival (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}y).",
+        };
+    }
+
     private static string BuildTreasureRouteRadiusStatus(
         DungeonFrontierPoint frontierPoint,
         bool isTreasureFollowerPassageCandidate)
@@ -2239,6 +2236,22 @@ public sealed class ExecutionService
             out var targetVerticalDelta,
             out var arrivalRange,
             out var xyzArrivalRange);
+        string? forceMarchCompletionReason = null;
+        if (frontierPoint.IsForceMarchManualDestination)
+        {
+            destinationReached = TryGetForceMarchCompletionReason(
+                frontierPoint,
+                playerPosition.Value,
+                out var completionReason,
+                out targetHorizontalDistance,
+                out targetDistance,
+                out targetVerticalDelta);
+            forceMarchCompletionReason = destinationReached
+                ? completionReason
+                : null;
+            arrivalRange = ForceMarchArrivalRange;
+            xyzArrivalRange = ForceMarchArrivalRange;
+        }
         if (isTreasureFollowerPassageCandidate && targetVerticalDelta > TreasureFollowerRouteVerticalCap)
         {
             StopNavigationForTreasureRouteNudge();
@@ -2374,7 +2387,22 @@ public sealed class ExecutionService
         }
 
         if (isMapXzDestination || isXyzDestination)
-            dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
+        {
+            if (frontierPoint.IsForceMarchManualDestination)
+            {
+                dungeonFrontierService.RetireManualDestination(
+                    frontierPoint,
+                    forceMarchCompletionReason ?? DungeonFrontierService.ForceMarchMapXzArrivedReason,
+                    BuildForceMarchCompletionDetail(
+                        frontierPoint,
+                        playerPosition.Value,
+                        forceMarchCompletionReason ?? DungeonFrontierService.ForceMarchMapXzArrivedReason));
+            }
+            else
+            {
+                dungeonFrontierService.MarkVisited(frontierPoint, playerPosition.Value);
+            }
+        }
 
         if (!frontierPoint.AllowCombatBypass
             && (isMapXzDestination || isXyzDestination)
@@ -2996,6 +3024,9 @@ public sealed class ExecutionService
             : targetHorizontalDistance;
         manualDestinationNavigationTargetId = BuildFrontierTargetId(frontierPoint);
 
+        if (frontierPoint.IsForceMarchManualDestination)
+            return false;
+
         if (!string.Equals(manualDestinationNoProgressTargetKey, frontierPoint.Key, StringComparison.Ordinal)
             || !manualDestinationNoProgressBaselinePosition.HasValue)
         {
@@ -3353,6 +3384,9 @@ public sealed class ExecutionService
         if (frontierPoint is null)
             return;
 
+        if (frontierPoint.IsForceMarchManualDestination)
+            return;
+
         pendingSatisfiedManualDestination = frontierPoint;
         pendingSatisfiedManualInteractableKey = observedInteractable.Key;
     }
@@ -3636,11 +3670,8 @@ public sealed class ExecutionService
         if (IsPraetoriumMountedCombatContext(context))
             return true;
 
-        if (committedForceMarchManualDestination is not null
-            && DateTime.UtcNow < committedForceMarchManualDestinationUntilUtc)
-        {
+        if (committedForceMarchManualDestination is not null)
             return true;
-        }
 
         if (!context.InCombat)
         {

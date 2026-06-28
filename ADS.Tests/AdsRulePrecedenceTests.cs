@@ -31,7 +31,7 @@ public sealed class AdsRulePrecedenceTests
     }
 
     [Fact]
-    public void LiveRequiredObjectRuleBeatsXyzForceMarchOutsideCombat()
+    public void XyzForceMarchBeatsLiveRequiredObjectRuleOutsideCombat()
     {
         using var fixture = new PlannerFixture(
             Vector3.Zero,
@@ -44,8 +44,8 @@ public sealed class AdsRulePrecedenceTests
             OwnershipMode.OwnedStartInside,
             considerTreasureCoffers: false);
 
-        Assert.Equal(PlannerObjectiveKind.RequiredInteractable, fixture.Planner.Current.ObjectiveKind);
-        Assert.Equal("Transporter", fixture.Planner.Current.TargetName);
+        Assert.Equal(PlannerObjectiveKind.XyzForceMarchDestination, fixture.Planner.Current.ObjectiveKind);
+        Assert.Equal("Force March", fixture.Planner.Current.TargetName);
     }
 
     [Fact]
