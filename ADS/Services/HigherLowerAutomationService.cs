@@ -264,6 +264,15 @@ public sealed class HigherLowerAutomationService
 
         if (!surface.Present)
         {
+            if (HasPendingCallback())
+            {
+                if (ShouldHoldMovementForAutomation(ownershipMode))
+                    HoldMovement = true;
+
+                TryHandlePendingCallback(state, solverState, surface, now);
+                return;
+            }
+
             if (pendingDirectionDecision is not null)
             {
                 if (ShouldHoldMovementForAutomation(ownershipMode))
@@ -412,6 +421,12 @@ public sealed class HigherLowerAutomationService
 
         if (state.HighTargetable || state.LowTargetable)
         {
+            if (currentDecision is { Action: HigherLowerAction.CashOut } cashOutDecision)
+            {
+                BeginOrContinuePendingOpenChestSurfaceWait(state, solverState, surface, cashOutDecision, now);
+                return;
+            }
+
             var directionDecision = ResolveCurrentDirectionDecision(currentDecision, out var directionSource);
             lastDirectionDecisionSource = directionSource;
             if (directionDecision is null || !IsPlayAction(directionDecision.Action))
@@ -827,6 +842,12 @@ public sealed class HigherLowerAutomationService
         string reason)
     {
         var actionName = FormatPendingCallbackAction(action);
+        if (!state.TreasureHighLowVisible)
+        {
+            Status = BuildStatus(state, $"waiting: {actionName} TreasureHighLow surface");
+            return false;
+        }
+
         if (DateTime.UtcNow < nextActionUtc)
         {
             Status = BuildStatus(state, $"waiting: {actionName} callback cooldown");
@@ -878,6 +899,73 @@ public sealed class HigherLowerAutomationService
         pendingCallbackHasBaselineServerRowSequence = hasBaselineServerRowSequence;
     }
 
+    private void BeginOrContinuePendingOpenChestSurfaceWait(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        AutomationDecision decision,
+        DateTime now)
+    {
+        var recovery = HigherLowerCashOutRecoveryPolicy.Evaluate(new HigherLowerCashOutRecoveryPolicy.RecoveryState(
+            CashOutDecision: decision.Action == HigherLowerAction.CashOut,
+            PendingOpenChest: IsPendingOpenChestCallback(),
+            PendingPhase: ToCashOutRecoveryPendingPhase(pendingCallbackPhase),
+            TreasureHighLowVisible: state.TreasureHighLowVisible,
+            HighLowTargetable: state.HighTargetable || state.LowTargetable,
+            TerminalProofAvailable: false,
+            TimedOut: IsPendingCallbackTimedOut(now)));
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.SendOpenChest)
+        {
+            TrySendTreasureHighLowCallbackSequence(
+                state,
+                solverState,
+                PendingCallbackAction.OpenChest,
+                OpenChestCallbackArg,
+                decision,
+                decision.Reason);
+            return;
+        }
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.Timeout)
+        {
+            TimeoutPendingCallback(state, solverState, surface, now, recovery.Reason);
+            return;
+        }
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.StartWaitingSurface)
+        {
+            CaptureServerRowBaseline(solverState, out var baselineServerRowSequence, out var hasBaselineServerRowSequence);
+            BeginPendingCallbackWaitingSurface(decision, now, baselineServerRowSequence, hasBaselineServerRowSequence);
+            LogAction($"hlauto cashout-openchest-waiting-surface action=OpenChest reason='{Escape(decision.Reason)}' {BuildAddonLogFields(state)} {BuildDecisionLogFields(decision, now, "cashout-recovery")} {BuildPendingCallbackLogFields()}");
+        }
+
+        TryStopVnav("cashout-openchest-waiting-surface");
+        MarkHigherLowerActivity(now, "hlauto-cashout-openchest-waiting-surface");
+        Status = BuildStatus(state, "waiting: OpenChest TreasureHighLow surface");
+    }
+
+    private void BeginPendingCallbackWaitingSurface(
+        AutomationDecision decision,
+        DateTime now,
+        ulong baselineServerRowSequence,
+        bool hasBaselineServerRowSequence)
+    {
+        ClearDirectionState(clearTarget: true);
+        pendingCallbackAction = PendingCallbackAction.OpenChest;
+        pendingCallbackPhase = PendingCallbackPhase.WaitingSurface;
+        pendingCallbackTimedOutPhase = PendingCallbackPhase.None;
+        pendingCallbackDecision = decision;
+        pendingCallbackSentUtc = DateTime.MinValue;
+        pendingCallbackPhaseStartedUtc = now;
+        pendingCallbackConfirmVisibleLogged = false;
+        pendingCallbackTimeoutLogged = false;
+        retainedDecision = null;
+        pendingCallbackBaselineServerRowSequence = baselineServerRowSequence;
+        pendingCallbackHasBaselineServerRowSequence = hasBaselineServerRowSequence;
+        lastDirectionDecisionSource = "cashout-openchest";
+    }
+
     private bool TryHandlePendingCallback(
         TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
         HigherLowerCardVfxSolverService.SolverState solverState,
@@ -906,6 +994,9 @@ public sealed class HigherLowerAutomationService
             return true;
         }
 
+        if (pendingCallbackPhase == PendingCallbackPhase.WaitingSurface)
+            return TryHandlePendingOpenChestSurface(state, solverState, surface, now, decision);
+
         if (pendingCallbackPhase == PendingCallbackPhase.WaitingSelectYesno)
             return TryHandlePendingCallbackSelectYesno(state, solverState, surface, now, decision);
 
@@ -913,6 +1004,46 @@ public sealed class HigherLowerAutomationService
             return TryHandlePendingCallbackProof(state, solverState, surface, now, decision);
 
         return false;
+    }
+
+    private bool TryHandlePendingOpenChestSurface(
+        TreasureHighLowDiagnosticService.HigherLowerRuntimeState state,
+        HigherLowerCardVfxSolverService.SolverState solverState,
+        HigherLowerSurface surface,
+        DateTime now,
+        AutomationDecision decision)
+    {
+        var recovery = HigherLowerCashOutRecoveryPolicy.Evaluate(new HigherLowerCashOutRecoveryPolicy.RecoveryState(
+            CashOutDecision: decision.Action == HigherLowerAction.CashOut,
+            PendingOpenChest: IsPendingOpenChestCallback(),
+            PendingPhase: ToCashOutRecoveryPendingPhase(pendingCallbackPhase),
+            TreasureHighLowVisible: state.TreasureHighLowVisible,
+            HighLowTargetable: state.HighTargetable || state.LowTargetable,
+            TerminalProofAvailable: false,
+            TimedOut: IsPendingCallbackTimedOut(now)));
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.Timeout)
+        {
+            TimeoutPendingCallback(state, solverState, surface, now, recovery.Reason);
+            return true;
+        }
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.SendOpenChest)
+        {
+            TrySendTreasureHighLowCallbackSequence(
+                state,
+                solverState,
+                PendingCallbackAction.OpenChest,
+                OpenChestCallbackArg,
+                decision,
+                decision.Reason);
+            return true;
+        }
+
+        TryStopVnav("cashout-openchest-waiting-surface");
+        MarkHigherLowerActivity(now, "hlauto-cashout-openchest-waiting-surface");
+        Status = BuildStatus(state, "waiting: OpenChest TreasureHighLow surface");
+        return true;
     }
 
     private bool TryHandlePendingCallbackSelectYesno(
@@ -1040,7 +1171,11 @@ public sealed class HigherLowerAutomationService
         if (!pendingCallbackTimeoutLogged)
         {
             pendingCallbackTimeoutLogged = true;
-            LogWarning($"hlauto callback-timeout action={actionName} phase={FormatPendingCallbackPhase(timeoutPhase)}{reasonField} age={FormatPendingCallbackAgeSeconds(now)} {BuildAddonLogFields(state)} {BuildPendingCallbackLogFields()}");
+            var eventName = pendingCallbackAction == PendingCallbackAction.OpenChest
+                            && timeoutPhase == PendingCallbackPhase.WaitingSurface
+                ? "cashout-surface-timeout"
+                : "callback-timeout";
+            LogWarning($"hlauto {eventName} action={actionName} phase={FormatPendingCallbackPhase(timeoutPhase)}{reasonField} age={FormatPendingCallbackAgeSeconds(now)} {BuildAddonLogFields(state)} {BuildPendingCallbackLogFields()}");
         }
 
         Block(
@@ -1647,6 +1782,10 @@ public sealed class HigherLowerAutomationService
         => pendingCallbackAction != PendingCallbackAction.None
            && pendingCallbackPhase != PendingCallbackPhase.None;
 
+    private bool IsPendingOpenChestCallback()
+        => pendingCallbackAction == PendingCallbackAction.OpenChest
+           && pendingCallbackPhase != PendingCallbackPhase.None;
+
     private bool IsPendingCallbackTimedOut(DateTime now)
         => pendingCallbackPhaseStartedUtc != DateTime.MinValue
            && now - pendingCallbackPhaseStartedUtc >= PendingCallbackTimeout;
@@ -2057,10 +2196,21 @@ public sealed class HigherLowerAutomationService
     private static string FormatPendingCallbackPhase(PendingCallbackPhase phase)
         => phase switch
         {
+            PendingCallbackPhase.WaitingSurface => "waiting-surface",
             PendingCallbackPhase.WaitingSelectYesno => "waiting-selectyesno",
             PendingCallbackPhase.WaitingProof => "waiting-proof",
             PendingCallbackPhase.TimedOut => "timed-out",
             _ => "none",
+        };
+
+    private static HigherLowerCashOutRecoveryPolicy.PendingPhase ToCashOutRecoveryPendingPhase(PendingCallbackPhase phase)
+        => phase switch
+        {
+            PendingCallbackPhase.WaitingSurface => HigherLowerCashOutRecoveryPolicy.PendingPhase.WaitingSurface,
+            PendingCallbackPhase.WaitingSelectYesno => HigherLowerCashOutRecoveryPolicy.PendingPhase.WaitingSelectYesno,
+            PendingCallbackPhase.WaitingProof => HigherLowerCashOutRecoveryPolicy.PendingPhase.WaitingProof,
+            PendingCallbackPhase.TimedOut => HigherLowerCashOutRecoveryPolicy.PendingPhase.TimedOut,
+            _ => HigherLowerCashOutRecoveryPolicy.PendingPhase.None,
         };
 
     private static string FormatPendingDirectionPhase(PendingDirectionPhase phase)
@@ -2116,9 +2266,10 @@ public sealed class HigherLowerAutomationService
     private enum PendingCallbackPhase
     {
         None = 0,
-        WaitingSelectYesno = 1,
-        WaitingProof = 2,
-        TimedOut = 3,
+        WaitingSurface = 1,
+        WaitingSelectYesno = 2,
+        WaitingProof = 3,
+        TimedOut = 4,
     }
 
     private enum PendingDirectionPhase
