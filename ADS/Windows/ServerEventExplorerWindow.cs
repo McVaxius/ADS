@@ -23,6 +23,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     private bool currentTerritoryMapOnly;
     private bool higherLowerRelevantOnly;
     private bool newestFirst = true;
+    private string actionStatus = "Ready.";
 
     public ServerEventExplorerWindow(Plugin plugin)
         : base("ADS Server Events###ADSServerEvents")
@@ -30,7 +31,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(900f, 480f),
+            MinimumSize = new Vector2(1050f, 480f),
             MaximumSize = new Vector2(3400f, 2200f),
         };
         Size = new Vector2(1500f, 900f);
@@ -62,11 +63,69 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         ImGui.TextUnformatted($"Pending: {plugin.HigherLowerServerEventTraceService.PendingCount}");
 
+        DrawLoggingAndExportControls();
         DrawHookStatus();
         DrawFilters();
 
         ImGui.TextUnformatted($"Rows shown: {rows.Count}");
+        ImGui.TextWrapped($"Action status: {actionStatus}");
         DrawTable(rows);
+    }
+
+    private void DrawLoggingAndExportControls()
+    {
+        var diskLoggingEnabled = plugin.TreasureHighLowDiagnosticService.VfxDataminingEnabled;
+        if (ImGui.Checkbox("JSONL logging (disk)", ref diskLoggingEnabled))
+        {
+            plugin.TreasureHighLowDiagnosticService.SetVfxDataminingEnabled(diskLoggingEnabled);
+            actionStatus = diskLoggingEnabled
+                ? "JSONL logging enabled. Files are written only during active Higher/Lower datamine sessions."
+                : "JSONL logging disabled and the active writer was closed.";
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Persistent datamine JSONL logging. Off by default. Enabling this can use substantial disk space.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Open JSONL"))
+        {
+            var path = plugin.TreasureHighLowDiagnosticService.FindLatestDatamineJsonlPath();
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                actionStatus = "No datamine.jsonl file exists yet.";
+            }
+            else
+            {
+                plugin.OpenPath(path);
+                actionStatus = $"Opened {path}";
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Open Log Folder"))
+        {
+            Directory.CreateDirectory(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
+            plugin.OpenPath(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
+            actionStatus = $"Opened {plugin.TreasureHighLowDiagnosticService.DatamineDirectory}";
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Export All JSON"))
+        {
+            var result = plugin.ExportExplorerSnapshot();
+            actionStatus = result.Status;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Open Export Folder"))
+        {
+            Directory.CreateDirectory(plugin.ExplorerSnapshotExportService.ExportDirectory);
+            plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
+            actionStatus = $"Opened {plugin.ExplorerSnapshotExportService.ExportDirectory}";
+        }
+
+        if (diskLoggingEnabled)
+            ImGui.TextColored(new Vector4(1f, 0.72f, 0.2f, 1f), "JSONL DISK LOGGING IS ON");
     }
 
     private void DrawHookStatus()
@@ -119,7 +178,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
     private void DrawTable(IReadOnlyList<HigherLowerServerEventTraceService.ServerEventRow> rows)
     {
-        if (!ImGui.BeginTable("ADSServerEventTable", 8, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSServerEventTable", 9, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Age/Time", ImGuiTableColumnFlags.WidthFixed, 155f);
@@ -130,6 +189,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Position", ImGuiTableColumnFlags.WidthFixed, 190f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Source Params", ImGuiTableColumnFlags.WidthStretch, 380f);
+        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 290f);
         ImGui.TableHeadersRow();
 
         var now = DateTime.UtcNow;
@@ -160,15 +220,68 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
             ImGui.TableSetColumnIndex(7);
             DrawCell(row.SourceParams, row);
+
+            ImGui.TableSetColumnIndex(8);
+            DrawActions(row);
         }
 
         ImGui.EndTable();
     }
 
-    private static void DrawCell(string value, HigherLowerServerEventTraceService.ServerEventRow row)
+    private void DrawCell(string value, HigherLowerServerEventTraceService.ServerEventRow row)
     {
-        ImGui.TextWrapped(string.IsNullOrWhiteSpace(value) ? "-" : value);
+        var displayValue = string.IsNullOrWhiteSpace(value) ? "-" : value;
+        ImGui.TextWrapped(displayValue);
+        if (ImGui.IsItemClicked())
+        {
+            ImGui.SetClipboardText(displayValue);
+            actionStatus = $"Copied {row.KindLabel} cell.";
+        }
+
         DrawRowTooltip(row);
+    }
+
+    private void DrawActions(HigherLowerServerEventTraceService.ServerEventRow row)
+    {
+        var hasPosition = row.Position.HasValue;
+        ImGui.BeginDisabled(!hasPosition);
+        if (ImGui.SmallButton($"move##ADSServerEventMove{row.Sequence}") && row.Position.HasValue)
+        {
+            plugin.TryExplorerNavigation(row.Position.Value, useFly: false);
+            actionStatus = plugin.ObjectExplorerStatus;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"fly##ADSServerEventFly{row.Sequence}") && row.Position.HasValue)
+        {
+            plugin.TryExplorerNavigation(row.Position.Value, useFly: true);
+            actionStatus = plugin.ObjectExplorerStatus;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"FLAG##ADSServerEventFlag{row.Sequence}") && row.Position.HasValue)
+        {
+            var label = string.IsNullOrWhiteSpace(row.ObjectName)
+                ? $"{row.KindLabel} 0x{row.ActorId:X8}"
+                : row.ObjectName;
+            plugin.TryPlaceObjectFlag(label, row.Position.Value);
+            actionStatus = plugin.ObjectExplorerStatus;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"XYZ##ADSServerEventXyz{row.Sequence}") && row.Position.HasValue)
+        {
+            ImGui.SetClipboardText(row.PositionText);
+            actionStatus = $"Copied {row.PositionText}";
+        }
+
+        ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"LINE##ADSServerEventLine{row.Sequence}"))
+        {
+            ImGui.SetClipboardText(row.ToBossModLogLine());
+            actionStatus = $"Copied {row.KindLabel} log line.";
+        }
     }
 
     private static void DrawRowTooltip(HigherLowerServerEventTraceService.ServerEventRow row)

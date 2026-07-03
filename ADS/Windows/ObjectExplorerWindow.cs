@@ -36,6 +36,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         FinalizePendingWindowPlacement();
+        DrawExportControls();
 
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         if (localPlayer is null)
@@ -164,6 +165,24 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.EndTable();
+    }
+
+    private void DrawExportControls()
+    {
+        if (ImGui.SmallButton("Export All JSON"))
+            plugin.ExportExplorerSnapshot();
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Exports all buffered server events and every loaded object-table entry, independent of viewer filters.");
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Open Export Folder"))
+        {
+            Directory.CreateDirectory(plugin.ExplorerSnapshotExportService.ExportDirectory);
+            plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
+        }
+
+        ImGui.TextWrapped($"Export status: {plugin.ExplorerSnapshotExportService.Status}");
     }
 
     private IEnumerable<ObjectExplorerRow> BuildRows(DutyContextSnapshot context, IGameObject localPlayer)

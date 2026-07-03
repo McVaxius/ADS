@@ -117,6 +117,7 @@ public sealed class Plugin : IDalamudPlugin
     public TreasureFollowerAutoMoveAssistService TreasureFollowerAutoMoveAssistService { get; }
     public TreasureHighLowDiagnosticService TreasureHighLowDiagnosticService { get; }
     public HigherLowerServerEventTraceService HigherLowerServerEventTraceService { get; }
+    public ExplorerSnapshotExportService ExplorerSnapshotExportService { get; }
     public HigherLowerVfxTraceService HigherLowerVfxTraceService { get; }
     public HigherLowerCardVfxSolverService HigherLowerCardVfxSolverService { get; }
     public HigherLowerAutomationService HigherLowerAutomationService { get; }
@@ -192,6 +193,7 @@ public sealed class Plugin : IDalamudPlugin
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
+        ExplorerSnapshotExportService = new ExplorerSnapshotExportService(ObjectTable, Log, configDirectory);
         HigherLowerVfxTraceService = new HigherLowerVfxTraceService(ObjectTable, ClientState, TreasureHighLowDiagnosticService, Log);
         HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, HigherLowerServerEventTraceService, DataManager, Log);
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
@@ -628,6 +630,12 @@ public sealed class Plugin : IDalamudPlugin
 
     public string ObjectExplorerMapFlagStatus
         => mapFlagMonitorPolicy.BuildCurrentStatus(ObjectTable.LocalPlayer?.Position);
+
+    public ExplorerSnapshotExportResult ExportExplorerSnapshot()
+        => ExplorerSnapshotExportService.Export(
+            PluginInfo.GetVersion(),
+            DutyContextService.Current,
+            HigherLowerServerEventTraceService.GetRowsSnapshot());
 
     public bool TryPlaceObjectFlag(string objectName, System.Numerics.Vector3 worldPosition)
     {

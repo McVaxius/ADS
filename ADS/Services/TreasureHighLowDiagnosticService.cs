@@ -180,6 +180,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     public string CurrentDatamineSessionDirectory
         => currentDatamineSessionDirectory ?? string.Empty;
 
+    public string CurrentDatamineJsonlPath
+        => currentDatamineJsonlPath ?? string.Empty;
+
     public string CardMapPath
         => cardMapPath;
 
@@ -303,6 +306,29 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         ResetDatamineSessionGate();
         ResetDatamineCooldown();
         log.Information($"{Prefix} vfx datamining disabled.");
+    }
+
+    public string FindLatestDatamineJsonlPath()
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(currentDatamineJsonlPath) && File.Exists(currentDatamineJsonlPath))
+                return currentDatamineJsonlPath;
+
+            if (!Directory.Exists(datamineDirectory))
+                return string.Empty;
+
+            return Directory
+                       .EnumerateFiles(datamineDirectory, "datamine.jsonl", SearchOption.AllDirectories)
+                       .OrderByDescending(File.GetLastWriteTimeUtc)
+                       .FirstOrDefault()
+                   ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, $"{Prefix} failed to locate latest datamine JSONL file.");
+            return string.Empty;
+        }
     }
 
     public void ForceDump()
