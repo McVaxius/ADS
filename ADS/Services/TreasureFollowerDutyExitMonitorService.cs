@@ -136,7 +136,7 @@ public sealed class TreasureFollowerDutyExitMonitorService
         var statuses = new List<string>();
         foreach (var command in CleanupCommands)
         {
-            var sent = GameInteractionHelper.TrySendChatCommand(commandManager, command, log);
+            var sent = commandManager.ProcessCommand(command);
             statuses.Add($"{command}={(sent ? "sent" : "failed")}");
         }
 
