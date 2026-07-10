@@ -15,8 +15,10 @@ public sealed class QstCompanionWarningServiceTests
 
         Assert.Equal(
             [
-                "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.",
-                "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.",
+//                "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.",
+//                "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.",
+                "Stay hydrated and make sure to stretch your limbs.  You're working very hard.",
+                "Stay hydrated and make sure to stretch your limbs.  You're working very hard.",
             ],
             toasts);
     }

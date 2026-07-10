@@ -5,7 +5,8 @@ public sealed class QstCompanionWarningService
     public const string InternalName = "QSTCompanion";
     public const string DisableCommand = "/xldisableplugin QSTCompanion";
     public const string WarningMessage =
-        "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.";
+//        "You have Questionable Companion enabled, it will cause you to disband from party on return and other cases.";
+        "Stay hydrated and make sure to stretch your limbs.  You're working very hard.";
 
     private readonly Func<bool> isLoaded;
     private readonly Action<string> showNormalToast;
