@@ -37,6 +37,15 @@ public sealed class AdsOperatorApiService
             plugin.Configuration.PluginEnabled,
             plugin.Configuration.LootMode,
             plugin.Configuration.LootRegistrableNeedingEnabled,
+            plugin.Configuration.LootRegistrableMountsEnabled,
+            plugin.Configuration.LootRegistrableMinionsEnabled,
+            plugin.Configuration.LootRegistrableFashionAccessoriesEnabled,
+            plugin.Configuration.LootRegistrableFacewearEnabled,
+            plugin.Configuration.LootRegistrableOrchestrionRollsEnabled,
+            plugin.Configuration.LootRegistrableFadedOrchestrionCopiesEnabled,
+            plugin.Configuration.LootRegistrableEmotesHairstylesEnabled,
+            plugin.Configuration.LootRegistrableBardingsEnabled,
+            plugin.Configuration.LootRegistrableTripleTriadCardsEnabled,
             plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty,
             plugin.Configuration.HigherLowerAutomationEnabled,
             plugin.Configuration.DesynthSource,
@@ -122,6 +131,42 @@ public sealed class AdsOperatorApiService
                     case "lootregistrableneedingenabled":
                         var lootRegistrable = property.Value.GetBoolean();
                         changes.Add(() => plugin.Configuration.LootRegistrableNeedingEnabled = lootRegistrable);
+                        break;
+                    case "lootregistrablemountsenabled":
+                        var lootRegistrableMounts = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableMountsEnabled = lootRegistrableMounts);
+                        break;
+                    case "lootregistrableminionsenabled":
+                        var lootRegistrableMinions = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableMinionsEnabled = lootRegistrableMinions);
+                        break;
+                    case "lootregistrablefashionaccessoriesenabled":
+                        var lootRegistrableFashionAccessories = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableFashionAccessoriesEnabled = lootRegistrableFashionAccessories);
+                        break;
+                    case "lootregistrablefacewearenabled":
+                        var lootRegistrableFacewear = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableFacewearEnabled = lootRegistrableFacewear);
+                        break;
+                    case "lootregistrableorchestrionrollsenabled":
+                        var lootRegistrableOrchestrionRolls = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableOrchestrionRollsEnabled = lootRegistrableOrchestrionRolls);
+                        break;
+                    case "lootregistrablefadedorchestrioncopiesenabled":
+                        var lootRegistrableFadedOrchestrionCopies = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableFadedOrchestrionCopiesEnabled = lootRegistrableFadedOrchestrionCopies);
+                        break;
+                    case "lootregistrableemoteshairstylesenabled":
+                        var lootRegistrableEmotesHairstyles = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableEmotesHairstylesEnabled = lootRegistrableEmotesHairstyles);
+                        break;
+                    case "lootregistrablebardingsenabled":
+                        var lootRegistrableBardings = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableBardingsEnabled = lootRegistrableBardings);
+                        break;
+                    case "lootregistrabletripletriadcardsenabled":
+                        var lootRegistrableTripleTriadCards = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootRegistrableTripleTriadCardsEnabled = lootRegistrableTripleTriadCards);
                         break;
                     case "lootmode":
                         if (!Enum.TryParse<LootRollMode>(property.Value.GetString(), true, out var lootMode))

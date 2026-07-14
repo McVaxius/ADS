@@ -133,6 +133,16 @@ public sealed class DesynthPersistenceTests
     [InlineData("desynthSource", true)]
     [InlineData("desynthCategories", true)]
     [InlineData("lootMode", true)]
+    [InlineData("lootRegistrableNeedingEnabled", true)]
+    [InlineData("lootRegistrableMountsEnabled", true)]
+    [InlineData("lootRegistrableMinionsEnabled", true)]
+    [InlineData("lootRegistrableFashionAccessoriesEnabled", true)]
+    [InlineData("lootRegistrableFacewearEnabled", true)]
+    [InlineData("lootRegistrableOrchestrionRollsEnabled", true)]
+    [InlineData("lootRegistrableFadedOrchestrionCopiesEnabled", true)]
+    [InlineData("lootRegistrableEmotesHairstylesEnabled", true)]
+    [InlineData("lootRegistrableBardingsEnabled", true)]
+    [InlineData("lootRegistrableTripleTriadCardsEnabled", true)]
     [InlineData("releaseVersion", false)]
     public void IpcConfigurationValidationRejectsUnknownSettings(string setting, bool expected)
         => Assert.Equal(expected, AdsIpcValidation.IsKnownConfigurationSetting(setting));
