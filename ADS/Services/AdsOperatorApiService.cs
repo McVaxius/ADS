@@ -24,7 +24,7 @@ public sealed class AdsOperatorApiService
             {
                 "duty.start-outside", "duty.start-inside", "duty.resume-inside", "duty.leave",
                 "window.open-loot", "window.toggle-loot", "window.open-desynth",
-                "utility.start-repair", "utility.start-extract-materia", "utility.start-desynth", "utility.cancel",
+                "utility.start-repair", "utility.start-extract-materia", "utility.start-desynth", "utility.start-shop-purchase", "utility.cancel",
                 "preset.create", "preset.rename", "preset.delete", "preset.select", "preset.add-item",
                 "preset.remove-item", "preset.import-raw", "preset.import-base64", "preset.export-raw",
                 "preset.export-base64", "ledger.clear", "configuration.patch",
@@ -77,6 +77,7 @@ public sealed class AdsOperatorApiService
                 "utility.start-repair" => Result(action, plugin.StartRepair(GetString(payload, "mode"))),
                 "utility.start-extract-materia" => Result(action, plugin.StartExtractMateria()),
                 "utility.start-desynth" => Result(action, plugin.StartDesynth(GetString(payload, "mode"))),
+                "utility.start-shop-purchase" => StartShopPurchase(action, payload),
                 "utility.cancel" => Result(action, plugin.CancelUtility()),
                 "preset.create" => PresetResult(action, plugin.DesynthPresetStore.Create(GetString(payload, "name"), GetString(payload, "description"), out var createError), createError),
                 "preset.rename" => PresetResult(action, plugin.RenameDesynthPreset(GetString(payload, "name"), GetString(payload, "newName"), out var renameError), renameError),
@@ -95,7 +96,10 @@ public sealed class AdsOperatorApiService
         }
         catch (Exception ex)
         {
-            return Result(action, false, $"Invalid payload: {ex.Message}");
+            var message = $"Invalid payload: {ex.Message}";
+            if (action.Trim().Equals("utility.start-shop-purchase", StringComparison.OrdinalIgnoreCase))
+                plugin.RejectShopPurchaseStart(message);
+            return Result(action, false, message);
         }
     }
 
@@ -261,6 +265,17 @@ public sealed class AdsOperatorApiService
     {
         plugin.DesynthDutyLedgerStore.Clear();
         return true;
+    }
+
+    private string StartShopPurchase(string action, JsonElement payload)
+    {
+        if (!ShopPurchaseRequest.TryParseJson(payload, out var request, out var error))
+        {
+            plugin.RejectShopPurchaseStart(error);
+            return Result(action, false, error);
+        }
+
+        return Result(action, plugin.StartShopPurchase(request.ItemId, request.Quantity));
     }
 
     private bool MutatePresetItem(JsonElement payload, bool add, out string error)

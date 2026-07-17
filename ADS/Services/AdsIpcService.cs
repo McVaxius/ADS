@@ -17,6 +17,7 @@ public sealed class AdsIpcService : IDisposable
         Func<string, bool> startRepair,
         Func<bool> startExtractMateria,
         Func<string, bool> startDesynth,
+        Func<uint, int, bool> startShopPurchase,
         Func<bool> cancelUtility,
         Func<bool> openDesynthConfigUi,
         Func<bool> isDutyOwned,
@@ -27,7 +28,8 @@ public sealed class AdsIpcService : IDisposable
         Func<string> getConfigurationJson,
         Func<string, string> patchConfigurationJson,
         Func<string> getDesynthStatusJson,
-        Func<string> getExtractMateriaStatusJson)
+        Func<string> getExtractMateriaStatusJson,
+        Func<string> getShopPurchaseStatusJson)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -38,6 +40,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartRepair", startRepair);
         Register(pluginInterface, "ADS.StartExtractMateria", startExtractMateria);
         Register(pluginInterface, "ADS.StartDesynth", startDesynth);
+        Register(pluginInterface, "ADS.StartShopPurchase", startShopPurchase);
         Register(pluginInterface, "ADS.CancelUtility", cancelUtility);
         Register(pluginInterface, "ADS.OpenDesynthConfigUi", openDesynthConfigUi);
         Register(pluginInterface, "ADS.IsDutyOwned", isDutyOwned);
@@ -49,6 +52,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.PatchConfigurationJson", patchConfigurationJson);
         Register(pluginInterface, "ADS.GetDesynthStatusJson", getDesynthStatusJson);
         Register(pluginInterface, "ADS.GetExtractMateriaStatusJson", getExtractMateriaStatusJson);
+        Register(pluginInterface, "ADS.GetShopPurchaseStatusJson", getShopPurchaseStatusJson);
     }
 
     public void Dispose()

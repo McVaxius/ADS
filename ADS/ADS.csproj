@@ -6,9 +6,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.5.7.5</Version>
-    <FileVersion>0.5.7.5</FileVersion>
-    <AssemblyVersion>0.5.7.5</AssemblyVersion>
+    <Version>0.5.7.6</Version>
+    <FileVersion>0.5.7.6</FileVersion>
+    <AssemblyVersion>0.5.7.6</AssemblyVersion>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <RootNamespace>ADS</RootNamespace>
@@ -19,6 +19,7 @@
     <None Include="ADS.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Tools\hldbg_tex_export.py" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Resources\shop-npc-placements.json" />
   </ItemGroup>
 
   <ItemGroup>

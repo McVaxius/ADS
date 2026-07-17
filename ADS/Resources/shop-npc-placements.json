@@ -1,0 +1,3361 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "xivdatamineCsv": "local xivapi/ffxiv-datamining export",
+    "garlandNpcBrowseSha256": "sha256:454be4c1a1e5083a7e49c6112e521e6ab8660f35e7466e40454cb15348b3545f",
+    "corrections": "https://github.com/electr0sheep/ItemVendorLocation/blob/main/ItemVendorLocation/ItemLookup.Fix.cs",
+    "correctionsCommit": "75e87857be85dd6bdde40ac326e6f047e34980af"
+  },
+  "placements": [
+    {
+      "npcId": 1000185,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": -8.590881,
+      "z": -2.212585,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000215,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 155.35205,
+      "z": -70.26782,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000216,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 158.345366,
+      "z": -77.923902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000217,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 170.30591,
+      "z": -73.16705,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000218,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 164.839024,
+      "z": -57.943415,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000220,
+      "territoryId": 148,
+      "territoryName": "Central Shroud",
+      "mapId": 4,
+      "x": 16.189758,
+      "z": -15.640564,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000222,
+      "territoryId": 152,
+      "territoryName": "East Shroud",
+      "mapId": 5,
+      "x": -213.94684,
+      "z": 300.4348,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000230,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 421.46936,
+      "z": -125.993774,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000232,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 164.72107,
+      "z": -133.68433,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000234,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 423.69714,
+      "z": -122.08746,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000236,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 158.345366,
+      "z": -114.388293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000238,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 155.348293,
+      "z": -121.880976,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000239,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 170.333659,
+      "z": -118.883902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000244,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 423.17834,
+      "z": -119.95117,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000267,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 103.89868,
+      "z": -213.03125,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000301,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -87.174866,
+      "z": -173.51044,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000391,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 66.819214,
+      "z": -143.45007,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000392,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": -17.746277,
+      "z": 43.35083,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000396,
+      "territoryId": 148,
+      "territoryName": "Central Shroud",
+      "mapId": 4,
+      "x": 82.597046,
+      "z": -103.349365,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000535,
+      "territoryId": 152,
+      "territoryName": "East Shroud",
+      "mapId": 5,
+      "x": -579.4003,
+      "z": 104.32593,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000579,
+      "territoryId": 152,
+      "territoryName": "East Shroud",
+      "mapId": 5,
+      "x": 16.03717,
+      "z": 220.50806,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000597,
+      "territoryId": 153,
+      "territoryName": "South Shroud",
+      "mapId": 6,
+      "x": -163.07324,
+      "z": -78.62976,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000717,
+      "territoryId": 148,
+      "territoryName": "Central Shroud",
+      "mapId": 4,
+      "x": 175.61597,
+      "z": 319.32544,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000718,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 332.23462,
+      "z": 332.47876,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000996,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": -28.152893,
+      "z": 196.70398,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1000999,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": -29.465149,
+      "z": 197.92468,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001016,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": -42.679565,
+      "z": 119.920654,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001202,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -136.366829,
+      "z": 12.487805,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001203,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -156.846829,
+      "z": 20.979512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001204,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -129.373659,
+      "z": 28.472195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001205,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -236.269268,
+      "z": 36.963902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001207,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -258.247805,
+      "z": 53.947317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001276,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": 13.986341,
+      "z": 1.998049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001564,
+      "territoryId": 141,
+      "territoryName": "Central Thanalan",
+      "mapId": 21,
+      "x": -9.490732,
+      "z": -144.858537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1001787,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -61.939512,
+      "z": 9.490732,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002371,
+      "territoryId": 152,
+      "territoryName": "East Shroud",
+      "mapId": 5,
+      "x": -480.91858,
+      "z": 201.9226,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002374,
+      "territoryId": 153,
+      "territoryName": "South Shroud",
+      "mapId": 6,
+      "x": 204.39453,
+      "z": -65.75122,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002375,
+      "territoryId": 153,
+      "territoryName": "South Shroud",
+      "mapId": 6,
+      "x": 203.75366,
+      "z": -64.560974,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002376,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 10.635498,
+      "z": 220.20288,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002377,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 11.062683,
+      "z": 221.57617,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003252,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -139.57434,
+      "z": 31.967651,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003253,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -149.853659,
+      "z": 36.963902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003254,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -246.759024,
+      "z": 36.963902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003263,
+      "territoryId": 138,
+      "territoryName": "Western La Noscea",
+      "mapId": 18,
+      "x": 667.348293,
+      "z": 494.517073,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003267,
+      "territoryId": 139,
+      "territoryName": "Upper La Noscea",
+      "mapId": 19,
+      "x": -329.678049,
+      "z": 136.366829,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1004418,
+      "territoryId": 131,
+      "territoryName": "Ul'dah - Steps of Thal",
+      "mapId": 73,
+      "x": -114.0307,
+      "z": 118.30322,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1005180,
+      "territoryId": 138,
+      "territoryName": "Western La Noscea",
+      "mapId": 18,
+      "x": 19.480976,
+      "z": -63.937561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1005181,
+      "territoryId": 138,
+      "territoryName": "Western La Noscea",
+      "mapId": 18,
+      "x": -90.91122,
+      "z": 83.918049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1005182,
+      "territoryId": 180,
+      "territoryName": "Outer La Noscea",
+      "mapId": 30,
+      "x": -101.900488,
+      "z": -202.801951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1005422,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -397.6349,
+      "z": 80.979614,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1005494,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1005896,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -49.451707,
+      "z": -98.903415,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006004,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": 5.355835,
+      "z": 155.22998,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006005,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -61.234497,
+      "z": -141.31384,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006798,
+      "territoryId": 155,
+      "territoryName": "Coerthas Central Highlands",
+      "mapId": 53,
+      "x": 242.263415,
+      "z": -252.753171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006799,
+      "territoryId": 155,
+      "territoryName": "Coerthas Central Highlands",
+      "mapId": 53,
+      "x": 237.767805,
+      "z": 320.187317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006800,
+      "territoryId": 155,
+      "territoryName": "Coerthas Central Highlands",
+      "mapId": 53,
+      "x": -410.599024,
+      "z": -276.230244,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006998,
+      "territoryId": 138,
+      "territoryName": "Western La Noscea",
+      "mapId": 18,
+      "x": -470.540488,
+      "z": 766.251707,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1007904,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -52.948293,
+      "z": -92.909268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1008263,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -70.43122,
+      "z": 45.45561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1008907,
+      "territoryId": 138,
+      "territoryName": "Western La Noscea",
+      "mapId": 18,
+      "x": -225.28,
+      "z": 46.954146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1008909,
+      "territoryId": 180,
+      "territoryName": "Outer La Noscea",
+      "mapId": 30,
+      "x": 7.492683,
+      "z": -183.320976,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1008945,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 445.564878,
+      "z": -67.434146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1009152,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": -74.427317,
+      "z": 3.496585,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1009205,
+      "territoryId": 154,
+      "territoryName": "North Shroud",
+      "mapId": 7,
+      "x": 173.830244,
+      "z": 64.936585,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1009246,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -93.908293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1009451,
+      "territoryId": 763,
+      "territoryName": "Eureka Pagos",
+      "mapId": 467,
+      "x": -845.674146,
+      "z": 146.357073,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1010780,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -37.962927,
+      "z": -104.897561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1010790,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -37.962927,
+      "z": -104.897561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1010796,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -35.964878,
+      "z": -102.4,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011200,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -188.316098,
+      "z": -42.958049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011201,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -195.80878,
+      "z": -26.973659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011202,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -228.277073,
+      "z": -49.95122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011203,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -214.290732,
+      "z": -62.439024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011204,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -203.800976,
+      "z": -53.447805,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011205,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -245.260488,
+      "z": -60.940488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011206,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -236.76878,
+      "z": -82.419512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011207,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -258.747317,
+      "z": -63.438049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011228,
+      "territoryId": 397,
+      "territoryName": "Coerthas Western Highlands",
+      "mapId": 211,
+      "x": 504.559897,
+      "z": 718.351117,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011806,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.454634,
+      "z": -99.902439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011906,
+      "territoryId": 397,
+      "territoryName": "Coerthas Western Highlands",
+      "mapId": 211,
+      "x": -297.656688,
+      "z": 2.050629,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011912,
+      "territoryId": 398,
+      "territoryName": "The Dravanian Forelands",
+      "mapId": 212,
+      "x": 476.087702,
+      "z": 46.007702,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011925,
+      "territoryId": 398,
+      "territoryName": "The Dravanian Forelands",
+      "mapId": 212,
+      "x": 84.969653,
+      "z": -155.295712,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1011947,
+      "territoryId": 401,
+      "territoryName": "The Sea of Clouds",
+      "mapId": 215,
+      "x": -650.312298,
+      "z": 524.540385,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012061,
+      "territoryId": 401,
+      "territoryName": "The Sea of Clouds",
+      "mapId": 215,
+      "x": -560.899615,
+      "z": -437.020591,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012073,
+      "territoryId": 400,
+      "territoryName": "The Churning Mists",
+      "mapId": 214,
+      "x": 292.766727,
+      "z": 580.985263,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012086,
+      "territoryId": 400,
+      "territoryName": "The Churning Mists",
+      "mapId": 214,
+      "x": -95.354249,
+      "z": 189.367702,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012135,
+      "territoryId": 463,
+      "territoryName": "Matoya's Cave",
+      "mapId": 253,
+      "x": 35.21561,
+      "z": 1.24878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012142,
+      "territoryId": 402,
+      "territoryName": "Azys Lla",
+      "mapId": 216,
+      "x": -630.831322,
+      "z": -549.410834,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012158,
+      "territoryId": 418,
+      "territoryName": "Foundation",
+      "mapId": 218,
+      "x": 90.411707,
+      "z": 28.971707,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012172,
+      "territoryId": 418,
+      "territoryName": "Foundation",
+      "mapId": 218,
+      "x": -153.350244,
+      "z": -42.458537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012227,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": -20.729756,
+      "z": -37.713171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012228,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": -17.233171,
+      "z": -41.709268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012229,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": -19.730732,
+      "z": 55.69561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012261,
+      "territoryId": 418,
+      "territoryName": "Foundation",
+      "mapId": 218,
+      "x": -58.942439,
+      "z": -45.45561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1013747,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": 30.72,
+      "z": 66.185366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1015578,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": -13.237073,
+      "z": -45.205854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1015612,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 457.053659,
+      "z": 311.69561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1015615,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 463.047805,
+      "z": 328.679024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1015813,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -49.95122,
+      "z": -93.40878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016093,
+      "territoryId": 401,
+      "territoryName": "The Sea of Clouds",
+      "mapId": 215,
+      "x": -776.189371,
+      "z": -414.542542,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016261,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": 174.829268,
+      "z": -12.487805,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016296,
+      "territoryId": 579,
+      "territoryName": "The Battlehall",
+      "mapId": 295,
+      "x": -0.124878,
+      "z": -0.62439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016391,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016522,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -43.957073,
+      "z": -99.402927,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016596,
+      "territoryId": 402,
+      "territoryName": "Azys Lla",
+      "mapId": 216,
+      "x": -770.694737,
+      "z": -564.895712,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1016804,
+      "territoryId": 398,
+      "territoryName": "The Dravanian Forelands",
+      "mapId": 212,
+      "x": 54.998922,
+      "z": -173.777664,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017107,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": 76.17561,
+      "z": -64.187317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017172,
+      "territoryId": 400,
+      "territoryName": "The Churning Mists",
+      "mapId": 214,
+      "x": -329.125956,
+      "z": 298.261361,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017190,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": 29.221463,
+      "z": 67.683902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017230,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 557.45561,
+      "z": 370.638049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017613,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": 2.822865,
+      "z": 153.521,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017614,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -58.79309,
+      "z": -142.1073,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017646,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 506.505366,
+      "z": 383.625366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017655,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": 84.667317,
+      "z": -94.657561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017844,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017857,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1018091,
+      "territoryId": 574,
+      "territoryName": "Lily Hills Apartment Lobby",
+      "mapId": 321,
+      "x": 1.24878,
+      "z": -4.745366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1018094,
+      "territoryId": 573,
+      "territoryName": "Topmast Apartment Lobby",
+      "mapId": 320,
+      "x": 1.24878,
+      "z": -4.745366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1018097,
+      "territoryId": 575,
+      "territoryName": "Sultana's Breath Apartment Lobby",
+      "mapId": 322,
+      "x": 1.24878,
+      "z": -4.745366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1018128,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1018723,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019100,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -85.03851,
+      "z": 117.05188,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019101,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -36.484375,
+      "z": 49.240845,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019102,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -59.617065,
+      "z": 33.524048,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019103,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -52.35376,
+      "z": 76.58496,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019104,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -67.582275,
+      "z": 59.739014,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019106,
+      "territoryId": 641,
+      "territoryName": "Shirogane",
+      "mapId": 364,
+      "x": -99.22949,
+      "z": 105.6687,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": true
+    },
+    {
+      "npcId": 1019254,
+      "territoryId": 614,
+      "territoryName": "Yanxia",
+      "mapId": 354,
+      "x": 439.570732,
+      "z": -167.836098,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019269,
+      "territoryId": 614,
+      "territoryName": "Yanxia",
+      "mapId": 354,
+      "x": 169.334634,
+      "z": -421.588293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019597,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019664,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019788,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1019791,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1023794,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 768.249756,
+      "z": 481.529756,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1023795,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 765.752195,
+      "z": 462.548293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1023957,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -45.955122,
+      "z": -93.40878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024166,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024181,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -52.948293,
+      "z": -102.899512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024185,
+      "territoryId": 763,
+      "territoryName": "Eureka Pagos",
+      "mapId": 467,
+      "x": -916.604878,
+      "z": 143.859512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024213,
+      "territoryId": 250,
+      "territoryName": "Wolves' Den Pier",
+      "mapId": 51,
+      "x": -4.670244,
+      "z": 4.745366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024219,
+      "territoryId": 613,
+      "territoryName": "The Ruby Sea",
+      "mapId": 371,
+      "x": 392.616585,
+      "z": -230.275122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024437,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -52.948293,
+      "z": -102.899512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024440,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -52.948293,
+      "z": -102.899512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024586,
+      "territoryId": 140,
+      "territoryName": "Western Thanalan",
+      "mapId": 20,
+      "x": -464.046829,
+      "z": -321.186341,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1024774,
+      "territoryId": 612,
+      "territoryName": "The Fringes",
+      "mapId": 367,
+      "x": -25.974634,
+      "z": 237.268293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1025256,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1025313,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1025604,
+      "territoryId": 622,
+      "territoryName": "The Azim Steppe",
+      "mapId": 372,
+      "x": -782.236098,
+      "z": 100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1025949,
+      "territoryId": 763,
+      "territoryName": "Eureka Pagos",
+      "mapId": 467,
+      "x": -868.152195,
+      "z": 141.861463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026055,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 739.777561,
+      "z": 263.242927,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026185,
+      "territoryId": 732,
+      "territoryName": "Eureka Anemos",
+      "mapId": 414,
+      "x": -122.88,
+      "z": 496.515122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026501,
+      "territoryId": 795,
+      "territoryName": "Eureka Pyros",
+      "mapId": 484,
+      "x": -238.267317,
+      "z": 118.38439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026635,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026661,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026851,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -94.907317,
+      "z": -128.374634,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1026981,
+      "territoryId": 795,
+      "territoryName": "Eureka Pyros",
+      "mapId": 484,
+      "x": -193.31122,
+      "z": 194.310244,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027038,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027146,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -44.956098,
+      "z": -99.902439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027168,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027179,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -87.914146,
+      "z": -142.860488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027239,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -71.430244,
+      "z": 182.821463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027240,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -84.417561,
+      "z": 174.329756,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027241,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -95.906341,
+      "z": 160.842927,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027242,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -121.381463,
+      "z": 129.873171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027243,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -132.870244,
+      "z": 112.390244,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027269,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -76.425366,
+      "z": -89.412683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027308,
+      "territoryId": 814,
+      "territoryName": "Kholusia",
+      "mapId": 492,
+      "x": 651.363902,
+      "z": 299.207805,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027343,
+      "territoryId": 813,
+      "territoryName": "Lakeland",
+      "mapId": 491,
+      "x": 715.301463,
+      "z": -45.955122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027362,
+      "territoryId": 813,
+      "territoryName": "Lakeland",
+      "mapId": 491,
+      "x": -128.874146,
+      "z": 708.308293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027383,
+      "territoryId": 813,
+      "territoryName": "Lakeland",
+      "mapId": 491,
+      "x": -785.233171,
+      "z": -226.778537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027415,
+      "territoryId": 813,
+      "territoryName": "Lakeland",
+      "mapId": 491,
+      "x": -140.362927,
+      "z": -128.874146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027429,
+      "territoryId": 814,
+      "territoryName": "Kholusia",
+      "mapId": 492,
+      "x": -309.697561,
+      "z": 367.141463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027465,
+      "territoryId": 814,
+      "territoryName": "Kholusia",
+      "mapId": 492,
+      "x": -478.033171,
+      "z": -630.883902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027493,
+      "territoryId": 814,
+      "territoryName": "Kholusia",
+      "mapId": 492,
+      "x": -474.536585,
+      "z": -640.874146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027653,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": -329.178537,
+      "z": 538.474146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027668,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": -85.916098,
+      "z": -866.154146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027708,
+      "territoryId": 817,
+      "territoryName": "The Rak'tika Greatwood",
+      "mapId": 495,
+      "x": 313.693659,
+      "z": -171.332683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027874,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": 315.691707,
+      "z": -190.813659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027875,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": 318.189268,
+      "z": -216.788293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027877,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": -531.480976,
+      "z": -235.270244,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027898,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": 281.724878,
+      "z": -284.222439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027914,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": -434.57561,
+      "z": -580.932683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027955,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": -43.457561,
+      "z": 740.776585,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027961,
+      "territoryId": 818,
+      "territoryName": "The Tempest",
+      "mapId": 496,
+      "x": 15.98439,
+      "z": 246.259512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027988,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -88.413659,
+      "z": -83.418537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027991,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -126.376585,
+      "z": 96.405854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027992,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -111.39122,
+      "z": 55.945366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027993,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -90.411707,
+      "z": 54.946341,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1027995,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -26.474146,
+      "z": 99.402927,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1028075,
+      "territoryId": 141,
+      "territoryName": "Central Thanalan",
+      "mapId": 21,
+      "x": 1.998049,
+      "z": -174.329756,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1028221,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 88.413659,
+      "z": -291.715122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1030123,
+      "territoryId": 815,
+      "territoryName": "Amh Araeng",
+      "mapId": 493,
+      "x": 260.745366,
+      "z": -253.252683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1030520,
+      "territoryId": 818,
+      "territoryName": "The Tempest",
+      "mapId": 496,
+      "x": 638.876098,
+      "z": 212.792195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031196,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 766.75122,
+      "z": 236.76878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031305,
+      "territoryId": 817,
+      "territoryName": "The Rak'tika Greatwood",
+      "mapId": 495,
+      "x": 336.67122,
+      "z": -147.85561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031464,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 735.281951,
+      "z": 246.759024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031465,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 737.28,
+      "z": 265.740488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031552,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031810,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": -449.560976,
+      "z": 573.44,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1031939,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032099,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032644,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -47.453659,
+      "z": -100.901463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032661,
+      "territoryId": 817,
+      "territoryName": "The Rak'tika Greatwood",
+      "mapId": 495,
+      "x": 792.725854,
+      "z": -216.28878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032822,
+      "territoryId": 900,
+      "territoryName": "The *Endeavor*",
+      "mapId": 604,
+      "x": -0.249756,
+      "z": 0.749268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032900,
+      "territoryId": 418,
+      "territoryName": "Foundation",
+      "mapId": 218,
+      "x": -161.342439,
+      "z": -56.94439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1032977,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -44.956098,
+      "z": -99.902439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1033714,
+      "territoryId": 813,
+      "territoryName": "Lakeland",
+      "mapId": 491,
+      "x": -599.414634,
+      "z": -418.59122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1034203,
+      "territoryId": 920,
+      "territoryName": "Bozjan Southern Front",
+      "mapId": 606,
+      "x": -214.166829,
+      "z": 881.553171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1034205,
+      "territoryId": 920,
+      "territoryName": "Bozjan Southern Front",
+      "mapId": 606,
+      "x": -181.199024,
+      "z": 848.085854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1034215,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 665.849756,
+      "z": 222.282927,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1034896,
+      "territoryId": 915,
+      "territoryName": "Gangos",
+      "mapId": 603,
+      "x": -4.745366,
+      "z": -70.181463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1035159,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1035274,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1035477,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1035607,
+      "territoryId": 915,
+      "territoryName": "Gangos",
+      "mapId": 603,
+      "x": -18.232195,
+      "z": -49.701463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1036535,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -47.453659,
+      "z": -100.901463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1036606,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 664.850732,
+      "z": 221.283902,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037047,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 26.973659,
+      "z": -65.93561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037049,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 42.958049,
+      "z": -76.924878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037050,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 52.44878,
+      "z": -78.423415,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037053,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 75.925854,
+      "z": -55.945366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037054,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 78.922927,
+      "z": -46.454634,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037059,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 35.465366,
+      "z": 102.4,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037300,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -17.982439,
+      "z": -38.961951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037301,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -19.980488,
+      "z": -40.96,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037302,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -33.966829,
+      "z": -56.444878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037303,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -45.45561,
+      "z": -76.425366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037305,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -17.482927,
+      "z": -67.933659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037308,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": 5.494634,
+      "z": -103.399024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037309,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": 40.96,
+      "z": -74.427317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037310,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": 8.99122,
+      "z": -130.872195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037312,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": -35.964878,
+      "z": -188.81561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037476,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": -22.478049,
+      "z": -731.285854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037478,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": 420.089756,
+      "z": -431.079024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037480,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": 28.971707,
+      "z": -74.926829,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037485,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": -26.474146,
+      "z": 608.405854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037486,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": -763.754146,
+      "z": 298.708293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037631,
+      "territoryId": 957,
+      "territoryName": "Thavnair",
+      "mapId": 696,
+      "x": 166.837073,
+      "z": 635.879024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037636,
+      "territoryId": 957,
+      "territoryName": "Thavnair",
+      "mapId": 696,
+      "x": -560.452683,
+      "z": 89.412683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037638,
+      "territoryId": 957,
+      "territoryName": "Thavnair",
+      "mapId": 696,
+      "x": 396.113171,
+      "z": -214.290732,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037789,
+      "territoryId": 959,
+      "territoryName": "Mare Lamentorum",
+      "mapId": 698,
+      "x": -426.083902,
+      "z": 561.451707,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037791,
+      "territoryId": 959,
+      "territoryName": "Mare Lamentorum",
+      "mapId": 698,
+      "x": -19.980488,
+      "z": -461.549268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037907,
+      "territoryId": 961,
+      "territoryName": "Elpis",
+      "mapId": 700,
+      "x": 140.362927,
+      "z": 164.839024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037910,
+      "territoryId": 961,
+      "territoryName": "Elpis",
+      "mapId": 700,
+      "x": -594.919024,
+      "z": 542.969756,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1037912,
+      "territoryId": 961,
+      "territoryName": "Elpis",
+      "mapId": 700,
+      "x": -568.444878,
+      "z": -234.27122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1038441,
+      "territoryId": 250,
+      "territoryName": "Wolves' Den Pier",
+      "mapId": 51,
+      "x": -4.670244,
+      "z": -0.749268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1039493,
+      "territoryId": 985,
+      "territoryName": "Ingleside Apartment Lobby",
+      "mapId": 681,
+      "x": 2.247805,
+      "z": -9.240976,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1039555,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": -655.36,
+      "z": 308.698537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1040846,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1040901,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1041054,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": -316.690732,
+      "z": -95.406829,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1042424,
+      "territoryId": 957,
+      "territoryName": "Thavnair",
+      "mapId": 696,
+      "x": -49.451707,
+      "z": 349.159024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1042690,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 737.28,
+      "z": 265.740488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1042869,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -47.453659,
+      "z": -100.901463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043625,
+      "territoryId": 962,
+      "territoryName": "Old Sharlayan",
+      "mapId": 693,
+      "x": 39.461463,
+      "z": 105.397073,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043892,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": 48.452683,
+      "z": -12.987317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043933,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043955,
+      "territoryId": 419,
+      "territoryName": "The Pillars",
+      "mapId": 219,
+      "x": -75.426341,
+      "z": -26.973659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043977,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -110.392195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1043985,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1044404,
+      "territoryId": 959,
+      "territoryName": "Mare Lamentorum",
+      "mapId": 698,
+      "x": -203.301463,
+      "z": -280.226341,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1044548,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": -246.759024,
+      "z": 616.897561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045000,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.454634,
+      "z": -103.898537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045023,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 737.28,
+      "z": 265.740488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045052,
+      "territoryId": 963,
+      "territoryName": "Radz-at-Han",
+      "mapId": 694,
+      "x": 33.467317,
+      "z": -211.793171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045069,
+      "territoryId": 819,
+      "territoryName": "The Crystarium",
+      "mapId": 497,
+      "x": -40.460488,
+      "z": -173.830244,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045593,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -110.392195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045753,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1045803,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": 41.959024,
+      "z": 93.40878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1046091,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1046160,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1046406,
+      "territoryId": 956,
+      "territoryName": "Labyrinthos",
+      "mapId": 695,
+      "x": -58.442927,
+      "z": -51.949268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1046441,
+      "territoryId": 1197,
+      "territoryName": "Blunderville Square",
+      "mapId": 891,
+      "x": 14.360976,
+      "z": -40.605854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048376,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": -48.945474,
+      "z": 93.532575,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048377,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": -32.961084,
+      "z": 79.546233,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048378,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": -28.465474,
+      "z": 75.050623,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048381,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": 4.502331,
+      "z": 80.045745,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048382,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": -9.484011,
+      "z": 90.535501,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048387,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": 28.978428,
+      "z": 125.001843,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048606,
+      "territoryId": 1190,
+      "territoryName": "Shaaloani",
+      "mapId": 860,
+      "x": -360.148293,
+      "z": -108.893659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048626,
+      "territoryId": 1187,
+      "territoryName": "Urqopacha",
+      "mapId": 857,
+      "x": 285.720976,
+      "z": -476.534634,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048696,
+      "territoryId": 1187,
+      "territoryName": "Urqopacha",
+      "mapId": 857,
+      "x": 426.583415,
+      "z": -199.804878,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048726,
+      "territoryId": 1187,
+      "territoryName": "Urqopacha",
+      "mapId": 857,
+      "x": 448.561951,
+      "z": 656.858537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048776,
+      "territoryId": 1188,
+      "territoryName": "Kozama'uka",
+      "mapId": 858,
+      "x": -197.806829,
+      "z": -498.013659,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048841,
+      "territoryId": 1188,
+      "territoryName": "Kozama'uka",
+      "mapId": 858,
+      "x": 591.921951,
+      "z": 217.787317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048851,
+      "territoryId": 1188,
+      "territoryName": "Kozama'uka",
+      "mapId": 858,
+      "x": -449.560976,
+      "z": 274.232195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048931,
+      "territoryId": 1189,
+      "territoryName": "Yak T'el",
+      "mapId": 859,
+      "x": -381.127805,
+      "z": -443.566829,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1048971,
+      "territoryId": 1189,
+      "territoryName": "Yak T'el",
+      "mapId": 859,
+      "x": 626.887805,
+      "z": 517.994146,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049077,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -187.261572,
+      "z": -8.024499,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049078,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -192.256694,
+      "z": -28.504499,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049079,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -187.761084,
+      "z": -31.00206,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049080,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -184.764011,
+      "z": -33.499621,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049081,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -182.765962,
+      "z": -37.99523,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049083,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -210.239133,
+      "z": -8.024499,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049086,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -158.289864,
+      "z": -45.987425,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049090,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -242.707425,
+      "z": -90.444011,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049260,
+      "territoryId": 1186,
+      "territoryName": "Solution Nine",
+      "mapId": 856,
+      "x": -196.752304,
+      "z": -40.492791,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049281,
+      "territoryId": 1190,
+      "territoryName": "Shaaloani",
+      "mapId": 860,
+      "x": 358.649756,
+      "z": 471.04,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049321,
+      "territoryId": 1190,
+      "territoryName": "Shaaloani",
+      "mapId": 860,
+      "x": -151.352195,
+      "z": 270.73561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049351,
+      "territoryId": 1190,
+      "territoryName": "Shaaloani",
+      "mapId": 860,
+      "x": 263.742439,
+      "z": -539.972683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049371,
+      "territoryId": 1190,
+      "territoryName": "Shaaloani",
+      "mapId": 860,
+      "x": -282.723902,
+      "z": -96.405854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049436,
+      "territoryId": 1191,
+      "territoryName": "Heritage Found",
+      "mapId": 861,
+      "x": -260.745366,
+      "z": -592.920976,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049486,
+      "territoryId": 1191,
+      "territoryName": "Heritage Found",
+      "mapId": 861,
+      "x": -209.29561,
+      "z": 129.873171,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1049526,
+      "territoryId": 1192,
+      "territoryName": "Living Memory",
+      "mapId": 862,
+      "x": 28.472195,
+      "z": 800.718049,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1050949,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -46.954146,
+      "z": -110.392195,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1050954,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 737.28,
+      "z": 265.740488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051627,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051628,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 3.246829,
+      "z": 35.715122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051632,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": -25.724878,
+      "z": -24.725854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051633,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 14.73561,
+      "z": 33.217561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051634,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 12.238049,
+      "z": -5.74439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051799,
+      "territoryId": 1188,
+      "territoryName": "Kozama'uka",
+      "mapId": 858,
+      "x": 784.234146,
+      "z": -264.241951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1051951,
+      "territoryId": 1264,
+      "territoryName": "Lower Jeuno",
+      "mapId": 955,
+      "x": 23.227317,
+      "z": -100.708293,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1052096,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -45.955122,
+      "z": -103.399024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1052353,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.971707,
+      "z": -121.381463,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1052563,
+      "territoryId": 1189,
+      "territoryName": "Yak T'el",
+      "mapId": 859,
+      "x": 594.419512,
+      "z": 730.786341,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053612,
+      "territoryId": 1252,
+      "territoryName": "South Horn",
+      "mapId": 967,
+      "x": 810.708293,
+      "z": -717.799024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053613,
+      "territoryId": 1252,
+      "territoryName": "South Horn",
+      "mapId": 967,
+      "x": 821.697561,
+      "z": -669.346341,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053614,
+      "territoryId": 1252,
+      "territoryName": "South Horn",
+      "mapId": 967,
+      "x": 833.685854,
+      "z": -719.297561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053904,
+      "territoryId": 1269,
+      "territoryName": "Phantom Village",
+      "mapId": 1025,
+      "x": 40.710244,
+      "z": 20.690732,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053905,
+      "territoryId": 1269,
+      "territoryName": "Phantom Village",
+      "mapId": 1025,
+      "x": 29.720976,
+      "z": 10.700488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1053936,
+      "territoryId": 137,
+      "territoryName": "Eastern La Noscea",
+      "mapId": 17,
+      "x": 776.241951,
+      "z": 393.61561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054056,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054383,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -28.472195,
+      "z": -120.881951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054384,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 3.246829,
+      "z": 35.715122,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054385,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 14.73561,
+      "z": 33.217561,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054386,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": 12.238049,
+      "z": -5.74439,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054387,
+      "territoryId": 1247,
+      "territoryName": "Starlight Stalls",
+      "mapId": 956,
+      "x": -25.724878,
+      "z": -24.725854,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054473,
+      "territoryId": 1185,
+      "territoryName": "Tuliyollal",
+      "mapId": 855,
+      "x": -3.989377,
+      "z": 105.520867,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054477,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -52.948293,
+      "z": -123.379512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054637,
+      "territoryId": 1187,
+      "territoryName": "Urqopacha",
+      "mapId": 857,
+      "x": 486.524878,
+      "z": 791.227317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1056002,
+      "territoryId": 1269,
+      "territoryName": "Phantom Village",
+      "mapId": 1025,
+      "x": 40.210732,
+      "z": 11.699512,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1056070,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -45.955122,
+      "z": -103.399024,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1056094,
+      "territoryId": 1269,
+      "territoryName": "Phantom Village",
+      "mapId": 1025,
+      "x": 29.720976,
+      "z": 10.700488,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    }
+  ]
+}

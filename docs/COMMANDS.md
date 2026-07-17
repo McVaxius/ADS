@@ -60,6 +60,7 @@ Utility automation cannot start while ADS owns active duty execution or while in
 | Command | Action |
 |---|---|
 | `/ads enterinn` | Move to a nearby innkeeper and enter the inn |
+| `/ads shop <itemID> <quantity>` | Buy an exact additional quantity from a supported sheet-resolved vendor |
 | `/ads repair self` | Start self-repair |
 | `/ads repair npc` | Start NPC repair with normal fallback behavior |
 | `/ads repair npc-no-inn` | Start NPC repair without inn fallback |
@@ -73,6 +74,8 @@ Utility automation cannot start while ADS owns active duty execution or while in
 | `/ads desynthfrominventory` | Desynthesize inventory equipment directly |
 
 Running `/ads repair` without a mode prints valid modes.
+
+Shop item IDs and quantities must be decimal integers. Item ID must be a positive `uint`; quantity must be `1` through `9999`. Quantity means additional item units, not transactions and not a target inventory count. Missing, extra, non-decimal, or out-of-range arguments are rejected without starting automation. See [Shop Purchasing](SHOP_PURCHASING.md).
 
 Main > Tools > Treasure And Operations also exposes compact **Desynth Controls** and **Extract Materia** launchers. **Extract Materia** starts the same no-configuration automation as `/ads extractmateria`.
 

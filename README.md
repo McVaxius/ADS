@@ -8,6 +8,10 @@ ADS is observer-first. Entering a duty does not automatically grant ADS ownershi
 
 ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; Main > Tools > Treasure And Operations has compact Desynth Controls and Extract Materia launchers. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).
 
+## Shop Purchasing
+
+ADS can resolve supported vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. V1 supports regular gil shops and single-output `SpecialShop` exchanges paid entirely with inventory items or tomestones. Safe vendor fallback never changes the requested item, currency identities, or exact total cost. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
+
 ## Installation
 
 Add this custom repository in Dalamud:
@@ -54,6 +58,8 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 
 - [Operator Guide](GUIDE.md)
 - [Commands](docs/COMMANDS.md)
+- [Shop Purchasing](docs/SHOP_PURCHASING.md)
+- [IPC](docs/IPC.md)
 - [Rule Authoring](docs/RULE_AUTHORING.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Changelog](CHANGELOG.md)

@@ -81,6 +81,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         WriteIndented = false,
     };
+    private static readonly JsonSerializerOptions ShopStatusJsonOptions = new()
+    {
+        WriteIndented = false,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     public string Name
         => PluginInfo.DisplayName;
@@ -213,7 +218,20 @@ public sealed class Plugin : IDalamudPlugin
         DesynthPolicyService = new DesynthPolicyService();
         DesynthPresetStore = new DesynthPresetStore(configDirectory, Log);
         DesynthDutyLedgerStore = new DesynthDutyLedgerStore(configDirectory, Log);
-        UtilityAutomationService = new UtilityAutomationService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Configuration, DesynthPolicyService, DesynthPresetStore, DesynthDutyLedgerStore, Log);
+        UtilityAutomationService = new UtilityAutomationService(
+            DataManager,
+            ObjectTable,
+            TargetManager,
+            CommandManager,
+            ClientState,
+            Condition,
+            Configuration,
+            DesynthPolicyService,
+            DesynthPresetStore,
+            DesynthDutyLedgerStore,
+            () => ExecutionService.IsOwned,
+            () => InnEntryService.IsRunning,
+            Log);
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
         TreasureFollowerDutyExitMonitorService = new TreasureFollowerDutyExitMonitorService(CommandManager, Log);
@@ -238,6 +256,7 @@ public sealed class Plugin : IDalamudPlugin
             StartRepair,
             StartExtractMateria,
             StartDesynth,
+            StartShopPurchase,
             CancelUtility,
             OpenDesynthConfigUiIpc,
             IsDutyOwned,
@@ -248,7 +267,8 @@ public sealed class Plugin : IDalamudPlugin
             GetConfigurationJson,
             PatchConfigurationJson,
             GetDesynthStatusJson,
-            GetExtractMateriaStatusJson);
+            GetExtractMateriaStatusJson,
+            GetShopPurchaseStatusJson);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -829,6 +849,12 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartInnEntry()
     {
+        if (UtilityAutomationService.IsRunning)
+        {
+            PrintStatus($"Inn entry not started: {UtilityAutomationService.ActiveTaskName} is active.");
+            return false;
+        }
+
         var result = InnEntryService.StartManualEntry();
         PrintStatus(result ? InnEntryService.StatusMessage : $"Inn entry not started: {InnEntryService.StatusMessage}");
         return result;
@@ -952,6 +978,29 @@ public sealed class Plugin : IDalamudPlugin
         var result = UtilityAutomationService.StartDesynth(parsedMode);
         PrintStatus(result ? UtilityAutomationService.StatusMessage : $"Desynthesis not started: {UtilityAutomationService.StatusMessage}");
         return result;
+    }
+
+    public bool StartShopPurchase(uint itemId, int quantity)
+    {
+        if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
+            return RejectShopPurchaseStart(error);
+        if (ExecutionService.IsOwned)
+            return RejectShopPurchaseStart("Cannot start shop purchasing while ADS owns active duty execution.");
+        if (InnEntryService.IsRunning)
+            return RejectShopPurchaseStart("Cannot start shop purchasing while /ads enterinn is running.");
+
+        var result = UtilityAutomationService.StartShopPurchase(request);
+        PrintStatus(result
+            ? UtilityAutomationService.StatusMessage
+            : $"Shop purchase not started: {UtilityAutomationService.ShopPurchaseStatus.LastStartError}");
+        return result;
+    }
+
+    public bool RejectShopPurchaseStart(string message)
+    {
+        UtilityAutomationService.RejectShopPurchaseStart(message);
+        PrintStatus($"Shop purchase not started: {message}");
+        return false;
     }
 
     public bool CancelUtility()
@@ -1083,6 +1132,9 @@ public sealed class Plugin : IDalamudPlugin
                 ? null
                 : UtilityAutomationService.ExtractMateriaCompletedUtc.ToString("O"),
         });
+
+    public string GetShopPurchaseStatusJson()
+        => JsonSerializer.Serialize(UtilityAutomationService.ShopPurchaseStatus, ShopStatusJsonOptions);
 
     public bool TryResolveDesynthItemId(string value, out uint itemId)
     {
@@ -2232,6 +2284,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads resume - resume inside duty\n" +
                 "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
+                "/ads shop <itemID> <quantity> - buy an exact additional quantity from a supported sheet-resolved shop\n" +
                 "/ads repair self|npc|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
@@ -2449,6 +2502,19 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("enterinn", StringComparison.OrdinalIgnoreCase))
         {
             StartInnEntry();
+            return;
+        }
+
+        if (trimmed.Equals("shop", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("shop ", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!ShopPurchaseRequest.TryParseCommand(trimmed, out var purchase, out var error))
+            {
+                RejectShopPurchaseStart(error);
+                return;
+            }
+
+            StartShopPurchase(purchase.ItemId, purchase.Quantity);
             return;
         }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-16
+
+- Added a deterministic offline vendor-placement generator and checked-in catalog/audit sourced from local xivdatamine sheets, an offline Garland NPC browse snapshot, and the established ItemVendorLocation location corrections.
+- Shop placement resolution now prefers live LGB data, then `Level`, then the embedded offline fallback; explicitly marked corrections can replace known-invalid primary placements while ordinary catalog rows remain fallback-only.
+- Added vnavmesh floor resolution for catalog X/Z coordinates after territory entry, live-NPC destination retargeting, and callback-free identical-cost fallback when floor lookup or candidate validation fails.
+- Corrected the Versatile Lure regression: the teleport-accessible Limsa merchant is supplied by the offline correction catalog, not `planevent.lgb`.
+
 ## 2026-06-14
 
 - Fixed BattleNpc rule shadowing by applying distance/Y gates before effective-rule selection. Failed actionable BattleNpc rules no longer block manual/frontier movement, lower eligible matching rules can win, planner/frontier share one eligibility policy, and Analysis JSON exposes raw/eligible/gate-suppressed monster diagnostics.

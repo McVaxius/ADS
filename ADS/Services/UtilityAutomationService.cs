@@ -26,6 +26,7 @@ public sealed unsafe class UtilityAutomationService
         NpcRepair,
         ExtractMateria,
         DesynthFromInventory,
+        ShopPurchase,
     }
 
     private enum NpcRepairMode
@@ -205,6 +206,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly DesynthPolicyService desynthPolicyService;
     private readonly DesynthPresetStore desynthPresetStore;
     private readonly DesynthDutyLedgerStore desynthDutyLedgerStore;
+    private readonly ShopPurchaseRunner shopPurchaseRunner;
     private readonly Dictionary<uint, int?> repairIndexCache = [];
     private Lumina.Excel.ExcelSheet<Aetheryte>? aetheryteSheet;
     private Lumina.Excel.ExcelSheet<ENpcBase>? enpcBaseSheet;
@@ -276,6 +278,8 @@ public sealed unsafe class UtilityAutomationService
         DesynthPolicyService desynthPolicyService,
         DesynthPresetStore desynthPresetStore,
         DesynthDutyLedgerStore desynthDutyLedgerStore,
+        Func<bool> isDutyOwned,
+        Func<bool> isInnEntryRunning,
         IPluginLog log)
     {
         this.dataManager = dataManager;
@@ -289,13 +293,23 @@ public sealed unsafe class UtilityAutomationService
         this.desynthPresetStore = desynthPresetStore;
         this.desynthDutyLedgerStore = desynthDutyLedgerStore;
         this.log = log;
+        Action<string> shopDiagnostic = message => log.Information("[ADS][Shop] {Diagnostic}", message);
+        var catalog = new ShopCatalogService(new LuminaShopSheetSource(dataManager, log), shopDiagnostic);
+        var runtime = new DalamudShopPurchaseRuntime(objectTable, targetManager, commandManager, clientState, condition, log);
+        shopPurchaseRunner = new ShopPurchaseRunner(
+            catalog,
+            runtime,
+            new SystemShopPurchaseClock(),
+            isDutyOwned,
+            isInnEntryRunning,
+            shopDiagnostic);
     }
 
     public bool IsRunning
         => activeTask != UtilityTask.None;
 
     public bool SuppressesGenericYesNo
-        => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair;
+        => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair or UtilityTask.ShopPurchase;
 
     public string StatusMessage { get; private set; } = "Idle";
 
@@ -314,6 +328,7 @@ public sealed unsafe class UtilityAutomationService
             },
             UtilityTask.ExtractMateria => "extract-materia",
             UtilityTask.DesynthFromInventory => "desynth-inventory",
+            UtilityTask.ShopPurchase => "shop-purchase",
             _ => string.Empty,
         };
 
@@ -335,6 +350,8 @@ public sealed unsafe class UtilityAutomationService
     public string LastDesynthSuccessMessage { get; private set; } = string.Empty;
     public string LastDesynthFailureMessage { get; private set; } = string.Empty;
     public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
+    public bool IsShopPurchaseRunning => activeTask == UtilityTask.ShopPurchase && shopPurchaseRunner.IsRunning;
+    public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
     public bool ExtractMateriaDone => extractMateriaDone;
     public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
     public string ExtractMateriaStatusMessage => IsExtractMateriaRunning ? StatusMessage : extractMateriaStatusMessage;
@@ -547,6 +564,44 @@ public sealed unsafe class UtilityAutomationService
         return true;
     }
 
+    public bool StartShopPurchase(ShopPurchaseRequest request)
+    {
+        if (IsRunning)
+        {
+            var message = $"Cannot start shop purchasing while {GetTaskLabel(activeTask)} is active.";
+            shopPurchaseRunner.RejectStart(message);
+            StatusMessage = message;
+            return false;
+        }
+
+        if (!shopPurchaseRunner.Start(request))
+        {
+            StatusMessage = shopPurchaseRunner.Status.LastStartError;
+            return false;
+        }
+
+        ResetState();
+        activeTask = UtilityTask.ShopPurchase;
+        startedAtUtc = DateTime.UtcNow;
+        LastSuccessMessage = string.Empty;
+        LastFailureMessage = string.Empty;
+        LastCompletionUtc = DateTime.MinValue;
+        StatusMessage = shopPurchaseRunner.Status.StatusMessage;
+        log.Information(
+            "[ADS][Shop] Accepted purchase request item={ItemId}, quantity={Quantity}.",
+            request.ItemId,
+            request.Quantity);
+        return true;
+    }
+
+    public bool RejectShopPurchaseStart(string message)
+    {
+        var rejected = shopPurchaseRunner.RejectStart(message);
+        if (!IsRunning)
+            StatusMessage = shopPurchaseRunner.Status.LastStartError;
+        return rejected;
+    }
+
     public void Update()
     {
         if (!IsRunning)
@@ -557,7 +612,9 @@ public sealed unsafe class UtilityAutomationService
         try
         {
             var now = DateTime.UtcNow;
-            if (now - startedAtUtc > OverallTimeout && !IsNpcRepairFieldRouteAttemptActive())
+            if (activeTask != UtilityTask.ShopPurchase
+                && now - startedAtUtc > OverallTimeout
+                && !IsNpcRepairFieldRouteAttemptActive())
             {
                 Fail($"Timed out while running {GetTaskLabel(activeTask)}.");
                 return;
@@ -577,11 +634,23 @@ public sealed unsafe class UtilityAutomationService
                 case UtilityTask.DesynthFromInventory:
                     UpdateDesynthFromInventory();
                     break;
+                case UtilityTask.ShopPurchase:
+                    shopPurchaseRunner.Update();
+                    SyncShopPurchaseRunner();
+                    break;
             }
         }
         catch (Exception ex)
         {
-            Fail($"{GetTaskLabel(activeTask)} failed: {ex.Message}");
+            if (activeTask == UtilityTask.ShopPurchase)
+            {
+                shopPurchaseRunner.Cancel($"runner exception: {ex.Message}");
+                SyncShopPurchaseRunner();
+            }
+            else
+            {
+                Fail($"{GetTaskLabel(activeTask)} failed: {ex.Message}");
+            }
         }
         finally
         {
@@ -626,6 +695,13 @@ public sealed unsafe class UtilityAutomationService
         if (!IsRunning)
             return;
 
+        if (activeTask == UtilityTask.ShopPurchase)
+        {
+            shopPurchaseRunner.Cancel(reason);
+            SyncShopPurchaseRunner();
+            return;
+        }
+
         var cancelledTask = activeTask;
         var message = $"Cancelled {GetTaskLabel(activeTask)}: {reason}";
         LastFailureMessage = message;
@@ -655,7 +731,10 @@ public sealed unsafe class UtilityAutomationService
         }
 
         if (IsRunning)
-            Cancel("manual restart");
+        {
+            StatusMessage = $"Cannot start {GetTaskLabel(task)} while {GetTaskLabel(activeTask)} is active.";
+            return false;
+        }
 
         ResetState();
         activeTask = task;
@@ -2149,6 +2228,27 @@ public sealed unsafe class UtilityAutomationService
         return player == null ? float.MaxValue : Vector3.Distance(player.Position, obj.Position);
     }
 
+    private void SyncShopPurchaseRunner()
+    {
+        var purchase = shopPurchaseRunner.Status;
+        StatusMessage = purchase.StatusMessage;
+        if (purchase.Running || activeTask != UtilityTask.ShopPurchase)
+            return;
+
+        LastSuccessMessage = purchase.Succeeded == true ? purchase.SuccessMessage : string.Empty;
+        LastFailureMessage = purchase.Succeeded == true ? string.Empty : purchase.FailureMessage;
+        LastCompletionUtc = purchase.CompletedAtUtc ?? DateTime.UtcNow;
+        log.Information(
+            "[ADS][Shop] Purchase finished succeeded={Succeeded}, acquired={Acquired}/{Requested}, failureCode={FailureCode}, status={Status}.",
+            purchase.Succeeded ?? false,
+            purchase.AcquiredQuantity,
+            purchase.RequestedQuantity,
+            purchase.FailureCode ?? string.Empty,
+            purchase.StatusMessage);
+        ResetState();
+        StatusMessage = purchase.StatusMessage;
+    }
+
     private void Complete(string message)
     {
         var completedTask = activeTask;
@@ -2236,6 +2336,7 @@ public sealed unsafe class UtilityAutomationService
             UtilityTask.NpcRepair => "NPC repair",
             UtilityTask.ExtractMateria => "materia extraction",
             UtilityTask.DesynthFromInventory => "inventory desynthesis",
+            UtilityTask.ShopPurchase => "shop purchasing",
             _ => "utility automation",
         };
 
