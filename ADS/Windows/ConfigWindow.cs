@@ -134,6 +134,18 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawAutomation(ref bool changed)
     {
+        ImGui.TextUnformatted("Regular Duties");
+        var enableBmraiVbmInRegularDuties = plugin.Configuration.EnableBmraiVbmInRegularDuties;
+        if (ImGui.Checkbox("Enable BMRAI/VBM in regular duties", ref enableBmraiVbmInRegularDuties))
+        {
+            plugin.Configuration.EnableBmraiVbmInRegularDuties = enableBmraiVbmInRegularDuties;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("When enabled, entering a regular duty resets BMRAI and VBM follow targets to Slot1. Changes take effect on the next regular-duty entry.");
+
+        ImGui.Spacing();
+        ImGui.Separator();
         ImGui.TextUnformatted("Treasure");
         var considerTreasureCoffers = plugin.Configuration.ConsiderTreasureCoffers;
         if (ImGui.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))

@@ -90,7 +90,11 @@ public sealed class BossModMultiboxFollowService
     public bool RegularDutyActive { get; private set; }
 
     public void Clear(string reason, bool forceProviderCleanup = false)
-        => Clear(reason, forceProviderCleanup, resetBmraiToSlot1: false);
+        => Clear(
+            reason,
+            forceProviderCleanup,
+            resetBmraiToSlot1: false,
+            resetVbmToSlot1: true);
 
     public bool EnterRegularDuty(string reason)
     {
@@ -99,8 +103,15 @@ public sealed class BossModMultiboxFollowService
 
         RegularDutyActive = true;
         var cleanupPending = CleanupPending;
-        Clear(reason, forceProviderCleanup: false, resetBmraiToSlot1: true);
-        if (!cleanupPending)
+        var enableRegularFollow = configuration.EnableBmraiVbmInRegularDuties;
+
+        Clear(
+            reason,
+            forceProviderCleanup: false,
+            resetBmraiToSlot1: enableRegularFollow,
+            resetVbmToSlot1: enableRegularFollow);
+
+        if (!cleanupPending && enableRegularFollow)
         {
             var resetStatus = ResetRegularDutyFollowTargets(reason);
             FollowStatus = $"Treasure portal follow cleared after {reason}.{resetStatus}";
@@ -120,13 +131,21 @@ public sealed class BossModMultiboxFollowService
         log.Information($"[ADS] Regular duty follow cleanup latch reset after {reason}.");
     }
 
-    private void Clear(string reason, bool forceProviderCleanup, bool resetBmraiToSlot1)
+    private void Clear(
+        string reason,
+        bool forceProviderCleanup,
+        bool resetBmraiToSlot1,
+        bool resetVbmToSlot1)
     {
         var cleanupStatus = string.Empty;
         var shouldDisableBmrai = bmraiFollowActivated || configuration.BmraiTreasureFollowCleanupPending;
         if (forceProviderCleanup || CleanupPending)
         {
-            cleanupStatus = DisableBmraiTreasureFollow(reason, shouldDisableBmrai, resetBmraiToSlot1);
+            cleanupStatus = DisableBmraiTreasureFollow(
+                reason,
+                shouldDisableBmrai,
+                resetBmraiToSlot1,
+                resetVbmToSlot1);
             if (configuration.BmraiTreasureFollowCleanupPending)
             {
                 configuration.BmraiTreasureFollowCleanupPending = false;
@@ -435,7 +454,11 @@ public sealed class BossModMultiboxFollowService
         configuration.Save();
     }
 
-    private string DisableBmraiTreasureFollow(string reason, bool disableBmrai, bool resetBmraiToSlot1)
+    private string DisableBmraiTreasureFollow(
+        string reason,
+        bool disableBmrai,
+        bool resetBmraiToSlot1,
+        bool resetVbmToSlot1)
     {
         var cleanupStatuses = new List<string>();
         TryProcessFollowCommand("/bmrai followoutofcombat off", "BMRAI", out var followOutOfCombatStatus);
@@ -460,8 +483,11 @@ public sealed class BossModMultiboxFollowService
             cleanupStatuses.Add(bmraiFollowSlotStatus);
         }
 
-        TryProcessFollowCommand("/vbmai follow Slot1", "VBM", out var vbmFollowSlotStatus);
-        cleanupStatuses.Add(vbmFollowSlotStatus);
+        if (resetVbmToSlot1)
+        {
+            TryProcessFollowCommand("/vbmai follow Slot1", "VBM", out var vbmFollowSlotStatus);
+            cleanupStatuses.Add(vbmFollowSlotStatus);
+        }
 
         var status = $" Sent cleanup commands: {string.Join(" ", cleanupStatuses)}";
         log.Information($"[ADS] Clearing ADS {FollowProviderLabel} follow after {reason}.{status}");

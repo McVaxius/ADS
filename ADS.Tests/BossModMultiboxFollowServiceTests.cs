@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using ADS;
 using ADS.Models;
 using ADS.Services;
@@ -9,6 +10,14 @@ namespace ADS.Tests;
 
 public sealed class BossModMultiboxFollowServiceTests
 {
+    [Fact]
+    public void MissingRegularDutyFollowSettingDefaultsToEnabled()
+    {
+        var configuration = JsonSerializer.Deserialize<Configuration>("{}")!;
+
+        Assert.True(configuration.EnableBmraiVbmInRegularDuties);
+    }
+
     [Fact]
     public void RegularDutyCleanupSendsSlot1OnceAndBlocksFollowChanges()
     {
@@ -37,6 +46,49 @@ public sealed class BossModMultiboxFollowServiceTests
     }
 
     [Fact]
+    public void DisabledRegularDutyFollowSendsNoSlot1Commands()
+    {
+        var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
+        var commands = ((CommandManagerProxy)(object)commandManager).Commands;
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var configuration = new Configuration
+        {
+            EnableBmraiVbmInRegularDuties = false,
+        };
+        var service = new BossModMultiboxFollowService(null!, commandManager, configuration, log);
+
+        Assert.True(service.EnterRegularDuty("first stable normal-duty tick"));
+
+        Assert.DoesNotContain("/bmrai follow Slot1", commands);
+        Assert.DoesNotContain("/vbmai follow Slot1", commands);
+        Assert.Empty(commands);
+    }
+
+    [Fact]
+    public void DisabledRegularDutyFollowStillShutsDownPendingTreasureFollow()
+    {
+        var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
+        var commands = ((CommandManagerProxy)(object)commandManager).Commands;
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var configuration = new Configuration
+        {
+            EnableBmraiVbmInRegularDuties = false,
+        };
+        var service = new BossModMultiboxFollowService(null!, commandManager, configuration, log);
+        SetTreasureFollowActivated(service);
+
+        Assert.True(service.EnterRegularDuty("first stable normal-duty tick"));
+
+        Assert.Contains("/bmrai followoutofcombat off", commands);
+        Assert.Contains("/bmrai followcombat off", commands);
+        Assert.Contains("/vbmai followoutofcombat off", commands);
+        Assert.Contains("/vbmai followcombat off", commands);
+        Assert.Contains("/bmrai off", commands);
+        Assert.DoesNotContain("/bmrai follow Slot1", commands);
+        Assert.DoesNotContain("/vbmai follow Slot1", commands);
+    }
+
+    [Fact]
     public void RegularDutyCleanupLatchResetsAfterLeavingDuty()
     {
         var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
@@ -59,9 +111,7 @@ public sealed class BossModMultiboxFollowServiceTests
         var commands = ((CommandManagerProxy)(object)commandManager).Commands;
         var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
         var service = new BossModMultiboxFollowService(null!, commandManager, new Configuration(), log);
-        typeof(BossModMultiboxFollowService)
-            .GetField("bmraiFollowActivated", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(service, true);
+        SetTreasureFollowActivated(service);
 
         Assert.True(service.EnterRegularDuty("first stable normal-duty tick"));
 
@@ -70,6 +120,25 @@ public sealed class BossModMultiboxFollowServiceTests
         Assert.Contains("/vbmai followoutofcombat off", commands);
         Assert.Contains("/vbmai followcombat off", commands);
         Assert.Contains("/bmrai follow Slot1", commands);
+        Assert.Contains("/vbmai follow Slot1", commands);
+    }
+
+    [Fact]
+    public void NonRegularCleanupRetainsExistingVbmSlot1Reset()
+    {
+        var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
+        var commands = ((CommandManagerProxy)(object)commandManager).Commands;
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var service = new BossModMultiboxFollowService(null!, commandManager, new Configuration(), log);
+        SetTreasureFollowActivated(service);
+
+        service.Clear("treasure cleanup");
+
+        Assert.Contains("/bmrai followoutofcombat off", commands);
+        Assert.Contains("/bmrai followcombat off", commands);
+        Assert.Contains("/vbmai followoutofcombat off", commands);
+        Assert.Contains("/vbmai followcombat off", commands);
+        Assert.DoesNotContain("/bmrai follow Slot1", commands);
         Assert.Contains("/vbmai follow Slot1", commands);
     }
 
@@ -94,6 +163,39 @@ public sealed class BossModMultiboxFollowServiceTests
         Assert.Contains("/bmrai follow Portal Opener", commands);
         Assert.Contains("/vbmai follow Portal Opener", commands);
     }
+
+    [Fact]
+    public void TreasureFollowerDutyExitCleanupRemainsUnchanged()
+    {
+        var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
+        var commands = ((CommandManagerProxy)(object)commandManager).Commands;
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var service = new TreasureFollowerDutyExitMonitorService(commandManager, log);
+        service.Arm(CreateRegularDutyContext(), "test");
+        typeof(TreasureFollowerDutyExitMonitorService)
+            .GetField("outsideStableSinceUtc", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(service, DateTime.UtcNow.AddSeconds(-2));
+
+        service.Update(
+            CreateOutsideContext(),
+            supportedTreasureDuty: false,
+            TreasureDungeonRole.Regular,
+            "Regular");
+
+        Assert.Equal(
+            [
+                "/bmrai followoutofcombat off",
+                "/cbt disable AutoFollow",
+                "/bmrai followcombat off",
+                "/vbmai follow Slot1",
+            ],
+            commands);
+    }
+
+    private static void SetTreasureFollowActivated(BossModMultiboxFollowService service)
+        => typeof(BossModMultiboxFollowService)
+            .GetField("bmraiFollowActivated", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(service, true);
 
     private static TreasurePortalOpenerSnapshot CreatePortalOpener()
         => new(
@@ -129,6 +231,30 @@ public sealed class BossModMultiboxFollowServiceTests
             TerritoryTypeId = 200,
             MapId = 0,
             ContentFinderConditionId = 100,
+            CurrentDuty = null,
+        };
+
+    private static DutyContextSnapshot CreateOutsideContext()
+        => new()
+        {
+            PluginEnabled = true,
+            IsLoggedIn = true,
+            BoundByDuty = false,
+            BoundByDuty56 = false,
+            BetweenAreas = false,
+            BetweenAreas51 = false,
+            Jumping = false,
+            Jumping61 = false,
+            Occupied33 = false,
+            OccupiedInQuestEvent = false,
+            OccupiedInEvent = false,
+            OccupiedInCutSceneEvent = false,
+            WatchingCutscene = false,
+            InCombat = false,
+            Mounted = false,
+            TerritoryTypeId = 0,
+            MapId = 0,
+            ContentFinderConditionId = 0,
             CurrentDuty = null,
         };
 

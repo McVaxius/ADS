@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-22
+
+- Added a default-enabled Settings > Automation toggle for BMRAI/VBM regular-duty follow resets. Disabling it skips the `/bmrai follow Slot1` and `/vbmai follow Slot1` commands on the next regular-duty entry while preserving pending treasure-follow shutdown, treasure opener follow, ordinary cleanup, and treasure-exit cleanup behavior.
+
 ## 2026-07-16
 
 - Added a deterministic offline vendor-placement generator and checked-in catalog/audit sourced from local xivdatamine sheets, an offline Garland NPC browse snapshot, and the established ItemVendorLocation location corrections.

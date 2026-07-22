@@ -41,6 +41,10 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 - **Leave** is disabled unless ADS owns execution.
 - Duty maturity and catalog metadata describe validation status; live instanced-duty truth controls whether inside start/resume is available.
 
+## Regular-Duty BossMod Follow
+
+**Settings > Automation > Enable BMRAI/VBM in regular duties** is enabled by default. When enabled, ADS resets BMRAI and VBM follow targets to `Slot1` on the next regular-duty entry. Disable it to skip only those regular-duty Slot1 commands; treasure opener follow and treasure-exit cleanup are unchanged.
+
 ## Feature Map
 
 | Surface | Purpose |

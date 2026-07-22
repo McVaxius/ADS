@@ -18,6 +18,7 @@ public sealed class Configuration : IPluginConfiguration
     public string DtrIconDisabled { get; set; } = DefaultDtrIconDisabled;
     public bool ShowDebugSections { get; set; }
     public bool ConsiderTreasureCoffers { get; set; } = true;
+    public bool EnableBmraiVbmInRegularDuties { get; set; } = true;
     public bool TreasureDoorJiggleRecoveryEnabled { get; set; } = true;
     public bool ResetCameraBeforeInteractEnabled { get; set; } = true;
     public bool ProcessDialogRulesOutsideOwnedDuty { get; set; } = true;

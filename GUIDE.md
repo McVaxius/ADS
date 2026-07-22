@@ -115,11 +115,12 @@ Clicking the ADS DTR entry opens Main.
 
 ### Automation
 
+- Enable BMRAI/VBM in regular duties.
 - Consider treasure coffers in planner.
 - Treasure door frame recovery.
 - Process dialog rules outside owned duties.
 
-These toggles retain their existing runtime behavior.
+The BMRAI/VBM setting is enabled by default. When enabled, entering a regular duty resets both follow targets to `Slot1`; when disabled, ADS skips those regular-duty Slot1 commands. A change takes effect on the next regular-duty entry and does not alter treasure opener follow or treasure-exit cleanup.
 
 ### Data & Rules
 
