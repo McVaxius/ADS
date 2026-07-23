@@ -1,0 +1,49 @@
+{
+  "project_id": 8,
+  "title": "ADS I19 shop families, I76/I77 camera recovery, I28 solo notice, and I4 setup wizards",
+  "context": "dev",
+  "phase": "define",
+  "status": "active",
+  "workspace": "Z:\\ADS",
+  "branch": "main",
+  "commit_hash": "b053e3c071e5f65e02be5c5c37a9430e62092aac",
+  "objective": "Implement and verify deterministic NPC shop-family support, ADS-owned duty camera recovery, once-per-entry solo-duty leave guidance, and five independent replayable setup wizards as one unversioned change set.",
+  "minimum_success": "All four ticket areas are implemented with preserved public shop contracts, safe callback-free failure behavior, configuration migration, operator UI and documentation, and full C# and Python suites passing.",
+  "exceptional_success": "Targeted regression coverage proves every requested family, gate, cooldown, latch, migration, and replay behavior; generated catalog/audit are deterministic and the complete diff is warning-free and ready for user-triggered live acceptance.",
+  "boundaries": [
+    "Include I19, I76/I77, I28, and I4 only.",
+    "Exclude I58 and unrelated work.",
+    "Do not bump assembly version, package, publish, commit, push, or perform live-game purchases/actions.",
+    "Keep public shop commands, IPC names, capability schema, phase strings, and failure-code strings compatible."
+  ],
+  "stakeholders": ["ADS operators", "plugin maintainer", "live acceptance tester"],
+  "existing_assets": [
+    "Clean main at b053e3c / v0.5.7.7",
+    "Existing GilShop and SpecialShop catalog/runtime/runner",
+    "Existing duty context, ownership, UI window system, and test seams",
+    "Pinned local placement inputs and seven Python generator tests",
+    "User-supplied implementation plan and acceptance matrix"
+  ],
+  "constraints": [
+    "Fail closed before callbacks when live UI identity, row, costs, rank, capacity, confirmation, or balance cannot be proved.",
+    "Use only Dalamud/game input APIs; never OS-level input.",
+    "Preserve unrelated current behavior and existing compatibility no-ops.",
+    "No runtime vendor network requests.",
+    "User-controlled live acceptance remains unperformed."
+  ],
+  "validation": [
+    "shop-family-resolution-and-gates",
+    "shop-live-ui-callback-safety",
+    "shop-exact-delta-and-confirmation",
+    "camera-owned-duty-cooldown-and-release",
+    "solo-toast-entry-latch-and-reentry",
+    "wizard-independent-migration-and-replay",
+    "generator-determinism-and-audit",
+    "full-csharp-suite",
+    "full-python-suite",
+    "debug-build-and-diff-check",
+    "documentation-synchronized"
+  ],
+  "current_step": "Reconcile repository state, required backups, and owning seams before editing.",
+  "next_action": "Save the pre-edit baseline/change manifest and create required backups, then implement camera and solo notice services."
+}
