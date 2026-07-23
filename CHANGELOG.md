@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-23
+
+- Fixed nested shop menus by resolving each unique live handler through `EventHandlerSelector.Option.GlobalIndex`; `LocalIndex` and sheet indexes are now diagnostic only, including the handler `3276827` local-index-3/global-callback-2 regression and its nested callback-4 path.
+- Unified owned confirmation and exact-delta verification under one ten-second timeout. Exact readable prompts are accepted once through the boundary, expired or mismatched prompts fail closed, and unreadable prompts time out without resending the purchase callback or changing candidates.
+- Replaced fire-and-forget shop navigation cleanup with `vnavmesh.Path.Stop` plus `Path.IsRunning` verification. Interaction, menu selection, retargeting, and identical-cost fallback now wait in a bounded `stopping-navigation` phase; persistent or unverifiable movement terminates as `no-route` before any NPC or purchase callback.
+
 ## 2026-07-22
 
 - Expanded deterministic shop purchasing across GilShop, direct and FATE-routed SpecialShop, InclusionShop, Grand Company, and Free Company families; added recursive carrier discovery, live handler-index resolution, deferred gates/balances, audited mixed currencies, exact coproduct verification, family-specific live validation, and owned one-shot confirmations.

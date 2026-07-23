@@ -2,9 +2,13 @@ using ADS.Models;
 
 namespace ADS.Services;
 
+internal static class ShopPurchaseTiming
+{
+    public static readonly TimeSpan ConfirmationAndVerificationTimeout = TimeSpan.FromSeconds(10);
+}
+
 internal sealed class ShopConfirmationToken
 {
-    private static readonly TimeSpan MaximumAge = TimeSpan.FromSeconds(5);
     private readonly IReadOnlyDictionary<ShopCurrencyIdentity, long> expectedCosts;
     private bool consumed;
 
@@ -46,12 +50,12 @@ internal sealed class ShopConfirmationToken
         if (!CanConsume(observedAtUtc) || string.IsNullOrWhiteSpace(prompt))
             return false;
         var normalized = prompt.Trim();
-        if (!normalized.Contains(ItemName, StringComparison.CurrentCultureIgnoreCase)
-            || !normalized.Contains(Quantity.ToString(System.Globalization.CultureInfo.CurrentCulture), StringComparison.CurrentCulture))
+        if (!ContainsExactText(normalized, ItemName)
+            || !ContainsExactDisplayNumber(normalized, Quantity))
             return false;
         foreach (var amount in expectedCosts.Values)
         {
-            if (!normalized.Contains(amount.ToString(System.Globalization.CultureInfo.CurrentCulture), StringComparison.CurrentCulture))
+            if (!ContainsExactDisplayNumber(normalized, amount))
                 return false;
         }
         consumed = true;
@@ -61,5 +65,47 @@ internal sealed class ShopConfirmationToken
     private bool CanConsume(DateTime observedAtUtc)
         => !consumed
             && observedAtUtc >= CreatedAtUtc
-            && observedAtUtc - CreatedAtUtc <= MaximumAge;
+            && observedAtUtc - CreatedAtUtc <= ShopPurchaseTiming.ConfirmationAndVerificationTimeout;
+
+    private static bool ContainsExactDisplayNumber(string prompt, long value)
+    {
+        var display = value.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        var searchStart = 0;
+        while (searchStart <= prompt.Length - display.Length)
+        {
+            var index = prompt.IndexOf(display, searchStart, StringComparison.CurrentCulture);
+            if (index < 0)
+                return false;
+            var beforeIsDigit = index > 0 && char.IsDigit(prompt[index - 1]);
+            var after = index + display.Length;
+            var afterIsDigit = after < prompt.Length && char.IsDigit(prompt[after]);
+            if (!beforeIsDigit && !afterIsDigit)
+                return true;
+            searchStart = index + display.Length;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsExactText(string prompt, string expected)
+    {
+        if (string.IsNullOrWhiteSpace(expected))
+            return false;
+
+        var searchStart = 0;
+        while (searchStart <= prompt.Length - expected.Length)
+        {
+            var index = prompt.IndexOf(expected, searchStart, StringComparison.CurrentCultureIgnoreCase);
+            if (index < 0)
+                return false;
+            var beforeIsWord = index > 0 && char.IsLetterOrDigit(prompt[index - 1]);
+            var after = index + expected.Length;
+            var afterIsWord = after < prompt.Length && char.IsLetterOrDigit(prompt[after]);
+            if (!beforeIsWord && !afterIsWord)
+                return true;
+            searchStart = index + expected.Length;
+        }
+
+        return false;
+    }
 }

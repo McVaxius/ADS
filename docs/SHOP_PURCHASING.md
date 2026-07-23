@@ -35,7 +35,7 @@ ADS builds a lazy local catalog from installed Lumina sheets and game files. It 
 - `InclusionShop` to category, series, and `SpecialShop`;
 - `GCShop` and `FccShop`.
 
-Sheet callback indexes remain diagnostic. At every visible selection step, ADS matches the expected handler ID against the selected NPC's live event-handler options and requires exactly one live match. Hidden/dynamic entries therefore remap safely, and ADS never probes adjacent indexes.
+Sheet and event-handler `LocalIndex` values remain diagnostic. At every visible selection step, ADS matches the expected handler ID against the selected NPC's live event-handler options, requires exactly one live match, validates its `GlobalIndex` against the live options array, and sends that global callback index. Hidden/dynamic and nested entries therefore remap safely, and ADS never probes adjacent indexes.
 
 Teleport routes join each real `Aetheryte` to its exact `Map` and the map's exact aetheryte `MapMarker`; marker X/Y values are converted back to world X/Z with the map size factor and offsets. A map/territory mismatch, missing marker, or duplicate matching marker is never guessed.
 
@@ -49,7 +49,7 @@ Before travel, ADS checks completed quests, Inclusion unlock quests, current Gra
 
 Unaffordable and unreachable offers are ignored. If affordable offers spend different currency identities, ADS returns `ambiguous-currency`. Within one currency set, a component-wise cheaper offer wins; incomparable costs remain ambiguous. Exact-cost ties prefer the current territory, no teleport, the shortest unlocked-aetheryte route, then stable shop and NPC IDs.
 
-Fallback is limited to offers for the exact requested item and quantity with the same currency identities and exact total cost, and can occur only before any purchase callback has been sent. Each candidate's own receive bundle must still produce the requested quantity exactly and validate live. ADS never substitutes another item, silently changes currency, or accepts a more expensive offer. Floor resolution, travel, NPC presence, interaction, menu opening, and live validation failures may advance to the next ranked candidate. Owned navigation is stopped and owned shop UI is closed before switching. If validation fails for every candidate, the terminal result is `ui-mismatch` with zero callbacks for invalid candidates.
+Fallback is limited to offers for the exact requested item and quantity with the same currency identities and exact total cost, and can occur only before any purchase callback has been sent. Each candidate's own receive bundle must still produce the requested quantity exactly and validate live. ADS never substitutes another item, silently changes currency, or accepts a more expensive offer. Floor resolution, travel, NPC presence, interaction, menu opening, and live validation failures may advance to the next ranked candidate. Owned navigation must be confirmed stopped and owned shop UI is closed before switching. If validation fails for every candidate, the terminal result is `ui-mismatch` with zero callbacks for invalid candidates.
 
 ## Offline Catalog Regeneration
 
@@ -65,7 +65,9 @@ python -m unittest discover -s tools/tests -p "test_*.py" -v
 
 vnavmesh is required to approach the resolved NPC. Lifestream is required only for a selected cross-territory route, and ADS requires an unlocked aetheryte. An accepted teleport command is sent once per attempted candidate and monitored for up to 90 seconds without resending.
 
-Offline catalog rows intentionally contain X/Z only. After ADS enters the selected territory, it first uses a visible live NPC's full X/Y/Z position. Otherwise it asks `vnavmesh.Query.Mesh.PointOnFloor` for the floor at the catalog X/Z and waits up to 20 seconds before falling back. ADS sends one `/vnav moveto` command and, once accepted, monitors NPC distance for up to 120 seconds without resending. If the live NPC appears materially away from the approximate catalog destination, ADS stops its owned movement and retargets once to the live full position. A rejected movement command send is retried at most three times. Owned navigation is stopped before interaction, menu work, callbacks, fallback, cancellation, or failure. A shop, selection window, or confirmation dialog appearing unexpectedly during navigation produces `ui-mismatch` and no callback.
+Offline catalog rows intentionally contain X/Z only. After ADS enters the selected territory, it first uses a visible live NPC's full X/Y/Z position. Otherwise it asks `vnavmesh.Query.Mesh.PointOnFloor` for the floor at the catalog X/Z and waits up to 20 seconds before falling back. ADS sends one `/vnav moveto` command and, once accepted, monitors NPC distance for up to 120 seconds without resending. If the live NPC appears materially away from the approximate catalog destination, ADS stops its owned movement and retargets once to the live full position. A rejected movement command send is retried at most three times.
+
+Owned movement cleanup invokes `vnavmesh.Path.Stop` and requires `vnavmesh.Path.IsRunning == false`. `/vnav stop` is a compatibility fallback only; sending it without a readable `Path.IsRunning` result is not treated as success. The `stopping-navigation` phase makes at most three stop attempts two seconds apart. ADS does not interact, select a menu, issue replacement movement, or advance to another candidate until the owned path is confirmed stopped. Three `StillRunning` or `Unverified` results terminate as `no-route` without an NPC or purchase callback; terminal cleanup makes one final best-effort stop and records an unverified result. A shop, selection window, or confirmation dialog appearing unexpectedly during navigation produces `ui-mismatch` and no callback.
 
 Before every purchase callback, ADS validates the runtime surface owned by that shop adapter:
 
@@ -86,9 +88,9 @@ Callbacks use the validated addon only:
 - `GrandCompanyExchange`: the validated row and exact bounded quantity;
 - `FreeCompanyCreditShop`: `(0, row, batch)`.
 
-Each callback is capped at `99` transactions. ADS then waits up to ten seconds for every exact output increase and every exact currency decrease. It never blindly resends a callback. A missing delta times out; a contradictory delta returns `ui-mismatch`. Verified inventory, coproduct capacity, currency, and live UI are checked again before another batch. A requested/output item or tracked-currency change outside ADS's verified callback window, cancellation, or any failure after a callback is immediate and never triggers vendor fallback.
+Each callback is capped at `99` transactions. ADS then uses one shared ten-second confirmation/verification window for an owned prompt, every exact output increase, and every exact currency decrease. It never blindly resends a callback. A missing delta times out; a contradictory delta returns `ui-mismatch`. Verified inventory, coproduct capacity, currency, and live UI are checked again before another batch. A requested/output item or tracked-currency change outside ADS's verified callback window, cancellation, or any failure after a callback is immediate and never triggers vendor fallback.
 
-An immediate confirmation created by ADS's validated callback receives a single owned token containing the expected item, quantity, and costs. Structured dialog values or localized prompt text must match before ADS accepts it. Pre-existing, late, duplicate, and mismatched confirmations remain `ui-mismatch`.
+An immediate confirmation created by ADS's validated callback receives a single-use owned token containing the expected item, quantity, and every currency amount. A readable structured dialog or localized prompt that matches exactly is accepted once through ten seconds. An expired, duplicate, or readable mismatched confirmation remains `ui-mismatch`; an unreadable owned prompt times out without resending the purchase callback or advancing to a fallback.
 
 Travel is bounded to 90 seconds, offline floor resolution to 20 seconds, navigation to 120 seconds, shop opening to 20 seconds, relevant command retries to three, and the whole run to five minutes.
 

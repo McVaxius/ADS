@@ -39,6 +39,13 @@ internal readonly record struct ShopRuntimeExchangeItem(uint ItemId, uint ItemCo
 
 internal readonly record struct ShopRuntimeGilItem(uint ItemId, int PriceBuy, bool IsHq);
 
+internal enum ShopNavigationStopResult
+{
+    Stopped,
+    StillRunning,
+    Unverified,
+}
+
 internal static class RegularGilShopRuntimeValidator
 {
     public static ShopUiValidationResult Validate(
@@ -203,7 +210,7 @@ internal interface IShopPurchaseRuntime
     bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition);
     bool TryTeleport(ResolvedShopRoute route);
     bool TryMove(Vector3 destination, string label);
-    void StopNavigation();
+    ShopNavigationStopResult TryStopNavigation();
     bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc);
     bool TryInteractNpc(uint npcId);
     bool IsExpectedShopVisible(ShopOfferKind kind);
@@ -225,6 +232,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     IPluginLog log) : IShopPurchaseRuntime
 {
     private const string PointOnFloorIpc = "vnavmesh.Query.Mesh.PointOnFloor";
+    private const string PathStopIpc = "vnavmesh.Path.Stop";
+    private const string PathIsRunningIpc = "vnavmesh.Path.IsRunning";
     private const float FloorQueryHalfExtent = 5f;
     private DateTime nextFloorQueryFailureLogUtc = DateTime.MinValue;
     private string inclusionRouteKey = string.Empty;
@@ -526,8 +535,31 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return sent;
     }
 
-    public void StopNavigation()
-        => GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
+    public ShopNavigationStopResult TryStopNavigation()
+    {
+        var ipcStopInvoked = false;
+        try
+        {
+            Plugin.PluginInterface.GetIpcSubscriber<object>(PathStopIpc).InvokeAction();
+            ipcStopInvoked = true;
+        }
+        catch (Exception ex)
+        {
+            log.Debug(ex, "[ADS][Shop] vnavmesh Path.Stop IPC was unavailable; trying the compatibility command.");
+        }
+
+        if (ipcStopInvoked && TryGetNavigationRunning(out var runningAfterIpc))
+            return runningAfterIpc
+                ? ShopNavigationStopResult.StillRunning
+                : ShopNavigationStopResult.Stopped;
+
+        GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
+        return TryGetNavigationRunning(out var runningAfterFallback)
+            ? runningAfterFallback
+                ? ShopNavigationStopResult.StillRunning
+                : ShopNavigationStopResult.Stopped
+            : ShopNavigationStopResult.Unverified;
+    }
 
     public bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc)
     {
@@ -631,6 +663,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 var option = selector->Options[index];
                 options[index] = new ShopRuntimeMenuOption(
                     option.Handler == null ? 0 : option.Handler->Info.EventId.Id,
+                    option.GlobalIndex,
                     option.LocalIndex);
             }
 
@@ -798,6 +831,21 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         grandCompanySelectionStage = 0;
         readableOwnedSelectYesNoPrompt = null;
         confirmationToken = null;
+    }
+
+    private bool TryGetNavigationRunning(out bool running)
+    {
+        try
+        {
+            running = Plugin.PluginInterface.GetIpcSubscriber<bool>(PathIsRunningIpc).InvokeFunc();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            running = true;
+            log.Debug(ex, "[ADS][Shop] vnavmesh Path.IsRunning IPC was unavailable; navigation stop is unverified.");
+            return false;
+        }
     }
 
     private ShopUiValidationResult ValidateInclusionShop(EvaluatedShopOffer offer)

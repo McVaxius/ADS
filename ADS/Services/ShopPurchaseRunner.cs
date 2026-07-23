@@ -20,6 +20,7 @@ internal sealed class ShopPurchaseRunner
         Resolving,
         Teleporting,
         Navigating,
+        StoppingNavigation,
         Interacting,
         OpeningMenu,
         ValidatingUi,
@@ -35,7 +36,6 @@ internal sealed class ShopPurchaseRunner
     private static readonly TimeSpan FloorResolutionTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan NavigationTimeout = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan ShopOpeningTimeout = TimeSpan.FromSeconds(20);
-    private static readonly TimeSpan DeltaTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ActionRetryDelay = TimeSpan.FromSeconds(2);
     private const int MaximumAttempts = 3;
     private const int MaximumTransactionsPerCallback = 99;
@@ -68,6 +68,7 @@ internal sealed class ShopPurchaseRunner
     private bool navigationOwned;
     private System.Numerics.Vector3? navigationDestination;
     private bool navigationUsingLiveNpc;
+    private Action? navigationStoppedContinuation;
     private bool shopUiOwned;
     private bool interactionSent;
     private int callbackTransactions;
@@ -146,6 +147,7 @@ internal sealed class ShopPurchaseRunner
         navigationOwned = false;
         navigationDestination = null;
         navigationUsingLiveNpc = false;
+        navigationStoppedContinuation = null;
         shopUiOwned = false;
         interactionSent = false;
         callbackTransactions = 0;
@@ -247,10 +249,17 @@ internal sealed class ShopPurchaseRunner
                     {
                         return;
                     }
-                    StopOwnedNavigation();
                     Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
                     return;
                 }
+
+                if (clock.UtcNow - phaseStartedAtUtc > ShopPurchaseTiming.ConfirmationAndVerificationTimeout)
+                {
+                    Fail(
+                        ShopPurchaseFailureCodes.Timeout,
+                        "Timed out waiting for the owned confirmation prompt to become readable; ADS did not resend the purchase callback.");
+                }
+                return;
             }
 
             if (phase != RunnerPhase.VerifyingInventory
@@ -271,6 +280,9 @@ internal sealed class ShopPurchaseRunner
                     break;
                 case RunnerPhase.Navigating:
                     UpdateNavigating();
+                    break;
+                case RunnerPhase.StoppingNavigation:
+                    UpdateStoppingNavigation();
                     break;
                 case RunnerPhase.Interacting:
                     UpdateInteracting();
@@ -416,14 +428,12 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.HasUnexpectedConfirmation)
         {
-            StopOwnedNavigation();
             Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared during navigation; ADS did not accept it.");
             return;
         }
 
         if (runtime.IsAnyShopVisible || runtime.IsSelectionMenuVisible)
         {
-            StopOwnedNavigation();
             Fail(ShopPurchaseFailureCodes.UiMismatch, "A shop or selection window appeared unexpectedly during navigation; ADS stopped before interaction.");
             return;
         }
@@ -456,9 +466,13 @@ internal sealed class ShopPurchaseRunner
         var distance = hasNpc ? npc.Distance : System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination);
         if (distance <= InteractionDistance)
         {
-            StopOwnedNavigation();
-            interactionSent = false;
-            SetPhase(RunnerPhase.Interacting, $"Interacting with {selected.Offer.NpcName}.");
+            BeginStoppingNavigation(
+                $"Stopping navigation before interacting with {selected.Offer.NpcName}.",
+                () =>
+                {
+                    interactionSent = false;
+                    SetPhase(RunnerPhase.Interacting, $"Interacting with {selected.Offer.NpcName}.");
+                });
             return;
         }
 
@@ -469,14 +483,20 @@ internal sealed class ShopPurchaseRunner
                 new System.Numerics.Vector2(navigationDestination!.Value.X, navigationDestination.Value.Z));
             if (horizontalDifference > LiveNpcRetargetDistance)
             {
-                StopOwnedNavigation();
-                navigationDestination = npc.Position;
-                navigationUsingLiveNpc = true;
-                phaseAttempts = 0;
-                lastActionAtUtc = DateTime.MinValue;
-                diagnostic(
-                    $"Live NPC position replaced the approximate catalog destination; retargeting by {horizontalDifference:F2} world units.");
-                TryMoveNow(npc.Position);
+                var navigationStartedAtUtcBeforeRetarget = phaseStartedAtUtc;
+                var liveNpcPosition = npc.Position;
+                BeginStoppingNavigation(
+                    $"Stopping navigation before retargeting the live position of {selected.Offer.NpcName}.",
+                    () =>
+                    {
+                        navigationDestination = liveNpcPosition;
+                        navigationUsingLiveNpc = true;
+                        SetPhase(RunnerPhase.Navigating, $"Retargeting the live position of {selected.Offer.NpcName}.");
+                        phaseStartedAtUtc = navigationStartedAtUtcBeforeRetarget;
+                        diagnostic(
+                            $"Live NPC position replaced the approximate catalog destination; retargeting by {horizontalDifference:F2} world units.");
+                        TryMoveNow(liveNpcPosition);
+                    });
                 return;
             }
 
@@ -566,6 +586,67 @@ internal sealed class ShopPurchaseRunner
             SetStatus($"vnavmesh movement command send {phaseAttempts} of {MaximumAttempts} failed; waiting to retry.");
             diagnostic($"Navigation command send {phaseAttempts} of {MaximumAttempts} failed.");
         }
+    }
+
+    private void BeginStoppingNavigation(string message, Action continuation)
+    {
+        if (!navigationOwned)
+        {
+            continuation();
+            return;
+        }
+
+        navigationStoppedContinuation = continuation;
+        SetPhase(RunnerPhase.StoppingNavigation, message);
+        TryStopNavigationNow();
+    }
+
+    private void UpdateStoppingNavigation()
+    {
+        if (!navigationOwned)
+        {
+            ContinueAfterNavigationStopped();
+            return;
+        }
+
+        if (clock.UtcNow - lastActionAtUtc >= ActionRetryDelay)
+            TryStopNavigationNow();
+    }
+
+    private void TryStopNavigationNow()
+    {
+        if (!navigationOwned || phaseAttempts >= MaximumAttempts)
+            return;
+
+        phaseAttempts++;
+        lastActionAtUtc = clock.UtcNow;
+        var result = runtime.TryStopNavigation();
+        diagnostic($"Navigation stop attempt {phaseAttempts} of {MaximumAttempts}: {result}.");
+        if (result == ShopNavigationStopResult.Stopped)
+        {
+            navigationOwned = false;
+            ContinueAfterNavigationStopped();
+            return;
+        }
+
+        SetStatus(
+            result == ShopNavigationStopResult.StillRunning
+                ? $"Navigation is still running after stop attempt {phaseAttempts} of {MaximumAttempts}; waiting to retry."
+                : $"Navigation stop attempt {phaseAttempts} of {MaximumAttempts} could not be verified; waiting to retry.");
+        if (phaseAttempts < MaximumAttempts)
+            return;
+
+        navigationStoppedContinuation = null;
+        Fail(
+            ShopPurchaseFailureCodes.NoRoute,
+            $"ADS could not verify that its navigation path stopped after {MaximumAttempts} attempts; no NPC or purchase callback was sent.");
+    }
+
+    private void ContinueAfterNavigationStopped()
+    {
+        var continuation = navigationStoppedContinuation;
+        navigationStoppedContinuation = null;
+        continuation?.Invoke();
     }
 
     private void UpdateInteracting()
@@ -861,7 +942,7 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (clock.UtcNow - phaseStartedAtUtc > DeltaTimeout)
+        if (clock.UtcNow - phaseStartedAtUtc > ShopPurchaseTiming.ConfirmationAndVerificationTimeout)
         {
             Fail(ShopPurchaseFailureCodes.Timeout, "Timed out waiting for the exact item and currency deltas; ADS did not resend the callback.");
             return;
@@ -878,7 +959,14 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        StopOwnedNavigation();
+        if (navigationOwned)
+        {
+            BeginStoppingNavigation(
+                "Stopping navigation before leaving the current shop candidate.",
+                () => TryFallbackOrFail(failureCode, message, isUiCandidateFailure));
+            return;
+        }
+
         CloseOwnedShopUi();
         var failedCandidate = selected;
         var failureSummary = failedCandidate == null
@@ -952,9 +1040,14 @@ internal sealed class ShopPurchaseRunner
 
     private void Finish(bool succeeded, RunnerPhase terminalPhase, string? failureCode, string message)
     {
-        StopOwnedNavigation();
+        var stopResult = TryFinalNavigationStop();
+        if (stopResult == ShopNavigationStopResult.StillRunning)
+            message += " Final navigation cleanup reported that the owned path was still running.";
+        else if (stopResult == ShopNavigationStopResult.Unverified)
+            message += " Final navigation cleanup could not verify that the owned path stopped.";
         RefreshAcquiredTruth();
         CloseOwnedShopUi();
+        navigationStoppedContinuation = null;
         var previous = phase;
         phase = terminalPhase;
         diagnostic($"Phase {PhaseName(previous)} -> {PhaseName(terminalPhase)}: {message}");
@@ -1012,12 +1105,16 @@ internal sealed class ShopPurchaseRunner
         };
     }
 
-    private void StopOwnedNavigation()
+    private ShopNavigationStopResult? TryFinalNavigationStop()
     {
         if (!navigationOwned)
-            return;
-        runtime.StopNavigation();
-        navigationOwned = false;
+            return null;
+
+        var result = runtime.TryStopNavigation();
+        diagnostic($"Terminal navigation cleanup: {result}.");
+        if (result == ShopNavigationStopResult.Stopped)
+            navigationOwned = false;
+        return result;
     }
 
     private void ReportValidation(ShopUiValidationResult validation)
@@ -1165,6 +1262,7 @@ internal sealed class ShopPurchaseRunner
             RunnerPhase.Resolving => "resolving",
             RunnerPhase.Teleporting => "teleporting",
             RunnerPhase.Navigating => "navigating",
+            RunnerPhase.StoppingNavigation => "stopping-navigation",
             RunnerPhase.Interacting => "interacting",
             RunnerPhase.OpeningMenu => "opening-menu",
             RunnerPhase.ValidatingUi => "validating-ui",

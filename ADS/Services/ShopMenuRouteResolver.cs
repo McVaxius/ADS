@@ -2,7 +2,10 @@ using ADS.Models;
 
 namespace ADS.Services;
 
-internal readonly record struct ShopRuntimeMenuOption(uint HandlerId, int VisibleIndex);
+internal readonly record struct ShopRuntimeMenuOption(
+    uint HandlerId,
+    int GlobalCallbackIndex,
+    int LocalDiagnosticIndex);
 
 internal static class ShopMenuRouteResolver
 {
@@ -22,24 +25,37 @@ internal static class ShopMenuRouteResolver
         }
 
         var matches = 0;
+        ShopRuntimeMenuOption matchedOption = default;
         foreach (var option in visibleOptions)
         {
-            if (option.HandlerId != expected.HandlerId || option.VisibleIndex < 0)
+            if (option.HandlerId != expected.HandlerId)
                 continue;
             matches++;
-            visibleIndex = option.VisibleIndex;
+            matchedOption = option;
         }
 
-        if (matches == 1)
+        if (matches != 1)
         {
-            diagnostic = $"Resolved handler {expected.HandlerId} to unique live menu index {visibleIndex}; sheet index {expected.Index} was diagnostic only.";
-            return true;
+            diagnostic = matches == 0
+                ? $"Handler {expected.HandlerId} is not present in the selected NPC's live menu."
+                : $"Handler {expected.HandlerId} appears {matches} times in the live menu; ADS will not guess.";
+            return false;
         }
 
-        visibleIndex = -1;
-        diagnostic = matches == 0
-            ? $"Handler {expected.HandlerId} is not present in the selected NPC's live menu."
-            : $"Handler {expected.HandlerId} appears {matches} times in the live menu; ADS will not guess.";
-        return false;
+        if (matchedOption.GlobalCallbackIndex < 0
+            || matchedOption.GlobalCallbackIndex >= visibleOptions.Length)
+        {
+            diagnostic =
+                $"Handler {expected.HandlerId} exposed invalid global callback index {matchedOption.GlobalCallbackIndex} "
+                + $"for {visibleOptions.Length} live options; local index {matchedOption.LocalDiagnosticIndex} "
+                + $"and sheet index {expected.Index} are diagnostic only.";
+            return false;
+        }
+
+        visibleIndex = matchedOption.GlobalCallbackIndex;
+        diagnostic =
+            $"Resolved handler {expected.HandlerId} to unique global callback index {visibleIndex}; "
+            + $"local index {matchedOption.LocalDiagnosticIndex} and sheet index {expected.Index} were diagnostic only.";
+        return true;
     }
 }

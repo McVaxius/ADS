@@ -349,6 +349,142 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void DelayedNavigationStopBlocksInteractionUntilConfirmed()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.StillRunning);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.Stopped);
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        runner.Update();
+
+        Assert.Equal("stopping-navigation", runner.Status.Phase);
+        Assert.Equal(1, runtime.StopNavigationCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.MenuSelectCount);
+        Assert.Equal(0, runtime.SubmitCount);
+
+        clock.Advance(TimeSpan.FromSeconds(2.1));
+        runner.Update();
+        Assert.Equal("interacting", runner.Status.Phase);
+        Assert.Empty(runtime.InteractedNpcIds);
+
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(2, runtime.StopNavigationCount);
+        Assert.True(runtime.Events.LastIndexOf("stop-navigation") < runtime.Events.IndexOf("interact:100"));
+    }
+
+    [Theory]
+    [InlineData((int)ShopNavigationStopResult.StillRunning)]
+    [InlineData((int)ShopNavigationStopResult.Unverified)]
+    public void PersistentUnstoppedNavigationTerminatesNoRouteWithoutCallbacks(
+        int stopResultValue)
+    {
+        var stopResult = (ShopNavigationStopResult)stopResultValue;
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime();
+        for (var index = 0; index < 4; index++)
+            runtime.NavigationStopResults.Enqueue(stopResult);
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        runner.Update();
+        for (var index = 0; index < 2 && runner.IsRunning; index++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(2.1));
+            runner.Update();
+        }
+
+        Assert.False(runner.IsRunning);
+        Assert.Equal(ShopPurchaseFailureCodes.NoRoute, runner.Status.FailureCode);
+        Assert.Equal(4, runtime.StopNavigationCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.MenuSelectCount);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Contains(
+            stopResult == ShopNavigationStopResult.Unverified ? "could not verify" : "still running",
+            runner.Status.FailureMessage,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CandidateFallbackCannotMoveUntilPreviousNavigationStopIsConfirmed()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NpcDistances[100] = 100;
+        runtime.NpcDistances[101] = 0;
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.StillRunning);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.Stopped);
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, 100, 1), Offer(11, 101, 1)])),
+            runtime,
+            clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        clock.Advance(TimeSpan.FromSeconds(121));
+        runner.Update();
+
+        Assert.Equal("stopping-navigation", runner.Status.Phase);
+        Assert.Equal(["move:NPC 100", "stop-navigation"], runtime.Events);
+        Assert.DoesNotContain(101u, runtime.InteractedNpcIds);
+
+        clock.Advance(TimeSpan.FromSeconds(2.1));
+        runner.Update();
+        Assert.True(runtime.Events.LastIndexOf("stop-navigation") < runtime.Events.IndexOf("move:NPC 101"));
+
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal([101u], runtime.SubmittedNpcIds);
+    }
+
+    [Fact]
+    public void LiveNpcRetargetCannotMoveUntilPreviousNavigationStopIsConfirmed()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+            FloorPosition = new Vector3(10, 3, 10),
+        };
+        runtime.MissingNpcIds.Add(100);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.StillRunning);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.Stopped);
+        var offlineOffer = Offer(10, 100, 1) with
+        {
+            NpcPosition = new Vector3(10, 0, 10),
+            RequiresFloorResolution = true,
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offlineOffer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        runner.Update();
+
+        runtime.MissingNpcIds.Remove(100);
+        runtime.NpcPositions[100] = new Vector3(20, 5, 20);
+        runtime.NpcDistances[100] = 20;
+        runner.Update();
+
+        Assert.Equal("stopping-navigation", runner.Status.Phase);
+        Assert.Equal([new Vector3(10, 3, 10)], runtime.MoveDestinations);
+
+        clock.Advance(TimeSpan.FromSeconds(2.1));
+        runner.Update();
+        Assert.Equal([new Vector3(10, 3, 10), new Vector3(20, 5, 20)], runtime.MoveDestinations);
+        Assert.True(runtime.Events.LastIndexOf("stop-navigation") < runtime.Events.IndexOf("move:NPC 100", 1));
+
+        runtime.NpcDistances[100] = 0;
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+    }
+
+    [Fact]
     public void AcceptedTeleportPersistsWithoutDuplicateCommands()
     {
         var clock = new FakeClock();
@@ -836,6 +972,7 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(0, runtime.AcceptedConfirmationCount);
         Assert.Equal(1, runtime.SubmitCount);
 
+        clock.Advance(TimeSpan.FromSeconds(5));
         runner.Update();
         Assert.Equal(1, runtime.AcceptedConfirmationCount);
         runtime.ItemCount = 1;
@@ -844,6 +981,60 @@ public sealed class ShopPurchaseRunnerTests
 
         Assert.True(runner.Status.Succeeded);
         Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void OwnedConfirmationAtTenSecondsIsAcceptedExactlyOnce()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = true,
+        };
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        clock.Advance(TimeSpan.FromSeconds(10));
+        runner.Update();
+
+        Assert.Equal(1, runtime.AcceptedConfirmationCount);
+        Assert.Equal(1, runtime.SubmitCount);
+        runtime.ItemCount = 1;
+        runtime.AdjustCurrency(new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500), -1);
+        runner.Update();
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.AcceptedConfirmationCount);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void UnreadableOwnedConfirmationTimesOutWithoutResendOrFallback()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = true,
+            UnreadableOwnedConfirmationChecks = int.MaxValue,
+        };
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, 100, 1), Offer(11, 101, 1)])),
+            runtime,
+            clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        clock.Advance(TimeSpan.FromSeconds(10).Add(TimeSpan.FromTicks(1)));
+        runner.Update();
+
+        Assert.Equal(ShopPurchaseFailureCodes.Timeout, runner.Status.FailureCode);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(0, runtime.AcceptedConfirmationCount);
+        Assert.DoesNotContain(101u, runtime.InteractedNpcIds);
+        Assert.Contains("did not resend", runner.Status.FailureMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1072,6 +1263,7 @@ public sealed class ShopPurchaseRunnerTests
         public Queue<bool> TeleportArrivalResults { get; } = [];
         public Queue<bool> MenuSelectResults { get; } = [];
         public Queue<bool> FloorResults { get; } = [];
+        public Queue<ShopNavigationStopResult> NavigationStopResults { get; } = [];
 
         public bool IsAetheryteUnlocked(uint aetheryteId) => true;
         public bool IsQuestComplete(uint questId) => true;
@@ -1104,10 +1296,13 @@ public sealed class ShopPurchaseRunnerTests
             Events.Add($"move:{label}");
             return MoveResults.Count == 0 || MoveResults.Dequeue();
         }
-        public void StopNavigation()
+        public ShopNavigationStopResult TryStopNavigation()
         {
             StopNavigationCount++;
             Events.Add("stop-navigation");
+            return NavigationStopResults.Count == 0
+                ? ShopNavigationStopResult.Stopped
+                : NavigationStopResults.Dequeue();
         }
 
         public bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc)

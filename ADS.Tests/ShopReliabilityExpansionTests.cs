@@ -7,33 +7,69 @@ namespace ADS.Tests;
 public sealed class ShopReliabilityExpansionTests
 {
     [Fact]
-    public void LiveMenuResolverUsesUniqueHandlerAndIgnoresSheetIndex()
+    public void LiveMenuResolverUsesGlobalCallbackIndexAcrossNestedPath()
     {
-        var step = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 99, 262_191);
+        var firstStep = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 3, 3_276_827);
 
-        var accepted = ShopMenuRouteResolver.TryResolveVisibleIndex(
+        var firstAccepted = ShopMenuRouteResolver.TryResolveVisibleIndex(
             1_001_276,
             1_001_276,
-            step,
-            [new(8, 0), new(262_191, 5)],
-            out var liveIndex,
-            out var diagnostic);
+            firstStep,
+            [
+                new(8, 0, 0),
+                new(9, 1, 1),
+                new(3_276_827, 2, 3),
+                new(10, 3, 4),
+                new(11, 4, 5),
+            ],
+            out var firstCallback,
+            out var firstDiagnostic);
+        var nestedStep = new ShopMenuPathStep(ShopMenuPathStepKind.TopicSelectShop, 1, 262_191);
+        var nestedAccepted = ShopMenuRouteResolver.TryResolveVisibleIndex(
+            1_001_276,
+            1_001_276,
+            nestedStep,
+            [
+                new(20, 0, 0),
+                new(21, 1, 1),
+                new(22, 2, 2),
+                new(23, 3, 3),
+                new(262_191, 4, 1),
+            ],
+            out var nestedCallback,
+            out _);
 
-        Assert.True(accepted);
-        Assert.Equal(5, liveIndex);
-        Assert.Contains("diagnostic only", diagnostic, StringComparison.Ordinal);
+        Assert.True(firstAccepted);
+        Assert.Equal(2, firstCallback);
+        Assert.Contains("local index 3", firstDiagnostic, StringComparison.Ordinal);
+        Assert.Contains("sheet index 3", firstDiagnostic, StringComparison.Ordinal);
+        Assert.True(nestedAccepted);
+        Assert.Equal(4, nestedCallback);
+    }
+
+    [Fact]
+    public void LiveMenuResolverRejectsDuplicateHandlerTargetMismatchAndInvalidGlobalIndex()
+    {
+        var step = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 3, 3_276_827);
         Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
             1_001_276,
             1_001_276,
             step,
-            [new(262_191, 4), new(262_191, 5)],
+            [new(3_276_827, 0, 3), new(3_276_827, 1, 4)],
             out _,
             out _));
         Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
             1_001_276,
             1_000_238,
             step,
-            [new(262_191, 5)],
+            [new(3_276_827, 0, 3)],
+            out _,
+            out _));
+        Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
+            1_001_276,
+            1_001_276,
+            step,
+            [new(3_276_827, 1, 3)],
             out _,
             out _));
     }
@@ -191,10 +227,17 @@ public sealed class ShopReliabilityExpansionTests
     }
 
     [Fact]
-    public void ConfirmationTokenIsImmediateSingleUseAndExact()
+    public void ConfirmationTokenUsesSharedTenSecondBoundaryAndRemainsExactSingleUse()
     {
         var evaluated = new EvaluatedShopOffer(
-            Offer(false, ShopCurrencyKind.Item, 500),
+            Offer(false, ShopCurrencyKind.Item, 500) with
+            {
+                Currencies =
+                [
+                    new ShopCurrencyCost(ShopCurrencyKind.Item, 500, "Fixture Token", 1),
+                    new ShopCurrencyCost(ShopCurrencyKind.Item, 501, "Other Token", 3),
+                ],
+            },
             null,
             [],
             true,
@@ -206,12 +249,37 @@ public sealed class ShopReliabilityExpansionTests
         var costs = new Dictionary<ShopCurrencyIdentity, long>
         {
             [new(ShopCurrencyKind.Item, 500)] = 2,
+            [new(ShopCurrencyKind.Item, 501)] = 6,
         };
 
         Assert.False(token.TryConsumeStructured(100, 1, costs, created));
-        Assert.False(token.TryConsumeStructured(100, 2, costs, created.AddSeconds(6)));
-        Assert.True(token.TryConsumeStructured(100, 2, costs, created.AddMilliseconds(10)));
-        Assert.False(token.TryConsumeStructured(100, 2, costs, created.AddMilliseconds(20)));
+        Assert.False(token.TryConsumeStructured(101, 2, costs, created.AddSeconds(5)));
+        Assert.False(token.TryConsumeStructured(
+            100,
+            2,
+            new Dictionary<ShopCurrencyIdentity, long>
+            {
+                [new(ShopCurrencyKind.Item, 500)] = 2,
+                [new(ShopCurrencyKind.Item, 501)] = 5,
+            },
+            created.AddSeconds(5)));
+        Assert.True(token.TryConsumeStructured(100, 2, costs, created.AddSeconds(10)));
+        Assert.False(token.TryConsumeStructured(100, 2, costs, created.AddSeconds(10)));
+
+        var expired = new ShopConfirmationToken(evaluated, 2, created);
+        Assert.False(expired.TryConsumeStructured(100, 2, costs, created.AddSeconds(10).AddTicks(1)));
+
+        var prompt = new ShopConfirmationToken(evaluated, 2, created);
+        Assert.True(prompt.TryConsumePrompt("Purchase 2 Fixture for 2 Fixture Token and 6 Other Token?", created.AddSeconds(5)));
+        Assert.False(prompt.TryConsumePrompt("Purchase 2 Fixture for 2 Fixture Token and 6 Other Token?", created.AddSeconds(6)));
+
+        var mismatchedPrompt = new ShopConfirmationToken(evaluated, 2, created);
+        Assert.False(mismatchedPrompt.TryConsumePrompt("Purchase 20 Fixture for 20 Fixture Token and 60 Other Token?", created.AddSeconds(5)));
+
+        var mismatchedItemPrompt = new ShopConfirmationToken(evaluated, 2, created);
+        Assert.False(mismatchedItemPrompt.TryConsumePrompt(
+            "Purchase 2 OtherFixture for costs 2 and 6?",
+            created.AddSeconds(5)));
     }
 
     private static ShopOffer Offer(bool hasUnknownGate, ShopCurrencyKind currencyKind, uint currencyItemId)
