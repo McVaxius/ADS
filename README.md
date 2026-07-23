@@ -10,7 +10,7 @@ ADS includes policy-driven desynthesis with local presets, skill-up filtering, t
 
 ## Shop Purchasing
 
-ADS can resolve supported vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. V1 supports regular gil shops and single-output `SpecialShop` exchanges paid entirely with inventory items or tomestones. Safe vendor fallback never changes the requested item, currency identities, or exact total cost. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
+ADS can resolve deterministic NPC vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. Supported families include gil, direct/FATE-routed special exchanges, Inclusion, Grand Company, and Free Company shops, including exact divisible coproduct bundles and mixed one-to-three-currency costs. Turn-in, sale, random, ambiguous, and unprovable offers remain callback-free. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
 
 ## Installation
 
@@ -29,6 +29,8 @@ Install **AI Duty Solver**, then open it with `/ads`.
 3. Use **Start Outside** before queueing, or **Start Inside** after entering an instanced duty.
 4. Keep **Overview** or `/ads mini` visible while ADS owns execution.
 5. Use **Stop** at any time to release ADS ownership immediately.
+
+Select **Guided Setup** for five independent, replayable setup flows. During an ADS-owned duty, camera recovery can leave idle camera or first-person mode with one shared attempt per ten seconds. Solo duties show the `/ads leave` recovery reminder once per stable entry.
 
 Use **Resume** after a plugin reload or intentional stop while still inside the duty. Use **Leave** only when ADS owns execution and you want ADS to request duty exit.
 
@@ -53,6 +55,7 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 | Main > Duties | Searchable responsive duty dashboard with family filters, maturity cards, compact catalog, selected-duty details, and collapsible rule coverage |
 | Main > Tools | Authoring, treasure, desynthesis, diagnostics, settings, updates, support links |
 | Main > Diagnostics | Territory/map/CFC, frontier, treasure follow, observations, JSON evidence |
+| Guided Setup | Five independent Duty, Rules, Utilities, Treasure/Follow, and Diagnostics/Recovery walkthroughs |
 | Settings | General, automation, data/rules, advanced display, about/support |
 | Compact Controls | Full-label primary actions, tool shortcuts, concise live status |
 | Rules Editors | Live `DEFAULT` rules plus parked presets |

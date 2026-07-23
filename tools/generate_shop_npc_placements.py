@@ -21,6 +21,11 @@ HANDLER_ORDER = (
     "topic-select-shop",
     "direct-pre-handler",
     "topic-select-pre-handler",
+    "fate-shop",
+    "inclusion-shop",
+    "grand-company-shop",
+    "free-company-shop",
+    "custom-talk",
 )
 
 
@@ -58,6 +63,11 @@ def enumerate_shop_links(
     npc_names: Mapping[int, str],
     topic_rows: Sequence[Mapping[str, Any]],
     pre_handler_rows: Sequence[Mapping[str, Any]],
+    gc_shop_ids: set[int] | None = None,
+    fcc_shop_ids: set[int] | None = None,
+    fate_shops: Mapping[int, Sequence[int]] | None = None,
+    inclusion_shops: Mapping[int, Sequence[int]] | None = None,
+    custom_talks: Mapping[int, Sequence[int]] | None = None,
 ) -> list[dict[str, Any]]:
     """Enumerate the same terminal link paths used by ADS production code."""
 
@@ -69,12 +79,21 @@ def enumerate_shop_links(
         parse_row_id(row["#"]): parse_row_id(row.get("Target"))
         for row in pre_handler_rows
     }
+    gc_shop_ids = gc_shop_ids or set()
+    fcc_shop_ids = fcc_shop_ids or set()
+    fate_shops = fate_shops or {}
+    inclusion_shops = inclusion_shops or {}
+    custom_talks = custom_talks or {}
 
     def terminal(value: int) -> tuple[str, int] | None:
         if value in gil_shop_ids:
             return ("gil", value)
         if value in special_shop_ids:
             return ("special", value)
+        if value in gc_shop_ids:
+            return ("grand-company", value)
+        if value in fcc_shop_ids:
+            return ("free-company", value)
         return None
 
     links: list[dict[str, Any]] = []
@@ -82,25 +101,55 @@ def enumerate_shop_links(
         npc_id = parse_row_id(npc_row["#"])
         name = npc_names.get(npc_id) or f"ENpc {npc_id}"
         for event_index, event_id in nonzero_ids(npc_row, "ENpcData"):
-            direct = terminal(event_id)
-            if direct:
-                links.append(_link(npc_id, name, direct, "direct-shop", event_index, None))
-                continue
-
-            if event_id in pre_handlers:
-                target = terminal(pre_handlers[event_id])
+            def traverse(
+                value: int,
+                handler: str,
+                topic_index: int | None,
+                visited: set[int],
+            ) -> None:
+                if not value or value in visited:
+                    return
+                visited = {*visited, value}
+                target = terminal(value)
                 if target:
-                    links.append(_link(npc_id, name, target, "direct-pre-handler", event_index, None))
-                    continue
+                    terminal_handler = handler
+                    if target[0] == "grand-company":
+                        terminal_handler = "grand-company-shop"
+                    elif target[0] == "free-company":
+                        terminal_handler = "free-company-shop"
+                    links.append(_link(npc_id, name, target, terminal_handler, event_index, topic_index))
+                    return
+                if value in pre_handlers:
+                    next_handler = (
+                        "topic-select-pre-handler"
+                        if handler.startswith("topic-select")
+                        else "direct-pre-handler"
+                    )
+                    traverse(pre_handlers[value], next_handler, topic_index, visited)
+                    return
+                if value in topics:
+                    for next_index, next_value in topics[value]:
+                        traverse(next_value, "topic-select-shop", next_index, visited)
+                    return
+                if value in fate_shops:
+                    for shop_id in fate_shops[value]:
+                        if shop_id in special_shop_ids:
+                            links.append(_link(npc_id, name, ("special", shop_id), "fate-shop", event_index, topic_index))
+                    return
+                if value in inclusion_shops:
+                    for shop_id in inclusion_shops[value]:
+                        if shop_id in special_shop_ids:
+                            links.append(_link(npc_id, name, ("special", shop_id), "inclusion-shop", event_index, topic_index))
+                    return
+                if value in custom_talks:
+                    for next_value in custom_talks[value]:
+                        before = len(links)
+                        traverse(next_value, "custom-talk", topic_index, visited)
+                        for link in links[before:]:
+                            if link["handler"] in {"direct-shop", "topic-select-shop"}:
+                                link["handler"] = "custom-talk"
 
-            for topic_index, topic_value in topics.get(event_id, []):
-                target = terminal(topic_value)
-                handler = "topic-select-shop"
-                if target is None and topic_value in pre_handlers:
-                    target = terminal(pre_handlers[topic_value])
-                    handler = "topic-select-pre-handler"
-                if target:
-                    links.append(_link(npc_id, name, target, handler, event_index, topic_index))
+            traverse(event_id, "direct-shop", None, set())
 
     return sorted(
         links,
@@ -309,6 +358,14 @@ def generate(
         "SpecialShop.csv",
         "TopicSelect.csv",
         "PreHandler.csv",
+        "FateShop.csv",
+        "InclusionShop.csv",
+        "InclusionShopCategory.csv",
+        "InclusionShopSeries.csv",
+        "GCShop.csv",
+        "FccShop.csv",
+        "CustomTalk.csv",
+        "CustomTalkNestHandlers.csv",
         "Map.csv",
         "TerritoryType.csv",
         "PlaceName.csv",
@@ -323,6 +380,49 @@ def generate(
         parse_row_id(row["#"]): str(row.get("Singular") or "")
         for row in load_csv(csv_root / "ENpcResident.csv")
     }
+    fate_shops = {
+        parse_row_id(row["#"]): [value for _index, value in nonzero_ids(row, "SpecialShop")]
+        for row in load_csv(csv_root / "FateShop.csv")
+    }
+    category_series = {
+        parse_row_id(row["#"]): parse_row_id(row.get("InclusionShopSeries"))
+        for row in load_csv(csv_root / "InclusionShopCategory.csv")
+    }
+    series_shops: dict[int, list[int]] = defaultdict(list)
+    for row in load_csv(csv_root / "InclusionShopSeries.csv"):
+        shop_id = parse_row_id(row.get("SpecialShop"))
+        if shop_id:
+            series_shops[parse_row_id(row["#"])].append(shop_id)
+    inclusion_shops: dict[int, list[int]] = {}
+    for row in load_csv(csv_root / "InclusionShop.csv"):
+        inclusion_shops[parse_row_id(row["#"])] = [
+            shop_id
+            for _page, category_id in nonzero_ids(row, "Category")
+            for shop_id in series_shops.get(category_series.get(category_id, 0), [])
+        ]
+
+    gc_ids = {parse_row_id(row["#"]) for row in load_csv(csv_root / "GCShop.csv")}
+    fcc_ids = {parse_row_id(row["#"]) for row in load_csv(csv_root / "FccShop.csv")}
+    custom_rows = load_csv(csv_root / "CustomTalk.csv")
+    custom_ids = {parse_row_id(row["#"]) for row in custom_rows}
+    nested_handlers: dict[int, list[int]] = defaultdict(list)
+    for row in load_csv(csv_root / "CustomTalkNestHandlers.csv"):
+        value = parse_row_id(row.get("NestHandler"))
+        if value:
+            nested_handlers[parse_row_id(row["#"])].append(value)
+    known_sets = (gil_ids, special_ids, gc_ids, fcc_ids, set(fate_shops), set(inclusion_shops), custom_ids)
+    custom_talks: dict[int, list[int]] = {}
+    for row in custom_rows:
+        references: list[int] = []
+        special_link = parse_row_id(row.get("SpecialLinks"))
+        if special_link:
+            references.extend(nested_handlers.get(special_link, [special_link]))
+        for index in range(30):
+            value = parse_row_id(row.get(f"Script[{index}].ScriptArg"))
+            if value and sum(value in ids for ids in known_sets) == 1:
+                references.append(value)
+        custom_talks[parse_row_id(row["#"])] = list(dict.fromkeys(references))
+
     links = enumerate_shop_links(
         gil_ids,
         special_ids,
@@ -330,6 +430,11 @@ def generate(
         residents,
         load_csv(csv_root / "TopicSelect.csv"),
         load_csv(csv_root / "PreHandler.csv"),
+        gc_ids,
+        fcc_ids,
+        fate_shops,
+        inclusion_shops,
+        custom_talks,
     )
     linked_npc_ids = {row["npcId"] for row in links}
     links_by_npc: dict[int, list[dict[str, Any]]] = defaultdict(list)

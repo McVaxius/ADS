@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Expanded deterministic shop purchasing across GilShop, direct and FATE-routed SpecialShop, InclusionShop, Grand Company, and Free Company families; added recursive carrier discovery, live handler-index resolution, deferred gates/balances, audited mixed currencies, exact coproduct verification, family-specific live validation, and owned one-shot confirmations.
+- Added ADS-owned duty camera recovery for idle-camera and all first-person control modes with one shared ten-second cooldown and one-tick ADS-owned key release.
+- Added a once-per-entry solo-duty toast explaining `/ads leave` recovery.
+- Added five independent, replayable Guided Setup flows plus version-21 one-time-new-install hub behavior and migration-safe optional completion flags.
 - Added a default-enabled Settings > Automation toggle for BMRAI/VBM regular-duty follow resets. Disabling it skips the `/bmrai follow Slot1` and `/vbmai follow Slot1` commands on the next regular-duty entry while preserving pending treasure-follow shutdown, treasure opener follow, ordinary cleanup, and treasure-exit cleanup behavior.
 
 ## 2026-07-16

@@ -130,6 +130,8 @@ public sealed class Plugin : IDalamudPlugin
     public CardinalHoldInputService CardinalHoldInputService { get; }
     public DebugStrafeService DebugStrafeService { get; }
     public QstCompanionWarningService QstCompanionWarningService { get; }
+    internal CameraRecoveryService CameraRecoveryService { get; }
+    internal SoloDutyLeaveNoticeService SoloDutyLeaveNoticeService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -148,6 +150,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly VfxExplorerWindow vfxExplorerWindow;
     private readonly ReflectionWindow reflectionWindow;
     private readonly DesynthesisWindow desynthesisWindow;
+    private readonly WizardWindow wizardWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
     private readonly MapFlagMonitorPolicy mapFlagMonitorPolicy = new();
@@ -165,7 +168,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
-        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        var loadedConfiguration = PluginInterface.GetPluginConfig() as Configuration;
+        var loadedExistingConfiguration = loadedConfiguration is not null;
+        Configuration = loadedConfiguration ?? new Configuration();
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         if (configurationChanged)
             Configuration.Save();
@@ -195,6 +200,13 @@ public sealed class Plugin : IDalamudPlugin
         TreasureDoorStrafeInputService = new TreasureDoorStrafeInputService(KeyState, Log);
         CardinalHoldInputService = new CardinalHoldInputService(KeyState, Log);
         ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, CardinalHoldInputService, Configuration, Log);
+        CameraRecoveryService = new CameraRecoveryService(
+            new DalamudCameraRecoveryRuntime(KeyState, CommandManager, Log),
+            new SystemCameraRecoveryClock(),
+            message => Log.Warning(message));
+        SoloDutyLeaveNoticeService = new SoloDutyLeaveNoticeService(
+            message => ToastGui.ShowNormal(message),
+            message => Log.Warning(message));
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
@@ -288,6 +300,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow = new VfxExplorerWindow(this);
         reflectionWindow = new ReflectionWindow(this);
         desynthesisWindow = new DesynthesisWindow(this);
+        wizardWindow = new WizardWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
         WindowSystem.AddWindow(objectExplorerWindow);
@@ -305,6 +318,14 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(vfxExplorerWindow);
         WindowSystem.AddWindow(reflectionWindow);
         WindowSystem.AddWindow(desynthesisWindow);
+        WindowSystem.AddWindow(wizardWindow);
+
+        if (WizardCatalog.ShouldAutoOpen(loadedExistingConfiguration, Configuration))
+        {
+            wizardWindow.OpenHub();
+            Configuration.WizardHubSeen = true;
+            Configuration.Save();
+        }
 
         RegisterCommands();
 
@@ -334,6 +355,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        CameraRecoveryService.Dispose();
         DebugStrafeService.Release("plugin dispose");
         CardinalHoldInputService.Release("plugin dispose");
         ExecutionService.ReleaseHeldMovementKeys("plugin dispose");
@@ -376,6 +398,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow.Dispose();
         reflectionWindow.Dispose();
         desynthesisWindow.Dispose();
+        wizardWindow.Dispose();
         ECommonsMain.Dispose();
     }
 
@@ -384,6 +407,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenConfigUi()
         => configWindow.IsOpen = true;
+
+    public void OpenWizardUi()
+        => wizardWindow.OpenHub();
 
     public void OpenDesynthConfigUi()
         => desynthesisWindow.IsOpen = true;
@@ -1874,6 +1900,8 @@ public sealed class Plugin : IDalamudPlugin
         {
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            Measure("solo-duty-notice", () => SoloDutyLeaveNoticeService.Update(DutyContextService.Current));
+            Measure("camera-recovery", () => CameraRecoveryService.Update(DutyContextService.Current, ExecutionService.IsOwned));
             Measure("object-explorer-flag", UpdateObjectExplorerMapFlagMonitor);
             Measure("desynth-ledger", () => DesynthDutyLedgerStore.Update(
                 DutyContextService.Current.InInstancedDuty,
@@ -2899,7 +2927,7 @@ public sealed class Plugin : IDalamudPlugin
         dtrEntry.Tooltip = new SeString(new TextPayload($"{PluginInfo.DisplayName} {state}/{phase}. {tooltipDuty}. Click to open the main window."));
     }
 
-    private static bool ApplyConfigurationMigrations(Configuration configuration)
+    internal static bool ApplyConfigurationMigrations(Configuration configuration)
     {
         var changed = false;
         if (configuration.Version < 1)
@@ -3064,6 +3092,20 @@ public sealed class Plugin : IDalamudPlugin
             configuration.RuleEditorFilterMode = 0;
             configuration.RuleEditorSeedObjectPosition = false;
             configuration.Version = 20;
+            changed = true;
+        }
+
+        if (configuration.Version < 21)
+        {
+            // Existing configurations should never receive a forced setup popup.
+            // Completion remains independent and optional so every flow can be replayed.
+            configuration.WizardHubSeen = true;
+            configuration.DutyOperationsWizardCompleted = false;
+            configuration.RulesDataWizardCompleted = false;
+            configuration.UtilitiesWizardCompleted = false;
+            configuration.TreasureFollowWizardCompleted = false;
+            configuration.DiagnosticsRecoveryWizardCompleted = false;
+            configuration.Version = 21;
             changed = true;
         }
 

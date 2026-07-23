@@ -157,7 +157,12 @@ internal static class ShopNpcLinkBuilder
         IReadOnlySet<uint> validSpecialShopIds,
         IReadOnlyList<ShopNpcEventSheetRow> npcs,
         IReadOnlyList<ShopTopicSelectSheetRow> topics,
-        IReadOnlyList<ShopPreHandlerSheetRow> preHandlers)
+        IReadOnlyList<ShopPreHandlerSheetRow> preHandlers,
+        IReadOnlySet<uint>? validGrandCompanyShopIds = null,
+        IReadOnlySet<uint>? validFreeCompanyShopIds = null,
+        IReadOnlyList<ShopFateShopSheetRow>? fateShops = null,
+        IReadOnlyList<ShopInclusionRouteSheetRow>? inclusionRoutes = null,
+        IReadOnlyList<ShopCustomTalkSheetRow>? customTalks = null)
     {
         var topicsById = topics
             .GroupBy(row => row.TopicSelectId)
@@ -165,6 +170,17 @@ internal static class ShopNpcLinkBuilder
         var preHandlersById = preHandlers
             .GroupBy(row => row.PreHandlerId)
             .ToDictionary(group => group.Key, group => group.First());
+        var fateShopsById = (fateShops ?? [])
+            .GroupBy(row => row.FateShopId)
+            .ToDictionary(group => group.Key, group => group.First());
+        var inclusionRoutesById = (inclusionRoutes ?? [])
+            .GroupBy(row => row.InclusionShopId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(row => row.Page).ThenBy(row => row.Subpage).ToArray());
+        var customTalksById = (customTalks ?? [])
+            .GroupBy(row => row.CustomTalkId)
+            .ToDictionary(group => group.Key, group => group.First());
+        validGrandCompanyShopIds ??= new HashSet<uint>();
+        validFreeCompanyShopIds ??= new HashSet<uint>();
         var links = new List<ShopNpcSheetLink>();
 
         foreach (var npc in npcs.OrderBy(row => row.NpcId))
@@ -173,101 +189,146 @@ internal static class ShopNpcLinkBuilder
             {
                 var npcEvent = npc.Events[eventIndex];
                 var npcStep = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, eventIndex, npcEvent.RowId);
-                if (TryAddTerminalLink(
-                        links,
-                        validGilShopIds,
-                        validSpecialShopIds,
-                        preHandlersById,
-                        npc,
-                        npcEvent,
-                        [npcStep],
-                        viaTopicSelect: false))
-                {
-                    continue;
-                }
-
-                if (npcEvent.Kind != ShopNpcEventKind.TopicSelect
-                    || !topicsById.TryGetValue(npcEvent.RowId, out var topic))
-                {
-                    continue;
-                }
-
-                for (var topicIndex = 0; topicIndex < topic.Shops.Count; topicIndex++)
-                {
-                    var topicShop = topic.Shops[topicIndex];
-                    TryAddTerminalLink(
-                        links,
-                        validGilShopIds,
-                        validSpecialShopIds,
-                        preHandlersById,
-                        npc,
-                        topicShop,
-                        [
-                            npcStep,
-                            new ShopMenuPathStep(ShopMenuPathStepKind.TopicSelectShop, topicIndex, topicShop.RowId),
-                        ],
-                        viaTopicSelect: true);
-                }
+                Traverse(
+                    npc,
+                    npcEvent,
+                    [npcStep],
+                    [],
+                    false,
+                    viaTopicSelect: false,
+                    throughPreHandler: false,
+                    viaCustomTalk: false,
+                    new HashSet<(ShopNpcEventKind, uint)>());
             }
         }
 
         return links;
-    }
 
-    private static bool TryAddTerminalLink(
-        ICollection<ShopNpcSheetLink> links,
-        IReadOnlySet<uint> validGilShopIds,
-        IReadOnlySet<uint> validSpecialShopIds,
-        IReadOnlyDictionary<uint, ShopPreHandlerSheetRow> preHandlers,
-        ShopNpcEventSheetRow npc,
-        ShopNpcEventReference terminal,
-        IReadOnlyList<ShopMenuPathStep> callbackPath,
-        bool viaTopicSelect)
-    {
-        var requiredQuests = Array.Empty<uint>();
-        var hasUnknownGate = false;
-        var throughPreHandler = false;
-        if (terminal.Kind == ShopNpcEventKind.PreHandler)
+        void Traverse(
+            ShopNpcEventSheetRow npc,
+            ShopNpcEventReference current,
+            IReadOnlyList<ShopMenuPathStep> path,
+            IReadOnlyList<uint> requiredQuests,
+            bool hasUnknownGate,
+            bool viaTopicSelect,
+            bool throughPreHandler,
+            bool viaCustomTalk,
+            HashSet<(ShopNpcEventKind, uint)> visited)
         {
-            if (!preHandlers.TryGetValue(terminal.RowId, out var preHandler))
-                return false;
-            terminal = preHandler.Target;
-            requiredQuests = preHandler.UnlockQuestId == 0 ? [] : [preHandler.UnlockQuestId];
-            hasUnknownGate = preHandler.HasUnknownGate;
-            throughPreHandler = true;
-        }
+            if (!visited.Add((current.Kind, current.RowId)))
+                return;
 
-        ShopSheetKind shopKind;
-        if (terminal.Kind == ShopNpcEventKind.GilShop && validGilShopIds.Contains(terminal.RowId))
-        {
-            shopKind = ShopSheetKind.Gil;
-        }
-        else if (terminal.Kind == ShopNpcEventKind.SpecialShop && validSpecialShopIds.Contains(terminal.RowId))
-        {
-            shopKind = ShopSheetKind.Special;
-        }
-        else
-        {
-            return false;
-        }
+            switch (current.Kind)
+            {
+                case ShopNpcEventKind.PreHandler when preHandlersById.TryGetValue(current.RowId, out var preHandler):
+                    Traverse(
+                        npc,
+                        preHandler.Target,
+                        path,
+                        requiredQuests.Concat(preHandler.UnlockQuestId == 0 ? [] : [preHandler.UnlockQuestId]).Distinct().ToArray(),
+                        hasUnknownGate || preHandler.HasUnknownGate,
+                        viaTopicSelect,
+                        true,
+                        viaCustomTalk,
+                        new HashSet<(ShopNpcEventKind, uint)>(visited));
+                    return;
+                case ShopNpcEventKind.TopicSelect when topicsById.TryGetValue(current.RowId, out var topic):
+                    for (var index = 0; index < topic.Shops.Count; index++)
+                    {
+                        var target = topic.Shops[index];
+                        Traverse(
+                            npc,
+                            target,
+                            path.Concat([new ShopMenuPathStep(ShopMenuPathStepKind.TopicSelectShop, index, target.RowId)]).ToArray(),
+                            requiredQuests,
+                            hasUnknownGate,
+                            true,
+                            throughPreHandler,
+                            viaCustomTalk,
+                            new HashSet<(ShopNpcEventKind, uint)>(visited));
+                    }
+                    return;
+                case ShopNpcEventKind.CustomTalk when customTalksById.TryGetValue(current.RowId, out var customTalk):
+                    for (var index = 0; index < customTalk.Links.Count; index++)
+                    {
+                        var target = customTalk.Links[index];
+                        Traverse(
+                            npc,
+                            target,
+                            path.Concat([new ShopMenuPathStep(ShopMenuPathStepKind.CustomTalkSpecialLink, index, target.RowId)]).ToArray(),
+                            requiredQuests,
+                            hasUnknownGate,
+                            viaTopicSelect,
+                            throughPreHandler,
+                            true,
+                            new HashSet<(ShopNpcEventKind, uint)>(visited));
+                    }
+                    return;
+                case ShopNpcEventKind.FateShop when fateShopsById.TryGetValue(current.RowId, out var fateShop):
+                    foreach (var shopId in fateShop.SpecialShopIds.Where(validSpecialShopIds.Contains).Distinct())
+                        AddTerminal(ShopSheetKind.Special, shopId, ShopNpcLinkKind.FateShop, path, requiredQuests, hasUnknownGate);
+                    return;
+                case ShopNpcEventKind.InclusionShop when inclusionRoutesById.TryGetValue(current.RowId, out var routes):
+                    foreach (var route in routes.Where(route => validSpecialShopIds.Contains(route.SpecialShopId)))
+                    {
+                        AddTerminal(
+                            ShopSheetKind.Special,
+                            route.SpecialShopId,
+                            ShopNpcLinkKind.InclusionShop,
+                            path.Concat([
+                                new ShopMenuPathStep(ShopMenuPathStepKind.InclusionPage, route.Page, route.SpecialShopId),
+                                new ShopMenuPathStep(ShopMenuPathStepKind.InclusionSubpage, route.Subpage, route.SpecialShopId),
+                            ]).ToArray(),
+                            requiredQuests.Concat(route.UnlockQuestId == 0 ? [] : [route.UnlockQuestId]).Distinct().ToArray(),
+                            hasUnknownGate);
+                    }
+                    return;
+                case ShopNpcEventKind.GilShop when validGilShopIds.Contains(current.RowId):
+                    AddTerminal(ShopSheetKind.Gil, current.RowId, ResolveLinkKind(), path, requiredQuests, hasUnknownGate);
+                    return;
+                case ShopNpcEventKind.SpecialShop when validSpecialShopIds.Contains(current.RowId):
+                    AddTerminal(ShopSheetKind.Special, current.RowId, ResolveLinkKind(), path, requiredQuests, hasUnknownGate);
+                    return;
+                case ShopNpcEventKind.GrandCompanyShop when validGrandCompanyShopIds.Contains(current.RowId):
+                    AddTerminal(ShopSheetKind.GrandCompany, current.RowId, ShopNpcLinkKind.GrandCompanyShop, path, requiredQuests, hasUnknownGate);
+                    return;
+                case ShopNpcEventKind.FreeCompanyShop when validFreeCompanyShopIds.Contains(current.RowId):
+                    AddTerminal(ShopSheetKind.FreeCompany, current.RowId, ShopNpcLinkKind.FreeCompanyShop, path, requiredQuests, hasUnknownGate);
+                    return;
+                default:
+                    // CollectablesShop and DisposalShop are turn-in/sale surfaces;
+                    // LotteryExchangeShop is nondeterministic. All fail closed here.
+                    return;
+            }
 
-        var linkKind = (viaTopicSelect, throughPreHandler) switch
-        {
-            (false, false) => ShopNpcLinkKind.DirectShop,
-            (true, false) => ShopNpcLinkKind.TopicSelectShop,
-            (false, true) => ShopNpcLinkKind.DirectPreHandler,
-            (true, true) => ShopNpcLinkKind.TopicSelectPreHandler,
-        };
-        links.Add(new ShopNpcSheetLink(
-            shopKind,
-            terminal.RowId,
-            npc.NpcId,
-            npc.NpcName,
-            callbackPath,
-            linkKind,
-            requiredQuests,
-            hasUnknownGate));
-        return true;
+            ShopNpcLinkKind ResolveLinkKind()
+                => viaCustomTalk
+                    ? ShopNpcLinkKind.CustomTalk
+                    : (viaTopicSelect, throughPreHandler) switch
+                    {
+                        (false, false) => ShopNpcLinkKind.DirectShop,
+                        (true, false) => ShopNpcLinkKind.TopicSelectShop,
+                        (false, true) => ShopNpcLinkKind.DirectPreHandler,
+                        (true, true) => ShopNpcLinkKind.TopicSelectPreHandler,
+                    };
+
+            void AddTerminal(
+                ShopSheetKind sheetKind,
+                uint shopId,
+                ShopNpcLinkKind linkKind,
+                IReadOnlyList<ShopMenuPathStep> callbackPath,
+                IReadOnlyList<uint> quests,
+                bool unknownGate)
+                => links.Add(new ShopNpcSheetLink(
+                    sheetKind,
+                    shopId,
+                    npc.NpcId,
+                    npc.NpcName,
+                    callbackPath,
+                    linkKind,
+                    quests,
+                    unknownGate));
+        }
     }
 }
 
@@ -403,9 +464,14 @@ internal static class ShopCatalogBuilder
         string ReceiveItemName,
         uint ReceiveCount,
         int TransactionsRequired,
+        IReadOnlyList<ShopOfferOutput> Outputs,
         IReadOnlyList<ShopCurrencyCost> Currencies,
         IReadOnlyList<uint> RequiredQuestIds,
-        bool HasUnknownGate);
+        bool HasUnknownGate,
+        byte RequiredGrandCompany = 0,
+        byte RequiredGrandCompanyRank = 0,
+        byte RankTab = 0,
+        byte CategoryTab = 0);
 
     public static ShopCatalogResolution Resolve(
         ShopCatalogSnapshot snapshot,
@@ -440,6 +506,7 @@ internal static class ShopCatalogBuilder
                 itemName,
                 1,
                 quantity,
+                [new ShopOfferOutput(itemId, itemName, 1, requestedItem.StackSize, requestedItem.IsUnique)],
                 [new ShopCurrencyCost(ShopCurrencyKind.Gil, 1, "Gil", requestedItem.PriceMid)],
                 row.RequiredQuestIds,
                 row.HasUnknownGate));
@@ -451,14 +518,19 @@ internal static class ShopCatalogBuilder
         foreach (var row in snapshot.SpecialShopRows.Where(row => row.ReceiveItems.Any(item => item.ItemId == itemId)))
         {
             var receives = row.ReceiveItems.Where(item => item.ItemId != 0 && item.Count != 0).ToArray();
-            if (receives.Length != 1 || receives[0].ItemId != itemId || receives[0].IsHq || receives[0].Count == 0)
+            var targets = receives.Where(item => item.ItemId == itemId).ToArray();
+            if (targets.Length != 1
+                || targets[0].IsHq
+                || receives.Any(receive => receive.IsHq)
+                || receives.Select(receive => receive.ItemId).Distinct().Count() != receives.Length
+                || receives.Any(receive => !snapshot.Items.ContainsKey(receive.ItemId)))
             {
                 unsupported++;
-                diagnostic($"Rejected SpecialShop shop={row.ShopId}, row={row.RowIndex}: output is not one exact non-HQ item bundle.");
+                diagnostic($"Rejected SpecialShop shop={row.ShopId}, row={row.RowIndex}: outputs are ambiguous, HQ, or missing item metadata.");
                 continue;
             }
 
-            var receiveCount = receives[0].Count;
+            var receiveCount = targets[0].Count;
             if (quantity % receiveCount != 0)
             {
                 nonDivisible++;
@@ -483,9 +555,66 @@ internal static class ShopCatalogBuilder
                 itemName,
                 receiveCount,
                 quantity / (int)receiveCount,
+                receives.Select(receive =>
+                {
+                    var outputItem = snapshot.Items[receive.ItemId];
+                    return new ShopOfferOutput(receive.ItemId, outputItem.Name, receive.Count, outputItem.StackSize, outputItem.IsUnique);
+                }).ToArray(),
                 currencies,
                 row.RequiredQuestIds,
                 row.HasUnknownGate));
+        }
+
+        foreach (var row in (snapshot.GrandCompanyShopRows ?? []).Where(row => row.ItemId == itemId))
+        {
+            if (requestedItem == null || row.SealCost == 0 || row.GrandCompanyId is < 1 or > 3)
+            {
+                unsupported++;
+                continue;
+            }
+            var sealItemId = (uint)(19 + row.GrandCompanyId);
+            templates.Add(new OfferTemplate(
+                ShopSheetKind.GrandCompany,
+                ShopOfferKind.GrandCompanyShop,
+                row.ShopId,
+                row.ShopName,
+                row.RowIndex,
+                itemId,
+                itemName,
+                1,
+                quantity,
+                [new ShopOfferOutput(itemId, itemName, 1, requestedItem.StackSize, requestedItem.IsUnique)],
+                [new ShopCurrencyCost(ShopCurrencyKind.CompanySeal, sealItemId, "Company Seals", row.SealCost)],
+                row.RequiredQuestIds,
+                row.HasUnknownGate,
+                row.GrandCompanyId,
+                row.RequiredRank,
+                row.RankTab,
+                row.CategoryTab));
+        }
+
+        foreach (var row in (snapshot.FreeCompanyShopRows ?? []).Where(row => row.ItemId == itemId))
+        {
+            if (requestedItem == null || row.CreditCost == 0)
+            {
+                unsupported++;
+                continue;
+            }
+            templates.Add(new OfferTemplate(
+                ShopSheetKind.FreeCompany,
+                ShopOfferKind.FreeCompanyShop,
+                row.ShopId,
+                row.ShopName,
+                row.RowIndex,
+                itemId,
+                itemName,
+                1,
+                quantity,
+                [new ShopOfferOutput(itemId, itemName, 1, requestedItem.StackSize, requestedItem.IsUnique)],
+                [new ShopCurrencyCost(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", row.CreditCost)],
+                row.RequiredQuestIds,
+                true,
+                RequiredGrandCompanyRank: row.RequiredRank));
         }
 
         var offers = new List<ShopOffer>();
@@ -546,8 +675,11 @@ internal static class ShopCatalogBuilder
                         .Distinct()
                         .OrderBy(questId => questId)
                         .ToArray();
+                    var runtimeKind = link.LinkKind == ShopNpcLinkKind.InclusionShop
+                        ? ShopOfferKind.InclusionShop
+                        : template.Kind;
                     var offer = new ShopOffer(
-                        template.Kind,
+                        runtimeKind,
                         template.ShopId,
                         template.ShopName,
                         template.RowIndex,
@@ -570,7 +702,12 @@ internal static class ShopCatalogBuilder
                         requiredQuests,
                         template.HasUnknownGate || link.HasUnknownGate,
                         aetheryteRoutes,
-                        placement.RequiresFloorResolution);
+                        placement.RequiresFloorResolution,
+                        template.Outputs,
+                        template.RequiredGrandCompany,
+                        template.RequiredGrandCompanyRank,
+                        template.RankTab,
+                        template.CategoryTab);
                     offers.Add(offer);
                     diagnostic(
                         $"Candidate shop={offer.ShopId}, row={offer.SheetRowIndex}, npc={offer.NpcId}, territory={offer.TerritoryId}, "
@@ -617,29 +754,22 @@ internal static class ShopCatalogBuilder
         if (nonzero.Length == 0 || nonzero.Any(cost => cost.Amount == 0 || cost.ItemOrCurrencyId == 0 || cost.Collectability != 0))
             return false;
 
+        if (nonzero.Length > 3)
+            return false;
+
         var normalized = new List<ShopCurrencyCost>();
         foreach (var cost in nonzero)
         {
-            switch (cost.CostType)
-            {
-                case 0:
-                    if (!snapshot.Items.TryGetValue(cost.ItemOrCurrencyId, out var item))
-                        return false;
-                    normalized.Add(new ShopCurrencyCost(ShopCurrencyKind.Item, item.ItemId, item.Name, cost.Amount));
-                    break;
-                case 2 when row.UseCurrencyType == 4:
-                    if (!tomestonesById.TryGetValue(cost.ItemOrCurrencyId, out var tomestone))
-                        return false;
-                    normalized.Add(new ShopCurrencyCost(ShopCurrencyKind.Tomestone, tomestone.ItemId, tomestone.Name, cost.Amount));
-                    break;
-                default:
-                    return false;
-            }
+            if (!ShopCurrencyResolver.TryResolveSpecialShopCost(
+                    snapshot.Items,
+                    tomestonesById,
+                    row.ShopId,
+                    row.UseCurrencyType,
+                    cost,
+                    out var resolved))
+                return false;
+            normalized.Add(resolved);
         }
-
-        var familyCount = normalized.Select(currency => currency.Kind).Distinct().Count();
-        if (familyCount != 1)
-            return false;
 
         try
         {
@@ -659,9 +789,11 @@ internal static class ShopCatalogBuilder
             return false;
         }
 
-        kind = currencies[0].Kind == ShopCurrencyKind.Tomestone
-            ? ShopOfferKind.SpecialShopTomestone
-            : ShopOfferKind.SpecialShopItem;
+        kind = currencies.Select(currency => currency.Kind).Distinct().Count() > 1
+            ? ShopOfferKind.SpecialShopMixed
+            : currencies[0].Kind == ShopCurrencyKind.Tomestone
+                ? ShopOfferKind.SpecialShopTomestone
+                : ShopOfferKind.SpecialShopItem;
         return true;
     }
 }
@@ -673,20 +805,16 @@ internal sealed record ShopSelectionContext(
     Func<uint, bool> IsQuestComplete,
     Func<ShopCurrencyCost, long> GetAvailableCurrency,
     Func<uint, long> GetItemCount,
-    Func<uint, uint, long> GetInventoryCapacity);
+    Func<uint, uint, long> GetInventoryCapacity,
+    Func<byte>? GetGrandCompany = null,
+    Func<byte>? GetGrandCompanyRank = null);
 
 internal static class ShopOfferSelector
 {
     public static ShopOfferSelectionResult Select(ShopCatalogResolution resolution, ShopSelectionContext context)
     {
-        var capacity = resolution.StackSize == 0
-            ? 0
-            : context.GetInventoryCapacity(resolution.ItemId, resolution.StackSize);
-        var capacitySatisfied = capacity >= resolution.RequestedQuantity
-            && (!resolution.IsUnique
-                || (resolution.RequestedQuantity == 1 && context.GetItemCount(resolution.ItemId) == 0));
         var evaluated = resolution.Offers
-            .Select(offer => Evaluate(offer, context, capacitySatisfied))
+            .Select(offer => Evaluate(offer, resolution, context))
             .ToArray();
 
         if (resolution.Offers.Count == 0)
@@ -706,7 +834,7 @@ internal static class ShopOfferSelector
             return new ShopOfferSelectionResult(null, evaluated, [], code, detail);
         }
 
-        var gated = evaluated.Where(offer => offer.GateSatisfied).ToArray();
+        var gated = evaluated.Where(offer => offer.Availability != ShopAvailability.Denied).ToArray();
         var reachable = gated.Where(offer => offer.Route != null).ToArray();
         if (reachable.Length == 0)
         {
@@ -718,7 +846,8 @@ internal static class ShopOfferSelector
                 "No reachable, unlocked NPC route was available for a supported shop offer.");
         }
 
-        if (!capacitySatisfied)
+        var capacityAccepted = reachable.Where(offer => offer.CapacitySatisfied).ToArray();
+        if (capacityAccepted.Length == 0)
         {
             return new ShopOfferSelectionResult(
                 null,
@@ -728,7 +857,7 @@ internal static class ShopOfferSelector
                 $"Inventory cannot accept {resolution.RequestedQuantity} additional {resolution.ItemName}.");
         }
 
-        var affordable = reachable.Where(offer => offer.Affordable).ToArray();
+        var affordable = capacityAccepted.Where(offer => offer.Affordable).ToArray();
         if (affordable.Length == 0)
         {
             return new ShopOfferSelectionResult(
@@ -739,7 +868,13 @@ internal static class ShopOfferSelector
                 "No reachable shop offer is affordable for the exact requested quantity.");
         }
 
-        var identitySets = affordable
+        var knownAffordable = affordable.Where(offer => offer.BalanceKnown).ToArray();
+        var candidatePool = knownAffordable.Length > 0 ? knownAffordable : affordable;
+        var explicitlyAllowed = candidatePool.Where(offer => offer.Availability == ShopAvailability.Allowed).ToArray();
+        if (explicitlyAllowed.Length > 0)
+            candidatePool = explicitlyAllowed;
+
+        var identitySets = candidatePool
             .Select(CurrencyIdentitySignature)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -753,8 +888,8 @@ internal static class ShopOfferSelector
                 "Affordable offers spend different currency identities; ADS will not choose what to spend.");
         }
 
-        var minima = affordable
-            .Where(candidate => !affordable.Any(other => !ReferenceEquals(other, candidate) && Dominates(other, candidate)))
+        var minima = candidatePool
+            .Where(candidate => !candidatePool.Any(other => !ReferenceEquals(other, candidate) && Dominates(other, candidate)))
             .ToArray();
         var distinctMinimumCosts = minima.Select(CostSignature).Distinct(StringComparer.Ordinal).ToArray();
         if (distinctMinimumCosts.Length != 1)
@@ -770,7 +905,7 @@ internal static class ShopOfferSelector
         var ordered = OrderCandidates(minima, context).ToArray();
         var selected = ordered[0];
         var fallbacks = OrderCandidates(
-                affordable.Where(offer => !ReferenceEquals(offer, selected) && EqualCosts(offer, selected)),
+                candidatePool.Where(offer => !ReferenceEquals(offer, selected) && EqualCosts(offer, selected)),
                 context)
             .ToArray();
         return new ShopOfferSelectionResult(selected, evaluated, fallbacks, null, "Supported shop offer selected.");
@@ -792,11 +927,61 @@ internal static class ShopOfferSelector
                 currency.Currency.ItemId,
                 currency.Currency.Name,
                 currency.RequiredAmount,
-                currency.AvailableAmount)).ToArray());
+                currency.AvailableAmount,
+                currency.AvailabilityKnown)).ToArray(),
+            evaluated.Offer.AllOutputs.Select(output => new ShopPurchaseOutputStatus(
+                output.ItemId,
+                output.Name,
+                output.Count)).ToArray(),
+            evaluated.Availability == ShopAvailability.Allowed && evaluated.BalanceKnown);
 
-    private static EvaluatedShopOffer Evaluate(ShopOffer offer, ShopSelectionContext context, bool capacitySatisfied)
+    private static EvaluatedShopOffer Evaluate(
+        ShopOffer offer,
+        ShopCatalogResolution resolution,
+        ShopSelectionContext context)
     {
-        var gateSatisfied = !offer.HasUnknownGate && offer.RequiredQuestIds.All(context.IsQuestComplete);
+        var availability = offer.RequiredQuestIds.Any(questId => !context.IsQuestComplete(questId))
+            ? ShopAvailability.Denied
+            : offer.HasUnknownGate
+                ? ShopAvailability.Deferred
+                : ShopAvailability.Allowed;
+        if (offer.RequiredGrandCompany != 0)
+        {
+            var currentCompany = context.GetGrandCompany?.Invoke() ?? 0;
+            var currentRank = context.GetGrandCompanyRank?.Invoke() ?? 0;
+            availability = currentCompany == 0 || currentRank == 0
+                ? ShopAvailability.Deferred
+                : currentCompany != offer.RequiredGrandCompany || currentRank < offer.RequiredGrandCompanyRank
+                    ? ShopAvailability.Denied
+                    : availability;
+        }
+        var gateSatisfied = availability != ShopAvailability.Denied;
+        var targetCapacity = resolution.StackSize == 0
+            ? 0
+            : context.GetInventoryCapacity(resolution.ItemId, resolution.StackSize);
+        var capacitySatisfied = targetCapacity >= resolution.RequestedQuantity
+            && (!resolution.IsUnique
+                || (resolution.RequestedQuantity == 1 && context.GetItemCount(resolution.ItemId) == 0));
+        foreach (var output in offer.AllOutputs)
+        {
+            long total;
+            try
+            {
+                total = checked((long)output.Count * offer.TransactionsRequired);
+            }
+            catch (OverflowException)
+            {
+                capacitySatisfied = false;
+                break;
+            }
+
+            var capacity = context.GetInventoryCapacity(output.ItemId, Math.Max(1, output.StackSize));
+            if (capacity < total || (output.IsUnique && (total != 1 || context.GetItemCount(output.ItemId) != 0)))
+            {
+                capacitySatisfied = false;
+                break;
+            }
+        }
         ResolvedShopRoute? route = null;
         if (offer.TerritoryId == context.CurrentTerritoryId)
         {
@@ -833,6 +1018,7 @@ internal static class ShopOfferSelector
 
         var currencies = new List<EvaluatedShopCurrency>();
         var affordable = true;
+        var balanceKnown = true;
         foreach (var currency in offer.Currencies)
         {
             long required;
@@ -845,9 +1031,11 @@ internal static class ShopOfferSelector
                 required = long.MaxValue;
             }
 
-            var available = Math.Max(0, context.GetAvailableCurrency(currency));
-            currencies.Add(new EvaluatedShopCurrency(currency, required, available));
-            affordable &= required <= available;
+            var available = context.GetAvailableCurrency(currency);
+            var known = available >= 0;
+            balanceKnown &= known;
+            currencies.Add(new EvaluatedShopCurrency(currency, required, known ? available : -1, known));
+            affordable &= !known || required <= available;
         }
 
         var failure = !gateSatisfied
@@ -859,7 +1047,16 @@ internal static class ShopOfferSelector
                     : !affordable
                         ? ShopPurchaseFailureCodes.InsufficientCurrency
                         : null;
-        return new EvaluatedShopOffer(offer, route, currencies, gateSatisfied, affordable, capacitySatisfied, failure);
+        return new EvaluatedShopOffer(
+            offer,
+            route,
+            currencies,
+            gateSatisfied,
+            affordable,
+            capacitySatisfied,
+            failure,
+            availability,
+            balanceKnown);
     }
 
     private static IOrderedEnumerable<EvaluatedShopOffer> OrderCandidates(
@@ -891,7 +1088,13 @@ internal static class ShopOfferSelector
     }
 
     private static bool EqualCosts(EvaluatedShopOffer left, EvaluatedShopOffer right)
-        => CostSignature(left) == CostSignature(right);
+        => CostSignature(left) == CostSignature(right)
+            && OutputSignature(left) == OutputSignature(right);
+
+    private static string OutputSignature(EvaluatedShopOffer offer)
+        => string.Join('|', offer.Offer.AllOutputs
+            .OrderBy(output => output.ItemId)
+            .Select(output => $"{output.ItemId}:{output.Count}"));
 
     private static string CurrencyIdentitySignature(EvaluatedShopOffer offer)
         => string.Join('|', offer.Currencies
@@ -911,6 +1114,10 @@ internal static class ShopOfferSelector
             ShopOfferKind.GilShop => "gil-shop",
             ShopOfferKind.SpecialShopItem => "special-shop-item",
             ShopOfferKind.SpecialShopTomestone => "special-shop-tomestone",
+            ShopOfferKind.SpecialShopMixed => "special-shop-mixed",
+            ShopOfferKind.InclusionShop => "inclusion-shop",
+            ShopOfferKind.GrandCompanyShop => "grand-company-shop",
+            ShopOfferKind.FreeCompanyShop => "free-company-shop",
             _ => "unsupported",
         };
 
@@ -920,6 +1127,12 @@ internal static class ShopOfferSelector
             ShopCurrencyKind.Gil => "gil",
             ShopCurrencyKind.Item => "item",
             ShopCurrencyKind.Tomestone => "tomestone",
+            ShopCurrencyKind.CompanySeal => "company-seal",
+            ShopCurrencyKind.Mgp => "mgp",
+            ShopCurrencyKind.WolfMark => "wolf-mark",
+            ShopCurrencyKind.AlliedSeal => "allied-seal",
+            ShopCurrencyKind.CurrencyManager => "currency-manager",
+            ShopCurrencyKind.FreeCompanyCredit => "free-company-credit",
             _ => "unknown",
         };
 }
@@ -954,7 +1167,9 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
                 subrow.Item.RowId,
                 subrow.IsHQ,
                 quests,
-                subrow.AchievementRequired.RowId != 0 || subrow.StateRequired != 0 || shop.FestivalId != 0));
+                subrow.AchievementRequired.RowId != 0
+                    || (subrow.StateRequired != 0 && quests.Length != 0)
+                    || shop.FestivalId != 0));
         }
 
         var specialRows = new List<SpecialShopSheetRow>();
@@ -1004,7 +1219,66 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
                 row.Item.RowId,
                 items.TryGetValue(row.Item.RowId, out var item) ? item.Name : $"Item {row.Item.RowId}"))
             .ToArray();
-        var links = BuildNpcLinks(gilRows, specialRows);
+        var gcShopsByCompany = dataManager.GetExcelSheet<GCShop>()
+            .Where(row => row.GrandCompany.RowId != 0)
+            .GroupBy(row => row.GrandCompany.RowId)
+            .ToDictionary(group => group.Key, group => group.First().RowId);
+        var gcCategories = dataManager.GetExcelSheet<GCScripShopCategory>().ToDictionary(row => row.RowId);
+        var grandCompanyRows = new List<GrandCompanyShopSheetRow>();
+        foreach (var row in dataManager.GetSubrowExcelSheet<GCScripShopItem>().Flatten())
+        {
+            if (!gcCategories.TryGetValue(row.RowId, out var category)
+                || !gcShopsByCompany.TryGetValue(category.GrandCompany.RowId, out var shopId)
+                || row.Item.RowId == 0
+                || row.CostGCSeals == 0)
+                continue;
+            var requiredRank = checked((byte)row.RequiredGrandCompanyRank.RowId);
+            var rankTab = requiredRank <= 4 ? (byte)0 : requiredRank <= 8 ? (byte)1 : (byte)2;
+            var categoryTab = category.SubCategory switch
+            {
+                1 => (byte)2,
+                2 => (byte)0,
+                3 => (byte)1,
+                4 => (byte)3,
+                _ => byte.MaxValue,
+            };
+            if (categoryTab == byte.MaxValue)
+                continue;
+            grandCompanyRows.Add(new GrandCompanyShopSheetRow(
+                shopId,
+                $"Grand Company Shop {category.GrandCompany.RowId}",
+                row.SubrowId,
+                row.Item.RowId,
+                row.CostGCSeals,
+                checked((byte)category.GrandCompany.RowId),
+                requiredRank,
+                rankTab,
+                categoryTab,
+                [],
+                false));
+        }
+
+        var freeCompanyRows = new List<FreeCompanyShopSheetRow>();
+        foreach (var shop in dataManager.GetExcelSheet<FccShop>())
+        {
+            for (var index = 0; index < shop.ItemData.Count; index++)
+            {
+                var row = shop.ItemData[index];
+                if (row.Item.RowId == 0 || row.Cost == 0)
+                    continue;
+                freeCompanyRows.Add(new FreeCompanyShopSheetRow(
+                    shop.RowId,
+                    string.IsNullOrWhiteSpace(shop.Name.ToString()) ? $"Free Company Shop {shop.RowId}" : shop.Name.ToString(),
+                    index,
+                    row.Item.RowId,
+                    row.Cost,
+                    checked((byte)row.FCRankRequired.RowId),
+                    [],
+                    false));
+            }
+        }
+
+        var links = BuildNpcLinks(gilRows, specialRows, grandCompanyRows, freeCompanyRows);
         var aetherytes = BuildAetherytes();
         var placements = BuildNpcPlacements(links, aetherytes.Routes);
 
@@ -1024,15 +1298,28 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
             aetherytes.MappedCount,
             aetherytes.RejectedCount,
             aetherytes.MissingCount);
-        return new ShopCatalogSnapshot(items, gilRows, specialRows, links, placements.Placements, aetherytes.Routes, tomestones);
+        return new ShopCatalogSnapshot(
+            items,
+            gilRows,
+            specialRows,
+            links,
+            placements.Placements,
+            aetherytes.Routes,
+            tomestones,
+            grandCompanyRows,
+            freeCompanyRows);
     }
 
     private List<ShopNpcSheetLink> BuildNpcLinks(
         IReadOnlyCollection<GilShopSheetRow> gilRows,
-        IReadOnlyCollection<SpecialShopSheetRow> specialRows)
+        IReadOnlyCollection<SpecialShopSheetRow> specialRows,
+        IReadOnlyCollection<GrandCompanyShopSheetRow> grandCompanyRows,
+        IReadOnlyCollection<FreeCompanyShopSheetRow> freeCompanyRows)
     {
         var validGilIds = gilRows.Select(row => row.ShopId).ToHashSet();
         var validSpecialIds = specialRows.Select(row => row.ShopId).ToHashSet();
+        var validGrandCompanyIds = grandCompanyRows.Select(row => row.ShopId).ToHashSet();
+        var validFreeCompanyIds = freeCompanyRows.Select(row => row.ShopId).ToHashSet();
         var residentSheet = dataManager.GetExcelSheet<ENpcResident>();
         var npcs = dataManager.GetExcelSheet<ENpcBase>()
             .Select(npc =>
@@ -1058,7 +1345,93 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
                 preHandler.UnlockQuest.RowId,
                 false))
             .ToArray();
-        var links = ShopNpcLinkBuilder.Build(validGilIds, validSpecialIds, npcs, topics, preHandlers).ToList();
+        var fateShops = dataManager.GetExcelSheet<FateShop>()
+            .Select(shop => new ShopFateShopSheetRow(
+                shop.RowId,
+                shop.SpecialShop.Select(row => row.RowId).Where(rowId => rowId != 0).ToArray()))
+            .ToArray();
+        var inclusionSeries = dataManager.GetSubrowExcelSheet<InclusionShopSeries>()
+            .Flatten()
+            .GroupBy(row => row.RowId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(row => row.SubrowId).ToArray());
+        var inclusionRoutes = new List<ShopInclusionRouteSheetRow>();
+        foreach (var shop in dataManager.GetExcelSheet<InclusionShop>())
+        {
+            for (var page = 0; page < shop.Category.Count; page++)
+            {
+                var category = shop.Category[page];
+                if (category.RowId == 0
+                    || !inclusionSeries.TryGetValue(category.Value.InclusionShopSeries.RowId, out var series))
+                    continue;
+                for (var subpage = 0; subpage < series.Length; subpage++)
+                {
+                    if (series[subpage].SpecialShop.RowId == 0)
+                        continue;
+                    inclusionRoutes.Add(new ShopInclusionRouteSheetRow(
+                        shop.RowId,
+                        series[subpage].SpecialShop.RowId,
+                        page,
+                        subpage,
+                        shop.UnlockQuest.RowId));
+                }
+            }
+        }
+
+        var customTalkRows = dataManager.GetExcelSheet<CustomTalk>().ToArray();
+        var customTalkNestHandlers = dataManager.GetSubrowExcelSheet<CustomTalkNestHandlers>()
+            .Flatten()
+            .GroupBy(row => row.RowId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => ToEventReference(row.NestHandler))
+                    .Where(reference => reference.Kind != ShopNpcEventKind.Unsupported)
+                    .ToArray());
+        var knownReferences = new (ShopNpcEventKind Kind, IReadOnlySet<uint> Ids)[]
+        {
+            (ShopNpcEventKind.GilShop, validGilIds),
+            (ShopNpcEventKind.SpecialShop, validSpecialIds),
+            (ShopNpcEventKind.TopicSelect, topics.Select(row => row.TopicSelectId).ToHashSet()),
+            (ShopNpcEventKind.PreHandler, preHandlers.Select(row => row.PreHandlerId).ToHashSet()),
+            (ShopNpcEventKind.FateShop, fateShops.Select(row => row.FateShopId).ToHashSet()),
+            (ShopNpcEventKind.InclusionShop, inclusionRoutes.Select(row => row.InclusionShopId).ToHashSet()),
+            (ShopNpcEventKind.GrandCompanyShop, validGrandCompanyIds),
+            (ShopNpcEventKind.FreeCompanyShop, validFreeCompanyIds),
+            (ShopNpcEventKind.CustomTalk, customTalkRows.Select(row => row.RowId).ToHashSet()),
+        };
+        var customTalks = customTalkRows.Select(row =>
+        {
+            var references = new List<ShopNpcEventReference>();
+            if (row.SpecialLinks.IsSubrow<CustomTalkNestHandlers>()
+                && customTalkNestHandlers.TryGetValue(row.SpecialLinks.RowId, out var nested))
+                references.AddRange(nested);
+            else
+            {
+                var specialLink = ToEventReference(row.SpecialLinks);
+                if (specialLink.Kind != ShopNpcEventKind.Unsupported)
+                    references.Add(specialLink);
+            }
+            foreach (var script in row.Script.Where(script => script.ScriptArg != 0))
+            {
+                var matches = knownReferences.Where(candidate => candidate.Ids.Contains(script.ScriptArg)).ToArray();
+                if (matches.Length == 1)
+                    references.Add(new ShopNpcEventReference(matches[0].Kind, script.ScriptArg));
+                else if (matches.Length == 0 && customTalkNestHandlers.TryGetValue(script.ScriptArg, out var scriptNested))
+                    references.AddRange(scriptNested);
+            }
+            return new ShopCustomTalkSheetRow(row.RowId, references.Distinct().ToArray());
+        }).ToArray();
+
+        var links = ShopNpcLinkBuilder.Build(
+            validGilIds,
+            validSpecialIds,
+            npcs,
+            topics,
+            preHandlers,
+            validGrandCompanyIds,
+            validFreeCompanyIds,
+            fateShops,
+            inclusionRoutes,
+            customTalks).ToList();
         foreach (var group in links.GroupBy(link => link.LinkKind).OrderBy(group => group.Key))
             log.Debug("[ADS][Shop] Link catalog kind={LinkKind}, count={Count}.", group.Key, group.Count());
         return links;
@@ -1222,8 +1595,24 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
                 ? new ShopNpcEventReference(ShopNpcEventKind.SpecialShop, row.RowId)
                 : row.Is<TopicSelect>()
                     ? new ShopNpcEventReference(ShopNpcEventKind.TopicSelect, row.RowId)
-                    : row.Is<PreHandler>()
-                        ? new ShopNpcEventReference(ShopNpcEventKind.PreHandler, row.RowId)
+                : row.Is<PreHandler>()
+                    ? new ShopNpcEventReference(ShopNpcEventKind.PreHandler, row.RowId)
+                    : row.Is<FateShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.FateShop, row.RowId)
+                    : row.Is<InclusionShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.InclusionShop, row.RowId)
+                    : row.Is<GCShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.GrandCompanyShop, row.RowId)
+                    : row.Is<FccShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.FreeCompanyShop, row.RowId)
+                    : row.Is<CustomTalk>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.CustomTalk, row.RowId)
+                    : row.Is<CollectablesShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.CollectablesShop, row.RowId)
+                    : row.Is<DisposalShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.DisposalShop, row.RowId)
+                    : row.Is<LotteryExchangeShop>()
+                        ? new ShopNpcEventReference(ShopNpcEventKind.LotteryExchangeShop, row.RowId)
                         : new ShopNpcEventReference(ShopNpcEventKind.Unsupported, row.RowId);
 
     private ShopAetheryteBuildResult BuildAetherytes()

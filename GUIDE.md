@@ -24,7 +24,7 @@ The planner chooses an objective from current observations, rules, recovery memo
 
 ## Primary Controls
 
-Main keeps five controls visible above every tab:
+Main keeps six controls visible above every tab:
 
 | Control | Use | Availability |
 |---|---|---|
@@ -33,6 +33,7 @@ Main keeps five controls visible above every tab:
 | **Resume** | Reclaim ownership after stop/reload while inside | Requires instanced-duty truth |
 | **Leave** | Request ADS-managed duty exit | Requires ADS ownership |
 | **Stop** | Release ADS ownership immediately | Always available |
+| **Guided Setup** | Open the replayable setup-wizard hub | Always available |
 
 For an immediate chat stop, use `/ads stop`.
 
@@ -137,7 +138,17 @@ The BMRAI/VBM setting is enabled by default. When enabled, entering a regular du
 
 ### About
 
-Shows version, product summary, pilot summary, support links, and feedback location.
+Shows version, product summary, pilot summary, support links, feedback location, and **Open Setup Wizards**.
+
+## Guided Setup
+
+The wizard hub contains five separately completed, always-replayable flows: Duty Operations, Rules & Data, Utilities, Treasure & Follow, and Diagnostics & Recovery. Each has overview, prerequisites/safety, and commands/UI steps. Wizard buttons only navigate to existing windows or copy commands; they do not start duties, purchases, updates, or automation. A new installation opens the hub once. Existing version-20 configurations migrate without a forced popup.
+
+## Duty Recovery Notices And Camera
+
+On the first stable tick of each solo-duty entry, ADS shows `If the duty gets stuck, you can leave with /ads leave.` The reminder does not require ownership and re-arms only after a stable duty exit or logout.
+
+Camera recovery is ownership-bound. While ADS owns a stable instanced duty, idle camera has priority and is stopped with `/icam`; first-person mode is corrected through the player's configured camera-mode keyboard binding. Both actions share one ten-second attempt cooldown, and ADS releases only key state it injected on the next framework tick.
 
 ## Compact Controls
 

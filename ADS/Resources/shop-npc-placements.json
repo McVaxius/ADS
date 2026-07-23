@@ -8,6 +8,16 @@
   },
   "placements": [
     {
+      "npcId": 1000165,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": -73.927805,
+      "z": -7.492683,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
       "npcId": 1000185,
       "territoryId": 132,
       "territoryName": "New Gridania",
@@ -408,6 +418,36 @@
       "replaceExisting": false
     },
     {
+      "npcId": 1002389,
+      "territoryId": 128,
+      "territoryName": "Limsa Lominsa Upper Decks",
+      "mapId": 11,
+      "x": 95.8114,
+      "z": 67.61267,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1002393,
+      "territoryId": 132,
+      "territoryName": "New Gridania",
+      "mapId": 2,
+      "x": -67.933659,
+      "z": -10.989268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003077,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": 145.83044,
+      "z": -106.767456,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
       "npcId": 1003252,
       "territoryId": 129,
       "territoryName": "Limsa Lominsa Lower Decks",
@@ -455,6 +495,16 @@
       "x": -329.678049,
       "z": 136.366829,
       "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1003633,
+      "territoryId": 129,
+      "territoryName": "Limsa Lominsa Lower Decks",
+      "mapId": 12,
+      "x": -259.32715,
+      "z": 37.491333,
+      "source": "item-vendor-location-correction",
       "replaceExisting": false
     },
     {
@@ -594,6 +644,16 @@
       "mapId": 3,
       "x": -52.948293,
       "z": -92.909268,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1008145,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -31.469268,
+      "z": -245.260488,
       "source": "garland-npc-browse",
       "replaceExisting": false
     },
@@ -798,6 +858,16 @@
       "replaceExisting": false
     },
     {
+      "npcId": 1011274,
+      "territoryId": 424,
+      "territoryName": "Company Workshop - The Goblet",
+      "mapId": 205,
+      "x": -3.246829,
+      "z": 2.747317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
       "npcId": 1011806,
       "territoryId": 133,
       "territoryName": "Old Gridania",
@@ -914,6 +984,16 @@
       "mapId": 218,
       "x": -153.350244,
       "z": -42.458537,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1012225,
+      "territoryId": 418,
+      "territoryName": "Foundation",
+      "mapId": 218,
+      "x": 89.912195,
+      "z": 29.970732,
       "source": "garland-npc-browse",
       "replaceExisting": false
     },
@@ -1144,6 +1224,16 @@
       "mapId": 17,
       "x": 506.505366,
       "z": 383.625366,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1017653,
+      "territoryId": 478,
+      "territoryName": "Idyllshire",
+      "mapId": 257,
+      "x": -17.732683,
+      "z": -1.24878,
       "source": "garland-npc-browse",
       "replaceExisting": false
     },
@@ -1468,6 +1558,16 @@
       "replaceExisting": false
     },
     {
+      "npcId": 1024951,
+      "territoryId": 732,
+      "territoryName": "Eureka Anemos",
+      "mapId": 414,
+      "x": -119.882927,
+      "z": 532.48,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
       "npcId": 1025256,
       "territoryId": 133,
       "territoryName": "Old Gridania",
@@ -1494,6 +1594,16 @@
       "mapId": 372,
       "x": -782.236098,
       "z": 100.401951,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1025848,
+      "territoryId": 613,
+      "territoryName": "The Ruby Sea",
+      "mapId": 371,
+      "x": -10.489756,
+      "z": -606.407805,
       "source": "garland-npc-browse",
       "replaceExisting": false
     },
@@ -3324,6 +3434,16 @@
       "mapId": 857,
       "x": 486.524878,
       "z": 791.227317,
+      "source": "garland-npc-browse",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1054944,
+      "territoryId": 816,
+      "territoryName": "Il Mheg",
+      "mapId": 494,
+      "x": 423.586341,
+      "z": -776.241951,
       "source": "garland-npc-browse",
       "replaceExisting": false
     },

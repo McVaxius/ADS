@@ -10,26 +10,32 @@ Start a purchase with:
 
 ## Supported Offers
 
-V1 supports:
+ADS supports deterministic acquisition offers from:
 
 - regular `GilShop` offers priced by the requested item's vendor price;
-- single-output `SpecialShop` exchanges paid entirely with inventory items;
-- single-output `SpecialShop` exchanges paid entirely with one or more tomestone costs.
+- direct and `FateShop`-routed `SpecialShop` exchanges;
+- `InclusionShop` category/series routes to `SpecialShop`;
+- `GCShop` seal exchanges;
+- `FccShop` Free Company credit exchanges.
 
-The requested quantity must divide exactly by the offer's receive count. ADS does not round quantities or overbuy. High-quality outputs, multiple outputs, mixed cost families, unknown cost types, and collectability costs fail closed.
+The requested quantity must divide exactly by the offer's receive count. ADS does not round quantities or overbuy. A deterministic non-HQ multi-output exchange is supported only when every coproduct has capacity and every output delta can be verified exactly. One-to-three mixed currency costs are normalized through physical items, `TomestonesItem`, the audited virtual-currency map, company seals, MGP, Wolf Marks, Allied Seals, and `CurrencyManager`.
 
-Grand Company, scrip, FATE, `InclusionShop`, collectable, unresolved merchant, and arbitrary NPC-menu offers are outside V1. `CustomTalk`, `InclusionShop`, and other terminal shop families are reported but never guessed. They return a structured unsupported or route failure without spending currency.
+High-quality target rows, collectability costs, overbuying, unresolved currency codes, and ambiguous currency choices fail closed. `CollectablesShop` and `DisposalShop` are turn-in/sale surfaces; `LotteryExchangeShop` is nondeterministic. They return `unsupported-offer` without travel or callbacks.
 
 ## Discovery And Selection
 
-ADS builds a lazy local catalog from installed Lumina sheets and game files. It resolves every supported terminal path:
+ADS builds a lazy local catalog from installed Lumina sheets and game files. It recursively resolves every supported terminal path with cycle detection:
 
 - direct `ENpcBase` to `GilShop` or `SpecialShop`;
 - `TopicSelect` to a supported shop;
 - direct `PreHandler` to a supported shop;
-- `TopicSelect` to `PreHandler` to a supported shop.
+- `TopicSelect` to `PreHandler` to a supported shop;
+- `CustomTalk.SpecialLinks` and unambiguous typed script arguments;
+- `FateShop` to `SpecialShop`;
+- `InclusionShop` to category, series, and `SpecialShop`;
+- `GCShop` and `FccShop`.
 
-The callback indexes, path kind, and known `PreHandler.UnlockQuest` gate stay attached to that exact link. ADS does not infer deeper or unsupported menu relationships.
+Sheet callback indexes remain diagnostic. At every visible selection step, ADS matches the expected handler ID against the selected NPC's live event-handler options and requires exactly one live match. Hidden/dynamic entries therefore remap safely, and ADS never probes adjacent indexes.
 
 Teleport routes join each real `Aetheryte` to its exact `Map` and the map's exact aetheryte `MapMarker`; marker X/Y values are converted back to world X/Z with the map size factor and offsets. A map/territory mismatch, missing marker, or duplicate matching marker is never guessed.
 
@@ -39,7 +45,7 @@ Placements for the same NPC and territory within one world unit are deduplicated
 
 ADS logs mapped/rejected/missing aetherytes; every LGB territory and file outcome; LGB, `Level`, offline-fallback, and replacement counts; deduplication; all same-item candidates; rejection reasons; selected route; and fallback progression. Production does not call Garland, XIVAPI, or another vendor-data network service.
 
-Before travel, ADS checks known quest gates, unlocked routes, live currency, and inventory capacity. Offers with an unknown sheet gate fail closed.
+Before travel, ADS checks completed quests, Inclusion unlock quests, current Grand Company/rank, unlocked routes, known balances, and capacity for every output. A known-denied gate or known-insufficient balance is rejected. Achievement, festival, content, quest-state, FC-rank, and unavailable FC-credit truth is deferred to live UI proof. Known-affordable offers outrank deferred-balance offers. `GilShopItem.StateRequired` is ignored when no quest is attached, avoiding the false Gysahl Greens and Grade 8 Dark Matter gate.
 
 Unaffordable and unreachable offers are ignored. If affordable offers spend different currency identities, ADS returns `ambiguous-currency`. Within one currency set, a component-wise cheaper offer wins; incomparable costs remain ambiguous. Exact-cost ties prefer the current territory, no teleport, the shortest unlocked-aetheryte route, then stable shop and NPC IDs.
 
@@ -47,7 +53,7 @@ Fallback is limited to offers for the exact requested item and quantity with the
 
 ## Offline Catalog Regeneration
 
-`tools/generate_shop_npc_placements.py` is an offline-only generator. It enumerates direct, `TopicSelect`, direct-`PreHandler`, and topic-`PreHandler` shop links from a local xivdatamine `csv/en` tree, joins linked NPCs to a local Garland `browse/en/2/npc` JSON snapshot, converts map coordinates to world X/Z, and merges `tools/shop-npc-location-corrections.json`. It writes the sorted embedded catalog and `docs/shop-npc-placement-audit.json`; missing and ambiguous map joins stay visible instead of being guessed.
+`tools/generate_shop_npc_placements.py` is an offline-only generator. It enumerates direct, TopicSelect, PreHandler, FATE, Inclusion, Grand Company, Free Company, and recursive CustomTalk carrier links from a local xivdatamine `csv/en` tree, joins linked NPCs to a local Garland `browse/en/2/npc` JSON snapshot, converts map coordinates to world X/Z, and merges `tools/shop-npc-location-corrections.json`. It writes the sorted embedded catalog and `docs/shop-npc-placement-audit.json`; every missing and ambiguous map join stays visible instead of being guessed.
 
 ```text
 python tools/generate_shop_npc_placements.py --csv-root <xivdatamine>/csv/en --garland-npcs <offline-garland>/npc.json
@@ -63,8 +69,11 @@ Offline catalog rows intentionally contain X/Z only. After ADS enters the select
 
 Before every purchase callback, ADS validates the runtime surface owned by that shop adapter:
 
-- regular `Shop` uses [`ShopEventHandler`](https://github.com/aers/FFXIVClientStructs/blob/9f88d387b85948a25a7bc0fa752b2ce60ec0f655/FFXIVClientStructs/FFXIV/Client/Game/Event/ShopEventHandler.cs) and requires the exact active `GilShop` ID plus one unique visible non-HQ item with the expected item ID and exact gil price; its visible index is the callback row;
-- `ShopExchangeItem` and `ShopExchangeCurrency` use [`AgentShop`](https://github.com/aers/FFXIVClientStructs/blob/9f88d387b85948a25a7bc0fa752b2ce60ec0f655/FFXIVClientStructs/FFXIV/Client/UI/Agent/AgentShop.cs) and require the exact sheet shop name plus one unique non-HQ receive row and its complete one-to-three-entry cost span.
+- regular `Shop` uses [`ShopEventHandler`](https://github.com/aers/FFXIVClientStructs/blob/d25004c582d2c5d78118830d79ffd1479fe650ee/FFXIVClientStructs/FFXIV/Client/Game/Event/ShopEventHandler.cs) and requires the exact active `GilShop` ID plus one unique visible non-HQ item with the expected item ID and exact gil price; its visible index is the callback row;
+- direct special/FATE exchanges use [`AgentShop`](https://github.com/aers/FFXIVClientStructs/blob/d25004c582d2c5d78118830d79ffd1479fe650ee/FFXIVClientStructs/FFXIV/Client/UI/Agent/AgentShop.cs) and require the exact sheet shop name plus one unique receive row and its complete one-to-three-entry cost span;
+- `InclusionShop` selects the sheet page/subpage, reads the typed `AddonInclusionShop` values, and requires a unique item, bundle, and exact-cost row;
+- `GrandCompanyExchange` selects the sheet-derived rank/category tabs and requires exact live item, seal price, company, and required rank;
+- `FreeCompanyCreditShop` requires exact item, price, FC rank, credits, and maximum quantity.
 
 A wrong shop, item, price, HQ state, duplicate row, malformed runtime layout, receive bundle, currency identity, or cost never receives a callback. Before the first callback, that candidate is closed and the next identical-cost candidate may be tried. Waiting states and diagnostics identify the unavailable `ShopEventHandler` or `AgentShop` surface; exhausting validation candidates produces `ui-mismatch`.
 
@@ -73,8 +82,13 @@ Callbacks use the validated addon only:
 - `Shop`: `(0, row, batch)`;
 - `ShopExchangeItem`: `(0, row, batch)`;
 - `ShopExchangeCurrency`: `(0, row, batch, 0)`.
+- `InclusionShop`: `(12, page)`, `(13, subpage)`, then `(14, row, batch)`;
+- `GrandCompanyExchange`: the validated row and exact bounded quantity;
+- `FreeCompanyCreditShop`: `(0, row, batch)`.
 
-Each callback is capped at `99` transactions. ADS then waits up to ten seconds for the exact requested-item increase and exact currency decreases. It never blindly resends a callback. A missing delta times out; a contradictory delta returns `ui-mismatch`. Verified inventory, capacity, currency, and live UI are checked again before another batch. A requested-item or tracked-currency change outside ADS's verified callback window, an unexpected confirmation, cancellation, or any failure after a callback is immediate and never triggers vendor fallback.
+Each callback is capped at `99` transactions. ADS then waits up to ten seconds for every exact output increase and every exact currency decrease. It never blindly resends a callback. A missing delta times out; a contradictory delta returns `ui-mismatch`. Verified inventory, coproduct capacity, currency, and live UI are checked again before another batch. A requested/output item or tracked-currency change outside ADS's verified callback window, cancellation, or any failure after a callback is immediate and never triggers vendor fallback.
+
+An immediate confirmation created by ADS's validated callback receives a single owned token containing the expected item, quantity, and costs. Structured dialog values or localized prompt text must match before ADS accepts it. Pre-existing, late, duplicate, and mismatched confirmations remain `ui-mismatch`.
 
 Travel is bounded to 90 seconds, offline floor resolution to 20 seconds, navigation to 120 seconds, shop opening to 20 seconds, relevant command retries to three, and the whole run to five minutes.
 
@@ -94,7 +108,7 @@ Versatile Lure remains a secondary regression because its teleport-accessible Li
 /ads shop 29717 1
 ```
 
-It is not a production special case and is not the sole acceptance item. Grade 8 Dark Matter (`/ads shop 33916 1`) remains useful for the separate regular-gil `ShopEventHandler` regression. Any wrong active shop ID, visible item, HQ state, price, duplicate row, or malformed handler layout must stay callback-free.
+It is not a production special case and is not the sole acceptance item. Gysahl Greens (`/ads shop 4868 1`) at Maisenta and Grade 8 Dark Matter (`/ads shop 33916 1`) at Alaric are the regular-gil state-gate/live-row regressions. Any wrong active shop ID, visible item, HQ state, price, duplicate row, or malformed handler layout must stay callback-free.
 
 ## Exclusivity, Cancellation, And Status
 

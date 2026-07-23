@@ -73,9 +73,18 @@ The action is additive and capability schema version remains `1`.
         "itemId": 28,
         "name": "Allagan Tomestones of Poetics",
         "requiredAmount": 1500,
-        "availableAmount": 2000
+        "availableAmount": 2000,
+        "availabilityKnown": true
       }
-    ]
+    ],
+    "outputs": [
+      {
+        "itemId": 38420,
+        "name": "Manderium Meteorite",
+        "countPerTransaction": 1
+      }
+    ],
+    "availabilityKnown": true
   },
   "alternativeOffers": [],
   "failureCode": null,
@@ -87,7 +96,9 @@ The action is additive and capability schema version remains `1`.
 }
 ```
 
-The stable failure-code vocabulary is `invalid-request`, `busy`, `unsupported-offer`, `no-route`, `insufficient-currency`, `ambiguous-currency`, `missing-dependency`, `inventory-capacity`, `ui-mismatch`, `timeout`, and `cancelled`. Accepted runs place an applicable terminal code in `failureCode`. Rejected starts preserve the prior `failureCode` and update only `lastStartError`; they do not replace the last accepted purchase result. Unrelated utility runs also leave that result intact.
+The additive `shopKind` values are `special-shop-mixed`, `inclusion-shop`, `grand-company-shop`, and `free-company-shop`. Additive currency kinds include `company-seal`, `mgp`, `wolf-mark`, `allied-seal`, `currency-manager`, and `free-company-credit`. `outputs` describes every deterministic output per transaction. `availabilityKnown` is false when a sheet gate or balance must be proven in the live shop, such as Free Company credits.
+
+The stable failure-code vocabulary is `invalid-request`, `busy`, `unsupported-offer`, `no-route`, `insufficient-currency`, `ambiguous-currency`, `missing-dependency`, `inventory-capacity`, `ui-mismatch`, `timeout`, and `cancelled`. Accepted runs place an applicable terminal code in `failureCode`. Rejected starts preserve the prior `failureCode` and update only `lastStartError`; they do not replace the last accepted purchase result. Unrelated utility runs also leave that result intact. Capability schema version remains `1`.
 
 Capability schema version is `1`. `ADS.Invoke` returns:
 

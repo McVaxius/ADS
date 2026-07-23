@@ -59,6 +59,26 @@ class ShopNpcPlacementGeneratorTests(unittest.TestCase):
 
         self.assertAlmostEqual(world, converted, places=5)
 
+    def test_enumerates_new_terminal_carriers_and_breaks_custom_talk_cycles(self):
+        links = MODULE.enumerate_shop_links(
+            {10},
+            {20, 21},
+            [{"#": "1000", "ENpcData[0]": "50", "ENpcData[1]": "60", "ENpcData[2]": "70", "ENpcData[3]": "80", "ENpcData[4]": "90"}],
+            {1000: "Expanded Vendor"},
+            [],
+            [],
+            {80},
+            {90},
+            {60: [20]},
+            {70: [21]},
+            {50: [50, 10]},
+        )
+
+        self.assertEqual(
+            ["fate-shop", "inclusion-shop", "grand-company-shop", "free-company-shop", "custom-talk"],
+            [row["handler"] for row in links],
+        )
+
     def test_ambiguous_place_name_is_audited_and_not_guessed(self):
         placements, ambiguous = MODULE.build_garland_placements(
             {1000},
@@ -119,6 +139,14 @@ class ShopNpcPlacementGeneratorTests(unittest.TestCase):
             self._write_csv(csv_root / "ENpcBase.csv", ["#", "ENpcData[0]"], [[1000, 10]])
             self._write_csv(csv_root / "TopicSelect.csv", ["#", "Shop[0]"], [])
             self._write_csv(csv_root / "PreHandler.csv", ["#", "Target"], [])
+            self._write_csv(csv_root / "FateShop.csv", ["#", "SpecialShop[0]"], [])
+            self._write_csv(csv_root / "InclusionShop.csv", ["#", "Category[0]"], [])
+            self._write_csv(csv_root / "InclusionShopCategory.csv", ["#", "InclusionShopSeries"], [])
+            self._write_csv(csv_root / "InclusionShopSeries.csv", ["#", "SpecialShop"], [])
+            self._write_csv(csv_root / "GCShop.csv", ["#"], [])
+            self._write_csv(csv_root / "FccShop.csv", ["#"], [])
+            self._write_csv(csv_root / "CustomTalk.csv", ["#", "SpecialLinks"], [])
+            self._write_csv(csv_root / "CustomTalkNestHandlers.csv", ["#", "NestHandler"], [])
             self._write_csv(csv_root / "Map.csv", ["#", "PlaceName", "TerritoryType", "SizeFactor", "OffsetX", "OffsetY"], [])
             self._write_csv(csv_root / "TerritoryType.csv", ["#", "PlaceName", "Name", "Map"], [])
             self._write_csv(csv_root / "PlaceName.csv", ["#", "Name"], [])

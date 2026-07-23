@@ -590,7 +590,7 @@ public sealed class ShopCatalogTests
     }
 
     [Fact]
-    public void UnknownAndMixedCostFamiliesFailClosed()
+    public void UnknownCostFailsClosedWhileMixedDeterministicCostsAreSupported()
     {
         var snapshot = SpecialSnapshot(100, "Item", 200, "Exchange", 300, "Vendor", 400, 10) with
         {
@@ -613,8 +613,10 @@ public sealed class ShopCatalogTests
 
         var resolution = ShopCatalogBuilder.Resolve(snapshot, 100, 1);
 
-        Assert.Empty(resolution.Offers);
-        Assert.Equal(2, resolution.UnsupportedOfferCount);
+        var offer = Assert.Single(resolution.Offers);
+        Assert.Equal(ShopOfferKind.SpecialShopMixed, offer.Kind);
+        Assert.Equal(2, offer.Currencies.Count);
+        Assert.Equal(1, resolution.UnsupportedOfferCount);
     }
 
     [Fact]

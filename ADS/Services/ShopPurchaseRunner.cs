@@ -72,10 +72,12 @@ internal sealed class ShopPurchaseRunner
     private bool interactionSent;
     private int callbackTransactions;
     private long callbackItemCountBefore;
+    private IReadOnlyDictionary<uint, long> callbackOutputsBefore = new Dictionary<uint, long>();
     private IReadOnlyDictionary<ShopCurrencyIdentity, long> callbackCurrenciesBefore =
         new Dictionary<ShopCurrencyIdentity, long>();
     private IReadOnlyDictionary<ShopCurrencyIdentity, long> lastVerifiedCurrencies =
         new Dictionary<ShopCurrencyIdentity, long>();
+    private IReadOnlyDictionary<uint, long> lastVerifiedOutputs = new Dictionary<uint, long>();
     private readonly List<string> candidateFailures = [];
     private bool sawUiCandidateFailure;
     private string lastValidationDiagnostic = string.Empty;
@@ -147,10 +149,14 @@ internal sealed class ShopPurchaseRunner
         shopUiOwned = false;
         interactionSent = false;
         callbackTransactions = 0;
+        callbackOutputsBefore = new Dictionary<uint, long>();
         callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
         lastVerifiedCurrencies = selected?.Offer.Currencies
             .ToDictionary(currency => currency.Identity, runtime.GetAvailableCurrency)
             ?? new Dictionary<ShopCurrencyIdentity, long>();
+        lastVerifiedOutputs = selected?.Offer.AllOutputs
+            .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId))
+            ?? new Dictionary<uint, long>();
         candidateFailures.Clear();
         sawUiCandidateFailure = false;
         lastValidationDiagnostic = string.Empty;
@@ -228,6 +234,13 @@ internal sealed class ShopPurchaseRunner
 
             if (runtime.HasUnexpectedConfirmation)
             {
+                if (phase == RunnerPhase.VerifyingInventory
+                    && selected != null
+                    && callbackTransactions > 0
+                    && runtime.TryAcceptOwnedConfirmation(selected, callbackTransactions))
+                {
+                    return;
+                }
                 StopOwnedNavigation();
                 Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
                 return;
@@ -630,10 +643,10 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        var index = selected.Offer.MenuPath[menuPathIndex];
+        var step = selected.Offer.CallbackPath[menuPathIndex];
         phaseAttempts++;
         lastActionAtUtc = clock.UtcNow;
-        if (!runtime.TrySelectMenu(index))
+        if (!runtime.TrySelectMenu(step, selected.Offer.NpcId))
             return;
         menuPathIndex++;
         phaseAttempts = 0;
@@ -699,9 +712,12 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (runtime.GetInventoryCapacity(request.ItemId, resolution?.StackSize ?? 0) < status.RemainingQuantity)
+        var remainingTransactions = status.RemainingQuantity / (int)selected.Offer.ReceiveCount;
+        if (selected.Offer.AllOutputs.Any(output =>
+                runtime.GetInventoryCapacity(output.ItemId, Math.Max(1, output.StackSize))
+                    < checked((long)output.Count * remainingTransactions)))
         {
-            Fail(ShopPurchaseFailureCodes.InventoryCapacity, "Inventory no longer has capacity for the remaining requested items.");
+            Fail(ShopPurchaseFailureCodes.InventoryCapacity, "Inventory no longer has capacity for every output in the remaining exchange.");
             return;
         }
 
@@ -726,6 +742,8 @@ internal sealed class ShopPurchaseRunner
         }
 
         callbackItemCountBefore = lastVerifiedItemCount;
+        callbackOutputsBefore = selected.Offer.AllOutputs
+            .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId));
         var before = new Dictionary<ShopCurrencyIdentity, long>();
         foreach (var currency in selected.Offer.Currencies)
         {
@@ -771,6 +789,25 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
+        var outputsComplete = true;
+        foreach (var output in selected.Offer.AllOutputs)
+        {
+            if (!callbackOutputsBefore.TryGetValue(output.ItemId, out var outputBefore))
+            {
+                Fail(ShopPurchaseFailureCodes.UiMismatch, "Output verification state was incomplete.");
+                return;
+            }
+            var current = runtime.GetItemCount(output.ItemId);
+            var expectedDelta = checked((long)output.Count * callbackTransactions);
+            var actualDelta = current - outputBefore;
+            if (actualDelta < 0 || actualDelta > expectedDelta)
+            {
+                Fail(ShopPurchaseFailureCodes.UiMismatch, $"{output.Name} changed by an amount that contradicts the submitted shop batch.");
+                return;
+            }
+            outputsComplete &= actualDelta == expectedDelta;
+        }
+
         var currenciesComplete = true;
         foreach (var currency in selected.Offer.Currencies)
         {
@@ -792,14 +829,17 @@ internal sealed class ShopPurchaseRunner
             currenciesComplete &= actualDelta == expectedDelta;
         }
 
-        if (itemDelta == expectedItemDelta && currenciesComplete)
+        if (itemDelta == expectedItemDelta && outputsComplete && currenciesComplete)
         {
             lastVerifiedItemCount = currentItemCount;
             lastVerifiedCurrencies = selected.Offer.Currencies
                 .ToDictionary(currency => currency.Identity, runtime.GetAvailableCurrency);
+            lastVerifiedOutputs = selected.Offer.AllOutputs
+                .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId));
             RefreshAcquiredTruth(currentItemCount);
             callbackTransactions = 0;
             callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
+            callbackOutputsBefore = new Dictionary<uint, long>();
             if (status.RemainingQuantity == 0)
                 Complete();
             else
@@ -882,7 +922,9 @@ internal sealed class ShopPurchaseRunner
             runtime.IsQuestComplete,
             runtime.GetAvailableCurrency,
             runtime.GetItemCount,
-            runtime.GetInventoryCapacity);
+            runtime.GetInventoryCapacity,
+            () => runtime.CurrentGrandCompany,
+            () => runtime.CurrentGrandCompanyRank);
 
     private void Complete()
         => Finish(
@@ -994,6 +1036,19 @@ internal sealed class ShopPurchaseRunner
             return true;
         }
 
+        foreach (var output in selected.Offer.AllOutputs)
+        {
+            if (!lastVerifiedOutputs.TryGetValue(output.ItemId, out var expected))
+            {
+                message = $"Tracked {output.Name} state was incomplete before purchase.";
+                return true;
+            }
+            if (runtime.GetItemCount(output.ItemId) == expected)
+                continue;
+            message = $"{output.Name} changed outside ADS's verified purchase callback window.";
+            return true;
+        }
+
         foreach (var currency in selected.Offer.Currencies)
         {
             if (!lastVerifiedCurrencies.TryGetValue(currency.Identity, out var expected))
@@ -1001,6 +1056,9 @@ internal sealed class ShopPurchaseRunner
                 message = $"Tracked {currency.Name} state was incomplete before purchase.";
                 return true;
             }
+
+            if (expected < 0)
+                continue;
 
             if (runtime.GetAvailableCurrency(currency) == expected)
                 continue;

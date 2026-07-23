@@ -736,6 +736,50 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void OwnedImmediateConfirmationIsAcceptedExactlyOnce()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = true,
+        };
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.AcceptedConfirmationCount);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void MultiOutputPurchaseVerifiesEveryCoproductDelta()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var offer = Offer(10, 100, 1) with
+        {
+            Outputs =
+            [
+                new ShopOfferOutput(100, "Fixture Item", 1, 999, false),
+                new ShopOfferOutput(200, "Coproduct", 2, 999, false),
+            ],
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(2, runtime.GetItemCount(200));
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
     public void RejectedStartOnlyUpdatesLastStartError()
     {
         var clock = new FakeClock();
@@ -881,7 +925,11 @@ public sealed class ShopPurchaseRunnerTests
         public ShopUiValidationResult Validation { get; set; } = ShopUiValidationResult.Valid(0);
         public bool ApplyItemDelta { get; set; }
         public bool ApplyCurrencyDelta { get; set; }
+        public bool ShowConfirmationAfterSubmit { get; set; }
+        public bool AcceptOwnedConfirmation { get; set; }
+        public int AcceptedConfirmationCount { get; private set; }
         public long ItemCount { get; set; }
+        private readonly Dictionary<uint, long> additionalItemCounts = [];
         public int SubmitCount { get; private set; }
         public int TeleportCount { get; private set; }
         public int MoveCount { get; private set; }
@@ -911,7 +959,8 @@ public sealed class ShopPurchaseRunnerTests
 
         public bool IsAetheryteUnlocked(uint aetheryteId) => true;
         public bool IsQuestComplete(uint questId) => true;
-        public long GetItemCount(uint itemId) => itemId == 100 ? ItemCount : 0;
+        public long GetItemCount(uint itemId)
+            => itemId == 100 ? ItemCount : additionalItemCounts.GetValueOrDefault(itemId);
         public long GetAvailableCurrency(ShopCurrencyCost currency)
             => currencies.TryGetValue(currency.Identity, out var value) ? value : 0;
         public long GetInventoryCapacity(uint itemId, uint stackSize) => 100_000;
@@ -999,13 +1048,33 @@ public sealed class ShopPurchaseRunnerTests
             StopCountsAtSubmit.Add(StopNavigationCount);
             Events.Add($"submit:{offer.Offer.NpcId}");
             if (ApplyItemDelta)
-                ItemCount += (long)offer.Offer.ReceiveCount * transactionCount;
+            {
+                foreach (var output in offer.Offer.AllOutputs)
+                {
+                    var delta = (long)output.Count * transactionCount;
+                    if (output.ItemId == 100)
+                        ItemCount += delta;
+                    else
+                        additionalItemCounts[output.ItemId] = additionalItemCounts.GetValueOrDefault(output.ItemId) + delta;
+                }
+            }
             if (ApplyCurrencyDelta)
             {
                 foreach (var currency in offer.Offer.Currencies)
                     currencies[currency.Identity] -= (long)currency.AmountPerTransaction * transactionCount;
             }
 
+            if (ShowConfirmationAfterSubmit)
+                HasUnexpectedConfirmation = true;
+            return true;
+        }
+
+        public bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount)
+        {
+            if (!AcceptOwnedConfirmation || !HasUnexpectedConfirmation)
+                return false;
+            HasUnexpectedConfirmation = false;
+            AcceptedConfirmationCount++;
             return true;
         }
 

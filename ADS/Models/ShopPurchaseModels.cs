@@ -87,6 +87,10 @@ public enum ShopOfferKind
     GilShop,
     SpecialShopItem,
     SpecialShopTomestone,
+    SpecialShopMixed,
+    InclusionShop,
+    GrandCompanyShop,
+    FreeCompanyShop,
 }
 
 public enum ShopCurrencyKind
@@ -94,6 +98,19 @@ public enum ShopCurrencyKind
     Gil,
     Item,
     Tomestone,
+    CompanySeal,
+    Mgp,
+    WolfMark,
+    AlliedSeal,
+    CurrencyManager,
+    FreeCompanyCredit,
+}
+
+internal enum ShopAvailability
+{
+    Allowed,
+    Denied,
+    Deferred,
 }
 
 public readonly record struct ShopCurrencyIdentity(ShopCurrencyKind Kind, uint ItemId);
@@ -111,6 +128,8 @@ internal enum ShopSheetKind
 {
     Gil,
     Special,
+    GrandCompany,
+    FreeCompany,
 }
 
 internal enum ShopNpcEventKind
@@ -120,6 +139,14 @@ internal enum ShopNpcEventKind
     SpecialShop,
     TopicSelect,
     PreHandler,
+    FateShop,
+    InclusionShop,
+    GrandCompanyShop,
+    FreeCompanyShop,
+    CustomTalk,
+    CollectablesShop,
+    DisposalShop,
+    LotteryExchangeShop,
 }
 
 internal enum ShopNpcLinkKind
@@ -128,12 +155,20 @@ internal enum ShopNpcLinkKind
     TopicSelectShop,
     DirectPreHandler,
     TopicSelectPreHandler,
+    FateShop,
+    InclusionShop,
+    GrandCompanyShop,
+    FreeCompanyShop,
+    CustomTalk,
 }
 
 internal enum ShopMenuPathStepKind
 {
     ENpcData,
     TopicSelectShop,
+    CustomTalkSpecialLink,
+    InclusionPage,
+    InclusionSubpage,
 }
 
 internal enum ShopNpcPlacementSource
@@ -175,6 +210,44 @@ internal sealed record SpecialShopSheetRow(
     IReadOnlyList<uint> RequiredQuestIds,
     bool HasUnknownGate);
 
+internal sealed record GrandCompanyShopSheetRow(
+    uint ShopId,
+    string ShopName,
+    int RowIndex,
+    uint ItemId,
+    uint SealCost,
+    byte GrandCompanyId,
+    byte RequiredRank,
+    byte RankTab,
+    byte CategoryTab,
+    IReadOnlyList<uint> RequiredQuestIds,
+    bool HasUnknownGate);
+
+internal sealed record FreeCompanyShopSheetRow(
+    uint ShopId,
+    string ShopName,
+    int RowIndex,
+    uint ItemId,
+    uint CreditCost,
+    byte RequiredRank,
+    IReadOnlyList<uint> RequiredQuestIds,
+    bool HasUnknownGate);
+
+internal sealed record ShopFateShopSheetRow(
+    uint FateShopId,
+    IReadOnlyList<uint> SpecialShopIds);
+
+internal sealed record ShopInclusionRouteSheetRow(
+    uint InclusionShopId,
+    uint SpecialShopId,
+    int Page,
+    int Subpage,
+    uint UnlockQuestId);
+
+internal sealed record ShopCustomTalkSheetRow(
+    uint CustomTalkId,
+    IReadOnlyList<ShopNpcEventReference> Links);
+
 internal readonly record struct ShopNpcEventReference(ShopNpcEventKind Kind, uint RowId);
 
 internal sealed record ShopNpcEventSheetRow(
@@ -205,7 +278,11 @@ internal sealed record ShopNpcSheetLink(
     IReadOnlyList<ShopMenuPathStep> CallbackPath,
     ShopNpcLinkKind LinkKind,
     IReadOnlyList<uint> RequiredQuestIds,
-    bool HasUnknownGate)
+    bool HasUnknownGate,
+    byte RequiredGrandCompany = 0,
+    byte RequiredGrandCompanyRank = 0,
+    byte RankTab = 0,
+    byte CategoryTab = 0)
 {
     public IReadOnlyList<int> MenuPath { get; } = CallbackPath.Select(step => step.Index).ToArray();
 
@@ -293,13 +370,22 @@ internal sealed record ShopCatalogSnapshot(
     IReadOnlyList<ShopNpcSheetLink> NpcLinks,
     IReadOnlyList<ShopNpcPlacementSheetRow> NpcPlacements,
     IReadOnlyList<ShopAetheryteSheetRow> Aetherytes,
-    IReadOnlyList<ShopTomestoneSheetRow> Tomestones);
+    IReadOnlyList<ShopTomestoneSheetRow> Tomestones,
+    IReadOnlyList<GrandCompanyShopSheetRow>? GrandCompanyShopRows = null,
+    IReadOnlyList<FreeCompanyShopSheetRow>? FreeCompanyShopRows = null);
 
 internal sealed record ShopRouteCandidate(
     uint AetheryteId,
     string AetheryteName,
     Vector3 Position,
     float DistanceToNpc);
+
+internal sealed record ShopOfferOutput(
+    uint ItemId,
+    string Name,
+    uint Count,
+    uint StackSize,
+    bool IsUnique);
 
 internal sealed record ShopOffer(
     ShopOfferKind Kind,
@@ -325,12 +411,20 @@ internal sealed record ShopOffer(
     IReadOnlyList<uint> RequiredQuestIds,
     bool HasUnknownGate,
     IReadOnlyList<ShopRouteCandidate> AetheryteRoutes,
-    bool RequiresFloorResolution = false)
+    bool RequiresFloorResolution = false,
+    IReadOnlyList<ShopOfferOutput>? Outputs = null,
+    byte RequiredGrandCompany = 0,
+    byte RequiredGrandCompanyRank = 0,
+    byte RankTab = 0,
+    byte CategoryTab = 0)
 {
     public IReadOnlyList<int> MenuPath { get; } = CallbackPath.Select(step => step.Index).ToArray();
 
     public bool ViaTopicSelect
         => LinkKind is ShopNpcLinkKind.TopicSelectShop or ShopNpcLinkKind.TopicSelectPreHandler;
+
+    public IReadOnlyList<ShopOfferOutput> AllOutputs => Outputs ??
+        [new ShopOfferOutput(ReceiveItemId, ReceiveItemName, ReceiveCount, 0, false)];
 }
 
 internal sealed record ShopCatalogResolution(
@@ -357,7 +451,8 @@ internal sealed record ResolvedShopRoute(
 internal sealed record EvaluatedShopCurrency(
     ShopCurrencyCost Currency,
     long RequiredAmount,
-    long AvailableAmount);
+    long AvailableAmount,
+    bool AvailabilityKnown = true);
 
 internal sealed record EvaluatedShopOffer(
     ShopOffer Offer,
@@ -366,7 +461,9 @@ internal sealed record EvaluatedShopOffer(
     bool GateSatisfied,
     bool Affordable,
     bool CapacitySatisfied,
-    string? EvaluationFailureCode);
+    string? EvaluationFailureCode,
+    ShopAvailability Availability = ShopAvailability.Allowed,
+    bool BalanceKnown = true);
 
 internal sealed record ShopOfferSelectionResult(
     EvaluatedShopOffer? Selected,
@@ -380,7 +477,13 @@ public sealed record ShopPurchaseCurrencyStatus(
     uint ItemId,
     string Name,
     long RequiredAmount,
-    long AvailableAmount);
+    long AvailableAmount,
+    bool AvailabilityKnown = true);
+
+public sealed record ShopPurchaseOutputStatus(
+    uint ItemId,
+    string Name,
+    uint CountPerTransaction);
 
 public sealed record ShopPurchaseOfferStatus(
     string ShopKind,
@@ -392,7 +495,9 @@ public sealed record ShopPurchaseOfferStatus(
     uint TerritoryId,
     string TerritoryName,
     uint ReceiveCount,
-    IReadOnlyList<ShopPurchaseCurrencyStatus> Currencies);
+    IReadOnlyList<ShopPurchaseCurrencyStatus> Currencies,
+    IReadOnlyList<ShopPurchaseOutputStatus>? Outputs = null,
+    bool AvailabilityKnown = true);
 
 public sealed record ShopPurchaseStatusSnapshot(
     bool Running,

@@ -332,7 +332,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private void DrawActionRow()
     {
         var inInstancedDuty = plugin.DutyContextService.Current.InInstancedDuty;
-        if (ImGui.BeginTable("ADSPrimaryActions", 5, ImGuiTableFlags.SizingStretchSame))
+        if (ImGui.BeginTable("ADSPrimaryActions", 6, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
@@ -363,6 +363,10 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(4);
             if (ImGui.Button("Stop", new Vector2(-1f, 32f)))
                 plugin.StopOwnership();
+
+            ImGui.TableSetColumnIndex(5);
+            if (ImGui.Button("Guided Setup", new Vector2(-1f, 32f)))
+                plugin.OpenWizardUi();
             ImGui.EndTable();
         }
     }

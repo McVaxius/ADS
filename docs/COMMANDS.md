@@ -53,6 +53,8 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads leave` | Request leave state; nearby eligible chests may be handled before exit |
 | `/ads stop` | Drop ADS ownership immediately |
 
+Solo duties show the `/ads leave` recovery reminder once per stable entry. The reminder does not grant ownership or change the command's existing eligibility rules.
+
 ## Reusable Utility Automation
 
 Utility automation cannot start while ADS owns active duty execution or while inn-entry automation is running.
@@ -75,7 +77,7 @@ Utility automation cannot start while ADS owns active duty execution or while in
 
 Running `/ads repair` without a mode prints valid modes.
 
-Shop item IDs and quantities must be decimal integers. Item ID must be a positive `uint`; quantity must be `1` through `9999`. Quantity means additional item units, not transactions and not a target inventory count. Missing, extra, non-decimal, or out-of-range arguments are rejected without starting automation. See [Shop Purchasing](SHOP_PURCHASING.md).
+Shop item IDs and quantities must be decimal integers. Item ID must be a positive `uint`; quantity must be `1` through `9999`. Quantity means additional item units, not transactions and not a target inventory count. Deterministic gil, special/FATE, Inclusion, Grand Company, and Free Company families are eligible; turn-in, sale, lottery, ambiguous, or unprovable offers fail closed. Missing, extra, non-decimal, or out-of-range arguments are rejected without starting automation. See [Shop Purchasing](SHOP_PURCHASING.md).
 
 Main > Tools > Treasure And Operations also exposes compact **Desynth Controls** and **Extract Materia** launchers. **Extract Materia** starts the same no-configuration automation as `/ads extractmateria`.
 

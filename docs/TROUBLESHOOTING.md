@@ -87,6 +87,21 @@ Manual update bypasses the normal stale-age gate and uses cache-busted remote re
 
 - ADS does not currently own execution.
 - Use Stop for immediate release; Leave is only an owned-execution exit request.
+- The solo-duty reminder is guidance only; it does not bypass ownership or transition gates.
+
+### Camera Stays In Idle Camera Or First Person
+
+- Camera recovery runs only while ADS is enabled, logged in, stably inside an instanced duty, and owns execution.
+- Idle camera has priority. ADS sends `/icam`, then waits on the shared ten-second cooldown before a later first-person correction.
+- First-person recovery requires an unmodified keyboard binding for Camera Mode and will not inject while that key is already down.
+- Failed commands, unavailable pointers/bindings, and held keys consume the same cooldown. ADS never uses OS-level input and releases only its own injected state on the next framework tick.
+
+### Shop Purchase Returns `ui-mismatch`
+
+- Capture the selected shop/NPC, callback path, `shopKind`, `outputs`, currencies, and `availabilityKnown` from shop status JSON.
+- Confirm the live shop family, item, bundle, every cost, required rank, page/category tabs, and visible handler are unique.
+- A pre-existing, late, duplicate, or mismatched confirmation remains callback-free. ADS accepts only its immediate owned confirmation token once.
+- Never retry by guessing an adjacent menu or item row; hidden live rows are remapped by handler/item identity.
 
 ### ADS Shows Observing Only
 

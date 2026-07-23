@@ -250,6 +250,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
         DrawActionGrid(
             "ADSAboutLinks",
+            ("Open Setup Wizards", plugin.OpenWizardUi),
             ("Ko-fi", () => plugin.OpenUrl(PluginInfo.SupportUrl)),
             ("Discord", () => plugin.OpenUrl(PluginInfo.DiscordUrl)),
             ("Repository", () => plugin.OpenUrl(PluginInfo.RepoUrl)));

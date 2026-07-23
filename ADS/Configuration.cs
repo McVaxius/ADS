@@ -8,7 +8,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 20;
+    public int Version { get; set; } = 21;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
@@ -59,6 +59,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool DesynthProtectGearsets { get; set; } = true;
     public List<string> DesynthCategories { get; set; } = ["InventoryEquipment"];
     public bool DesynthContextMenuEnabled { get; set; } = true;
+    public bool WizardHubSeen { get; set; }
+    public bool DutyOperationsWizardCompleted { get; set; }
+    public bool RulesDataWizardCompleted { get; set; }
+    public bool UtilitiesWizardCompleted { get; set; }
+    public bool TreasureFollowWizardCompleted { get; set; }
+    public bool DiagnosticsRecoveryWizardCompleted { get; set; }
 
     public void Save()
         => Plugin.PluginInterface.SavePluginConfig(this);
