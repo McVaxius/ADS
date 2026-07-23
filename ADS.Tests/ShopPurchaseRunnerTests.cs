@@ -372,6 +372,67 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void ConfirmedTeleportRebasesOnlyGilAndCompletesOneShotPurchase()
+    {
+        var clock = new FakeClock();
+        var gil = new ShopCurrencyIdentity(ShopCurrencyKind.Gil, 1);
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.TeleportArrivalResults.Enqueue(false);
+        runtime.NpcDistances[100] = 20;
+        runtime.NpcPositions[100] = new Vector3(20, 0, 0);
+        var offer = Offer(10, 100, 1, territoryId: 2) with
+        {
+            Currencies = [new ShopCurrencyCost(ShopCurrencyKind.Gil, 1, "Gil", 10)],
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        runtime.AdjustCurrency(gil, -50);
+        runner.Update();
+        Assert.True(runner.IsRunning);
+        Assert.Equal("teleporting", runner.Status.Phase);
+
+        runtime.CurrentTerritoryId = 2;
+        runner.Update();
+        Assert.Equal(1, runtime.MoveCount);
+        runtime.NpcDistances[100] = 0;
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.TeleportCount);
+        Assert.Equal(1, runtime.MoveCount);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(9_940, runtime.GetAvailableCurrency(offer.Currencies[0]));
+    }
+
+    [Fact]
+    public void NonGilMutationDuringTeleportStillFailsOnConfirmedArrival()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime();
+        runtime.TeleportArrivalResults.Enqueue(false);
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, 100, 1, territoryId: 2)])),
+            runtime,
+            clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        runtime.AdjustCurrency(new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500), -1);
+        runner.Update();
+        Assert.True(runner.IsRunning);
+        Assert.Equal("teleporting", runner.Status.Phase);
+
+        runtime.CurrentTerritoryId = 2;
+        runner.Update();
+
+        Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.Status.FailureCode);
+        Assert.Equal(0, runtime.MoveCount);
+        Assert.Equal(0, runtime.SubmitCount);
+    }
+
+    [Fact]
     public void TeleportTimeoutTriesEachIdenticalCostCandidateOnlyOnceWhenAccepted()
     {
         var clock = new FakeClock();
@@ -757,6 +818,59 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void OwnedConfirmationWaitsForReadablePromptWithoutResendingCallback()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = true,
+            UnreadableOwnedConfirmationChecks = 1,
+        };
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        runner.Update();
+        Assert.True(runner.IsRunning);
+        Assert.Equal(0, runtime.AcceptedConfirmationCount);
+        Assert.Equal(1, runtime.SubmitCount);
+
+        runner.Update();
+        Assert.Equal(1, runtime.AcceptedConfirmationCount);
+        runtime.ItemCount = 1;
+        runtime.AdjustCurrency(new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500), -1);
+        runner.Update();
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void ReadableMismatchedOwnedConfirmationFailsWithoutResendOrFallback()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = false,
+        };
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, 100, 1), Offer(11, 101, 1)])),
+            runtime,
+            clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        runner.Update();
+
+        Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.Status.FailureCode);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(0, runtime.AcceptedConfirmationCount);
+        Assert.DoesNotContain(101u, runtime.InteractedNpcIds);
+    }
+
+    [Fact]
     public void MultiOutputPurchaseVerifiesEveryCoproductDelta()
     {
         var clock = new FakeClock();
@@ -908,6 +1022,7 @@ public sealed class ShopPurchaseRunnerTests
         private readonly Dictionary<ShopCurrencyIdentity, long> currencies = new()
         {
             [new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500)] = 10_000,
+            [new ShopCurrencyIdentity(ShopCurrencyKind.Gil, 1)] = 10_000,
         };
 
         public bool IsLoggedIn { get; set; } = true;
@@ -927,6 +1042,7 @@ public sealed class ShopPurchaseRunnerTests
         public bool ApplyCurrencyDelta { get; set; }
         public bool ShowConfirmationAfterSubmit { get; set; }
         public bool AcceptOwnedConfirmation { get; set; }
+        public int UnreadableOwnedConfirmationChecks { get; set; }
         public int AcceptedConfirmationCount { get; private set; }
         public long ItemCount { get; set; }
         private readonly Dictionary<uint, long> additionalItemCounts = [];
@@ -1066,6 +1182,14 @@ public sealed class ShopPurchaseRunnerTests
 
             if (ShowConfirmationAfterSubmit)
                 HasUnexpectedConfirmation = true;
+            return true;
+        }
+
+        public bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount)
+        {
+            if (!HasUnexpectedConfirmation || UnreadableOwnedConfirmationChecks <= 0)
+                return false;
+            UnreadableOwnedConfirmationChecks--;
             return true;
         }
 

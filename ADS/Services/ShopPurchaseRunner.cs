@@ -234,19 +234,27 @@ internal sealed class ShopPurchaseRunner
 
             if (runtime.HasUnexpectedConfirmation)
             {
-                if (phase == RunnerPhase.VerifyingInventory
+                var ownedConfirmationPending = phase == RunnerPhase.VerifyingInventory
                     && selected != null
                     && callbackTransactions > 0
-                    && runtime.TryAcceptOwnedConfirmation(selected, callbackTransactions))
+                    && runtime.IsOwnedConfirmationPending(selected, callbackTransactions);
+                if (!ownedConfirmationPending)
                 {
+                    if (phase == RunnerPhase.VerifyingInventory
+                        && selected != null
+                        && callbackTransactions > 0
+                        && runtime.TryAcceptOwnedConfirmation(selected, callbackTransactions))
+                    {
+                        return;
+                    }
+                    StopOwnedNavigation();
+                    Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
                     return;
                 }
-                StopOwnedNavigation();
-                Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
-                return;
             }
 
             if (phase != RunnerPhase.VerifyingInventory
+                && phase != RunnerPhase.Teleporting
                 && TryGetExternalBalanceChange(out var balanceChange))
             {
                 Fail(ShopPurchaseFailureCodes.UiMismatch, balanceChange);
@@ -336,6 +344,12 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.CurrentTerritoryId == selected.Route.TerritoryId)
         {
+            RebaselineTrackedGilAfterTeleport();
+            if (TryGetExternalBalanceChange(out var balanceChange))
+            {
+                Fail(ShopPurchaseFailureCodes.UiMismatch, balanceChange);
+                return;
+            }
             BeginNavigation();
             return;
         }
@@ -1067,6 +1081,24 @@ internal sealed class ShopPurchaseRunner
         }
 
         return false;
+    }
+
+    private void RebaselineTrackedGilAfterTeleport()
+    {
+        if (selected == null)
+            return;
+
+        var trackedGil = selected.Offer.Currencies
+            .Where(currency => currency.Kind == ShopCurrencyKind.Gil)
+            .ToArray();
+        if (trackedGil.Length == 0)
+            return;
+
+        var rebased = new Dictionary<ShopCurrencyIdentity, long>(lastVerifiedCurrencies);
+        foreach (var currency in trackedGil)
+            rebased[currency.Identity] = runtime.GetAvailableCurrency(currency);
+        lastVerifiedCurrencies = rebased;
+        diagnostic("Confirmed teleport arrival; re-baselined tracked gil while preserving item, output, and non-gil baselines.");
     }
 
     private void ReportSelectionDiagnostics(ShopOfferSelectionResult result)

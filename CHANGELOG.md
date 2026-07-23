@@ -3,6 +3,7 @@
 ## 2026-07-22
 
 - Expanded deterministic shop purchasing across GilShop, direct and FATE-routed SpecialShop, InclusionShop, Grand Company, and Free Company families; added recursive carrier discovery, live handler-index resolution, deferred gates/balances, audited mixed currencies, exact coproduct verification, family-specific live validation, and owned one-shot confirmations.
+- Fixed one-shot shop travel by accepting the owned teleport gil fee after confirmed arrival and waiting for callback-owned confirmation prompts to become readable without weakening exact mismatch or delta checks.
 - Added ADS-owned duty camera recovery for idle-camera and all first-person control modes with one shared ten-second cooldown and one-tick ADS-owned key release.
 - Added a once-per-entry solo-duty toast explaining `/ads leave` recovery.
 - Added five independent, replayable Guided Setup flows plus version-21 one-time-new-install hub behavior and migration-safe optional completion flags.

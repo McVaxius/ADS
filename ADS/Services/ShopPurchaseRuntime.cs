@@ -211,6 +211,7 @@ internal interface IShopPurchaseRuntime
     bool TrySelectMenu(ShopMenuPathStep step, uint npcId) => TrySelectMenu(step.Index);
     ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer);
     bool SubmitPurchase(EvaluatedShopOffer offer, int runtimeRow, int transactionCount);
+    bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount) => false;
     bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount) => false;
     void CloseOwnedShopUi();
 }
@@ -231,6 +232,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private string grandCompanyRouteKey = string.Empty;
     private int grandCompanySelectionStage;
     private ShopConfirmationToken? confirmationToken;
+    private string? readableOwnedSelectYesNoPrompt;
 
     private interface IShopUiAdapter
     {
@@ -704,8 +706,30 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             _ => GetAdapter(offer.Offer.Kind).Submit(runtimeRow, transactionCount),
         };
         if (accepted)
+        {
+            readableOwnedSelectYesNoPrompt = null;
             confirmationToken = new ShopConfirmationToken(offer, transactionCount, DateTime.UtcNow);
+        }
         return accepted;
+    }
+
+    public bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount)
+    {
+        readableOwnedSelectYesNoPrompt = null;
+        var token = confirmationToken;
+        if (token is not { IsConsumed: false }
+            || transactionCount <= 0
+            || token.ItemId != offer.Offer.ReceiveItemId
+            || token.Quantity != checked((int)((long)offer.Offer.ReceiveCount * transactionCount))
+            || !GameInteractionHelper.IsAddonVisible("SelectYesno"))
+            return false;
+
+        if (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)
+            || string.IsNullOrWhiteSpace(prompt))
+            return true;
+
+        readableOwnedSelectYesNoPrompt = prompt;
+        return false;
     }
 
     public bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount)
@@ -716,8 +740,13 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         var now = DateTime.UtcNow;
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
         {
-            if (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)
-                || !token.TryConsumePrompt(prompt, now))
+            var prompt = readableOwnedSelectYesNoPrompt;
+            readableOwnedSelectYesNoPrompt = null;
+            if (string.IsNullOrWhiteSpace(prompt)
+                && (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out prompt)
+                    || string.IsNullOrWhiteSpace(prompt)))
+                return false;
+            if (!token.TryConsumePrompt(prompt, now))
                 return false;
             return GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log: log);
         }
@@ -767,6 +796,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         inclusionSelectionStage = 0;
         grandCompanyRouteKey = string.Empty;
         grandCompanySelectionStage = 0;
+        readableOwnedSelectYesNoPrompt = null;
         confirmationToken = null;
     }
 
