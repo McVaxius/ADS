@@ -134,6 +134,7 @@ public sealed class ObservationMemoryService
         var liveInteractables = new Dictionary<string, ObservedInteractable>(StringComparer.Ordinal);
         var now = DateTime.UtcNow;
         var playerPosition = objectTable.LocalPlayer?.Position;
+        RemoveHardIgnoredTreasureState(context, considerTreasureCoffers);
         CleanupExpiredTreasureSuppressions(now);
 
         foreach (var gameObject in objectTable)
@@ -150,6 +151,12 @@ public sealed class ObservationMemoryService
             }
 
             if (IsPartyMemberGameObject(gameObject, name, partyMembers))
+            {
+                ForgetObservationKey(objectKey);
+                continue;
+            }
+
+            if (ShouldHardIgnoreTreasureLoot(context, considerTreasureCoffers, gameObject.ObjectKind, name))
             {
                 ForgetObservationKey(objectKey);
                 continue;
@@ -264,7 +271,7 @@ public sealed class ObservationMemoryService
                         knownInteractables[interactable.Key] = interactable;
                         break;
                     }
-                case ObjectKind.Treasure when considerTreasureCoffers:
+                case ObjectKind.Treasure:
                     {
                         if (objectPriorityRuleService.ShouldIgnoreInteractable(context, gameObject.ObjectKind, gameObject.BaseId, name, gameObject.Position, context.MapId))
                         {
@@ -606,6 +613,32 @@ public sealed class ObservationMemoryService
         treasureSuppressionUntil.Remove(objectKey);
     }
 
+    private void RemoveHardIgnoredTreasureState(DutyContextSnapshot context, bool considerTreasureCoffers)
+    {
+        if (considerTreasureCoffers)
+            return;
+
+        var ignoredObservationKeys = knownInteractables.Values
+            .Where(x => ShouldHardIgnoreTreasureLoot(context, false, x.ObjectKind, x.Name))
+            .Select(x => x.Key)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        foreach (var key in ignoredObservationKeys)
+            knownInteractables.Remove(key);
+
+        var ignoredProgressionKeys = usedProgressionInteractables
+            .Where(x => ShouldHardIgnoreTreasureLoot(context, false, x.Value.ObjectKind, x.Value.Name))
+            .Select(x => x.Key)
+            .ToList();
+        foreach (var key in ignoredProgressionKeys)
+        {
+            if (usedProgressionInteractables.Remove(key, out var interactable))
+                knownInteractables.Remove(interactable.Key);
+        }
+
+        treasureSuppressionUntil.Clear();
+    }
+
     private static bool IsNpcPartyMemberBattleNpc(IGameObject gameObject)
         => gameObject.ObjectKind == ObjectKind.BattleNpc
            && gameObject is IBattleNpc { BattleNpcKind: BattleNpcSubKind.NpcPartyMember };
@@ -717,6 +750,23 @@ public sealed class ObservationMemoryService
         => LooksLikeTreasureCofferOrChestName(name)
            || (TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId)
                && LooksLikeTreasureSackName(name));
+
+    internal static bool ShouldHardIgnoreTreasureLoot(
+        DutyContextSnapshot context,
+        bool considerTreasureCoffers,
+        ObjectKind objectKind,
+        string name)
+    {
+        if (considerTreasureCoffers)
+            return false;
+
+        if (TreasureDungeonData.TryGetInteractableClassification(context.TerritoryTypeId, name, out _))
+            return false;
+
+        return objectKind == ObjectKind.Treasure
+               || (objectKind is ObjectKind.EventObj or ObjectKind.EventNpc
+                   && LooksLikeTreasureLootName(context, name));
+    }
 
     private static bool LooksLikeTreasureSackName(string name)
         => name.Trim().Contains("sack", StringComparison.OrdinalIgnoreCase);

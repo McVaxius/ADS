@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-25
+
+- Made `Treasure coffers: OFF` a hard observation-layer ignore for treasure objects and recognized coffer, chest, and treasure-dungeon sack names. The policy now wins before authored object rules and clears remembered loot/suppression state so normal ADS and Fren followers cannot select a live or ghost coffer, while enabled behavior and non-loot progression such as treasure doors remain unchanged.
+
 ## 2026-07-23
 
 - Fixed nested shop menus by resolving each unique live handler through `EventHandlerSelector.Option.GlobalIndex`; `LocalIndex` and sheet indexes are now diagnostic only, including the handler `3276827` local-index-3/global-callback-2 regression and its nested callback-4 path.
