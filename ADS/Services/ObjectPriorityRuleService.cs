@@ -441,6 +441,8 @@ public sealed class ObjectPriorityRuleService
             parts.Add($"Terr {rule.TerritoryTypeId}");
         if (!string.IsNullOrWhiteSpace(rule.DutyEnglishName))
             parts.Add(rule.DutyEnglishName);
+        if (!string.IsNullOrWhiteSpace(rule.Alliance))
+            parts.Add($"Alliance {rule.Alliance.Trim()}");
 
         var selector = GetLayerSelector(rule);
         if (!string.IsNullOrWhiteSpace(selector))
@@ -1016,6 +1018,15 @@ public sealed class ObjectPriorityRuleService
             return false;
         }
 
+        var configuredAlliance = rule.Alliance?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredAlliance)
+            && (!AllianceScopeParser.IsValidScope(configuredAlliance)
+                || !AllianceScopeParser.IsValidScope(context.Alliance)
+                || !string.Equals(configuredAlliance, context.Alliance, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
         if (includeLayerScope && !MatchesLayerScope(rule, context))
             return false;
 
@@ -1221,6 +1232,7 @@ public sealed class ObjectPriorityRuleService
             TerritoryTypeId = rule.TerritoryTypeId,
             ContentFinderConditionId = rule.ContentFinderConditionId,
             DutyEnglishName = rule.DutyEnglishName,
+            Alliance = rule.Alliance,
             ObjectKind = rule.ObjectKind,
             BaseId = rule.BaseId,
             ObjectName = rule.ObjectName,

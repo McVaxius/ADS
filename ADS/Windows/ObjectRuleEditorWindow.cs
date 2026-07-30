@@ -16,6 +16,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         "Exact",
         "Contains",
     ];
+    private static readonly string[] AllianceValues = ["A", "B", "C"];
 
     internal static readonly string[] ClassificationLabels = RuleSemanticsCatalog.ClassificationLabels;
     internal static readonly string[] ClassificationValues = RuleSemanticsCatalog.ClassificationValues;
@@ -347,13 +348,14 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             | ImGuiTableFlags.Resizable
             | ImGuiTableFlags.SizingFixedFit;
 
-        if (!ImGui.BeginTable("ADSRulesEditorTable", 20, tableFlags, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSRulesEditorTable", 21, tableFlags, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 40f);
         ImGui.TableSetupColumn("Duty", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Terr", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("CFC", ImGuiTableColumnFlags.WidthFixed, 48f);
+        ImGui.TableSetupColumn("Alliance", ImGuiTableColumnFlags.WidthFixed, 76f);
         ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
         ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 90f);
@@ -423,11 +425,16 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(4);
+            DrawFieldCue(semantics, nameof(ObjectPriorityRule.Alliance), missingRequiredFields);
+            if (DrawAllianceCell(rule, ruleIndex))
+                dirty = true;
+
+            ImGui.TableSetColumnIndex(5);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectKind), missingRequiredFields);
             if (DrawObjectKindCell(rule, ruleIndex))
                 dirty = true;
 
-            ImGui.TableSetColumnIndex(5);
+            ImGui.TableSetColumnIndex(6);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectName), missingRequiredFields);
             if (EditTextCell("##ObjectName", rule.ObjectName, 128, out var objectName))
             {
@@ -435,7 +442,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(7);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.NameMatchMode), missingRequiredFields);
             var matchModeIndex = Math.Max(0, Array.IndexOf(NameMatchModes, string.IsNullOrWhiteSpace(rule.NameMatchMode) ? "Exact" : rule.NameMatchMode));
             if (ImGui.Combo("##NameMatchMode", ref matchModeIndex, NameMatchModes, NameMatchModes.Length))
@@ -444,7 +451,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(7);
+            ImGui.TableSetColumnIndex(8);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.Classification), missingRequiredFields);
             var classificationIndex = Math.Max(0, Array.IndexOf(ClassificationValues, rule.Classification ?? string.Empty));
             ImGui.SetNextItemWidth(-30f);
@@ -470,14 +477,14 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 ImGui.EndTooltip();
             }
 
-            ImGui.TableSetColumnIndex(8);
+            ImGui.TableSetColumnIndex(9);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.Layer), missingRequiredFields);
             if (DrawLayerCell(rule, ruleIndex))
             {
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(9);
+            ImGui.TableSetColumnIndex(10);
             DrawFieldCue(semantics, GetCoordinateSemanticsField(rule), missingRequiredFields);
             var unifiedCoordinates = GetUnifiedCoordinatesValue(rule);
             if (EditTextCell("##Coords", unifiedCoordinates, 48, out var editedCoordinates))
@@ -486,7 +493,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(10);
+            ImGui.TableSetColumnIndex(11);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.ObjectMatchRadius), missingRequiredFields);
             using (new ImGuiDisabledBlock(IsManualDestinationRule(rule) || IsCardinalHoldRule(rule)))
             {
@@ -497,7 +504,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 }
             }
 
-            ImGui.TableSetColumnIndex(11);
+            ImGui.TableSetColumnIndex(12);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.Priority), missingRequiredFields);
             if (EditIntCell("##Priority", rule.Priority, out var priority))
             {
@@ -505,7 +512,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(12);
+            ImGui.TableSetColumnIndex(13);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.PriorityVerticalRadius), missingRequiredFields);
             if (EditFloatCell("##PriorityVerticalRadius", rule.PriorityVerticalRadius, out var priorityVerticalRadius))
             {
@@ -513,7 +520,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(13);
+            ImGui.TableSetColumnIndex(14);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.MaxDistance), missingRequiredFields);
             if (EditNullableFloatCell("##MaxDistance", rule.MaxDistance, out var maxDistance))
             {
@@ -523,7 +530,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             if (ImGui.IsItemHovered())
                 DrawDistancePreviewTooltip(rule);
 
-            ImGui.TableSetColumnIndex(14);
+            ImGui.TableSetColumnIndex(15);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.WaitAtDestinationSeconds), missingRequiredFields);
             if (EditFloatCell("##WaitAtDestinationSeconds", rule.WaitAtDestinationSeconds, out var waitAtDestinationSeconds))
             {
@@ -531,7 +538,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(15);
+            ImGui.TableSetColumnIndex(16);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.WaitAfterInteractSeconds), missingRequiredFields);
             if (EditFloatCell("##WaitAfterInteractSeconds", rule.WaitAfterInteractSeconds, out var waitAfterInteractSeconds))
             {
@@ -539,7 +546,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(16);
+            ImGui.TableSetColumnIndex(17);
             DrawFieldCue(semantics, nameof(ObjectPriorityRule.Notes), missingRequiredFields);
             if (EditTextCell("##Notes", rule.Notes, 512, out var notes))
             {
@@ -547,15 +554,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 dirty = true;
             }
 
-            ImGui.TableSetColumnIndex(17);
+            ImGui.TableSetColumnIndex(18);
             if (ImGui.SmallButton("B64"))
                 ExportRuleAsBase64(rule);
 
-            ImGui.TableSetColumnIndex(18);
+            ImGui.TableSetColumnIndex(19);
             if (ImGui.SmallButton("Paste") && ImportRuleFromClipboard(ruleIndex))
                 dirty = true;
 
-            ImGui.TableSetColumnIndex(19);
+            ImGui.TableSetColumnIndex(20);
             if (ImGui.SmallButton("-"))
                 rowToRemove = ruleIndex;
 
@@ -581,22 +588,23 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(1, "Duty", "Catalog duty selector. GLOBAL leaves Duty/Terr/CFC wild so the row can match any duty.");
         DrawHeaderCell(2, "Terr", "TerritoryTypeId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
         DrawHeaderCell(3, "CFC", "ContentFinderConditionId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
-        DrawHeaderCell(4, "Kind", "Live ObjectKind match. Use blank for wildcard. This is the game object category, not a unique instance id.");
-        DrawHeaderCell(5, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
-        DrawHeaderCell(6, "Match", "Exact or substring name matching.");
-        DrawHeaderCell(7, "Class", "Planner/execution behavior override such as Required, CombatFriendly, TreasureDoor, BossFight, MapXzDestination, MapXzForceMarch, XYZ, or XYZForceMarch. ForceMarch rows are generic authored bypass destinations, not mounted-only rows.");
-        DrawHeaderCell(8, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
-        DrawHeaderCell(9, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
-        DrawHeaderCell(10, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
-        DrawHeaderCell(11, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
-        DrawHeaderCell(12, "Y", "Priority vertical radius gate. Zero means no Y gate.");
-        DrawHeaderCell(13, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
-        DrawHeaderCell(14, "Wait-before", "Seconds to hold after ADS arrives in interact range and before it sends the first direct interact for this commitment.");
-        DrawHeaderCell(15, "Wait-after", "Seconds to hold after a successful direct interact send before ADS retries the same target or moves on to new planner truth.");
-        DrawHeaderCell(16, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
-        DrawHeaderCell(17, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
-        DrawHeaderCell(18, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
-        DrawHeaderCell(19, "-", "Delete this row.");
+        DrawHeaderCell(4, "Alliance", "Optional alliance-party scope. (Any) is wildcard; A, B, or C fails closed when the live alliance cannot be resolved.");
+        DrawHeaderCell(5, "Kind", "Live ObjectKind match. Use blank for wildcard. This is the game object category, not a unique instance id.");
+        DrawHeaderCell(6, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
+        DrawHeaderCell(7, "Match", "Exact or substring name matching.");
+        DrawHeaderCell(8, "Class", "Planner/execution behavior override such as Required, CombatFriendly, TreasureDoor, BossFight, MapXzDestination, MapXzForceMarch, XYZ, or XYZForceMarch. ForceMarch rows are generic authored bypass destinations, not mounted-only rows.");
+        DrawHeaderCell(9, "Layer", "Live map/sub-area filter. If set, this rule only applies on that active layer. Use a live map name like Forecastle or a map row id.");
+        DrawHeaderCell(10, "Coords", "Single coordinate field. Enter `a,b` for map X,Z and `a,b,c` for world X,Y,Z. On manual destination rows this is the destination point. On ordinary rows this is the physical object selector.");
+        DrawHeaderCell(11, "R", "Optional positional-match radius for ordinary rows only. Blank/0 means no explicit radius and falls back to 6y when Coords is populated. Manual destination rows ignore this field.");
+        DrawHeaderCell(12, "Pri", "Lower wins. Manual destinations can intentionally beat worse live progression interactables if you give them the better priority.");
+        DrawHeaderCell(13, "Y", "Priority vertical radius gate. Zero means no Y gate.");
+        DrawHeaderCell(14, "Dist", "Optional max distance gate. Zero/blank means no distance cap.");
+        DrawHeaderCell(15, "Wait-before", "Seconds to hold after ADS arrives in interact range and before it sends the first direct interact for this commitment.");
+        DrawHeaderCell(16, "Wait-after", "Seconds to hold after a successful direct interact send before ADS retries the same target or moves on to new planner truth.");
+        DrawHeaderCell(17, "Notes", "Human notes only. Safe place for why this rule exists or what was tested.");
+        DrawHeaderCell(18, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
+        DrawHeaderCell(19, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
+        DrawHeaderCell(20, "-", "Delete this row.");
     }
 
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
@@ -747,6 +755,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 return;
 
             var context = plugin.DutyContextService.Current;
+            if (!plugin.ObjectPriorityRuleService.MatchesCurrentDutyScopeForEditor(rule, context))
+                return;
+
             var liveObjects = Plugin.ObjectTable
                 .Where(x => x is not null && x.GameObjectId != localPlayer.GameObjectId)
                 .Select(x => new RuleDistancePreviewObject(
@@ -913,6 +924,38 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         => string.IsNullOrWhiteSpace(dutySearch)
            || label.Contains(dutySearch, StringComparison.OrdinalIgnoreCase);
 
+    private static bool DrawAllianceCell(ObjectPriorityRule rule, int ruleIndex)
+    {
+        var currentLabel = string.IsNullOrWhiteSpace(rule.Alliance)
+            ? "(Any)"
+            : AllianceScopeParser.IsValidScope(rule.Alliance)
+                ? rule.Alliance.Trim().ToUpperInvariant()
+                : $"[Invalid] {rule.Alliance.Trim()}";
+        ImGui.SetNextItemWidth(-1f);
+        if (!ImGui.BeginCombo($"##Alliance{ruleIndex}", currentLabel))
+            return false;
+
+        var changed = false;
+        if (ImGui.Selectable("(Any)", string.IsNullOrWhiteSpace(rule.Alliance)))
+        {
+            rule.Alliance = null;
+            changed = true;
+        }
+
+        foreach (var alliance in AllianceValues)
+        {
+            var isSelected = string.Equals(rule.Alliance?.Trim(), alliance, StringComparison.OrdinalIgnoreCase);
+            if (!ImGui.Selectable(alliance, isSelected))
+                continue;
+
+            rule.Alliance = alliance;
+            changed = true;
+        }
+
+        ImGui.EndCombo();
+        return changed;
+    }
+
     private bool DrawLayerCell(ObjectPriorityRule rule, int ruleIndex)
     {
         var territoryTypeId = rule.TerritoryTypeId != 0
@@ -992,6 +1035,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             .OrderBy(index => GetDutySortLabel(draft.Rules[index]), StringComparer.OrdinalIgnoreCase)
             .ThenBy(index => draft.Rules[index].ContentFinderConditionId)
             .ThenBy(index => draft.Rules[index].TerritoryTypeId)
+            .ThenBy(index => NormalizeEditorText(draft.Rules[index].Alliance), StringComparer.OrdinalIgnoreCase)
             .ThenBy(index => draft.Rules[index].ObjectName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(index => draft.Rules[index].Priority)
             .ToList();
@@ -1032,16 +1076,18 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         var filter = ruleTextFilter.Trim();
         return ContainsFilterText(GetDutySelectionLabel(rule), filter)
+               || ContainsFilterText(rule.Alliance ?? string.Empty, filter)
                || ContainsFilterText(rule.ObjectName, filter)
                || ContainsFilterText(rule.Classification, filter)
                || ContainsFilterText(GetLayerSelectorForEditor(rule), filter)
                || ContainsFilterText(rule.Notes, filter);
     }
 
-    private static bool IsGlobalAreaRule(ObjectPriorityRule rule)
+    internal static bool IsGlobalAreaRule(ObjectPriorityRule rule)
         => string.IsNullOrWhiteSpace(rule.DutyEnglishName)
            && rule.TerritoryTypeId == 0
-           && rule.ContentFinderConditionId == 0;
+           && rule.ContentFinderConditionId == 0
+           && string.IsNullOrWhiteSpace(rule.Alliance);
 
     private static bool ContainsFilterText(string value, string filter)
         => !string.IsNullOrWhiteSpace(value)
@@ -1240,7 +1286,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private void SyncDiskTransferPath()
         => diskTransferPath = plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName);
 
-    private static ObjectPriorityRuleManifest CloneManifest(ObjectPriorityRuleManifest manifest)
+    internal static ObjectPriorityRuleManifest CloneManifest(ObjectPriorityRuleManifest manifest)
         => new()
         {
             SchemaVersion = manifest.SchemaVersion,
@@ -1252,6 +1298,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                         TerritoryTypeId = rule.TerritoryTypeId,
                         ContentFinderConditionId = rule.ContentFinderConditionId,
                         DutyEnglishName = rule.DutyEnglishName,
+                        Alliance = rule.Alliance,
                         ObjectKind = rule.ObjectKind,
                         BaseId = rule.BaseId,
                         ObjectName = rule.ObjectName,

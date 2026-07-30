@@ -13,7 +13,8 @@ internal static class TestDutyContextFactory
         bool occupied = false,
         bool cutscene = false,
         uint territoryId = 777,
-        uint cfcId = 888)
+        uint cfcId = 888,
+        string? alliance = null)
         => new()
         {
             PluginEnabled = pluginEnabled,
@@ -34,6 +35,7 @@ internal static class TestDutyContextFactory
             TerritoryTypeId = territoryId,
             MapId = 1,
             ContentFinderConditionId = cfcId,
+            Alliance = alliance,
             CurrentDuty = category is null ? null : CreateDuty(category.Value, territoryId, cfcId),
         };
 

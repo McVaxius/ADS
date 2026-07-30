@@ -2,6 +2,8 @@ using ADS.Models;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ADS.Services;
 
@@ -10,12 +12,18 @@ public sealed class DutyContextService
     private readonly IClientState clientState;
     private readonly ICondition condition;
     private readonly DutyCatalogService dutyCatalogService;
+    private readonly IPartyList partyList;
 
-    public DutyContextService(IClientState clientState, ICondition condition, DutyCatalogService dutyCatalogService)
+    public DutyContextService(
+        IClientState clientState,
+        ICondition condition,
+        DutyCatalogService dutyCatalogService,
+        IPartyList partyList)
     {
         this.clientState = clientState;
         this.condition = condition;
         this.dutyCatalogService = dutyCatalogService;
+        this.partyList = partyList;
         Current = new DutyContextSnapshot
         {
             PluginEnabled = true,
@@ -36,6 +44,7 @@ public sealed class DutyContextService
             TerritoryTypeId = 0,
             MapId = 0,
             ContentFinderConditionId = 0,
+            Alliance = null,
             CurrentDuty = null,
         };
     }
@@ -85,7 +94,38 @@ public sealed class DutyContextService
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,
+            Alliance = TryResolveAlliance(),
             CurrentDuty = currentDuty,
         };
+    }
+
+    private unsafe string? TryResolveAlliance()
+    {
+        try
+        {
+            if (!partyList.IsAlliance)
+                return null;
+
+            var unitManager = RaptureAtkUnitManager.Instance();
+            if (unitManager == null)
+                return null;
+
+            var addon = (AddonPartyList*)unitManager->GetAddonByName("_PartyList");
+            if (addon == null
+                || !addon->AtkUnitBase.IsReady
+                || !addon->AtkUnitBase.IsVisible
+                || addon->PartyTypeTextNode == null)
+            {
+                return null;
+            }
+
+            return AllianceScopeParser.Parse(
+                isAlliance: true,
+                addon->PartyTypeTextNode->NodeText.ToString());
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

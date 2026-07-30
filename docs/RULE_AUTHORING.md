@@ -60,7 +60,7 @@ Ignored fields remain stored. Selecting a class and showing cues never clears th
 
 ## Rule Resolution Order
 
-1. Scope: duty, territory, CFC, then layer.
+1. Scope: duty, territory, CFC, alliance, then layer.
 2. Object match: kind, base ID, name/match mode, then optional positional selector.
 3. Gates: distance and vertical eligibility.
 4. Priority: lower value wins among eligible matching candidates.
@@ -74,6 +74,7 @@ ADS removes every identity/scope match that fails `Dist` or `Y` before selecting
 |---|---|
 | `Duty` | Duty scope; `GLOBAL` means wildcard scope |
 | `Terr` / `CFC` | Numeric territory/content-finder scope |
+| `Alliance` | Optional alliance-party scope: `(Any)`, `A`, `B`, or `C` |
 | `Kind` | Live object kind such as `BattleNpc`, `EventObj`, `EventNpc`, `Treasure` |
 | `BaseId` | Stable base/sheet ID; useful when names collide |
 | `Name` | Object name |
@@ -126,15 +127,17 @@ ADS removes every identity/scope match that fails `Dist` or `Y` before selecting
 | Push through incidental combat | `MapXzForceMarch` / `XYZForceMarch` |
 | Hold direct cardinal movement | `CardinalHoldNorth/East/South/West` |
 
-## Scope And Layer
+## Scope, Alliance, And Layer
 
-- Blank duty, `TerritoryTypeId = 0`, and `ContentFinderConditionId = 0` create global scope.
+- Blank duty, `TerritoryTypeId = 0`, `ContentFinderConditionId = 0`, and blank `Alliance` create global scope.
 - A non-empty duty name is real duty scope, not notes.
 - Duty-name matching tolerates leading `The`, but remains a duty match.
+- `Alliance` is optional. `(Any)`/blank matches every party; `A`, `B`, or `C` matches only that live alliance.
+- An invalid nonblank alliance or an explicit alliance whose live label cannot currently be resolved fails closed.
 - `Layer` restricts any rule to current live map/sub-area.
 - Prefer a human-readable active sub-area name from Main > Diagnostics or Frontier Labels.
 - Leave `Layer` blank unless behavior truly differs by sub-area.
-- Object Rules **Current Area + Global** filters by duty/territory/CFC and intentionally does not hide rows from another layer in the same duty.
+- Object Rules **Current Area + Global** filters by duty/territory/CFC/alliance and intentionally does not hide rows from another layer in the same duty.
 
 For BattleNpc truth, layer-scoped rows can act as a truth gate: if a visible mob only matches layer-scoped rows and none match current layer, ADS suppresses it instead of treating it as generic unruled monster truth.
 
@@ -152,7 +155,7 @@ For BattleNpc truth, layer-scoped rows can act as a truth gate: if a visible mob
 
 ## Planner And Frontier Precedence
 
-- Entered live object rules are first-tier truth once identity, duty/layer, distance, and Y gates pass.
+- Entered live object rules are first-tier truth once identity, duty/alliance/layer, distance, and Y gates pass.
 - `Ignored`, manual destination, and cardinal-hold rows are not live object truth.
 - Numeric `Priority` only sorts inside the same tier; generated Lumina labels cannot beat eligible live authored object rules.
 - Non-combat `MapXzDestination` / `XYZ` waypoints run only when no eligible live progression object is being skipped.
@@ -289,6 +292,7 @@ Catalog maturity describes validation. It does not replace live instanced-duty t
 
 - Prefer exact name before `Contains`.
 - Prefer exact kind and base ID when known.
+- Add alliance only when A/B/C behavior truly differs.
 - Add layer only for real layer differences.
 - Use positional selectors only for truly same-name physical instances.
 - Use normal object rules before manual waypoints.

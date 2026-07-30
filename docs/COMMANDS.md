@@ -53,6 +53,8 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads leave` | Request leave state; nearby eligible chests may be handled before exit |
 | `/ads stop` | Drop ADS ownership immediately |
 
+`/ads outside` and `/ads inside` best-effort-send `/xldisableplugin AutoDuty` before ADS begins ownership work. A dispatch failure is logged but does not reject the requested ADS start. `/ads resume` does not send this command.
+
 Solo duties show the `/ads leave` recovery reminder once per stable entry. The reminder does not grant ownership or change the command's existing eligibility rules.
 
 ## Reusable Utility Automation

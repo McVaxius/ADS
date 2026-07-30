@@ -22,6 +22,7 @@ public sealed class RuleSemanticsCatalogTests
                 Assert.False(string.IsNullOrWhiteSpace(entry.Behavior));
                 Assert.False(string.IsNullOrWhiteSpace(entry.CommonExample));
                 Assert.NotEmpty(RuleSemanticsCatalog.GetRelevantEditorFieldLabels(entry));
+                Assert.Equal(RuleFieldUse.Optional, entry.Fields[nameof(ObjectPriorityRule.Alliance)]);
             });
         Assert.Equal(
             RuleSemanticsCatalog.UniversalFields.OrderBy(x => x),

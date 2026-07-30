@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-30
+
+- Added optional A/B/C alliance scoping to object rules. ADS resolves the current alliance from the typed `_PartyList` UI only while `IPartyList.IsAlliance` is true; blank scope remains wildcard, while invalid or currently unresolved explicit scope fails closed across object rules, manual destinations, cardinal holds, previews, and editor filters. Schema version remains 1.
+- ADS outside/inside starts now best-effort-send `/xldisableplugin AutoDuty` before ownership work for shared chat, UI, IPC, and operator-API behavior. Dispatch failure is logged without blocking the requested start; Resume is unchanged. Credit <@196286096726949888>.
+
 ## 2026-07-25
 
 - Made `Treasure coffers: OFF` a hard observation-layer ignore for treasure objects and recognized coffer, chest, and treasure-dungeon sack names. The policy now wins before authored object rules and clears remembered loot/suppression state so normal ADS and Fren followers cannot select a live or ghost coffer, while enabled behavior and non-loot progression such as treasure doors remain unchanged.

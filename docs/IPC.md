@@ -4,6 +4,10 @@ Existing ADS IPC endpoints remain available.
 
 ## Endpoints
 
+- `ADS.StartDutyFromOutside() -> bool`
+- `ADS.StartDutyFromInside() -> bool`
+- `ADS.ResumeDutyFromInside() -> bool`
+- `ADS.LeaveDuty() -> bool`
 - `ADS.GetCapabilitiesJson() -> string`
 - `ADS.Invoke(string action, string payloadJson) -> string`
 - `ADS.GetConfigurationJson() -> string`
@@ -17,6 +21,8 @@ Existing ADS IPC endpoints remain available.
 - `ADS.OpenDesynthConfigUi() -> bool`
 - `ADS.IsDutyOwned() -> bool`
 - `ADS.GetDesynthStatusJson() -> string`
+
+`ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. They best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty.
 
 `ADS.IsDutyOwned` is authoritative runtime duty ownership. It returns `true` only while live instanced-duty truth is active and ADS mode is `OwnedStartOutside`, `OwnedStartInside`, `OwnedResumeInside`, or `Leaving`. It returns `false` for `Idle`, `Observing`, `Failed`, and queued outside-duty ownership.
 

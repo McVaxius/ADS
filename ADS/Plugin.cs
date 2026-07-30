@@ -190,7 +190,7 @@ public sealed class Plugin : IDalamudPlugin
         RemoteJsonUpdateService.TryStartStartupRefresh("startup");
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
-        DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService);
+        DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
         ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, configDirectory);
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
@@ -811,6 +811,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromOutside()
     {
+        DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
         ResetOwnedTreasureRoleInferenceLatch();
         InferAndApplyTreasureDungeonRole("outside start");
@@ -824,6 +825,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromInside()
     {
+        DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside start", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
@@ -836,6 +838,12 @@ public sealed class Plugin : IDalamudPlugin
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
+    }
+
+    private static void DisableAutoDutyForDutyStart()
+    {
+        if (!GameInteractionHelper.TrySendChatCommand(CommandManager, "/xldisableplugin AutoDuty", Log))
+            Log.Warning("[ADS] Failed to dispatch automatic AutoDuty disable command; continuing duty start.");
     }
 
     public bool ResumeDutyFromInside()
