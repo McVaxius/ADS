@@ -16,7 +16,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         "Exact",
         "Contains",
     ];
-    private static readonly string[] AllianceValues = ["A", "B", "C"];
+    private static readonly string[] AllianceValues = ["A", "B", "C", "D", "E", "F", "G"];
 
     internal static readonly string[] ClassificationLabels = RuleSemanticsCatalog.ClassificationLabels;
     internal static readonly string[] ClassificationValues = RuleSemanticsCatalog.ClassificationValues;
@@ -588,7 +588,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(1, "Duty", "Catalog duty selector. GLOBAL leaves Duty/Terr/CFC wild so the row can match any duty.");
         DrawHeaderCell(2, "Terr", "TerritoryTypeId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
         DrawHeaderCell(3, "CFC", "ContentFinderConditionId scope. Auto-filled from the duty dropdown. Zero means wildcard.");
-        DrawHeaderCell(4, "Alliance", "Optional alliance-party scope. (Any) is wildcard; A, B, or C fails closed when the live alliance cannot be resolved.");
+        DrawHeaderCell(4, "Alliance", "Optional alliance-party scope. (Any) is wildcard; A-G fails closed when the live alliance cannot be resolved.");
         DrawHeaderCell(5, "Kind", "Live ObjectKind match. Use blank for wildcard. This is the game object category, not a unique instance id.");
         DrawHeaderCell(6, "Name", "Object name text to match. Leave blank for any object name inside the rest of this rule scope.");
         DrawHeaderCell(7, "Match", "Exact or substring name matching.");

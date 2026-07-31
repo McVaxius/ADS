@@ -2,6 +2,7 @@
 
 ## 2026-07-31
 
+- Expanded optional alliance scoping from A/B/C to A-G. Blank scope remains wildcard, while invalid or currently unresolved explicit scope continues to fail closed; schema version remains 1.
 - Stopped duty-object rule loads from automatically rewriting saved rule fields through built-in migrations; the rule editor now reloads the manifest exactly as authored.
 
 ## 2026-07-30

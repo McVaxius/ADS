@@ -4,7 +4,7 @@ namespace ADS.Models;
 
 public static partial class AllianceScopeParser
 {
-    [GeneratedRegex(@"(?<![\p{L}\p{N}])([ABC])(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\p{L}\p{N}])([A-G])(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex StandaloneAllianceRegex();
 
     public static string? Parse(bool isAlliance, string? partyTypeText)
@@ -23,6 +23,7 @@ public static partial class AllianceScopeParser
         var trimmed = alliance?.Trim();
         return trimmed is not null
                && trimmed.Length == 1
-               && trimmed[0] is 'A' or 'a' or 'B' or 'b' or 'C' or 'c';
+               && trimmed[0] is 'A' or 'a' or 'B' or 'b' or 'C' or 'c'
+                   or 'D' or 'd' or 'E' or 'e' or 'F' or 'f' or 'G' or 'g';
     }
 }

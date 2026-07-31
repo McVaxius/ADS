@@ -74,7 +74,7 @@ ADS removes every identity/scope match that fails `Dist` or `Y` before selecting
 |---|---|
 | `Duty` | Duty scope; `GLOBAL` means wildcard scope |
 | `Terr` / `CFC` | Numeric territory/content-finder scope |
-| `Alliance` | Optional alliance-party scope: `(Any)`, `A`, `B`, or `C` |
+| `Alliance` | Optional alliance-party scope: `(Any)`, `A` through `G` |
 | `Kind` | Live object kind such as `BattleNpc`, `EventObj`, `EventNpc`, `Treasure` |
 | `BaseId` | Stable base/sheet ID; useful when names collide |
 | `Name` | Object name |
@@ -132,7 +132,7 @@ ADS removes every identity/scope match that fails `Dist` or `Y` before selecting
 - Blank duty, `TerritoryTypeId = 0`, `ContentFinderConditionId = 0`, and blank `Alliance` create global scope.
 - A non-empty duty name is real duty scope, not notes.
 - Duty-name matching tolerates leading `The`, but remains a duty match.
-- `Alliance` is optional. `(Any)`/blank matches every party; `A`, `B`, or `C` matches only that live alliance.
+- `Alliance` is optional. `(Any)`/blank matches every party; `A` through `G` matches only that live alliance.
 - An invalid nonblank alliance or an explicit alliance whose live label cannot currently be resolved fails closed.
 - `Layer` restricts any rule to current live map/sub-area.
 - Prefer a human-readable active sub-area name from Main > Diagnostics or Frontier Labels.
@@ -292,7 +292,7 @@ Catalog maturity describes validation. It does not replace live instanced-duty t
 
 - Prefer exact name before `Contains`.
 - Prefer exact kind and base ID when known.
-- Add alliance only when A/B/C behavior truly differs.
+- Add alliance only when A-G behavior truly differs.
 - Add layer only for real layer differences.
 - Use positional selectors only for truly same-name physical instances.
 - Use normal object rules before manual waypoints.

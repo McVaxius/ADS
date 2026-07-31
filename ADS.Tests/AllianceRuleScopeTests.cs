@@ -15,6 +15,10 @@ public sealed class AllianceRuleScopeTests
     [InlineData("A", "A")]
     [InlineData("b", "B")]
     [InlineData(" C ", "C")]
+    [InlineData("Alliance: D", "D")]
+    [InlineData("e", "E")]
+    [InlineData("Alliance: F", "F")]
+    [InlineData("Alliance: G", "G")]
     [InlineData("Alliance: A", "A")]
     [InlineData("アライアンス: B", "B")]
     [InlineData("Équipe — C", "C")]
@@ -26,11 +30,33 @@ public sealed class AllianceRuleScopeTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("Alliance")]
-    [InlineData("Alliance D")]
+    [InlineData("Alliance H")]
     [InlineData("Alliance AB")]
     [InlineData("A / B")]
+    [InlineData("D / E")]
     public void ParserRejectsBlankOrMalformedLabels(string? text)
         => Assert.Null(AllianceScopeParser.Parse(isAlliance: true, text));
+
+    [Theory]
+    [InlineData("A")]
+    [InlineData("b")]
+    [InlineData(" C ")]
+    [InlineData("d")]
+    [InlineData("E")]
+    [InlineData(" f ")]
+    [InlineData("G")]
+    public void AllianceScopeValidationAcceptsAThroughG(string alliance)
+        => Assert.True(AllianceScopeParser.IsValidScope(alliance));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("H")]
+    [InlineData("AB")]
+    [InlineData("A/B")]
+    [InlineData("Alliance: D")]
+    public void AllianceScopeValidationRejectsMalformedLabels(string? alliance)
+        => Assert.False(AllianceScopeParser.IsValidScope(alliance));
 
     [Fact]
     public void ParserRejectsPartyTextOutsideAllianceState()
@@ -44,7 +70,13 @@ public sealed class AllianceRuleScopeTests
     [InlineData("a", "A", true)]
     [InlineData("A", "B", false)]
     [InlineData("A", null, false)]
-    [InlineData("D", "A", false)]
+    [InlineData("D", "D", true)]
+    [InlineData("E", "E", true)]
+    [InlineData("F", "F", true)]
+    [InlineData("G", "G", true)]
+    [InlineData("D", "G", false)]
+    [InlineData("D", null, false)]
+    [InlineData("H", "D", false)]
     public void OrdinaryObjectRulesHonorAllianceScope(string? ruleAlliance, string? liveAlliance, bool expected)
     {
         using var fixture = new RuleServiceFixture(
@@ -73,6 +105,12 @@ public sealed class AllianceRuleScopeTests
     [InlineData("C", "C", true)]
     [InlineData("C", "A", false)]
     [InlineData("C", null, false)]
+    [InlineData("D", "D", true)]
+    [InlineData("E", "E", true)]
+    [InlineData("F", "F", true)]
+    [InlineData("G", "G", true)]
+    [InlineData("D", "G", false)]
+    [InlineData("G", null, false)]
     [InlineData("invalid", "C", false)]
     public void ManualDestinationRulesHonorAllianceScope(string? ruleAlliance, string? liveAlliance, bool expected)
     {

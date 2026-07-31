@@ -78,7 +78,7 @@ public static class RuleSemanticsCatalog
             [nameof(ObjectPriorityRule.TerritoryTypeId)] = "Optional territory scope; zero is wildcard.",
             [nameof(ObjectPriorityRule.ContentFinderConditionId)] = "Optional duty scope; zero is wildcard.",
             [nameof(ObjectPriorityRule.DutyEnglishName)] = "Optional English duty-name scope.",
-            [nameof(ObjectPriorityRule.Alliance)] = "Optional alliance-party scope: A, B, or C; blank is wildcard.",
+            [nameof(ObjectPriorityRule.Alliance)] = "Optional alliance-party scope: A-G; blank is wildcard.",
             [nameof(ObjectPriorityRule.ObjectKind)] = "Optional live object-kind match.",
             [nameof(ObjectPriorityRule.BaseId)] = "Optional live object base-id match; zero is wildcard.",
             [nameof(ObjectPriorityRule.ObjectName)] = "Optional object-name match.",
