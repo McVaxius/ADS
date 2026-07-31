@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-31
+
+- Stopped duty-object rule loads from automatically rewriting saved rule fields through built-in migrations; the rule editor now reloads the manifest exactly as authored.
+
 ## 2026-07-30
 
 - Added optional A/B/C alliance scoping to object rules. ADS resolves the current alliance from the typed `_PartyList` UI only while `IPartyList.IsAlliance` is true; blank scope remains wildcard, while invalid or currently unresolved explicit scope fails closed across object rules, manual destinations, cardinal holds, previews, and editor filters. Schema version remains 1.

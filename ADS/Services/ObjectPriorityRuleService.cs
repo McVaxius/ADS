@@ -121,7 +121,7 @@ public sealed class ObjectPriorityRuleService
         try
         {
             EnsureSeeded();
-            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
+            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status))
             {
                 Current = new ObjectPriorityRuleManifest();
                 LastLoadStatus = status;
@@ -206,7 +206,7 @@ public sealed class ObjectPriorityRuleService
         try
         {
             var path = EnsurePresetSeeded(presetName);
-            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: true);
+            return TryLoadManifestFromPath(path, out manifest, out status);
         }
         catch (Exception ex)
         {
@@ -223,7 +223,7 @@ public sealed class ObjectPriorityRuleService
         try
         {
             EnsureSeeded();
-            return TryLoadManifestFromPath(configPath, out manifest, out status, persistMigrations: false);
+            return TryLoadManifestFromPath(configPath, out manifest, out status);
         }
         catch (Exception ex)
         {
@@ -307,7 +307,7 @@ public sealed class ObjectPriorityRuleService
                 return false;
             }
 
-            return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: false);
+            return TryLoadManifestFromPath(path, out manifest, out status);
         }
         catch (Exception ex)
         {
@@ -1253,7 +1253,7 @@ public sealed class ObjectPriorityRuleService
             Notes = rule.Notes,
         };
 
-    private bool TryLoadManifestFromPath(string path, out ObjectPriorityRuleManifest manifest, out string status, bool persistMigrations)
+    private bool TryLoadManifestFromPath(string path, out ObjectPriorityRuleManifest manifest, out string status)
     {
         manifest = new ObjectPriorityRuleManifest();
         status = $"Failed to load manifest from {path}.";
@@ -1264,13 +1264,7 @@ public sealed class ObjectPriorityRuleService
             if (!TryDeserializeManifest(json, path, out manifest, out status))
                 return false;
 
-            var migrated = ApplyBuiltInRuleMigrations(manifest);
-            if (migrated && persistMigrations)
-                WriteManifestToPath(path, manifest);
-
-            status = migrated
-                ? $"Loaded {manifest.Rules.Count(x => x.Enabled)} active rule(s) from {path}; applied built-in rule migration(s)."
-                : $"Loaded {manifest.Rules.Count(x => x.Enabled)} active rule(s) from {path}.";
+            status = $"Loaded {manifest.Rules.Count(x => x.Enabled)} active rule(s) from {path}.";
             return true;
         }
         catch (Exception ex)
