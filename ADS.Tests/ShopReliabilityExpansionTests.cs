@@ -282,6 +282,36 @@ public sealed class ShopReliabilityExpansionTests
             created.AddSeconds(5)));
     }
 
+    [Fact]
+    public void ConfirmationTokenMatchesExactNinetyNineQuantityPromptAndRejectsMismatch()
+    {
+        var evaluated = new EvaluatedShopOffer(
+            Offer(false, ShopCurrencyKind.Item, 500) with
+            {
+                Currencies =
+                [
+                    new ShopCurrencyCost(ShopCurrencyKind.Item, 500, "Fixture Token", 2),
+                    new ShopCurrencyCost(ShopCurrencyKind.Item, 501, "Other Token", 6),
+                ],
+            },
+            null,
+            [],
+            true,
+            true,
+            true,
+            null);
+        var created = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
+        const string expectedPrompt = "Purchase 99 Fixture for 198 Fixture Token and 594 Other Token?";
+        var exact = new ShopConfirmationToken(evaluated, 99, created);
+
+        Assert.True(exact.TryConsumePrompt(expectedPrompt, created.AddSeconds(5)));
+
+        var mismatched = new ShopConfirmationToken(evaluated, 99, created);
+        Assert.False(mismatched.TryConsumePrompt(
+            "Purchase 99 Fixture for 198 Fixture Token and 593 Other Token?",
+            created.AddSeconds(5)));
+    }
+
     private static ShopOffer Offer(bool hasUnknownGate, ShopCurrencyKind currencyKind, uint currencyItemId)
         => new(
             ShopOfferKind.GilShop,

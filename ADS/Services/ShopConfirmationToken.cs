@@ -18,6 +18,11 @@ internal sealed class ShopConfirmationToken
         ItemName = offer.Offer.ReceiveItemName;
         Quantity = checked((int)((long)offer.Offer.ReceiveCount * transactions));
         CreatedAtUtc = createdAtUtc;
+        ShopContext = $"{offer.Offer.Kind} shopId={offer.Offer.ShopId} shopName='{offer.Offer.ShopName}'";
+        DiagnosticCosts = string.Join(
+            ", ",
+            offer.Offer.Currencies.Select(currency =>
+                $"{currency.Kind}:{currency.ItemId} '{currency.Name}'={checked((long)currency.AmountPerTransaction * transactions)}"));
         expectedCosts = offer.Offer.Currencies.ToDictionary(
             currency => currency.Identity,
             currency => checked((long)currency.AmountPerTransaction * transactions));
@@ -28,6 +33,10 @@ internal sealed class ShopConfirmationToken
     public int Quantity { get; }
     public DateTime CreatedAtUtc { get; }
     public bool IsConsumed => consumed;
+    public string ShopContext { get; }
+    public string DiagnosticCosts { get; }
+    public string DiagnosticDetails
+        => $"{ShopContext}; itemId={ItemId} itemName='{ItemName}' quantity={Quantity}; totalCosts=[{DiagnosticCosts}]";
 
     public bool TryConsumeStructured(
         uint itemId,

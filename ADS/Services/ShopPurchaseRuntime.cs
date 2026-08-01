@@ -242,6 +242,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private int grandCompanySelectionStage;
     private ShopConfirmationToken? confirmationToken;
     private string? readableOwnedSelectYesNoPrompt;
+    private bool unreadableOwnedSelectYesnoWarningLogged;
 
     private interface IShopUiAdapter
     {
@@ -742,6 +743,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         {
             readableOwnedSelectYesNoPrompt = null;
             confirmationToken = new ShopConfirmationToken(offer, transactionCount, DateTime.UtcNow);
+            unreadableOwnedSelectYesnoWarningLogged = false;
+            log.Information(
+                "[ADS][Shop] Armed owned confirmation token: {Token}",
+                confirmationToken.DiagnosticDetails);
         }
         return accepted;
     }
@@ -759,7 +764,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         if (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)
             || string.IsNullOrWhiteSpace(prompt))
+        {
+            WarnUnreadableOwnedSelectYesno(token);
             return true;
+        }
 
         readableOwnedSelectYesNoPrompt = prompt;
         return false;
@@ -778,10 +786,25 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             if (string.IsNullOrWhiteSpace(prompt)
                 && (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out prompt)
                     || string.IsNullOrWhiteSpace(prompt)))
+            {
+                WarnUnreadableOwnedSelectYesno(token);
                 return false;
+            }
             if (!token.TryConsumePrompt(prompt, now))
+            {
+                log.Warning(
+                    "[ADS][Shop] SelectYesno prompt did not match the owned confirmation token; expected={Token} displayedPrompt='{Prompt}'. ADS will not dispatch Yes.",
+                    token.DiagnosticDetails,
+                    prompt);
                 return false;
-            return GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log: log);
+            }
+
+            var dispatched = GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log: log);
+            if (dispatched)
+                log.Information("[ADS][Shop] Owned confirmation Yes dispatch succeeded: {Token}", token.DiagnosticDetails);
+            else
+                log.Warning("[ADS][Shop] Owned confirmation Yes dispatch failed: {Token}", token.DiagnosticDetails);
+            return dispatched;
         }
 
         var costs = offer.Offer.Currencies.ToDictionary(
@@ -830,7 +853,19 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         grandCompanyRouteKey = string.Empty;
         grandCompanySelectionStage = 0;
         readableOwnedSelectYesNoPrompt = null;
+        unreadableOwnedSelectYesnoWarningLogged = false;
         confirmationToken = null;
+    }
+
+    private void WarnUnreadableOwnedSelectYesno(ShopConfirmationToken token)
+    {
+        if (unreadableOwnedSelectYesnoWarningLogged)
+            return;
+
+        unreadableOwnedSelectYesnoWarningLogged = true;
+        log.Warning(
+            "[ADS][Shop] SelectYesno is visible but its prompt could not be read for the owned confirmation token; waiting within the existing timeout. Expected={Token}",
+            token.DiagnosticDetails);
     }
 
     private bool TryGetNavigationRunning(out bool running)

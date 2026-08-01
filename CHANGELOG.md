@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-01
+
+- Added bounded ADS-owned shop-confirmation diagnostics: each successful purchase callback logs its armed shop/token context and total costs; an unreadable visible `SelectYesno` logs one warning per token; readable mismatches log the expected token and displayed prompt; and Yes dispatch logs success or failure. Exact validation, the ten-second timeout, callback behavior, and fail-closed rejection remain unchanged.
+- Focused Debug x64 confirmation-token tests pass 9/9, including exact 99-quantity prompt acceptance and mismatch rejection; the full Debug x64 suite passes 407/407 and the Debug x64 plugin build succeeds with zero warnings and errors. No live purchase or confirmation was run.
+
 ## 2026-07-31
 
 - Added an ADS-owned, current-run XA Slave dialog/cutscene skipper fallback. TextAdvance remains authoritative when enabled; `/ads skipper [on|off]` never changes TextAdvance or FrenRider, does not persist configuration, and cleans XA Slave state only after ownership/leaving ends.
