@@ -14,6 +14,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private readonly string[] ruleClassificationOptions = ["Auto", .. Enum.GetNames<InteractableClass>()];
     private string textFilter = string.Empty;
     private int objectKindFilterIndex;
+    private bool levelFilterEnabled;
     private int levelFilter;
     private int levelFilterMode;
     private bool targetableOnly;
@@ -64,21 +65,43 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
         ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
 
+        ImGui.TextUnformatted("Search");
+        ImGui.SameLine();
         ImGui.SetNextItemWidth(260f);
-        ImGui.InputTextWithHint("##ADSObjectTextFilter", "filter text / base id / object kind", ref textFilter, 128);
+        ImGui.InputTextWithHint("##ADSObjectTextFilter", "name / base id / object kind", ref textFilter, 128);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("Kind");
         ImGui.SameLine();
         ImGui.SetNextItemWidth(180f);
         ImGui.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters, objectKindFilters.Length);
         ImGui.SameLine();
+        if (ImGui.Button("Clear filters"))
+        {
+            textFilter = string.Empty;
+            objectKindFilterIndex = 0;
+            levelFilterEnabled = false;
+            levelFilter = 0;
+            levelFilterMode = 0;
+            targetableOnly = false;
+            sameMapOnly = false;
+        }
+
+        if (ImGui.Checkbox("Filter by Lv.", ref levelFilterEnabled) && levelFilterEnabled && levelFilter <= 0)
+            levelFilter = localPlayer.Level;
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!levelFilterEnabled);
         ImGui.SetNextItemWidth(72f);
         ImGui.InputInt("Lv.##ADSObjectLevelFilter", ref levelFilter, 0, 0);
-        levelFilter = Math.Max(0, levelFilter);
+        if (levelFilterEnabled)
+            levelFilter = Math.Max(1, levelFilter);
         ImGui.SameLine();
         ImGui.RadioButton("Exact##ADSObjectLevelFilter", ref levelFilterMode, 0);
         ImGui.SameLine();
         ImGui.RadioButton("<=##ADSObjectLevelFilter", ref levelFilterMode, 1);
         ImGui.SameLine();
         ImGui.RadioButton(">=##ADSObjectLevelFilter", ref levelFilterMode, 2);
+        ImGui.EndDisabled();
         ImGui.SameLine();
         ImGui.Checkbox("Targetable only", ref targetableOnly);
         ImGui.SameLine();
@@ -89,6 +112,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
+        ImGui.TextUnformatted("|");
+        ImGui.SameLine();
         var seedObjectPosition = plugin.Configuration.RuleEditorSeedObjectPosition;
         if (ImGui.Checkbox("Pin rule to XYZ", ref seedObjectPosition))
         {
@@ -98,17 +123,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("When enabled, RULE seeds object XYZ coordinates plus a 6y radius. BaseId remains 0; observed BaseId is kept in Notes.");
-
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Clear"))
-        {
-            textFilter = string.Empty;
-            objectKindFilterIndex = 0;
-            levelFilter = 0;
-            levelFilterMode = 0;
-            targetableOnly = false;
-            sameMapOnly = false;
-        }
 
         var rows = BuildRows(context, localPlayer)
             .Where(MatchesFilter)
@@ -250,7 +264,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     private bool MatchesFilter(ObjectExplorerRow row)
     {
-        if (levelFilter > 0)
+        if (levelFilterEnabled)
         {
             if (row.Level is not { } level)
                 return false;

@@ -2,7 +2,7 @@
 
 ## 2026-08-01
 
-- Object Explorer now shows character levels (and `—` for non-character objects), includes levels in row tooltips, and offers a session-only `Lv.` Exact/`<=`/`>=` filter that composes with its existing filters.
+- Refined Object Explorer into a two-row filter toolbar. `Filter by Lv.` now explicitly enables the session-only character-only Exact/`<=`/`>=` level filter; its first enable uses the local character level, values are positive integers with no maximum, and **Clear filters** disables and resets it while preserving the existing additive filters and row actions.
 - Added bounded ADS-owned shop-confirmation diagnostics: each successful purchase callback logs its armed shop/token context and total costs; an unreadable visible `SelectYesno` logs one warning per token; readable mismatches log the expected token and displayed prompt; and Yes dispatch logs success or failure. Exact validation, the ten-second timeout, callback behavior, and fail-closed rejection remain unchanged.
 - Focused Debug x64 confirmation-token tests pass 9/9, including exact 99-quantity prompt acceptance and mismatch rejection; the full Debug x64 suite passes 407/407 and the Debug x64 plugin build succeeds with zero warnings and errors. No live purchase or confirmation was run.
 

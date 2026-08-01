@@ -215,7 +215,7 @@ Field cues are class-specific: red is required, amber recommended, normal option
 
 | Window | Primary use |
 |---|---|
-| Object Explorer | Identify live object name, kind, character level (or `—`), base ID, distance, targetability, position; use the session-only `Lv.` exact/upper/lower filter; seed object rule |
+| Object Explorer | Identify live object name, kind, character level (or `—`), base ID, distance, targetability, position; use `Filter by Lv.` to enable a session-only Exact/`<=`/`>=` positive-integer character-level filter with no maximum (first enable uses your current level; **Clear filters** disables and resets it); seed object rule |
 | Ghost Inspector | Inspect monster/interactable ghosts and manual-destination recovery state |
 | Frontier Labels | Inspect active-map labels and map resolution |
 | Object Rules | Author live/parked object-rule manifests |
