@@ -52,10 +52,15 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads resume` | Resume ownership inside current instanced duty |
 | `/ads leave` | Request leave state; nearby eligible chests may be handled before exit |
 | `/ads stop` | Drop ADS ownership immediately |
+| `/ads skipper` | Toggle XA Slave dialog/cutscene fallback for the current ADS ownership run |
+| `/ads skipper on` | Enable the current run's XA Slave skipper fallback when TextAdvance is not enabled |
+| `/ads skipper off` | Disable and suppress the current run's XA Slave skipper fallback until the run ends |
 
 `/ads outside` and `/ads inside` best-effort-send `/xldisableplugin AutoDuty` before ADS begins ownership work. A dispatch failure is logged but does not reject the requested ADS start. `/ads resume` does not send this command.
 
 Solo duties show the `/ads leave` recovery reminder once per stable entry. The reminder does not grant ownership or change the command's existing eligibility rules.
+
+ADS checks `TextAdvance.IsEnabled` at ownership start and when a skipper command is used. Enabled TextAdvance is authoritative, so ADS does not change TextAdvance or dispatch XA Slave skipper commands in that case. The XA Slave fallback turns off only after ADS ownership/leaving has ended; no skipper command is sent merely because ADS entered `Leaving`. If XA Slave is unavailable, ADS reports that no fallback change was made and does not show a success toast.
 
 ## Reusable Utility Automation
 

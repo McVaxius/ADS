@@ -42,6 +42,7 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 - **Start Inside** and **Resume** require live instanced-duty truth.
 - **Leave** is disabled unless ADS owns execution.
 - Duty maturity and catalog metadata describe validation status; live instanced-duty truth controls whether inside start/resume is available.
+- On an ADS-owned run, ADS uses XA Slave's dialog/cutscene skipper only when `TextAdvance.IsEnabled` is false or unavailable. `/ads skipper [on|off]` controls that fallback for the current run only; it never changes TextAdvance or FrenRider.
 
 ## Regular-Duty BossMod Follow
 

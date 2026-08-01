@@ -37,6 +37,12 @@ Main keeps six controls visible above every tab:
 
 For an immediate chat stop, use `/ads stop`.
 
+### XA Slave Skipper Fallback
+
+On a successful **Start Outside**, **Start Inside**, or **Resume**, ADS checks `TextAdvance.IsEnabled`. When TextAdvance is enabled, ADS leaves all skipping to it. Otherwise, ADS can enable XA Slave's dialog and cutscene skipper for that ADS-owned run, then turns that fallback off only after ownership (including **Leaving**) has ended. ADS never changes TextAdvance or FrenRider.
+
+Use `/ads skipper` to toggle the fallback for the current run, or `/ads skipper on` and `/ads skipper off` for an explicit choice. `off` suppresses the fallback until the run ends; the next successful ownership start starts fresh. If XA Slave is unavailable, ADS reports the unavailable fallback and makes no skipper change. Successful manual changes show `AIDS Advanced ON` or `AIDS Advanced OFF` once.
+
 ## Main Window
 
 Open with `/ads`.

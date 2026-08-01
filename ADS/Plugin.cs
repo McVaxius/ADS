@@ -132,6 +132,7 @@ public sealed class Plugin : IDalamudPlugin
     public QstCompanionWarningService QstCompanionWarningService { get; }
     internal CameraRecoveryService CameraRecoveryService { get; }
     internal SoloDutyLeaveNoticeService SoloDutyLeaveNoticeService { get; }
+    internal XaSlaveSkipperService XaSlaveSkipperService { get; }
 
     private readonly MainWindow mainWindow;
     private readonly ConfigWindow configWindow;
@@ -225,6 +226,12 @@ public sealed class Plugin : IDalamudPlugin
                     StringComparison.OrdinalIgnoreCase)),
             message => ToastGui.ShowNormal(message),
             command => CommandManager.ProcessCommand(command),
+            message => Log.Warning(message));
+        XaSlaveSkipperService = new XaSlaveSkipperService(
+            IsTextAdvanceEnabled,
+            IsXaSlaveAvailable,
+            command => CommandManager.ProcessCommand(command),
+            message => ToastGui.ShowNormal(message),
             message => Log.Warning(message));
         InnEntryService = new InnEntryService(DataManager, ObjectTable, TargetManager, CommandManager, ClientState, Condition, Log);
         DesynthPolicyService = new DesynthPolicyService();
@@ -355,6 +362,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        XaSlaveSkipperService.EndOwnershipRun();
         CameraRecoveryService.Dispose();
         DebugStrafeService.Release("plugin dispose");
         CardinalHoldInputService.Release("plugin dispose");
@@ -818,6 +826,8 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerTracker.BeginEntryCycle("outside start");
         TreasurePortalOpenerRelayService.Clear("new treasure cycle");
         var result = ExecutionService.StartDutyFromOutside();
+        if (result)
+            ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.BeginOwnershipRun());
         PrintStatus(ExecutionService.LastStatus);
         UpdateDtrBar();
         return result;
@@ -832,6 +842,7 @@ public sealed class Plugin : IDalamudPlugin
         var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
         if (result)
         {
+            ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.BeginOwnershipRun());
             RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedStartInside);
             WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "inside start", force: true);
         }
@@ -846,6 +857,34 @@ public sealed class Plugin : IDalamudPlugin
             Log.Warning("[ADS] Failed to dispatch automatic AutoDuty disable command; continuing duty start.");
     }
 
+    private bool IsTextAdvanceEnabled()
+    {
+        try
+        {
+            return PluginInterface.GetIpcSubscriber<bool>("TextAdvance.IsEnabled").InvokeFunc();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[ADS][Skipper] TextAdvance.IsEnabled was unavailable.");
+            return false;
+        }
+    }
+
+    private bool IsXaSlaveAvailable()
+    {
+        try
+        {
+            return PluginInterface.InstalledPlugins.Any(plugin =>
+                plugin.IsLoaded
+                && string.Equals(plugin.InternalName, "XASlave", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[ADS][Skipper] XA Slave availability check failed.");
+            return false;
+        }
+    }
+
     public bool ResumeDutyFromInside()
     {
         QueueDutyOwnershipRemoteUpdate();
@@ -854,6 +893,7 @@ public sealed class Plugin : IDalamudPlugin
         var result = ExecutionService.ResumeDutyFromInside(DutyContextService.Current);
         if (result)
         {
+            ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.BeginOwnershipRun());
             RememberOwnedTreasureRoleInference(DutyContextService.Current, OwnershipMode.OwnedResumeInside);
             WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "inside resume", force: true);
         }
@@ -900,6 +940,7 @@ public sealed class Plugin : IDalamudPlugin
         var stoppedUtility = UtilityAutomationService.IsRunning;
         DebugStrafeService.Release("ADS stop");
         ExecutionService.Stop(DutyContextService.Current);
+        ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
         ResetOwnedTreasureRoleInferenceLatch();
         ClearTreasureDutyRecoveryMarker("ownership stop");
         TreasurePortalOpenerTracker.ClearPendingOpener("ownership stop");
@@ -1952,6 +1993,7 @@ public sealed class Plugin : IDalamudPlugin
                         Configuration.PluginEnabled,
                         Configuration.ConsiderTreasureCoffers,
                         DialogAutomationService.DialogStatus);
+                    ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
                     TreasureHighLowDiagnosticService.Update(
                         DutyContextService.Current,
                         ObservationSnapshot.Empty,
@@ -2047,6 +2089,8 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.PluginEnabled,
                 Configuration.ConsiderTreasureCoffers,
                 DialogAutomationService.DialogStatus));
+            Measure("xa-slave-skipper", () => ReportXaSlaveSkipperLifecycleResult(
+                XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode)));
             Measure("diagnostics", () => TreasureHighLowDiagnosticService.Update(
                 DutyContextService.Current,
                 ObservationMemoryService.Current,
@@ -2319,6 +2363,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads inside - claim ownership inside duty\n" +
                 "/ads resume - resume inside duty\n" +
                 "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
+                "/ads skipper [on|off] - control XA Slave's current-run dialog/cutscene fallback\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
                 "/ads shop <itemID> <quantity> - buy an exact additional quantity from a supported sheet-resolved shop\n" +
                 "/ads repair self|npc|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
@@ -2532,6 +2577,13 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("leave", StringComparison.OrdinalIgnoreCase))
         {
             LeaveDuty();
+            return;
+        }
+
+        if (trimmed.Equals("skipper", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("skipper ", StringComparison.OrdinalIgnoreCase))
+        {
+            HandleSkipperCommand(trimmed);
             return;
         }
 
@@ -2787,6 +2839,20 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         ToggleMainUi();
+    }
+
+    private void HandleSkipperCommand(string command)
+    {
+        var argument = command.Length == "skipper".Length
+            ? string.Empty
+            : command["skipper".Length..].Trim();
+        PrintStatus(XaSlaveSkipperService.HandleManualCommand(argument).Status);
+    }
+
+    private void ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperResult result)
+    {
+        if (result.FallbackUnavailable)
+            PrintStatus(result.Status);
     }
 
     private void HandleDebugCommand(string trimmed)
