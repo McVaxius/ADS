@@ -14,6 +14,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private readonly string[] ruleClassificationOptions = ["Auto", .. Enum.GetNames<InteractableClass>()];
     private string textFilter = string.Empty;
     private int objectKindFilterIndex;
+    private int levelFilter;
+    private int levelFilterMode;
     private bool targetableOnly;
     private bool sameMapOnly;
 
@@ -68,6 +70,16 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.SetNextItemWidth(180f);
         ImGui.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters, objectKindFilters.Length);
         ImGui.SameLine();
+        ImGui.SetNextItemWidth(72f);
+        ImGui.InputInt("Lv.##ADSObjectLevelFilter", ref levelFilter, 0, 0);
+        levelFilter = Math.Max(0, levelFilter);
+        ImGui.SameLine();
+        ImGui.RadioButton("Exact##ADSObjectLevelFilter", ref levelFilterMode, 0);
+        ImGui.SameLine();
+        ImGui.RadioButton("<=##ADSObjectLevelFilter", ref levelFilterMode, 1);
+        ImGui.SameLine();
+        ImGui.RadioButton(">=##ADSObjectLevelFilter", ref levelFilterMode, 2);
+        ImGui.SameLine();
         ImGui.Checkbox("Targetable only", ref targetableOnly);
         ImGui.SameLine();
         ImGui.Checkbox("Same-map-only", ref sameMapOnly);
@@ -92,6 +104,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         {
             textFilter = string.Empty;
             objectKindFilterIndex = 0;
+            levelFilter = 0;
+            levelFilterMode = 0;
             targetableOnly = false;
             sameMapOnly = false;
         }
@@ -103,11 +117,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             .ToList();
 
         ImGui.TextUnformatted($"Objects shown: {rows.Count}");
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 10, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 11, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
         ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Lv.", ImGuiTableColumnFlags.WidthFixed, 45f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 60f);
@@ -131,35 +146,39 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted(row.Distance.ToString("0.00"));
+            ImGui.TextUnformatted(row.Level?.ToString() ?? "—");
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(row.VerticalDelta.ToString("0.00"));
+            ImGui.TextUnformatted(row.Distance.ToString("0.00"));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
+            ImGui.TextUnformatted(row.VerticalDelta.ToString("0.00"));
+            DrawRowTooltip(row);
+
+            ImGui.TableSetColumnIndex(5);
             ImGui.TextUnformatted(row.MatchingRules.Count.ToString());
             DrawRuleTooltip(row);
 
-            ImGui.TableSetColumnIndex(5);
+            ImGui.TableSetColumnIndex(6);
             if (ImGui.SmallButton($"moveto##ADSObjectMove{index}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: false);
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(7);
             if (ImGui.SmallButton($"flyto##ADSObjectFly{index}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: true);
 
-            ImGui.TableSetColumnIndex(7);
+            ImGui.TableSetColumnIndex(8);
             if (ImGui.SmallButton($"FLAG##ADSObjectFlag{index}"))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
 
-            ImGui.TableSetColumnIndex(8);
+            ImGui.TableSetColumnIndex(9);
             if (ImGui.SmallButton($"RULE##ADSObjectRule{index}"))
                 ImGui.OpenPopup($"ADSObjectRulePopup##{index}");
             DrawRulePopup(index, row);
 
-            ImGui.TableSetColumnIndex(9);
+            ImGui.TableSetColumnIndex(10);
             if (ImGui.SmallButton($"XYZ##ADSObjectCopy{index}"))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
         }
@@ -217,6 +236,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             yield return new ObjectExplorerRow(
                 Name: name,
                 ObjectKind: gameObject.ObjectKind.ToString(),
+                Level: gameObject is ICharacter character ? character.Level : null,
                 Distance: Vector3.Distance(localPlayer.Position, gameObject.Position),
                 VerticalDelta: MathF.Abs(gameObject.Position.Y - localPlayer.Position.Y),
                 BaseId: gameObject.BaseId,
@@ -230,6 +250,21 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     private bool MatchesFilter(ObjectExplorerRow row)
     {
+        if (levelFilter > 0)
+        {
+            if (row.Level is not { } level)
+                return false;
+
+            if (levelFilterMode == 1 && level > levelFilter)
+                return false;
+
+            if (levelFilterMode == 2 && level < levelFilter)
+                return false;
+
+            if (levelFilterMode == 0 && level != levelFilter)
+                return false;
+        }
+
         if (targetableOnly && !row.IsTargetable)
             return false;
 
@@ -308,6 +343,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.BeginTooltip();
         ImGui.TextUnformatted(row.Name);
         ImGui.TextUnformatted($"ObjectKind: {row.ObjectKind}");
+        ImGui.TextUnformatted($"Level: {row.Level?.ToString() ?? "—"}");
         ImGui.TextUnformatted($"Distance: {row.Distance:0.00}");
         ImGui.TextUnformatted($"Y delta: {row.VerticalDelta:0.00}");
         ImGui.TextUnformatted($"BaseId: {row.BaseId}");
@@ -321,6 +357,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private sealed record ObjectExplorerRow(
         string Name,
         string ObjectKind,
+        byte? Level,
         float Distance,
         float VerticalDelta,
         uint BaseId,
