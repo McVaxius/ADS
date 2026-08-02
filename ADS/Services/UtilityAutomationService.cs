@@ -352,6 +352,13 @@ public sealed unsafe class UtilityAutomationService
     public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
     public bool IsShopPurchaseRunning => activeTask == UtilityTask.ShopPurchase && shopPurchaseRunner.IsRunning;
     public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
+
+    /// <summary>Opt in to reusing one open shop across consecutive purchases. See ShopPurchaseRunner.KeepShopOpen.</summary>
+    public bool ShopKeepOpen
+    {
+        get => shopPurchaseRunner.KeepShopOpen;
+        set => shopPurchaseRunner.KeepShopOpen = value;
+    }
     public bool ExtractMateriaDone => extractMateriaDone;
     public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
     public string ExtractMateriaStatusMessage => IsExtractMateriaRunning ? StatusMessage : extractMateriaStatusMessage;

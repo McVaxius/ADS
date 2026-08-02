@@ -1055,6 +1055,20 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    /// <summary>
+    /// Toggle shop reuse across consecutive purchases. Returns the value that is now in effect.
+    /// </summary>
+    /// <remarks>
+    /// While on, a successful purchase leaves its shop open so the next purchase from the same shop
+    /// skips navigate/interact/open. The caller is then responsible for closing it -- CancelUtility
+    /// does, and so does any failed run. See ShopPurchaseRunner.KeepShopOpen.
+    /// </remarks>
+    public bool SetShopKeepOpen(bool enabled)
+    {
+        UtilityAutomationService.ShopKeepOpen = enabled;
+        return UtilityAutomationService.ShopKeepOpen;
+    }
+
     public bool StartShopPurchase(uint itemId, int quantity)
     {
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
