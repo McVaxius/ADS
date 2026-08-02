@@ -312,6 +312,49 @@ public sealed class ShopReliabilityExpansionTests
             created.AddSeconds(5)));
     }
 
+    [Fact]
+    public void ConfirmationTokenAcceptsPluralisedItemNameInPrompt()
+    {
+        // The game pluralises the item name in the purchase confirmation while the sheet name stays
+        // singular, e.g. token 'Ragworm' against "Purchase 2 ragworms for 16 gil?". Exact whole-word
+        // matching rejected those, so ADS refused to confirm its own purchase and failed ui-mismatch.
+        var created = new DateTime(2026, 8, 2, 12, 0, 0, DateTimeKind.Utc);
+
+        static EvaluatedShopOffer Gil(string itemName)
+            => new(
+                Offer(false, ShopCurrencyKind.Gil, 1) with
+                {
+                    ReceiveItemName = itemName,
+                    Currencies = [new ShopCurrencyCost(ShopCurrencyKind.Gil, 1, "Gil", 8)],
+                },
+                null,
+                [],
+                true,
+                true,
+                true,
+                null);
+
+        Assert.True(new ShopConfirmationToken(Gil("Ragworm"), 2, created)
+            .TryConsumePrompt("Purchase 2 ragworms for 16 gil?", created.AddSeconds(1)));
+        Assert.True(new ShopConfirmationToken(Gil("Plump Worm"), 2, created)
+            .TryConsumePrompt("Purchase 2 plump worms for 16 gil?", created.AddSeconds(1)));
+        Assert.True(new ShopConfirmationToken(Gil("Anchovy"), 2, created)
+            .TryConsumePrompt("Purchase 2 anchovies for 16 gil?", created.AddSeconds(1)));
+
+        // Singular prompts must keep working -- Krill is its own plural, which is why the bug hid.
+        Assert.True(new ShopConfirmationToken(Gil("Krill"), 2, created)
+            .TryConsumePrompt("Purchase 2 krill for 16 gil?", created.AddSeconds(1)));
+
+        // Loosening applies to the item NAME only: quantity and every currency amount stay exact, and
+        // an unrelated item is still rejected even in plural form.
+        Assert.False(new ShopConfirmationToken(Gil("Ragworm"), 2, created)
+            .TryConsumePrompt("Purchase 3 ragworms for 16 gil?", created.AddSeconds(1)));
+        Assert.False(new ShopConfirmationToken(Gil("Ragworm"), 2, created)
+            .TryConsumePrompt("Purchase 2 ragworms for 15 gil?", created.AddSeconds(1)));
+        Assert.False(new ShopConfirmationToken(Gil("Ragworm"), 2, created)
+            .TryConsumePrompt("Purchase 2 plump worms for 16 gil?", created.AddSeconds(1)));
+    }
+
     private static ShopOffer Offer(bool hasUnknownGate, ShopCurrencyKind currencyKind, uint currencyItemId)
         => new(
             ShopOfferKind.GilShop,

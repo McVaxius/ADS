@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-02
+
+- Fixed shop purchases terminating as `ui-mismatch` whenever the game pluralises the item name in its confirmation prompt. `ShopConfirmationToken.TryConsumePrompt` matched the sheet item name as an exact whole word, so `Purchase 2 ragworms for 16 gil?` never matched token item `Ragworm` and ADS declined to dispatch Yes to its own confirmation; items whose plural equals their singular, such as `Krill`, masked the bug. Item-name matching now also accepts the `-s`, `-es`, and `-y`/`-ies` plural forms. Quantity and every currency amount are still matched exactly and the ten-second boundary, one-shot consumption, and fail-closed rejection are unchanged, so a prompt that does not describe the exact transaction is still refused.
+
+- Added opt-in reuse of an already-open shop across consecutive purchases (`ShopPurchaseRunner.KeepShopOpen`, surfaced as `UtilityAutomationService.ShopKeepOpen` and `Plugin.SetShopKeepOpen`). It defaults to off, so existing single-purchase behaviour is unchanged. While enabled a successful purchase leaves its shop open, and the next `Start` whose resolved offer matches the visible shop kind enters `validating-ui` directly instead of navigating, interacting and reopening; `ValidateShopUi` still checks the live shop id and row against sheet data, so a different shop is rejected rather than bought from, and a non-matching visible shop fails the start closed. Failed and cancelled runs still close the UI, and the caller owns closing the shop once its batch ends.
+- Measured on a gil vendor the character is already standing at, the first purchase is unchanged at ~1.4s while each subsequent purchase from the same shop costs ~0.27-0.33s instead of ~1.4s, because the shop addon open (0.7-1.4s of that) is paid once rather than per item; buying two each of three baits completed in 1.9-2.8s over four consecutive runs.
+- Release suite passes 408/408 including the new confirmation-token plural test, and the Release plugin build succeeds with zero errors. Live verification covered gil-shop purchases only.
+
 ## 2026-08-01
 
 - Refined Object Explorer into a two-row filter toolbar. `Filter by Lv.` now explicitly enables the session-only character-only Exact/`<=`/`>=` level filter; its first enable uses the local character level, values are positive integers with no maximum, and **Clear filters** disables and resets it while preserving the existing additive filters and row actions.

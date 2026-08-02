@@ -104,6 +104,26 @@ internal sealed class ShopPurchaseRunner
     public bool IsRunning => status.Running;
     public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
 
+    /// <summary>
+    /// Keep a successfully used shop open so the next purchase from the SAME shop can reuse it.
+    /// </summary>
+    /// <remarks>
+    /// Off by default -- this changes nothing unless a caller opts in.
+    ///
+    /// Normally every purchase pays for a full navigate -> interact -> open -> validate -> buy ->
+    /// verify -> close cycle. Measured on a gil shop the character is already standing at, that is
+    /// ~1.4s per item, of which 0.7-1.4s is just waiting for the Shop addon to appear. Buying three
+    /// baits from one merchant therefore repeats the expensive half three times.
+    ///
+    /// Worse, closing leaves the character in an unfinished NPC event (the window closes but the
+    /// event does not end), and because navigation parks the character on the NPC's exact coordinate
+    /// the next run has nothing to walk -- so the event never ends and the next interact is silently
+    /// ignored. Holding the shop open sidesteps that entirely.
+    ///
+    /// The caller owns closing it afterwards (CancelUtility, or closing the addon).
+    /// </remarks>
+    public bool KeepShopOpen { get; set; }
+
     public bool Start(ShopPurchaseRequest purchaseRequest)
     {
         if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out purchaseRequest, out var validationError))
@@ -116,7 +136,11 @@ internal sealed class ShopPurchaseRunner
             return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.");
         if (!runtime.HasVnavmesh)
             return RejectStart("Shop purchasing requires the vnavmesh plugin.");
-        if (runtime.HasUnexpectedConfirmation || runtime.IsAnyShopVisible || runtime.IsSelectionMenuVisible)
+        // Under KeepShopOpen a visible shop is expected -- it is the one this runner deliberately left
+        // open -- so it is not rejected here. It still has to be the RIGHT shop, which cannot be judged
+        // until the offer is resolved, so that check moves below rather than being dropped.
+        if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible
+            || (!KeepShopOpen && runtime.IsAnyShopVisible))
             return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.");
 
         ShopCatalogResolution nextResolution;
@@ -133,6 +157,19 @@ internal sealed class ShopPurchaseRunner
 
         if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
             return RejectStart("The selected shop route requires the Lifestream plugin.");
+
+        // Deferred from the entry gate: a shop is on screen, so decide whether it is the one this
+        // offer needs. IsExpectedShopVisible only matches the addon KIND, but that is enough to enter
+        // ValidatingUi -- ValidateShopUi then checks the live shop id and row against the sheet, so a
+        // different gil shop is rejected there rather than being silently bought from.
+        var reuseOpenShop = false;
+        if (runtime.IsAnyShopVisible)
+        {
+            if (nextSelection.Selected != null && runtime.IsExpectedShopVisible(nextSelection.Selected.Offer.Kind))
+                reuseOpenShop = true;
+            else
+                return RejectStart("A different shop is already open; close it before starting shop purchasing.");
+        }
 
         request = purchaseRequest;
         resolution = nextResolution;
@@ -164,7 +201,16 @@ internal sealed class ShopPurchaseRunner
         lastValidationDiagnostic = string.Empty;
         startedAtUtc = clock.UtcNow;
         lastStartError = string.Empty;
-        SetPhase(RunnerPhase.Resolving, $"Resolving supported shops for {nextResolution.ItemName}.");
+        if (reuseOpenShop)
+        {
+            // The NPC is already engaged and its shop is open, so navigation, interaction and menu
+            // opening are all already done. UpdateValidatingUi needs only `selected`, set above.
+            interactionSent = true;
+            shopUiOwned = true;
+            SetPhase(RunnerPhase.ValidatingUi, $"Reusing the open {selected!.Offer.ShopName}; validating the live shop row.");
+        }
+        else
+            SetPhase(RunnerPhase.Resolving, $"Resolving supported shops for {nextResolution.ItemName}.");
         status = new ShopPurchaseStatusSnapshot(
             true,
             false,
@@ -1046,7 +1092,10 @@ internal sealed class ShopPurchaseRunner
         else if (stopResult == ShopNavigationStopResult.Unverified)
             message += " Final navigation cleanup could not verify that the owned path stopped.";
         RefreshAcquiredTruth();
-        CloseOwnedShopUi();
+        // Hold the shop open only when the run succeeded and the caller opted in: a FAILED run must
+        // still tear the UI down, or a half-open shop is left for the next caller to trip over.
+        if (!(KeepShopOpen && succeeded))
+            CloseOwnedShopUi();
         navigationStoppedContinuation = null;
         var previous = phase;
         phase = terminalPhase;
