@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-02
+
+- Fixed shop purchases terminating as `ui-mismatch` whenever the game pluralises the item name in its confirmation prompt. `ShopConfirmationToken.TryConsumePrompt` matched the sheet item name as an exact whole word, so `Purchase 2 ragworms for 16 gil?` never matched token item `Ragworm` and ADS declined to dispatch Yes to its own confirmation; items whose plural equals their singular, such as `Krill`, masked the bug. Item-name matching now also accepts the `-s`, `-es`, and `-y`/`-ies` plural forms. Quantity and every currency amount are still matched exactly and the ten-second boundary, one-shot consumption, and fail-closed rejection are unchanged, so a prompt that does not describe the exact transaction is still refused.
+
 ## 2026-08-01
 
 - Refined Object Explorer into a two-row filter toolbar. `Filter by Lv.` now explicitly enables the session-only character-only Exact/`<=`/`>=` level filter; its first enable uses the local character level, values are positive integers with no maximum, and **Clear filters** disables and resets it while preserving the existing additive filters and row actions.

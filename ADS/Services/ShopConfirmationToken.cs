@@ -59,7 +59,7 @@ internal sealed class ShopConfirmationToken
         if (!CanConsume(observedAtUtc) || string.IsNullOrWhiteSpace(prompt))
             return false;
         var normalized = prompt.Trim();
-        if (!ContainsExactText(normalized, ItemName)
+        if (!ContainsItemName(normalized, ItemName)
             || !ContainsExactDisplayNumber(normalized, Quantity))
             return false;
         foreach (var amount in expectedCosts.Values)
@@ -92,6 +92,41 @@ internal sealed class ShopConfirmationToken
                 return true;
             searchStart = index + display.Length;
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whole-word item-name match that also accepts the plural the shop confirmation actually uses.
+    /// </summary>
+    /// <remarks>
+    /// The game pluralises the item name in the purchase prompt while the sheet name stays singular:
+    ///   token 'Ragworm'    -> "Purchase 2 ragworms for 16 gil?"
+    ///   token 'Plump Worm' -> "Purchase 2 plump worms for 16 gil?"
+    /// ContainsExactText rejects those because the character after the match is a letter, so ADS
+    /// refused to confirm its own purchase and failed with ui-mismatch. Krill hid the bug: its plural
+    /// is identical to its singular.
+    ///
+    /// Only the item name is loosened, and only by an English plural suffix. Quantity and every
+    /// currency amount are still matched exactly, so the prompt must still describe this exact
+    /// transaction before ADS will dispatch Yes.
+    /// </remarks>
+    private static bool ContainsItemName(string prompt, string expected)
+    {
+        if (ContainsExactText(prompt, expected))
+            return true;
+        if (string.IsNullOrWhiteSpace(expected))
+            return false;
+
+        // "ragworm" -> "ragworms"; "anchovy" -> "anchovies"; "brass" -> "brasses".
+        if (ContainsExactText(prompt, expected + "s"))
+            return true;
+        if (expected.Length > 1
+            && expected.EndsWith("y", StringComparison.CurrentCultureIgnoreCase)
+            && ContainsExactText(prompt, expected[..^1] + "ies"))
+            return true;
+        if (ContainsExactText(prompt, expected + "es"))
+            return true;
 
         return false;
     }
