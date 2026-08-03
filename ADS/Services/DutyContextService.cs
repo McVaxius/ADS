@@ -74,6 +74,7 @@ public sealed class DutyContextService
             mapId = gameMainMapId;
 
         var currentDuty = dutyCatalogService.ResolveCurrentDuty(contentFinderConditionId, territoryTypeId);
+        var automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId);
         Current = new DutyContextSnapshot
         {
             PluginEnabled = pluginEnabled,
@@ -94,7 +95,7 @@ public sealed class DutyContextService
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,
-            Alliance = TryResolveAlliance(),
+            Alliance = automationExcludedTerritory ? null : TryResolveAlliance(),
             CurrentDuty = currentDuty,
         };
     }

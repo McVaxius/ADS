@@ -605,7 +605,7 @@ public sealed class ExecutionService
         return true;
     }
 
-    public void Stop(DutyContextSnapshot context)
+    public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
         InterruptCardinalHold("stop");
         StopMovementAssists();
@@ -615,12 +615,14 @@ public sealed class ExecutionService
         ClearTreasureFollowerPostTransitSettle("stop");
         ResetRecoveryHold();
         ResetLeaveState();
-        CurrentMode = context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle;
+        CurrentMode = string.IsNullOrWhiteSpace(idleStatus)
+            ? (context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle)
+            : OwnershipMode.Idle;
         SetPhase(
             CurrentMode == OwnershipMode.Observing ? ExecutionPhase.ObservingOnly : ExecutionPhase.Idle,
-            CurrentMode == OwnershipMode.Observing
-            ? "Ownership released. ADS returned to observing-only mode."
-            : "ADS stopped and ownership was released.");
+            idleStatus ?? (CurrentMode == OwnershipMode.Observing
+                ? "Ownership released. ADS returned to observing-only mode."
+                : "ADS stopped and ownership was released."));
     }
 
     public void CompleteDuty(string dutyName)

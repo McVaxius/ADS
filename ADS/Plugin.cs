@@ -166,6 +166,7 @@ public sealed class Plugin : IDalamudPlugin
     private string lastFrameworkSlowUpdateSection = "none";
     private DateTime lastFrameworkSlowUpdateUtc = DateTime.MinValue;
     private FrameworkSlowUpdateContext? lastFrameworkSlowUpdateContext;
+    private uint parkedAutomationExcludedTerritoryId;
 
     public Plugin()
     {
@@ -819,6 +820,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromOutside()
     {
+        if (RejectAutomationActionInExcludedTerritory("Duty start"))
+            return false;
+
         DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
         ResetOwnedTreasureRoleInferenceLatch();
@@ -835,6 +839,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromInside()
     {
+        if (RejectAutomationActionInExcludedTerritory("Duty start"))
+            return false;
+
         DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside start", preserveRecentDirectOpener: true);
@@ -887,6 +894,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool ResumeDutyFromInside()
     {
+        if (RejectAutomationActionInExcludedTerritory("Duty resume"))
+            return false;
+
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside resume", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside resume");
@@ -904,6 +914,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool LeaveDuty()
     {
+        if (RejectAutomationActionInExcludedTerritory("Duty leave"))
+            return false;
+
         var shouldClearTreasureFollow =
             ExecutionService.TreasureDungeonRole == TreasureDungeonRole.Follower ||
             BossModMultiboxFollowService.FollowerMovementOwnedByBmrai ||
@@ -923,6 +936,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartInnEntry()
     {
+        if (RejectAutomationActionInExcludedTerritory("Inn entry"))
+            return false;
+
         if (UtilityAutomationService.IsRunning)
         {
             PrintStatus($"Inn entry not started: {UtilityAutomationService.ActiveTaskName} is active.");
@@ -935,11 +951,14 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public void StopOwnership()
+        => StopOwnership(null);
+
+    private void StopOwnership(string? idleStatus)
     {
         var stoppedInn = InnEntryService.IsRunning;
         var stoppedUtility = UtilityAutomationService.IsRunning;
         DebugStrafeService.Release("ADS stop");
-        ExecutionService.Stop(DutyContextService.Current);
+        ExecutionService.Stop(DutyContextService.Current, idleStatus);
         ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
         ResetOwnedTreasureRoleInferenceLatch();
         ClearTreasureDutyRecoveryMarker("ownership stop");
@@ -1034,6 +1053,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDesynth(string mode)
     {
+        if (RejectAutomationActionInExcludedTerritory("Desynthesis"))
+            return false;
+
         if (!DesynthPolicyService.TryParseMode(mode, out var parsedMode))
         {
             PrintStatus("Desynthesis mode must be configured, all, whitelist, last-duty, skillups, inventory-only, everywhere-skip-gearsets, or everywhere.");
@@ -1071,6 +1093,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartShopPurchase(uint itemId, int quantity)
     {
+        if (RejectAutomationActionInExcludedTerritory("Shop purchase"))
+            return false;
+
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
             return RejectShopPurchaseStart(error);
         if (ExecutionService.IsOwned)
@@ -1959,10 +1984,25 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
+        var automationExcludedTerritory = false;
         try
         {
-            TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
+                DutyContextService.Current.TerritoryTypeId);
+            if (automationExcludedTerritory)
+            {
+                if (parkedAutomationExcludedTerritoryId != DutyContextService.Current.TerritoryTypeId)
+                {
+                    parkedAutomationExcludedTerritoryId = DutyContextService.Current.TerritoryTypeId;
+                    StopOwnership(AutomationTerritoryPolicy.InactiveStatus);
+                }
+
+                return;
+            }
+
+            parkedAutomationExcludedTerritoryId = 0;
+            TreasureHighLowDiagnosticService.BeginFrameworkTick();
             Measure("solo-duty-notice", () => SoloDutyLeaveNoticeService.Update(DutyContextService.Current));
             Measure("camera-recovery", () => CameraRecoveryService.Update(DutyContextService.Current, ExecutionService.IsOwned));
             Measure("object-explorer-flag", UpdateObjectExplorerMapFlagMonitor);
@@ -2117,7 +2157,8 @@ public sealed class Plugin : IDalamudPlugin
         finally
         {
             updateStopwatch.Stop();
-            ReportFrameworkSlowUpdate(updateStopwatch.Elapsed.TotalMilliseconds, slowestSection, slowestMs);
+            if (!automationExcludedTerritory)
+                ReportFrameworkSlowUpdate(updateStopwatch.Elapsed.TotalMilliseconds, slowestSection, slowestMs);
         }
     }
 
@@ -2910,6 +2951,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private bool CanStartManualUtility(string actionLabel)
     {
+        if (RejectAutomationActionInExcludedTerritory(actionLabel))
+            return false;
+
         if (ExecutionService.IsOwned)
         {
             PrintStatus($"Cannot start {actionLabel} while ADS owns active duty execution.");
@@ -2922,6 +2966,18 @@ public sealed class Plugin : IDalamudPlugin
             return false;
         }
 
+        return true;
+    }
+
+    private bool RejectAutomationActionInExcludedTerritory(string actionLabel)
+    {
+        if (!AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+            && !AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId))
+        {
+            return false;
+        }
+
+        PrintStatus($"{actionLabel} is unavailable: {AutomationTerritoryPolicy.InactiveStatus}");
         return true;
     }
 
