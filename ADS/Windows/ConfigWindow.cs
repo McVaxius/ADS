@@ -240,6 +240,18 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         }
 
         ImGui.TextWrapped("Enables live JSON preview and short observation samples in Main > Diagnostics.");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextUnformatted("Framework Hitch Profiler");
+        var frameworkHitchProfilerEnabled = plugin.Configuration.FrameworkHitchProfilerEnabled;
+        if (ImGui.Checkbox("Enable framework hitch profiler", ref frameworkHitchProfilerEnabled))
+        {
+            plugin.Configuration.FrameworkHitchProfilerEnabled = frameworkHitchProfilerEnabled;
+            changed = true;
+        }
+
+        ImGui.TextWrapped("Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play.");
     }
 
     private void DrawAbout()

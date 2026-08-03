@@ -15,6 +15,16 @@ public sealed class ExplorerSnapshotExportTests
     }
 
     [Fact]
+    public void FrameworkHitchProfilerDefaultsOffForNewAndPreExistingConfigurations()
+    {
+        var newConfiguration = new Configuration();
+        var existingConfiguration = JsonSerializer.Deserialize<Configuration>("""{"Version":21,"PluginEnabled":true}""")!;
+
+        Assert.False(newConfiguration.FrameworkHitchProfilerEnabled);
+        Assert.False(existingConfiguration.FrameworkHitchProfilerEnabled);
+    }
+
+    [Fact]
     public void SnapshotDocumentIncludesObjectTableAndUnfilteredServerEvents()
     {
         using var temp = new TempDirectory();

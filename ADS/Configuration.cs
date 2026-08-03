@@ -17,6 +17,7 @@ public sealed class Configuration : IPluginConfiguration
     public string DtrIconEnabled { get; set; } = DefaultDtrIconEnabled;
     public string DtrIconDisabled { get; set; } = DefaultDtrIconDisabled;
     public bool ShowDebugSections { get; set; }
+    public bool FrameworkHitchProfilerEnabled { get; set; } = false;
     public bool ConsiderTreasureCoffers { get; set; } = true;
     public bool EnableBmraiVbmInRegularDuties { get; set; } = true;
     public bool TreasureDoorJiggleRecoveryEnabled { get; set; } = true;

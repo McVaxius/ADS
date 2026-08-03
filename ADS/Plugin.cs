@@ -1284,6 +1284,7 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 pluginEnabled = Configuration.PluginEnabled,
+                frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled,
                 lootMode = Configuration.LootMode.ToString(),
                 lootRegistrableNeedingEnabled = Configuration.LootRegistrableNeedingEnabled,
                 lootStatus = LootAutomationService.Status,
@@ -1291,16 +1292,18 @@ public sealed class Plugin : IDalamudPlugin
                 higherLowerVfxDataminingEnabled = Configuration.HigherLowerVfxDataminingEnabled,
                 reflection = BmrReflectionService.CaptureStatusPayload(),
                 version = PluginInfo.GetVersion(),
-                lastFrameworkSlowUpdateMs = lastFrameworkSlowUpdateUtc == DateTime.MinValue
+                lastFrameworkSlowUpdateMs = !Configuration.FrameworkHitchProfilerEnabled || lastFrameworkSlowUpdateUtc == DateTime.MinValue
                     ? null
                     : (double?)lastFrameworkSlowUpdateMs,
-                lastFrameworkSlowUpdateSection = lastFrameworkSlowUpdateUtc == DateTime.MinValue
+                lastFrameworkSlowUpdateSection = !Configuration.FrameworkHitchProfilerEnabled || lastFrameworkSlowUpdateUtc == DateTime.MinValue
                     ? string.Empty
                     : lastFrameworkSlowUpdateSection,
-                lastFrameworkSlowUpdateUtc = lastFrameworkSlowUpdateUtc == DateTime.MinValue
+                lastFrameworkSlowUpdateUtc = !Configuration.FrameworkHitchProfilerEnabled || lastFrameworkSlowUpdateUtc == DateTime.MinValue
                     ? null
                     : lastFrameworkSlowUpdateUtc.ToString("O"),
-                lastFrameworkSlowUpdateContext,
+                lastFrameworkSlowUpdateContext = Configuration.FrameworkHitchProfilerEnabled
+                    ? lastFrameworkSlowUpdateContext
+                    : null,
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
@@ -1967,27 +1970,25 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        var updateStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled;
+        if (!frameworkHitchProfilerEnabled)
+            ClearFrameworkHitchState();
+
+        var updateStartedAt = frameworkHitchProfilerEnabled ? Stopwatch.GetTimestamp() : 0;
         var slowestSection = "none";
         var slowestMs = 0d;
-
-        void Measure(string section, Action action)
-        {
-            var sectionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            action();
-            sectionStopwatch.Stop();
-            var elapsedMs = sectionStopwatch.Elapsed.TotalMilliseconds;
-            if (elapsedMs > slowestMs)
-            {
-                slowestMs = elapsedMs;
-                slowestSection = section;
-            }
-        }
+        long sectionStartedAt;
 
         var automationExcludedTerritory = false;
         try
         {
-            Measure("duty-context", () => DutyContextService.Update(Configuration.PluginEnabled));
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            else
+                sectionStartedAt = 0;
+            DutyContextService.Update(Configuration.PluginEnabled);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "duty-context", ref slowestSection, ref slowestMs);
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
                 DutyContextService.Current.TerritoryTypeId);
             if (automationExcludedTerritory)
@@ -2003,162 +2004,267 @@ public sealed class Plugin : IDalamudPlugin
 
             parkedAutomationExcludedTerritoryId = 0;
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
-            Measure("solo-duty-notice", () => SoloDutyLeaveNoticeService.Update(DutyContextService.Current));
-            Measure("camera-recovery", () => CameraRecoveryService.Update(DutyContextService.Current, ExecutionService.IsOwned));
-            Measure("object-explorer-flag", UpdateObjectExplorerMapFlagMonitor);
-            Measure("desynth-ledger", () => DesynthDutyLedgerStore.Update(
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            SoloDutyLeaveNoticeService.Update(DutyContextService.Current);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "solo-duty-notice", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            CameraRecoveryService.Update(DutyContextService.Current, ExecutionService.IsOwned);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "camera-recovery", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            UpdateObjectExplorerMapFlagMonitor();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "object-explorer-flag", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            DesynthDutyLedgerStore.Update(
                 DutyContextService.Current.InInstancedDuty,
                 DutyContextService.Current.TerritoryTypeId,
                 Configuration.DesynthSource == DesynthSource.LastDutyGains,
-                CaptureRegularInventoryCounts));
-            Measure("debug-strafe", () => DebugStrafeService.Update(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled));
-            Measure("remote-json-complete", QueueCompletedRemoteJsonReload);
-            Measure("dialog", () => DialogAutomationService.Update(
+                CaptureRegularInventoryCounts);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "desynth-ledger", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            DebugStrafeService.Update(DutyContextService.Current.IsLoggedIn, Configuration.PluginEnabled);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "debug-strafe", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            QueueCompletedRemoteJsonReload();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "remote-json-complete", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            DialogAutomationService.Update(
                 DutyContextService.Current,
                 ExecutionService.CurrentMode,
                 Configuration.PluginEnabled,
                 Configuration.ProcessDialogRulesOutsideOwnedDuty,
-                UtilityAutomationService.SuppressesGenericYesNo));
-            Measure("bmr-reflection", BmrReflectionService.Update);
-            Measure("duty-housekeeping", () =>
-            {
-                CleanupTreasureDutyRuntimeOutsideDuty();
-                TryRecoverTreasureDutyOwnership();
-                EnsureTreasureDungeonRoleInferredForOwnedDuty();
-                UpdateDutyRoleSegmentation();
-                WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
-            });
+                UtilityAutomationService.SuppressesGenericYesNo);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "dialog", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            BmrReflectionService.Update();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "bmr-reflection", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            CleanupTreasureDutyRuntimeOutsideDuty();
+            TryRecoverTreasureDutyOwnership();
+            EnsureTreasureDungeonRoleInferredForOwnedDuty();
+            UpdateDutyRoleSegmentation();
+            WriteTreasureDutyRecoveryMarker(DutyContextService.Current, "owned treasure duty tick");
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "duty-housekeeping", ref slowestSection, ref slowestMs);
 
             if (DutyContextService.Current.IsUnsafeTransition)
             {
-                Measure("transition-hold", () =>
-                {
-                    ObservationMemoryService.HoldUnsafeTransition();
-                    DungeonFrontierService.HoldUnsafeTransition(DutyContextService.Current);
-                    ObjectivePlannerService.Update(
-                        DutyContextService.Current,
-                        ObservationSnapshot.Empty,
-                        ExecutionService.CurrentMode,
-                        Configuration.ConsiderTreasureCoffers);
-                    ExecutionService.Update(
-                        DutyContextService.Current,
-                        ObjectivePlannerService.Current,
-                        ObservationSnapshot.Empty,
-                        Configuration.PluginEnabled,
-                        Configuration.ConsiderTreasureCoffers,
-                        DialogAutomationService.DialogStatus);
-                    ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
-                    TreasureHighLowDiagnosticService.Update(
-                        DutyContextService.Current,
-                        ObservationSnapshot.Empty,
-                        ObjectivePlannerService.Current,
-                        DialogAutomationService.DialogStatus);
-                    TreasureFollowerAutoMoveAssistService.Update(
-                        DutyContextService.Current,
-                        ExecutionService.TreasureDungeonRole,
-                        BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
-                        TreasurePortalOpenerTracker.CurrentOrRecentDirect);
-                    TreasureFollowerDutyExitMonitorService.Update(
-                        DutyContextService.Current,
-                        IsSupportedTreasureDutyContext(DutyContextService.Current),
-                        ExecutionService.TreasureDungeonRole,
-                        ExecutionService.TreasureDungeonRoleDisplayName);
-                    UpdateDtrBar();
-                });
-                return;
-            }
-
-            Measure("json-reload", UpdateJsonReloads);
-
-            var shouldUseTreasureFollowerBmraiFollow = false;
-            Measure("treasure-follow-mode", () => shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow());
-            Measure("higher-lower-server", () => HigherLowerServerEventTraceService.Update(DutyContextService.Current));
-            var allowHigherLowerHeavyWork = false;
-            Measure("higher-lower-gate", () => allowHigherLowerHeavyWork = ShouldRunHigherLowerHeavyWork(DutyContextService.Current));
-            var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
-            Measure("treasure-witness", () =>
-            {
-                TreasurePortalOpenerSnapshot? followOpener = null;
-                if (ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular)
-                {
-                    DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
-                    var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
-                    if (directWitnessOpener is not null)
-                        BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(
-                            directWitnessOpener,
-                            DutyContextService.Current,
-                            "interaction witness");
-                    followOpener = TreasurePortalOpenerTracker.CurrentOrRecentDirect;
-                    if (followOpener is not null)
-                    {
-                        BossModMultiboxFollowService.ReapplyDirectTreasurePortalOpenerIfNeeded(
-                            followOpener,
-                            DutyContextService.Current,
-                            "stable follower duty truth");
-                    }
-                }
-
-                BossModMultiboxFollowService.Update(
-                    ExecutionService.TreasureDungeonRole,
-                    ExecutionService.TreasureDungeonRoleDisplayName,
-                    followOpener,
-                    shouldUseTreasureFollowerBmraiFollow);
+                if (frameworkHitchProfilerEnabled)
+                    sectionStartedAt = Stopwatch.GetTimestamp();
+                ObservationMemoryService.HoldUnsafeTransition();
+                DungeonFrontierService.HoldUnsafeTransition(DutyContextService.Current);
+                ObjectivePlannerService.Update(
+                    DutyContextService.Current,
+                    ObservationSnapshot.Empty,
+                    ExecutionService.CurrentMode,
+                    Configuration.ConsiderTreasureCoffers);
+                ExecutionService.Update(
+                    DutyContextService.Current,
+                    ObjectivePlannerService.Current,
+                    ObservationSnapshot.Empty,
+                    Configuration.PluginEnabled,
+                    Configuration.ConsiderTreasureCoffers,
+                    DialogAutomationService.DialogStatus);
+                ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
+                TreasureHighLowDiagnosticService.Update(
+                    DutyContextService.Current,
+                    ObservationSnapshot.Empty,
+                    ObjectivePlannerService.Current,
+                    DialogAutomationService.DialogStatus);
                 TreasureFollowerAutoMoveAssistService.Update(
                     DutyContextService.Current,
                     ExecutionService.TreasureDungeonRole,
                     BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
-                    followOpener);
-                ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
-                    BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
-                    BossModMultiboxFollowService.FollowerMovementStatus);
-            });
-            Measure("td-exit-monitor", () => TreasureFollowerDutyExitMonitorService.Update(
+                    TreasurePortalOpenerTracker.CurrentOrRecentDirect);
+                TreasureFollowerDutyExitMonitorService.Update(
+                    DutyContextService.Current,
+                    IsSupportedTreasureDutyContext(DutyContextService.Current),
+                    ExecutionService.TreasureDungeonRole,
+                    ExecutionService.TreasureDungeonRoleDisplayName);
+                UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "transition-hold", ref slowestSection, ref slowestMs);
+                return;
+            }
+
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            UpdateJsonReloads();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "json-reload", ref slowestSection, ref slowestMs);
+
+            var shouldUseTreasureFollowerBmraiFollow = false;
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            shouldUseTreasureFollowerBmraiFollow = ShouldUseTreasureFollowerBmraiFollow();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "treasure-follow-mode", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            HigherLowerServerEventTraceService.Update(DutyContextService.Current);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "higher-lower-server", ref slowestSection, ref slowestMs);
+            var allowHigherLowerHeavyWork = false;
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            allowHigherLowerHeavyWork = ShouldRunHigherLowerHeavyWork(DutyContextService.Current);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "higher-lower-gate", ref slowestSection, ref slowestMs);
+            var treasureInteractionWitness = HigherLowerServerEventTraceService.LastTreasureInteractionWitness;
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            TreasurePortalOpenerSnapshot? followOpener = null;
+            if (ExecutionService.TreasureDungeonRole != TreasureDungeonRole.Regular)
+            {
+                DungeonFrontierService.RecordTreasureInteractionWitness(treasureInteractionWitness);
+                var directWitnessOpener = TreasurePortalOpenerTracker.Update(DutyContextService.Current, shouldUseTreasureFollowerBmraiFollow, treasureInteractionWitness);
+                if (directWitnessOpener is not null)
+                    BossModMultiboxFollowService.ApplyDirectTreasurePortalOpener(
+                        directWitnessOpener,
+                        DutyContextService.Current,
+                        "interaction witness");
+                followOpener = TreasurePortalOpenerTracker.CurrentOrRecentDirect;
+                if (followOpener is not null)
+                {
+                    BossModMultiboxFollowService.ReapplyDirectTreasurePortalOpenerIfNeeded(
+                        followOpener,
+                        DutyContextService.Current,
+                        "stable follower duty truth");
+                }
+            }
+
+            BossModMultiboxFollowService.Update(
+                ExecutionService.TreasureDungeonRole,
+                ExecutionService.TreasureDungeonRoleDisplayName,
+                followOpener,
+                shouldUseTreasureFollowerBmraiFollow);
+            TreasureFollowerAutoMoveAssistService.Update(
+                DutyContextService.Current,
+                ExecutionService.TreasureDungeonRole,
+                BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                followOpener);
+            ExecutionService.SetTreasureFollowerBmraiMovementAuthority(
+                BossModMultiboxFollowService.FollowerMovementOwnedByBmrai,
+                BossModMultiboxFollowService.FollowerMovementStatus);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "treasure-witness", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            TreasureFollowerDutyExitMonitorService.Update(
                 DutyContextService.Current,
                 IsSupportedTreasureDutyContext(DutyContextService.Current),
                 ExecutionService.TreasureDungeonRole,
-                ExecutionService.TreasureDungeonRoleDisplayName));
-            Measure("higher-lower-vfx", () => HigherLowerVfxTraceService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
-            Measure("higher-lower-card", () => HigherLowerCardVfxSolverService.Update(DutyContextService.Current, allowHigherLowerHeavyWork));
-            Measure("higher-lower-auto", () =>
-            {
-                HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
-                ExecutionService.SetHigherLowerAutomationHold(
-                    HigherLowerAutomationService.HoldMovement,
-                    HigherLowerAutomationService.Status,
-                    HigherLowerAutomationService.BlocksDutyExit,
-                    HigherLowerAutomationService.LastHigherLowerActivityUtc);
-            });
-            Measure("loot", () => LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled));
-            Measure("observation", () => ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers));
-            Measure("frontier", () => DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current));
-            Measure("planner", () => ObjectivePlannerService.Update(
+                ExecutionService.TreasureDungeonRoleDisplayName);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "td-exit-monitor", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            HigherLowerVfxTraceService.Update(DutyContextService.Current, allowHigherLowerHeavyWork);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "higher-lower-vfx", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            HigherLowerCardVfxSolverService.Update(DutyContextService.Current, allowHigherLowerHeavyWork);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "higher-lower-card", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            HigherLowerAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+            ExecutionService.SetHigherLowerAutomationHold(
+                HigherLowerAutomationService.HoldMovement,
+                HigherLowerAutomationService.Status,
+                HigherLowerAutomationService.BlocksDutyExit,
+                HigherLowerAutomationService.LastHigherLowerActivityUtc);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "higher-lower-auto", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "loot", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "observation", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "frontier", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            ObjectivePlannerService.Update(
                 DutyContextService.Current,
                 ObservationMemoryService.Current,
                 ExecutionService.CurrentMode,
-                Configuration.ConsiderTreasureCoffers));
-            Measure("execution", () => ExecutionService.Update(
+                Configuration.ConsiderTreasureCoffers);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "planner", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            ExecutionService.Update(
                 DutyContextService.Current,
                 ObjectivePlannerService.Current,
                 ObservationMemoryService.Current,
                 Configuration.PluginEnabled,
                 Configuration.ConsiderTreasureCoffers,
-                DialogAutomationService.DialogStatus));
-            Measure("xa-slave-skipper", () => ReportXaSlaveSkipperLifecycleResult(
-                XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode)));
-            Measure("diagnostics", () => TreasureHighLowDiagnosticService.Update(
+                DialogAutomationService.DialogStatus);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "execution", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "xa-slave-skipper", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            TreasureHighLowDiagnosticService.Update(
                 DutyContextService.Current,
                 ObservationMemoryService.Current,
                 ObjectivePlannerService.Current,
-                DialogAutomationService.DialogStatus));
-            Measure("inn", InnEntryService.Update);
-            Measure("utility", UtilityAutomationService.Update);
-            Measure("dtr", UpdateDtrBar);
+                DialogAutomationService.DialogStatus);
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "diagnostics", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            InnEntryService.Update();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "inn", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            UtilityAutomationService.Update();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "utility", ref slowestSection, ref slowestMs);
+            if (frameworkHitchProfilerEnabled)
+                sectionStartedAt = Stopwatch.GetTimestamp();
+            UpdateDtrBar();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "dtr", ref slowestSection, ref slowestMs);
         }
         finally
         {
-            updateStopwatch.Stop();
-            if (!automationExcludedTerritory)
-                ReportFrameworkSlowUpdate(updateStopwatch.Elapsed.TotalMilliseconds, slowestSection, slowestMs);
+            if (frameworkHitchProfilerEnabled && !automationExcludedTerritory)
+                ReportFrameworkSlowUpdate(
+                    Stopwatch.GetElapsedTime(updateStartedAt, Stopwatch.GetTimestamp()).TotalMilliseconds,
+                    slowestSection,
+                    slowestMs);
         }
     }
 
@@ -2320,6 +2426,29 @@ public sealed class Plugin : IDalamudPlugin
             slowContext.dialogStatus,
             slowContext.pendingHigherLowerVfxCount,
             slowContext.trackedHigherLowerVfxCount);
+    }
+
+    private static void RecordFrameworkSection(
+        long startedAt,
+        string section,
+        ref string slowestSection,
+        ref double slowestMs)
+    {
+        var elapsedMs = Stopwatch.GetElapsedTime(startedAt, Stopwatch.GetTimestamp()).TotalMilliseconds;
+        if (elapsedMs <= slowestMs)
+            return;
+
+        slowestMs = elapsedMs;
+        slowestSection = section;
+    }
+
+    private void ClearFrameworkHitchState()
+    {
+        nextFrameworkSlowLogUtc = DateTime.MinValue;
+        lastFrameworkSlowUpdateMs = 0d;
+        lastFrameworkSlowUpdateSection = "none";
+        lastFrameworkSlowUpdateUtc = DateTime.MinValue;
+        lastFrameworkSlowUpdateContext = null;
     }
 
     private void OnChatMessage(IHandleableChatMessage message)
