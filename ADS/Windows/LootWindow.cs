@@ -35,6 +35,12 @@ public sealed class LootWindow : PositionedWindow, IDisposable
 
         DrawModeButtons();
         ImGui.Separator();
+        var glamourNeed = plugin.Configuration.LootGlamourNeedingEnabled;
+        if (ImGui.Checkbox("Need/Greed missing glamour gear (XA Database)", ref glamourNeed))
+            plugin.SetLootGlamourNeedingEnabled(glamourNeed);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap.");
+        ImGui.Separator();
         DrawRegistrableControls();
     }
 

@@ -12,6 +12,10 @@ ADS includes policy-driven desynthesis with local presets, skill-up filtering, t
 
 ADS can resolve deterministic NPC vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. Supported families include gil, direct/FATE-routed special exchanges, Inclusion, Grand Company, and Free Company shops, including exact divisible coproduct bundles and mixed one-to-three-currency costs. Turn-in, sale, random, ambiguous, and unprovable offers remain callback-free. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
 
+## Loot Automation
+
+Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot and requests Need only when no owned row is returned. Live Greed/Pass availability still caps the result; unavailable or incomplete XA Database responses retain the selected base mode.
+
 ## Installation
 
 Add this custom repository in Dalamud:

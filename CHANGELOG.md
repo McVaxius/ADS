@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-09
+
+- Added a default-off XA Database glamour-loot option to Loot Controls. It queries current-character ownership only for equippable loot, requests Need for missing gear, retains live Greed/Pass caps, and preserves the configured base mode with rate-limited diagnostics when IPC data is unavailable or incomplete.
+- Added `/ads l` as an exact toggle alias for `/ads loot`.
+- Expanded Object Explorer with guarded Foray level/element columns and tooltips, trimmed pipe-separated OR search, and a session-only compact view that keeps actions and filters visible while hiding contextual/status text.
+- Debug x64 solution compilation succeeds with zero errors; the two warnings are obsolete-distance references in unchanged `ExplorerSnapshotExportService.cs`. No tests or live-client checks were run.
+
 ## 2026-08-02
 
 - Parked ADS in the current Foray, Diadem, and Ocean Fishing territory list (512, 514, 515, 624, 625, 656, 732, 763, 795, 827, 900, 901, 920, 929, 939, 975, 1163, 1252, and 1346). On entry ADS now uses its normal stop/cancel cleanup, stays Idle with an inactive status, skips alliance lookup and all further framework work, and rejects duty, inn, repair, desynth, materia, and shop starts before their side effects. UI, Stop Ownership, and Cancel Utility remain available; normal duties and Eureka Orthos are unaffected.

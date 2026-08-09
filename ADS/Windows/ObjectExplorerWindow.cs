@@ -4,6 +4,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface.Windowing;
+using NativeCharacter = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
 
 namespace ADS.Windows;
 
@@ -19,6 +20,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private int levelFilterMode;
     private bool targetableOnly;
     private bool sameMapOnly;
+    private bool compact;
 
     public ObjectExplorerWindow(Plugin plugin)
         : base("ADS Object Explorer###ADSObjectExplorer")
@@ -44,9 +46,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         if (localPlayer is null)
         {
-            ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
-            ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
-            ImGui.TextUnformatted("No local player is available.");
+            if (!compact)
+            {
+                ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
+                ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
+                ImGui.TextUnformatted("No local player is available.");
+            }
             return;
         }
 
@@ -56,19 +61,22 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             .OrderBy(x => Vector3.Distance(localPlayer.Position, x.WorldPosition))
             .FirstOrDefault();
 
-        ImGui.TextUnformatted("Live Loaded Objects");
-        ImGui.TextWrapped("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence.");
-        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
-        ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
-        ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
-        ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
-        ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
-        ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
+        if (!compact)
+        {
+            ImGui.TextUnformatted("Live Loaded Objects");
+            ImGui.TextWrapped("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence.");
+            ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
+            ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
+            ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
+            ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
+            ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
+            ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
+        }
 
         ImGui.TextUnformatted("Search");
         ImGui.SameLine();
         ImGui.SetNextItemWidth(260f);
-        ImGui.InputTextWithHint("##ADSObjectTextFilter", "name / base id / object kind", ref textFilter, 128);
+        ImGui.InputTextWithHint("##ADSObjectTextFilter", "name / base id / object kind; | for OR", ref textFilter, 128);
         ImGui.SameLine();
         ImGui.TextUnformatted("Kind");
         ImGui.SameLine();
@@ -130,13 +138,16 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        ImGui.TextUnformatted($"Objects shown: {rows.Count}");
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 11, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!compact)
+            ImGui.TextUnformatted($"Objects shown: {rows.Count}");
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
         ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
         ImGui.TableSetupColumn("Lv.", ImGuiTableColumnFlags.WidthFixed, 45f);
+        ImGui.TableSetupColumn("f.Lv", ImGuiTableColumnFlags.WidthFixed, 45f);
+        ImGui.TableSetupColumn("Element", ImGuiTableColumnFlags.WidthFixed, 72f);
         ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 60f);
@@ -164,35 +175,43 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(row.Distance.ToString("0.00"));
+            ImGui.TextUnformatted(row.ForayLevel?.ToString() ?? "—");
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(row.VerticalDelta.ToString("0.00"));
+            ImGui.TextUnformatted(FormatForayElement(row.ForayElement));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(5);
+            ImGui.TextUnformatted(row.Distance.ToString("0.00"));
+            DrawRowTooltip(row);
+
+            ImGui.TableSetColumnIndex(6);
+            ImGui.TextUnformatted(row.VerticalDelta.ToString("0.00"));
+            DrawRowTooltip(row);
+
+            ImGui.TableSetColumnIndex(7);
             ImGui.TextUnformatted(row.MatchingRules.Count.ToString());
             DrawRuleTooltip(row);
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(8);
             if (ImGui.SmallButton($"moveto##ADSObjectMove{index}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: false);
 
-            ImGui.TableSetColumnIndex(7);
+            ImGui.TableSetColumnIndex(9);
             if (ImGui.SmallButton($"flyto##ADSObjectFly{index}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: true);
 
-            ImGui.TableSetColumnIndex(8);
+            ImGui.TableSetColumnIndex(10);
             if (ImGui.SmallButton($"FLAG##ADSObjectFlag{index}"))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
 
-            ImGui.TableSetColumnIndex(9);
+            ImGui.TableSetColumnIndex(11);
             if (ImGui.SmallButton($"RULE##ADSObjectRule{index}"))
                 ImGui.OpenPopup($"ADSObjectRulePopup##{index}");
             DrawRulePopup(index, row);
 
-            ImGui.TableSetColumnIndex(10);
+            ImGui.TableSetColumnIndex(12);
             if (ImGui.SmallButton($"XYZ##ADSObjectCopy{index}"))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
         }
@@ -215,7 +234,11 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
         }
 
-        ImGui.TextWrapped($"Export status: {plugin.ExplorerSnapshotExportService.Status}");
+        ImGui.SameLine();
+        ImGui.Checkbox("Compact", ref compact);
+
+        if (!compact)
+            ImGui.TextWrapped($"Export status: {plugin.ExplorerSnapshotExportService.Status}");
     }
 
     private IEnumerable<ObjectExplorerRow> BuildRows(DutyContextSnapshot context, IGameObject localPlayer)
@@ -246,11 +269,14 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
                 name,
                 gameObject.Position,
                 context.MapId);
+            var forayInfo = TryGetForayInfo(gameObject);
 
             yield return new ObjectExplorerRow(
                 Name: name,
                 ObjectKind: gameObject.ObjectKind.ToString(),
                 Level: gameObject is ICharacter character ? character.Level : null,
+                ForayLevel: forayInfo.Level,
+                ForayElement: forayInfo.Element,
                 Distance: Vector3.Distance(localPlayer.Position, gameObject.Position),
                 VerticalDelta: MathF.Abs(gameObject.Position.Y - localPlayer.Position.Y),
                 BaseId: gameObject.BaseId,
@@ -295,11 +321,45 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         if (string.IsNullOrWhiteSpace(textFilter))
             return true;
 
-        return row.Name.Contains(textFilter, StringComparison.OrdinalIgnoreCase)
-            || row.ObjectKind.Contains(textFilter, StringComparison.OrdinalIgnoreCase)
-            || row.BaseId.ToString().Contains(textFilter, StringComparison.OrdinalIgnoreCase)
-            || row.GameObjectId.ToString().Contains(textFilter, StringComparison.OrdinalIgnoreCase);
+        var terms = textFilter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return terms.Length == 0 || terms.Any(term =>
+            row.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || row.ObjectKind.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || row.BaseId.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
+            || row.GameObjectId.ToString().Contains(term, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static unsafe (byte? Level, byte? Element) TryGetForayInfo(IGameObject gameObject)
+    {
+        if (gameObject is not IBattleChara || gameObject.Address == nint.Zero)
+            return (null, null);
+
+        var character = (NativeCharacter*)gameObject.Address;
+        if (character == null
+            || character->VirtualTable == null
+            || character->VirtualTable->GetForayInfo == null)
+        {
+            return (null, null);
+        }
+
+        var forayInfo = character->GetForayInfo();
+        return forayInfo == null || forayInfo->Level == 0
+            ? (null, null)
+            : (forayInfo->Level, forayInfo->Element);
+    }
+
+    private static string FormatForayElement(byte? element)
+        => element switch
+        {
+            null => "—",
+            1 => "Fire",
+            2 => "Ice",
+            3 => "Wind",
+            4 => "Earth",
+            5 => "Lightning",
+            6 => "Water",
+            _ => element.Value.ToString(),
+        };
 
     private void DrawRulePopup(int index, ObjectExplorerRow row)
     {
@@ -358,6 +418,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted(row.Name);
         ImGui.TextUnformatted($"ObjectKind: {row.ObjectKind}");
         ImGui.TextUnformatted($"Level: {row.Level?.ToString() ?? "—"}");
+        ImGui.TextUnformatted($"Foray level: {row.ForayLevel?.ToString() ?? "—"}");
+        ImGui.TextUnformatted($"Foray element: {FormatForayElement(row.ForayElement)}");
         ImGui.TextUnformatted($"Distance: {row.Distance:0.00}");
         ImGui.TextUnformatted($"Y delta: {row.VerticalDelta:0.00}");
         ImGui.TextUnformatted($"BaseId: {row.BaseId}");
@@ -372,6 +434,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         string Name,
         string ObjectKind,
         byte? Level,
+        byte? ForayLevel,
+        byte? ForayElement,
         float Distance,
         float VerticalDelta,
         uint BaseId,

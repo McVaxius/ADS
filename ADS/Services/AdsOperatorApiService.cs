@@ -36,6 +36,7 @@ public sealed class AdsOperatorApiService
         {
             plugin.Configuration.PluginEnabled,
             plugin.Configuration.LootMode,
+            plugin.Configuration.LootGlamourNeedingEnabled,
             plugin.Configuration.LootRegistrableNeedingEnabled,
             plugin.Configuration.LootRegistrableMountsEnabled,
             plugin.Configuration.LootRegistrableMinionsEnabled,
@@ -131,6 +132,10 @@ public sealed class AdsOperatorApiService
                     case "pluginenabled":
                         var pluginEnabled = property.Value.GetBoolean();
                         changes.Add(() => plugin.Configuration.PluginEnabled = pluginEnabled);
+                        break;
+                    case "lootglamourneedingenabled":
+                        var lootGlamourNeeding = property.Value.GetBoolean();
+                        changes.Add(() => plugin.Configuration.LootGlamourNeedingEnabled = lootGlamourNeeding);
                         break;
                     case "lootregistrableneedingenabled":
                         var lootRegistrable = property.Value.GetBoolean();

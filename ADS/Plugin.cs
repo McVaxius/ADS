@@ -253,7 +253,15 @@ public sealed class Plugin : IDalamudPlugin
             () => InnEntryService.IsRunning,
             Log);
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
-        LootAutomationService = new LootAutomationService(DataManager, CommandManager, SigScanner, Configuration, Log);
+        var searchCurrentCharacterItemsJson = PluginInterface
+            .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
+        LootAutomationService = new LootAutomationService(
+            DataManager,
+            CommandManager,
+            SigScanner,
+            searchCurrentCharacterItemsJson.InvokeFunc,
+            Configuration,
+            Log);
         TreasureFollowerDutyExitMonitorService = new TreasureFollowerDutyExitMonitorService(CommandManager, Log);
         BmrReflectionService = new BmrReflectionService(PluginInterface, Configuration, Log);
         AdsOperatorApiService = new AdsOperatorApiService(this);
@@ -542,6 +550,15 @@ public sealed class Plugin : IDalamudPlugin
         SaveConfiguration();
         Log.Information($"[ADS][Loot] Loot mode {previous} -> {mode}.");
         PrintStatus($"Loot mode: {mode}.");
+    }
+
+    public void SetLootGlamourNeedingEnabled(bool enabled)
+    {
+        if (Configuration.LootGlamourNeedingEnabled == enabled)
+            return;
+
+        Configuration.LootGlamourNeedingEnabled = enabled;
+        SaveConfiguration();
     }
 
     public void SetLootRegistrableNeedingEnabled(bool enabled, bool printStatus = false)
@@ -1286,6 +1303,7 @@ public sealed class Plugin : IDalamudPlugin
                 pluginEnabled = Configuration.PluginEnabled,
                 frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled,
                 lootMode = Configuration.LootMode.ToString(),
+                lootGlamourNeedingEnabled = Configuration.LootGlamourNeedingEnabled,
                 lootRegistrableNeedingEnabled = Configuration.LootRegistrableNeedingEnabled,
                 lootStatus = LootAutomationService.Status,
                 processDialogRulesOutsideOwnedDuty = Configuration.ProcessDialogRulesOutsideOwnedDuty,
@@ -2531,7 +2549,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads ghosts - toggle the ghost inspector\n" +
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads mini - toggle the compact control window\n" +
-                "/ads loot - toggle the loot control window\n" +
+                "/ads loot|l - toggle the loot control window\n" +
                 "/ads debug on|off|status|release - toggle mini-window debug strafe controls\n" +
                 "/ads rules - toggle the rules editor\n" +
                 "/ads dialogs - toggle the dialog rules editor\n" +
@@ -2627,7 +2645,8 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (trimmed.Equals("loot", StringComparison.OrdinalIgnoreCase))
+        if (trimmed.Equals("loot", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("l", StringComparison.OrdinalIgnoreCase))
         {
             ToggleLootUi();
             return;
@@ -3379,6 +3398,13 @@ public sealed class Plugin : IDalamudPlugin
             configuration.TreasureFollowWizardCompleted = false;
             configuration.DiagnosticsRecoveryWizardCompleted = false;
             configuration.Version = 21;
+            changed = true;
+        }
+
+        if (configuration.Version < 22)
+        {
+            configuration.LootGlamourNeedingEnabled = false;
+            configuration.Version = 22;
             changed = true;
         }
 

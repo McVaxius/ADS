@@ -8,7 +8,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 21;
+    public int Version { get; set; } = 22;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
@@ -38,6 +38,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool ReflectionHasOriginalMaxLoadDistance { get; set; } = false;
     public float ReflectionOriginalMaxLoadDistance { get; set; } = 500f;
     public LootRollMode LootMode { get; set; } = LootRollMode.Off;
+    public bool LootGlamourNeedingEnabled { get; set; } = false;
     public bool LootRegistrableNeedingEnabled { get; set; } = false;
     public bool LootRegistrableMountsEnabled { get; set; } = true;
     public bool LootRegistrableMinionsEnabled { get; set; } = true;

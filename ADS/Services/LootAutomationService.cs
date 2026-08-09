@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
@@ -21,6 +22,7 @@ public sealed class LootAutomationService
     private readonly IDataManager dataManager;
     private readonly ICommandManager commandManager;
     private readonly ISigScanner sigScanner;
+    private readonly Func<string, string> searchCurrentCharacterItemsJson;
     private readonly Configuration configuration;
     private readonly IPluginLog log;
     private readonly Dictionary<uint, uint[]> fadedCopyResultCache = [];
@@ -41,12 +43,14 @@ public sealed class LootAutomationService
         IDataManager dataManager,
         ICommandManager commandManager,
         ISigScanner sigScanner,
+        Func<string, string> searchCurrentCharacterItemsJson,
         Configuration configuration,
         IPluginLog log)
     {
         this.dataManager = dataManager;
         this.commandManager = commandManager;
         this.sigScanner = sigScanner;
+        this.searchCurrentCharacterItemsJson = searchCurrentCharacterItemsJson;
         this.configuration = configuration;
         this.log = log;
     }
@@ -269,6 +273,8 @@ public sealed class LootAutomationService
             $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
             $"registrable=unknown(itemSheet=missing), " +
             $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
+            $"glamour=unknown(itemSheet=missing), " +
+            $"glamourNeedMissing={configuration.LootGlamourNeedingEnabled}, " +
             $"override=none(itemSheet=missing), " +
             $"rollStateCap={FormatRollResult(GetRollStateCap(lootItem))}, " +
             $"lootModeCap={FormatRollResult(GetLootModeCap(lootItem))}, " +
@@ -282,6 +288,7 @@ public sealed class LootAutomationService
         var baseDesired = MapBaseMode(configuration.LootMode);
         var desired = baseDesired;
         var registrableReason = "not-registrable";
+        var glamourReason = item.EquipSlotCategory.RowId == 0 ? "not-equippable" : "disabled";
         var overrideReason = "none(not-registrable)";
 
         if (TryClassifyRegistrable(itemId, item, out var category, out var categoryLabel, out var registrationItemIds))
@@ -316,6 +323,15 @@ public sealed class LootAutomationService
                 $"registered={alreadyRegistered}, owned={owned}, missing={missing}";
         }
 
+        if (configuration.LootGlamourNeedingEnabled && item.EquipSlotCategory.RowId != 0)
+        {
+            if (TryResolveGlamourOwnership(itemId, out var owned, out glamourReason) && !owned)
+            {
+                desired = RollResult.Needed;
+                overrideReason = "need-missing-glamour";
+            }
+        }
+
         var rollStateCap = GetRollStateCap(lootItem);
         var lootModeCap = GetLootModeCap(lootItem);
         var hardCap = ResultMerge(rollStateCap, lootModeCap);
@@ -328,6 +344,8 @@ public sealed class LootAutomationService
             $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
             $"registrable={registrableReason}, " +
             $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
+            $"glamour={glamourReason}, " +
+            $"glamourNeedMissing={configuration.LootGlamourNeedingEnabled}, " +
             $"override={overrideReason}, " +
             $"desired={FormatRollResult(desired)}, " +
             $"rollStateCap={FormatRollResult(rollStateCap)}, " +
@@ -336,6 +354,81 @@ public sealed class LootAutomationService
             $"liveCap={FormatRollResult(hardCap)}, " +
             $"final={FormatRollResult(final)}";
         return new RollDecision(final, reason);
+    }
+
+    private bool TryResolveGlamourOwnership(uint itemId, out bool owned, out string reason)
+    {
+        owned = false;
+        var request = JsonSerializer.Serialize(new
+        {
+            version = 1,
+            itemIds = new[] { itemId },
+            includeZeroQuantity = false,
+        });
+
+        try
+        {
+            var response = searchCurrentCharacterItemsJson(request);
+            if (string.IsNullOrWhiteSpace(response))
+                return PreserveBaseForGlamour(itemId, "empty response", out owned, out reason);
+
+            using var document = JsonDocument.Parse(response);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return PreserveBaseForGlamour(itemId, "response root is not an object", out owned, out reason);
+            if (!root.TryGetProperty("version", out var version)
+                || !version.TryGetInt32(out var versionValue)
+                || versionValue != 1)
+            {
+                return PreserveBaseForGlamour(itemId, "response version is missing or unsupported", out owned, out reason);
+            }
+
+            if (!root.TryGetProperty("ready", out var ready) || ready.ValueKind != JsonValueKind.True)
+                return PreserveBaseForGlamour(itemId, "response is not ready", out owned, out reason);
+            if (!root.TryGetProperty("rows", out var rows) || rows.ValueKind != JsonValueKind.Array)
+                return PreserveBaseForGlamour(itemId, "rows are missing or invalid", out owned, out reason);
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (row.ValueKind != JsonValueKind.Object
+                    || !row.TryGetProperty("itemId", out var rowItemId)
+                    || !rowItemId.TryGetUInt32(out var rowItemIdValue))
+                {
+                    return PreserveBaseForGlamour(itemId, "row itemId is missing or invalid", out owned, out reason);
+                }
+
+                if (rowItemIdValue != itemId)
+                    continue;
+                if (!row.TryGetProperty("quantity", out var quantity)
+                    || !quantity.TryGetInt64(out var quantityValue)
+                    || quantityValue <= 0)
+                {
+                    return PreserveBaseForGlamour(itemId, "matching row quantity is not positive", out owned, out reason);
+                }
+
+                owned = true;
+                reason = $"owned(quantity={quantityValue.ToString(CultureInfo.InvariantCulture)})";
+                return true;
+            }
+
+            reason = "missing(no matching row)";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            return PreserveBaseForGlamour(itemId, $"IPC failure ({ex.GetType().Name})", out owned, out reason);
+        }
+    }
+
+    private bool PreserveBaseForGlamour(uint itemId, string detail, out bool owned, out string reason)
+    {
+        owned = false;
+        reason = $"unavailable({detail})";
+        LogLootDiagnostic(
+            "xa-database-glamour",
+            $"XA Database glamour ownership is unavailable for item {itemId.ToString(CultureInfo.InvariantCulture)}: {detail}; preserving configured loot mode.",
+            warning: true);
+        return false;
     }
 
     private bool TryClassifyRegistrable(

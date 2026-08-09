@@ -215,12 +215,12 @@ Field cues are class-specific: red is required, amber recommended, normal option
 
 | Window | Primary use |
 |---|---|
-| Object Explorer | Identify live object name, kind, character level (or `—`), base ID, distance, targetability, position; use `Filter by Lv.` to enable a session-only Exact/`<=`/`>=` positive-integer character-level filter with no maximum (first enable uses your current level; **Clear filters** disables and resets it); seed object rule |
+| Object Explorer | Identify live object name, kind, character level, guarded Foray level/element (or `—`), base ID, distance, targetability, and position; separate trimmed search terms with `|` for OR matching; use the session-only **Compact** checkbox to retain export/action buttons and filter labels while hiding contextual/status text; use `Filter by Lv.` for the existing Exact/`<=`/`>=` character-level filter; seed object rule |
 | Ghost Inspector | Inspect monster/interactable ghosts and manual-destination recovery state |
 | Frontier Labels | Inspect active-map labels and map resolution |
 | Object Rules | Author live/parked object-rule manifests |
 | Dialog Rules | Author live/parked yes/no dialog manifests |
-| Loot Controls | Configure and inspect loot rolling |
+| Loot Controls | Open with `/ads loot` or `/ads l`; configure base rolling and the default-off XA Database glamour option, which requests Need for missing equippable gear while preserving live Greed/Pass caps and the selected base mode on incomplete IPC data |
 | Higher / Lower | Calibrate and inspect treasure Higher/Lower behavior |
 | Treasure Routes | Inspect/edit treasure route data |
 | Server Events | Inspect server/map-effect events |

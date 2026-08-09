@@ -26,7 +26,7 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads labels` | Toggle Frontier Labels |
 | `/ads rules` | Toggle Object Rules editor |
 | `/ads dialogs` | Toggle Dialog Rules editor |
-| `/ads loot` | Toggle Loot Controls |
+| `/ads loot`, `/ads l` | Toggle Loot Controls |
 | `/ads hl` | Toggle Higher / Lower window |
 | `/ads higherlower` | Alias for `/ads hl` |
 | `/ads higher-lower` | Alias for `/ads hl` |

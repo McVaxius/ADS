@@ -16,6 +16,7 @@ public static class AdsIpcValidation
     {
         "pluginEnabled",
         "lootMode",
+        "lootGlamourNeedingEnabled",
         "lootRegistrableNeedingEnabled",
         "lootRegistrableMountsEnabled",
         "lootRegistrableMinionsEnabled",
