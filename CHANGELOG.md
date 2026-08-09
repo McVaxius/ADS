@@ -2,6 +2,7 @@
 
 ## 2026-08-09
 
+- Fixed treasure-follower BMRAI/VBM targets inside ADS by resolving the live opener through party Content ID, then slot, then exact name or name-plus-world identity, and removing only an authoritative concatenated world suffix that leaves a two-part character name. Both providers, accepted-command state, reapply matching, keys, and diagnostics now share that resolved name; ordinary names, world-like surnames, missing party/world data, regular-duty Slot1 resets, and treasure-exit cleanup remain unchanged.
 - Added a default-off XA Database glamour-loot option to Loot Controls. It queries current-character ownership only for equippable loot, requests Need for missing gear, retains live Greed/Pass caps, and preserves the configured base mode with rate-limited diagnostics when IPC data is unavailable or incomplete.
 - Added `/ads l` as an exact toggle alias for `/ads loot`.
 - Expanded Object Explorer with guarded Foray level/element columns and tooltips, trimmed pipe-separated OR search, and a session-only compact view that keeps actions and filters visible while hiding contextual/status text.

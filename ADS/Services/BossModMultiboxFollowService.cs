@@ -36,9 +36,12 @@ public sealed class BossModMultiboxFollowService
     private readonly ICommandManager commandManager;
     private readonly Configuration configuration;
     private readonly IPluginLog log;
+    private readonly Func<IReadOnlyList<PartyMemberSnapshot>> partyMemberProvider;
 
     private string lastLoggedSuccessKey = string.Empty;
     private string lastReapplyAttemptKey = string.Empty;
+    private string lastPartyResolutionKey = string.Empty;
+    private string lastPartyResolvedName = string.Empty;
     private uint bmraiFollowCommandAcceptedDutyKey;
     private bool bmraiFollowActivated;
 
@@ -52,6 +55,18 @@ public sealed class BossModMultiboxFollowService
         this.commandManager = commandManager;
         this.configuration = configuration;
         this.log = log;
+        partyMemberProvider = CaptureLivePartyMembers;
+    }
+
+    internal BossModMultiboxFollowService(
+        IDalamudPluginInterface pluginInterface,
+        ICommandManager commandManager,
+        Configuration configuration,
+        IPluginLog log,
+        Func<IReadOnlyList<PartyMemberSnapshot>> partyMemberProvider)
+        : this(pluginInterface, commandManager, configuration, log)
+    {
+        this.partyMemberProvider = partyMemberProvider;
     }
 
     public bool FollowApplied { get; private set; }
@@ -161,6 +176,8 @@ public sealed class BossModMultiboxFollowService
         SetFollowerMovementAuthority(false, FollowStatus);
         lastLoggedSuccessKey = string.Empty;
         lastReapplyAttemptKey = string.Empty;
+        lastPartyResolutionKey = string.Empty;
+        lastPartyResolvedName = string.Empty;
         bmraiFollowCommandAcceptedDutyKey = 0;
         bmraiFollowActivated = false;
     }
@@ -181,6 +198,7 @@ public sealed class BossModMultiboxFollowService
             return false;
         }
 
+        opener = ResolvePartyTargetName(opener);
         FollowLeaderContentId = opener.ContentId;
 
         if (!IsDirectBmraiSource(opener.Source))
@@ -217,6 +235,7 @@ public sealed class BossModMultiboxFollowService
         if (RegularDutyActive)
             return false;
 
+        opener = ResolvePartyTargetName(opener);
         if (!TryGetDirectTreasureFollowReapplyReason(opener, context, out var reapplyReason))
             return false;
 
@@ -246,6 +265,7 @@ public sealed class BossModMultiboxFollowService
             return;
         }
 
+        opener = ResolvePartyTargetName(opener);
         FollowLeaderContentId = opener.ContentId;
 
         if (!IsDirectBmraiSource(opener.Source))
@@ -556,6 +576,148 @@ public sealed class BossModMultiboxFollowService
 
     private static string BuildFollowKey(TreasurePortalOpenerSnapshot opener)
         => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.OpenerName.Trim()}";
+
+    private TreasurePortalOpenerSnapshot ResolvePartyTargetName(TreasurePortalOpenerSnapshot opener)
+    {
+        var targetName = opener.OpenerName.Trim();
+        var resolutionKey = BuildPartyResolutionKey(opener, targetName);
+        if (string.Equals(resolutionKey, lastPartyResolutionKey, StringComparison.Ordinal))
+            return opener with { OpenerName = lastPartyResolvedName };
+
+        var members = partyMemberProvider();
+        PartyMemberSnapshot? candidate = null;
+        var matchSource = string.Empty;
+
+        if (opener.ContentId is { } contentId && contentId != 0)
+        {
+            foreach (var member in members)
+            {
+                if (member.ContentId != contentId)
+                    continue;
+
+                candidate = member;
+                matchSource = "contentId";
+                break;
+            }
+        }
+
+        if (candidate is null && opener.PartySlot is { } partySlot)
+        {
+            foreach (var member in members)
+            {
+                if (member.PartySlot != partySlot)
+                    continue;
+
+                candidate = member;
+                matchSource = "partySlot";
+                break;
+            }
+        }
+
+        if (candidate is null && targetName.Length > 0)
+        {
+            foreach (var member in members)
+            {
+                if (!PartyNameMatches(targetName, member))
+                    continue;
+
+                candidate = member;
+                matchSource = "name";
+                break;
+            }
+        }
+
+        var resolvedName = targetName;
+        if (candidate is { } matchedMember)
+        {
+            resolvedName = RemoveConcatenatedWorldSuffix(targetName, matchedMember.WorldName);
+            if (!string.Equals(targetName, resolvedName, StringComparison.Ordinal))
+            {
+                log.Debug(
+                    $"[ADS] Normalized treasure follow target from '{targetName}' to '{resolvedName}' using party {matchSource}, slot={matchedMember.PartySlot}, contentId={matchedMember.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}, world='{matchedMember.WorldName}'.");
+            }
+        }
+
+        lastPartyResolutionKey = resolutionKey;
+        lastPartyResolvedName = resolvedName;
+
+        return opener with { OpenerName = resolvedName };
+    }
+
+    private IReadOnlyList<PartyMemberSnapshot> CaptureLivePartyMembers()
+    {
+        var members = new List<PartyMemberSnapshot>();
+        try
+        {
+            var partyList = Plugin.PartyList;
+            for (var i = 0; i < partyList.Length; i++)
+            {
+                var member = partyList[i];
+                if (member is null)
+                    continue;
+
+                try
+                {
+                    var worldName = member.World.TryGetValue(out var world)
+                        ? world.Name.ToString().Trim()
+                        : string.Empty;
+                    members.Add(new PartyMemberSnapshot(
+                        i + 1,
+                        member.ContentId == 0 ? null : member.ContentId,
+                        NormalizeCharacterName(member.Name.TextValue),
+                        worldName));
+                }
+                catch (Exception ex)
+                {
+                    log.Debug($"[ADS] Failed to capture treasure follow identity for party slot {i + 1}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Debug($"[ADS] Failed to capture party identities for treasure follow normalization: {ex.Message}");
+        }
+
+        return members;
+    }
+
+    private static bool PartyNameMatches(string targetName, PartyMemberSnapshot member)
+    {
+        targetName = NormalizeCharacterName(targetName);
+        var displayName = NormalizeCharacterName(member.DisplayName);
+        if (string.Equals(targetName, displayName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var worldName = member.WorldName.Trim();
+        return displayName.Length > 0
+               && worldName.Length > 0
+               && string.Equals(targetName, $"{displayName}{worldName}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string RemoveConcatenatedWorldSuffix(string targetName, string authoritativeWorldName)
+    {
+        var worldName = authoritativeWorldName.Trim();
+        if (targetName.Length == 0
+            || worldName.Length == 0
+            || !targetName.EndsWith(worldName, StringComparison.OrdinalIgnoreCase))
+        {
+            return targetName;
+        }
+
+        var suffixStart = targetName.Length - worldName.Length;
+        if (suffixStart == 0 || char.IsWhiteSpace(targetName[suffixStart - 1]))
+            return targetName;
+
+        var nameWithoutWorld = targetName[..suffixStart].TrimEnd();
+        var nameParts = nameWithoutWorld.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return nameParts.Length == 2 ? nameWithoutWorld : targetName;
+    }
+
+    private static string NormalizeCharacterName(string value)
+        => string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static string BuildPartyResolutionKey(TreasurePortalOpenerSnapshot opener, string targetName)
+        => $"{opener.Source}:{opener.PartySlot?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{opener.ContentId?.ToString(CultureInfo.InvariantCulture) ?? "none"}:{targetName}";
 
     private bool CommandMatchesOpener(TreasurePortalOpenerSnapshot opener)
         => BmraiFollowCommandAccepted == true
@@ -1465,6 +1627,12 @@ public sealed class BossModMultiboxFollowService
         bool Accepted,
         DateTime AtUtc,
         string Status);
+
+    internal readonly record struct PartyMemberSnapshot(
+        int PartySlot,
+        ulong? ContentId,
+        string DisplayName,
+        string WorldName);
 
     private sealed record BossModReflectionContext(
         IExposedPlugin ExposedPlugin,

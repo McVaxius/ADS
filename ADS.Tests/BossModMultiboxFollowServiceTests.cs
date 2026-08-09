@@ -165,6 +165,147 @@ public sealed class BossModMultiboxFollowServiceTests
     }
 
     [Fact]
+    public void ConcatenatedCrossWorldOpenerUsesIdenticalNormalizedProviderTargets()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 30, "Portal Opener", "Lich"));
+        var opener = CreatePortalOpener() with
+        {
+            OpenerName = "Portal OpenerLich",
+            PartySlot = null,
+            ContentId = null,
+        };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Equal(1, commands.Count(command => command == "/bmrai follow Portal Opener"));
+        Assert.Equal(1, commands.Count(command => command == "/vbmai follow Portal Opener"));
+        Assert.DoesNotContain("/bmrai follow Portal OpenerLich", commands);
+        Assert.DoesNotContain("/vbmai follow Portal OpenerLich", commands);
+        Assert.Equal("Portal Opener", service.BmraiFollowCommandTargetName);
+    }
+
+    [Fact]
+    public void OrdinaryOpenerNameIsUnchanged()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 30, "Portal Opener", "Lich"));
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(CreatePortalOpener()));
+
+        Assert.Contains("/bmrai follow Portal Opener", commands);
+        Assert.Contains("/vbmai follow Portal Opener", commands);
+    }
+
+    [Fact]
+    public void MissingPartyWorldLeavesConcatenatedNameUnchanged()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 30, "Portal OpenerLich", string.Empty));
+        var opener = CreatePortalOpener() with { OpenerName = "Portal OpenerLich" };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Contains("/bmrai follow Portal OpenerLich", commands);
+        Assert.Contains("/vbmai follow Portal OpenerLich", commands);
+    }
+
+    [Fact]
+    public void SurnameMatchingWorldIsPreserved()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 30, "Portal Lich", "Lich"));
+        var opener = CreatePortalOpener() with { OpenerName = "Portal Lich" };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Contains("/bmrai follow Portal Lich", commands);
+        Assert.Contains("/vbmai follow Portal Lich", commands);
+    }
+
+    [Fact]
+    public void MissingPartyMatchLeavesConcatenatedNameUnchanged()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(4, 40, "Other Person", "Lich"));
+        var opener = CreatePortalOpener() with
+        {
+            OpenerName = "Portal OpenerLich",
+            PartySlot = null,
+            ContentId = null,
+        };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Contains("/bmrai follow Portal OpenerLich", commands);
+        Assert.Contains("/vbmai follow Portal OpenerLich", commands);
+    }
+
+    [Fact]
+    public void ContentIdMatchTakesPrecedenceOverPartySlot()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(1, 30, "Portal Opener", "Alpha"),
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 40, "Portal OpenerAlpha", "Lich"));
+        var opener = CreatePortalOpener() with
+        {
+            OpenerName = "Portal OpenerAlpha",
+            PartySlot = 2,
+            ContentId = 30,
+        };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Contains("/bmrai follow Portal Opener", commands);
+        Assert.Contains("/vbmai follow Portal Opener", commands);
+        Assert.DoesNotContain("/bmrai follow Portal OpenerAlpha", commands);
+        Assert.DoesNotContain("/vbmai follow Portal OpenerAlpha", commands);
+    }
+
+    [Fact]
+    public void PartySlotIsUsedWhenContentIdDoesNotMatch()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 40, "Portal Opener", "Lich"));
+        var opener = CreatePortalOpener() with
+        {
+            OpenerName = "Portal OpenerLich",
+            PartySlot = 2,
+            ContentId = 999,
+        };
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener));
+
+        Assert.Contains("/bmrai follow Portal Opener", commands);
+        Assert.Contains("/vbmai follow Portal Opener", commands);
+    }
+
+    [Fact]
+    public void NormalizedCommandStateMatchesRawOpenerWithoutReapplying()
+    {
+        var (service, commands) = CreatePartyAwareService(
+            new BossModMultiboxFollowService.PartyMemberSnapshot(2, 30, "Portal Opener", "Lich"));
+        var opener = CreatePortalOpener() with
+        {
+            OpenerName = "Portal OpenerLich",
+            PartySlot = null,
+            ContentId = null,
+        };
+        var context = CreateRegularDutyContext();
+
+        Assert.True(service.ApplyDirectTreasurePortalOpener(opener, context));
+        var commandCount = commands.Count;
+
+        service.Update(TreasureDungeonRole.Follower, "Follower", opener, followAllowed: true);
+
+        Assert.True(service.FollowApplied);
+        Assert.False(service.ReapplyDirectTreasurePortalOpenerIfNeeded(opener, context, "test update"));
+        Assert.Equal(commandCount, commands.Count);
+        Assert.Equal(1, commands.Count(command => command == "/bmrai follow Portal Opener"));
+        Assert.Equal(1, commands.Count(command => command == "/vbmai follow Portal Opener"));
+    }
+
+    [Fact]
     public void TreasureFollowerDutyExitCleanupRemainsUnchanged()
     {
         var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
@@ -196,6 +337,25 @@ public sealed class BossModMultiboxFollowServiceTests
         => typeof(BossModMultiboxFollowService)
             .GetField("bmraiFollowActivated", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(service, true);
+
+    private static (BossModMultiboxFollowService Service, List<string> Commands) CreatePartyAwareService(
+        params BossModMultiboxFollowService.PartyMemberSnapshot[] members)
+    {
+        var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
+        var commands = ((CommandManagerProxy)(object)commandManager).Commands;
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var configuration = new Configuration
+        {
+            BmraiTreasureFollowCleanupPending = true,
+        };
+        var service = new BossModMultiboxFollowService(
+            null!,
+            commandManager,
+            configuration,
+            log,
+            () => members);
+        return (service, commands);
+    }
 
     private static TreasurePortalOpenerSnapshot CreatePortalOpener()
         => new(
