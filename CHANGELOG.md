@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-13
+
+- Exposed the existing shop-reuse switch over IPC as `ADS.SetShopKeepOpen(bool) -> bool`, so an IPC caller buying several items from one vendor can hold the shop open instead of paying a close-and-re-interact cycle per item. Nothing changes unless a caller opts in; `KeepShopOpen` itself, purchase behaviour, and every other endpoint are untouched. Repeated restock testing showed that closing and re-interacting can leave the character in a stale NPC event, causing later interactions to be ignored.
+- Fixed the documented way to end such a chain. `KeepShopOpen` told callers to close the held shop with `CancelUtility`, which cannot work: both `Plugin.CancelUtility` and `UtilityAutomationService.Cancel` return immediately unless a purchase is still running, and a held shop exists only once the purchase is terminal. Turning `SetShopKeepOpen` off now closes it (new `ReleaseHeldShopUi`, which never touches a live run's UI), and the remarks no longer point at cancel.
+
 ## 2026-08-09
 
 - Fixed treasure-follower BMRAI/VBM targets inside ADS by resolving the live opener through party Content ID, then slot, then exact name or name-plus-world identity, and removing only an authoritative concatenated world suffix that leaves a two-part character name. Both providers, accepted-command state, reapply matching, keys, and diagnostics now share that resolved name; ordinary names, world-like surnames, missing party/world data, regular-duty Slot1 resets, and treasure-exit cleanup remain unchanged.

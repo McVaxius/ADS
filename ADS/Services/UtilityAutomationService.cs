@@ -359,6 +359,11 @@ public sealed unsafe class UtilityAutomationService
         get => shopPurchaseRunner.KeepShopOpen;
         set => shopPurchaseRunner.KeepShopOpen = value;
     }
+
+    /// <summary>Closes a shop left standing by <see cref="ShopKeepOpen"/> and reports whether there was
+    /// one. <see cref="Cancel"/> cannot: it early-returns unless a run is active, which a finished chain
+    /// never is.</summary>
+    public bool ReleaseHeldShopUi() => shopPurchaseRunner.ReleaseHeldShopUi();
     public bool ExtractMateriaDone => extractMateriaDone;
     public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
     public string ExtractMateriaStatusMessage => IsExtractMateriaRunning ? StatusMessage : extractMateriaStatusMessage;

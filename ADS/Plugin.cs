@@ -285,6 +285,7 @@ public sealed class Plugin : IDalamudPlugin
             StartExtractMateria,
             StartDesynth,
             StartShopPurchase,
+            SetShopKeepOpen,
             CancelUtility,
             OpenDesynthConfigUiIpc,
             IsDutyOwned,
@@ -1099,12 +1100,16 @@ public sealed class Plugin : IDalamudPlugin
     /// </summary>
     /// <remarks>
     /// While on, a successful purchase leaves its shop open so the next purchase from the same shop
-    /// skips navigate/interact/open. The caller is then responsible for closing it -- CancelUtility
-    /// does, and so does any failed run. See ShopPurchaseRunner.KeepShopOpen.
+    /// skips navigate/interact/open. Turning it back OFF closes whatever it left standing, which is the
+    /// supported way to end a chain -- CancelUtility cannot, because every cancel path early-returns
+    /// unless a run is active and a held shop only exists once the run is terminal. A failed run still
+    /// closes its own UI. See ShopPurchaseRunner.KeepShopOpen.
     /// </remarks>
     public bool SetShopKeepOpen(bool enabled)
     {
         UtilityAutomationService.ShopKeepOpen = enabled;
+        if (!enabled && UtilityAutomationService.ReleaseHeldShopUi())
+            Log.Information("[ADS][Shop] Closed the shop left open by shop reuse.");
         return UtilityAutomationService.ShopKeepOpen;
     }
 

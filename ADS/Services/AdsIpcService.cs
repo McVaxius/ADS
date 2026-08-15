@@ -18,6 +18,7 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> startExtractMateria,
         Func<string, bool> startDesynth,
         Func<uint, int, bool> startShopPurchase,
+        Func<bool, bool> setShopKeepOpen,
         Func<bool> cancelUtility,
         Func<bool> openDesynthConfigUi,
         Func<bool> isDutyOwned,
@@ -41,6 +42,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartExtractMateria", startExtractMateria);
         Register(pluginInterface, "ADS.StartDesynth", startDesynth);
         Register(pluginInterface, "ADS.StartShopPurchase", startShopPurchase);
+        Register(pluginInterface, "ADS.SetShopKeepOpen", setShopKeepOpen);
         Register(pluginInterface, "ADS.CancelUtility", cancelUtility);
         Register(pluginInterface, "ADS.OpenDesynthConfigUi", openDesynthConfigUi);
         Register(pluginInterface, "ADS.IsDutyOwned", isDutyOwned);
