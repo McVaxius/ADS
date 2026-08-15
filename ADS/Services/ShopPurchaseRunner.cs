@@ -120,9 +120,21 @@ internal sealed class ShopPurchaseRunner
     /// the next run has nothing to walk -- so the event never ends and the next interact is silently
     /// ignored. Holding the shop open sidesteps that entirely.
     ///
-    /// The caller owns closing it afterwards (CancelUtility, or closing the addon).
+    /// The caller owns closing it afterwards, via ReleaseHeldShopUi (which is what turning this back off
+    /// does). NOT via Cancel: that early-returns unless a run is active, and a held shop by definition
+    /// only exists once the run is terminal.
     /// </remarks>
     public bool KeepShopOpen { get; set; }
+
+    /// <summary>Closes a shop this runner deliberately left open under <see cref="KeepShopOpen"/>, and
+    /// reports whether there was one. Never touches a live run's UI.</summary>
+    public bool ReleaseHeldShopUi()
+    {
+        if (IsRunning || !shopUiOwned)
+            return false;
+        CloseOwnedShopUi();
+        return true;
+    }
 
     public bool Start(ShopPurchaseRequest purchaseRequest)
     {

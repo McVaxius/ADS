@@ -16,6 +16,7 @@ Existing ADS IPC endpoints remain available.
 - `ADS.GetExtractMateriaStatusJson() -> string`
 - `ADS.StartDesynth(string mode) -> bool`
 - `ADS.StartShopPurchase(uint itemId, int quantity) -> bool`
+- `ADS.SetShopKeepOpen(bool enabled) -> bool`
 - `ADS.GetShopPurchaseStatusJson() -> string`
 - `ADS.CancelUtility() -> bool`
 - `ADS.OpenDesynthConfigUi() -> bool`
@@ -31,6 +32,10 @@ Existing ADS IPC endpoints remain available.
 `ADS.StartExtractMateria` starts existing no-configuration materia extraction and returns whether the start was accepted. `/ads extractmateria` remains unchanged.
 
 `ADS.StartShopPurchase` accepts a positive decimal `uint` item ID and a quantity from `1` through `9999`. `true` means ADS accepted the run; it does not mean the purchase completed. Quantity is the exact number of additional item units. `ADS.CancelUtility` cancels an active purchase and preserves verified partial acquisition truth.
+
+`ADS.SetShopKeepOpen` toggles shop reuse across consecutive purchases and returns the value now in effect. While on, a SUCCESSFUL purchase leaves its shop open so the next purchase from the same shop skips navigate/interact/open; a failed run still tears the UI down. Calling it with `false` ends the chain AND closes whatever was left standing ? that is the supported way to finish, because `ADS.CancelUtility` cannot close a held shop: every cancel path early-returns unless a purchase is still running, and a held shop only exists once the purchase is terminal.
+
+Turning it on is what makes a multi-item run from one vendor work reliably: repeated testing showed that close-and-re-interact cycles can leave the character in an unfinished NPC event, causing later interactions to be silently ignored.
 
 The generic equivalent is:
 
