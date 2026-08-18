@@ -522,8 +522,11 @@ internal sealed class ShopPurchaseRunner
             ? npc.Position
             : navigationDestination ?? selected.Route.NpcPosition;
         var distance = hasNpc ? npc.Distance : System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination);
-        if (distance <= InteractionDistance)
+        var reachedOfflineStandOff = hasNpc && HasReachedOfflineInteractionStandOff();
+        if (distance <= InteractionDistance || reachedOfflineStandOff)
         {
+            if (reachedOfflineStandOff)
+                diagnostic("Reached the floor-resolved offline vendor stand-off; preserving it for the bounded NPC interaction.");
             BeginStoppingNavigation(
                 $"Stopping navigation before interacting with {selected.Offer.NpcName}.",
                 () =>
@@ -735,8 +738,11 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc) && npc.Distance > InteractionDistance)
         {
-            BeginNavigation();
-            return;
+            if (!HasReachedOfflineInteractionStandOff())
+            {
+                BeginNavigation();
+                return;
+            }
         }
 
         if (clock.UtcNow - phaseStartedAtUtc > ShopOpeningTimeout
@@ -756,6 +762,12 @@ internal sealed class ShopPurchaseRunner
             shopUiOwned = true;
         }
     }
+
+    private bool HasReachedOfflineInteractionStandOff()
+        => selected?.Route?.RequiresFloorResolution == true
+           && !navigationUsingLiveNpc
+           && navigationDestination is { } destination
+           && System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination) <= InteractionDistance;
 
     private void UpdateOpeningMenu()
     {

@@ -75,9 +75,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         ImGui.TextUnformatted("Search");
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(260f);
+        ImGui.SetNextItemWidth(-1f);
         ImGui.InputTextWithHint("##ADSObjectTextFilter", "name / base id / object kind; | for OR", ref textFilter, 128);
-        ImGui.SameLine();
         ImGui.TextUnformatted("Kind");
         ImGui.SameLine();
         ImGui.SetNextItemWidth(180f);

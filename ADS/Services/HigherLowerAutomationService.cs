@@ -839,10 +839,11 @@ public sealed class HigherLowerAutomationService
         PendingCallbackAction action,
         int actionArg,
         AutomationDecision decision,
-        string reason)
+        string reason,
+        bool allowHiddenAddon = false)
     {
         var actionName = FormatPendingCallbackAction(action);
-        if (!state.TreasureHighLowVisible)
+        if (!state.TreasureHighLowVisible && !allowHiddenAddon)
         {
             Status = BuildStatus(state, $"waiting: {actionName} TreasureHighLow surface");
             return false;
@@ -859,8 +860,12 @@ public sealed class HigherLowerAutomationService
         var decisionFields = BuildDecisionLogFields(decision, now, decision.Retained ? "retained" : "current");
         CaptureServerRowBaseline(solverState, out var baselineServerRowSequence, out var hasBaselineServerRowSequence);
         TryStopVnav($"callback-{actionName}", force: true);
-        var actionSent = GameInteractionHelper.TryFireAddonCallback(AddonName, true, actionArg);
-        var submitSent = GameInteractionHelper.TryFireAddonCallback(AddonName, true, SubmitCallbackArg);
+        var actionSent = allowHiddenAddon
+            ? GameInteractionHelper.TryFireHiddenAddonCallback(AddonName, true, actionArg)
+            : GameInteractionHelper.TryFireAddonCallback(AddonName, true, actionArg);
+        var submitSent = allowHiddenAddon
+            ? GameInteractionHelper.TryFireHiddenAddonCallback(AddonName, true, SubmitCallbackArg)
+            : GameInteractionHelper.TryFireAddonCallback(AddonName, true, SubmitCallbackArg);
         var sequence = $"{actionArg.ToString(CultureInfo.InvariantCulture)},{SubmitCallbackArg.ToString(CultureInfo.InvariantCulture)}";
         if (actionSent)
         {
@@ -1025,6 +1030,25 @@ public sealed class HigherLowerAutomationService
         if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.Timeout)
         {
             TimeoutPendingCallback(state, solverState, surface, now, recovery.Reason);
+            return true;
+        }
+
+        if (recovery.Action == HigherLowerCashOutRecoveryPolicy.RecoveryAction.SendHiddenOpenChest)
+        {
+            pendingCallbackTimedOutPhase = pendingCallbackPhase;
+            pendingCallbackPhase = PendingCallbackPhase.TimedOut;
+            if (!TrySendTreasureHighLowCallbackSequence(
+                    state,
+                    solverState,
+                    PendingCallbackAction.OpenChest,
+                    OpenChestCallbackArg,
+                    decision,
+                    recovery.Reason,
+                    allowHiddenAddon: true))
+            {
+                pendingCallbackPhase = PendingCallbackPhase.WaitingSurface;
+                TimeoutPendingCallback(state, solverState, surface, now, "hidden-openchest-send-failed");
+            }
             return true;
         }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-17
+
+- Higher/Lower cash-out recovery now makes one `OpenChest` callback attempt against the hidden `TreasureHighLow` addon after the existing 25-second missing-surface wait, then remains blocked if the callback cannot be sent or verified. It never substitutes a High/Low direction and does not resend the recovery attempt.
+- Offline shop routes now preserve a reached, floor-resolved vendor stand-off long enough to use the existing bounded NPC interaction, instead of retargeting an unreachable NPC center. Currency parsing, menu routing, and interaction failure fallback are unchanged.
+- Moved Object Explorer Search onto its own full-width row while preserving the existing filters, Clear behavior, and tooltips.
+
 ## 2026-08-13
 
 - Exposed the existing shop-reuse switch over IPC as `ADS.SetShopKeepOpen(bool) -> bool`, so an IPC caller buying several items from one vendor can hold the shop open instead of paying a close-and-re-interact cycle per item. Nothing changes unless a caller opts in; `KeepShopOpen` itself, purchase behaviour, and every other endpoint are untouched. Repeated restock testing showed that closing and re-interacting can leave the character in a stale NPC event, causing later interactions to be ignored.

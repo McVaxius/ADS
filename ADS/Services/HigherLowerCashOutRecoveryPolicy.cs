@@ -9,15 +9,18 @@ internal static class HigherLowerCashOutRecoveryPolicy
 
         if (state.PendingOpenChest)
         {
-            if (state.TimedOut)
-                return RecoveryDecision.Timeout("cashout-surface-timeout");
-
             if (state.PendingPhase == PendingPhase.WaitingSurface)
             {
+                if (state.TimedOut)
+                    return RecoveryDecision.SendHiddenOpenChest("cashout-surface-timeout");
+
                 return state.TreasureHighLowVisible
                     ? RecoveryDecision.SendOpenChest("treasure-highlow-visible")
                     : RecoveryDecision.WaitForSurface("waiting-surface");
             }
+
+            if (state.TimedOut)
+                return RecoveryDecision.Timeout("cashout-surface-timeout");
 
             return RecoveryDecision.None(true, "pending-openchest");
         }
@@ -61,6 +64,9 @@ internal static class HigherLowerCashOutRecoveryPolicy
         public static RecoveryDecision SendOpenChest(string reason)
             => new(RecoveryAction.SendOpenChest, reason, SuppressDirectionSelection: true, ShouldBlock: false);
 
+        public static RecoveryDecision SendHiddenOpenChest(string reason)
+            => new(RecoveryAction.SendHiddenOpenChest, reason, SuppressDirectionSelection: true, ShouldBlock: false);
+
         public static RecoveryDecision ClearTerminal(string reason)
             => new(RecoveryAction.ClearTerminal, reason, SuppressDirectionSelection: true, ShouldBlock: false);
 
@@ -76,6 +82,7 @@ internal static class HigherLowerCashOutRecoveryPolicy
         SendOpenChest = 3,
         ClearTerminal = 4,
         Timeout = 5,
+        SendHiddenOpenChest = 6,
     }
 
     public enum PendingPhase

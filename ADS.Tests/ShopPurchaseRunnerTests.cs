@@ -674,6 +674,39 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void ReachedOfflineStandOffInteractsWhenNpcCenterIsOutsideNormalDistance()
+    {
+        var clock = new FakeClock();
+        var floorPosition = new Vector3(10, 3, 10);
+        var runtime = new FakeRuntime
+        {
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+            FloorPosition = floorPosition,
+        };
+        runtime.MissingNpcIds.Add(100);
+        var offlineOffer = Offer(10, 100, 1) with
+        {
+            NpcPosition = new Vector3(10, 0, 10),
+            RequiresFloorResolution = true,
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offlineOffer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runtime.MoveCount == 1);
+
+        runtime.PlayerPosition = floorPosition;
+        runtime.MissingNpcIds.Remove(100);
+        runtime.NpcPositions[100] = new Vector3(20, 5, 20);
+        runtime.NpcDistances[100] = 20;
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal([floorPosition], runtime.MoveDestinations);
+        Assert.Equal([100u], runtime.InteractedNpcIds);
+        Assert.Equal([100u], runtime.SubmittedNpcIds);
+    }
+
+    [Fact]
     public void FloorResolutionFailureAdvancesBeforeAnyPurchaseCallback()
     {
         var clock = new FakeClock();

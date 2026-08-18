@@ -61,17 +61,26 @@ public sealed class HigherLowerCashOutRecoveryPolicyTests
     }
 
     [Fact]
-    public void WaitingSurfaceTimeoutProducesBoundedBlock()
+    public void WaitingSurfaceTimeoutAllowsOneHiddenOpenChestAttemptThenBlocks()
     {
-        var decision = Evaluate(
+        var firstDecision = Evaluate(
             pendingOpenChest: true,
             pendingPhase: HigherLowerCashOutRecoveryPolicy.PendingPhase.WaitingSurface,
             timedOut: true);
 
-        Assert.Equal(HigherLowerCashOutRecoveryPolicy.RecoveryAction.Timeout, decision.Action);
-        Assert.True(decision.SuppressDirectionSelection);
-        Assert.True(decision.ShouldBlock);
-        Assert.Equal("cashout-surface-timeout", decision.Reason);
+        Assert.Equal(HigherLowerCashOutRecoveryPolicy.RecoveryAction.SendHiddenOpenChest, firstDecision.Action);
+        Assert.True(firstDecision.SuppressDirectionSelection);
+        Assert.False(firstDecision.ShouldBlock);
+        Assert.Equal("cashout-surface-timeout", firstDecision.Reason);
+
+        var subsequentDecision = Evaluate(
+            pendingOpenChest: true,
+            pendingPhase: HigherLowerCashOutRecoveryPolicy.PendingPhase.TimedOut,
+            timedOut: true);
+
+        Assert.Equal(HigherLowerCashOutRecoveryPolicy.RecoveryAction.Timeout, subsequentDecision.Action);
+        Assert.True(subsequentDecision.SuppressDirectionSelection);
+        Assert.True(subsequentDecision.ShouldBlock);
     }
 
     private static HigherLowerCashOutRecoveryPolicy.RecoveryDecision Evaluate(

@@ -58,11 +58,17 @@ public static class GameInteractionHelper
         => TryFireAddonCallback(addonName, updateState, args);
 
     public static unsafe bool TryFireAddonCallback(string addonName, bool updateState, params object[] args)
+        => TryFireAddonCallback(addonName, updateState, requireVisible: true, args);
+
+    internal static unsafe bool TryFireHiddenAddonCallback(string addonName, bool updateState, params object[] args)
+        => TryFireAddonCallback(addonName, updateState, requireVisible: false, args);
+
+    private static unsafe bool TryFireAddonCallback(string addonName, bool updateState, bool requireVisible, params object[] args)
     {
         try
         {
             var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(addonName);
-            if (addon == null || !addon->IsVisible)
+            if (addon == null || (requireVisible && !addon->IsVisible))
                 return false;
 
             var atkValues = new AtkValue[args.Length];
