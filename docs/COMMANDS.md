@@ -21,6 +21,7 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads` | Toggle Main |
 | `/ads config` | Open Settings |
 | `/ads mini` | Toggle compact Controls |
+| `/ads shopper` | Open Shop Lists |
 | `/ads obj` | Toggle Object Explorer |
 | `/ads ghosts` | Toggle Ghost Inspector |
 | `/ads labels` | Toggle Frontier Labels |
@@ -69,6 +70,7 @@ Utility automation cannot start while ADS owns active duty execution or while in
 | Command | Action |
 |---|---|
 | `/ads enterinn` | Move to a nearby innkeeper and enter the inn |
+| `/ads shopper` | Open persisted target-total Shop Lists and batch purchasing controls |
 | `/ads shop <itemID> <quantity>` | Buy an exact additional quantity from a supported sheet-resolved vendor |
 | `/ads repair self` | Start self-repair |
 | `/ads repair npc` | Start NPC repair with normal fallback behavior |
@@ -86,7 +88,9 @@ Running `/ads repair` without a mode prints valid modes.
 
 Shop item IDs and quantities must be decimal integers. Item ID must be a positive `uint`; quantity must be `1` through `9999`. Quantity means additional item units, not transactions and not a target inventory count. Deterministic gil, special/FATE, Inclusion, Grand Company, and Free Company families are eligible; turn-in, sale, lottery, ambiguous, or unprovable offers fail closed. Missing, extra, non-decimal, or out-of-range arguments are rejected without starting automation. See [Shop Purchasing](SHOP_PURCHASING.md).
 
-Main > Tools > Treasure And Operations also exposes compact **Desynth Controls** and **Extract Materia** launchers. **Extract Materia** starts the same no-configuration automation as `/ads extractmateria`.
+Shop Lists uses desired total quantities instead. Before a batch, ADS requires a successful current-character XA Database retainer lookup and subtracts both live inventory and retainer holdings. Retainer items remain on retainers; ADS buys only the remaining amount.
+
+Main > Tools > Treasure And Operations also exposes **Shop Lists**, compact **Desynth Controls**, and **Extract Materia** launchers. Compact Controls has a **Shop Lists** shortcut. **Extract Materia** starts the same no-configuration automation as `/ads extractmateria`.
 
 ## Loot
 

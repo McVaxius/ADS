@@ -8,6 +8,24 @@ Start a purchase with:
 
 `itemID` is a positive decimal `uint`. `quantity` is `1` through `9999` and means the exact number of additional item units ADS should acquire. It is not a transaction count or a target inventory total. ADS rejects malformed, missing, extra, non-decimal, zero, and out-of-range arguments without starting automation.
 
+## Shop Lists
+
+Open the dedicated window with `/ads shopper`, compact Controls (`/ads mini`), or Main > Tools > Treasure And Operations > **Shop Lists**. Each persisted preset stores item IDs and desired total quantities from `1` through `9999`; this does not change `/ads shop`, whose quantity remains an exact additional amount.
+
+The three clipboard import buttons replace the active preset only after producing at least one valid consolidated vendor item:
+
+- **TeamCraft** accepts copied `Vendors:` text rows and self-contained Base64 `/import/` payloads. Live `/list/` share URLs require Firestore and are rejected without a network request.
+- **Crafting as a Service** accepts local `/list/saved/...` URLs, raw saved-list payloads, and its self-contained encoded payloads. ADS expands targets through local Lumina recipes until it reaches vendor-purchasable ingredients. Materially different recipe choices remain unresolved instead of being guessed.
+- **Artisan** accepts exported `NewCraftingList` JSON. Enabled recipe IDs and craft counts become ingredient demand, with outputs supplied by other enabled recipes subtracted before vendor rows are selected.
+
+Malformed or empty imports leave the active preset unchanged. Successful partial imports report every skipped or unresolved row and save only the consolidated result. No importer calls TeamCraft, Crafting as a Service, Artisan, Firestore, or another web service.
+
+The preview shows each desired total, current live inventory, current-character XA Database retainer quantity and location evidence, calculated purchase amount, selected sheet-resolved vendor, and any unsupported or route error. Returned `lastSeenUtc` and `snapshotQuality` values are displayed as supplied; ADS does not invent a freshness cutoff. Retainer quantities reduce the purchase amount but ADS does not withdraw those items.
+
+Run remains disabled until the active preset has a successful XA Database retainer lookup. Starting a batch repeats that lookup immediately, then recalculates each row as `max(0, desired - live inventory - retainer holdings)` just before purchase. Zero-needed rows are skipped. Purchases run sequentially through the existing single-purchase runner; consecutive rows reuse an ADS-owned shop only when their selected shop kind and ID match, otherwise ADS closes the shop before normal travel.
+
+The first failure stops the batch and preserves completed and partially acquired quantities. Cancel prevents later rows, stops ADS-owned navigation through the existing bounded cleanup, and closes ADS-owned shop UI. Shop Lists adds no batch IPC and does not change existing command or IPC contracts.
+
 ## Supported Offers
 
 ADS supports deterministic acquisition offers from:

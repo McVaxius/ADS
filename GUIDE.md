@@ -87,7 +87,7 @@ Maturity colors:
 Tools groups every Main launcher:
 
 - **Authoring:** Object Explorer, Object Rules, Dialog Rules, Frontier Labels.
-- **Treasure And Operations:** Loot Controls, Higher / Lower, Treasure Routes, Reflection, Desynth Controls, Extract Materia.
+- **Treasure And Operations:** Loot Controls, Higher / Lower, Treasure Routes, Reflection, Shop Lists, Desynth Controls, Extract Materia.
 - **Diagnostics:** Ghost Inspector, Server Events, VFX Explorer.
 - **Windows And Settings:** Settings, compact Controls.
 - **Data Update:** remote JSON cache update and per-file status.
@@ -162,7 +162,7 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 
 - Full labels replace abbreviated outside/inside start labels.
 - Primary controls use the same inside/leave disabled rules as Main.
-- Tool shortcuts open Object Rules, Object Explorer, Dialog Rules, and update cache.
+- Tool shortcuts open Loot Controls, Object Rules, Object Explorer, Dialog Rules, Shop Lists, and update cache.
 - Live status shows ownership/phase, duty, objective, treasure role/opener, follow status, and execution status.
 - Debug strafe controls appear only after `/ads debug on`.
 - Closing Controls releases any held debug strafe input.
@@ -221,6 +221,7 @@ Field cues are class-specific: red is required, amber recommended, normal option
 | Object Rules | Author live/parked object-rule manifests |
 | Dialog Rules | Author live/parked yes/no dialog manifests |
 | Loot Controls | Open with `/ads loot` or `/ads l`; configure base rolling and the default-off XA Database glamour option, which requests Need for missing equippable gear while preserving live Greed/Pass caps and the selected base mode on incomplete IPC data |
+| Shop Lists | Open with `/ads shopper`; manage persisted desired-total vendor lists, import TeamCraft/Crafting as a Service/Artisan clipboard data, inspect live and retainer ownership, and run sequential purchases |
 | Higher / Lower | Calibrate and inspect treasure Higher/Lower behavior |
 | Treasure Routes | Inspect/edit treasure route data |
 | Server Events | Inspect server/map-effect events |

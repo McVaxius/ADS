@@ -126,6 +126,11 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             plugin.DisableQstCompanion();
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(QstCompanionWarningService.DisableCommand);
+
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        if (ImGui.Button("Shop Lists", new Vector2(-1f, 28f)))
+            plugin.OpenShopListsUi();
         ImGui.EndTable();
     }
 

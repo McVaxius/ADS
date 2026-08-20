@@ -110,6 +110,8 @@ public sealed class Plugin : IDalamudPlugin
     public DesynthPolicyService DesynthPolicyService { get; }
     public DesynthPresetStore DesynthPresetStore { get; }
     public DesynthDutyLedgerStore DesynthDutyLedgerStore { get; }
+    public ShopListPresetStore ShopListPresetStore { get; }
+    public ShopListService ShopListService { get; }
     public DesynthContextMenuService DesynthContextMenuService { get; }
     public AdsOperatorApiService AdsOperatorApiService { get; }
     public LootAutomationService LootAutomationService { get; }
@@ -141,6 +143,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly FrontierLabelWindow frontierLabelWindow;
     private readonly QuickControlWindow quickControlWindow;
     private readonly LootWindow lootWindow;
+    private readonly LazyLootWarningWindow lazyLootWarningWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
     private readonly RuleGuideWindow ruleGuideWindow;
     private readonly DialogRuleEditorWindow dialogRuleEditorWindow;
@@ -151,6 +154,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly VfxExplorerWindow vfxExplorerWindow;
     private readonly ReflectionWindow reflectionWindow;
     private readonly DesynthesisWindow desynthesisWindow;
+    private readonly ShopListsWindow shopListsWindow;
     private readonly WizardWindow wizardWindow;
     private IDtrBarEntry? dtrEntry;
     private string objectExplorerStatus = "Ready.";
@@ -238,6 +242,7 @@ public sealed class Plugin : IDalamudPlugin
         DesynthPolicyService = new DesynthPolicyService();
         DesynthPresetStore = new DesynthPresetStore(configDirectory, Log);
         DesynthDutyLedgerStore = new DesynthDutyLedgerStore(configDirectory, Log);
+        ShopListPresetStore = new ShopListPresetStore(configDirectory, Log);
         UtilityAutomationService = new UtilityAutomationService(
             DataManager,
             ObjectTable,
@@ -255,6 +260,12 @@ public sealed class Plugin : IDalamudPlugin
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
+        ShopListService = new ShopListService(
+            ShopListPresetStore,
+            DataManager,
+            UtilityAutomationService,
+            searchCurrentCharacterItemsJson.InvokeFunc,
+            Log);
         LootAutomationService = new LootAutomationService(
             DataManager,
             CommandManager,
@@ -307,6 +318,7 @@ public sealed class Plugin : IDalamudPlugin
         frontierLabelWindow = new FrontierLabelWindow(this);
         quickControlWindow = new QuickControlWindow(this);
         lootWindow = new LootWindow(this);
+        lazyLootWarningWindow = new LazyLootWarningWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
         ruleGuideWindow = new RuleGuideWindow();
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
@@ -317,6 +329,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow = new VfxExplorerWindow(this);
         reflectionWindow = new ReflectionWindow(this);
         desynthesisWindow = new DesynthesisWindow(this);
+        shopListsWindow = new ShopListsWindow(this);
         wizardWindow = new WizardWindow(this);
         WindowSystem.AddWindow(mainWindow);
         WindowSystem.AddWindow(configWindow);
@@ -325,6 +338,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(frontierLabelWindow);
         WindowSystem.AddWindow(quickControlWindow);
         WindowSystem.AddWindow(lootWindow);
+        WindowSystem.AddWindow(lazyLootWarningWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
         WindowSystem.AddWindow(ruleGuideWindow);
         WindowSystem.AddWindow(dialogRuleEditorWindow);
@@ -335,6 +349,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(vfxExplorerWindow);
         WindowSystem.AddWindow(reflectionWindow);
         WindowSystem.AddWindow(desynthesisWindow);
+        WindowSystem.AddWindow(shopListsWindow);
         WindowSystem.AddWindow(wizardWindow);
 
         if (WizardCatalog.ShouldAutoOpen(loadedExistingConfiguration, Configuration))
@@ -366,6 +381,8 @@ public sealed class Plugin : IDalamudPlugin
             OpenMainUi();
         if (Configuration.OpenQuickControlsOnLoad)
             quickControlWindow.IsOpen = true;
+        if (!Configuration.LazyLootWarningDismissed && IsLazyLootLoaded())
+            lazyLootWarningWindow.IsOpen = true;
 
         Log.Information("[ADS] Plugin loaded.");
     }
@@ -406,6 +423,7 @@ public sealed class Plugin : IDalamudPlugin
         frontierLabelWindow.Dispose();
         quickControlWindow.Dispose();
         lootWindow.Dispose();
+        lazyLootWarningWindow.Dispose();
         objectRuleEditorWindow.Dispose();
         ruleGuideWindow.Dispose();
         dialogRuleEditorWindow.Dispose();
@@ -416,6 +434,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow.Dispose();
         reflectionWindow.Dispose();
         desynthesisWindow.Dispose();
+        shopListsWindow.Dispose();
         wizardWindow.Dispose();
         ECommonsMain.Dispose();
     }
@@ -431,6 +450,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenDesynthConfigUi()
         => desynthesisWindow.IsOpen = true;
+
+    public void OpenShopListsUi()
+        => shopListsWindow.IsOpen = true;
 
     private bool OpenDesynthConfigUiIpc()
     {
@@ -466,6 +488,21 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenLootUi()
         => lootWindow.IsOpen = true;
+
+    private static bool IsLazyLootLoaded()
+    {
+        try
+        {
+            return PluginInterface.InstalledPlugins.Any(plugin =>
+                plugin.IsLoaded
+                && string.Equals(plugin.InternalName, "LazyLoot", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[ADS][Loot] LazyLoot availability check failed.");
+            return false;
+        }
+    }
 
     public void DisableQstCompanion()
         => PrintStatus(QstCompanionWarningService.Disable()
@@ -676,6 +713,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow.QueueResetToOrigin();
         reflectionWindow.QueueResetToOrigin();
         desynthesisWindow.QueueResetToOrigin();
+        shopListsWindow.QueueResetToOrigin();
     }
 
     public void JumpWindows()
@@ -696,6 +734,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow.QueueRandomVisibleJump();
         reflectionWindow.QueueRandomVisibleJump();
         desynthesisWindow.QueueRandomVisibleJump();
+        shopListsWindow.QueueRandomVisibleJump();
     }
 
     public string ObjectExplorerStatus
@@ -1129,6 +1168,33 @@ public sealed class Plugin : IDalamudPlugin
         PrintStatus(result
             ? UtilityAutomationService.StatusMessage
             : $"Shop purchase not started: {UtilityAutomationService.ShopPurchaseStatus.LastStartError}");
+        return result;
+    }
+
+    internal bool StartShopListBatch(out string status)
+    {
+        if (AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+            || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId))
+        {
+            status = $"Shop-list purchasing is unavailable: {AutomationTerritoryPolicy.InactiveStatus}";
+            PrintStatus(status);
+            return false;
+        }
+        if (ExecutionService.IsOwned)
+        {
+            status = "Cannot start shop-list purchasing while ADS owns active duty execution.";
+            PrintStatus(status);
+            return false;
+        }
+        if (InnEntryService.IsRunning)
+        {
+            status = "Cannot start shop-list purchasing while /ads enterinn is running.";
+            PrintStatus(status);
+            return false;
+        }
+
+        var result = ShopListService.TryStartBatch(out status);
+        PrintStatus(result ? status : $"Shop list not started: {status}");
         return result;
     }
 
@@ -2572,6 +2638,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads leave - request leave state - if chests nearby it will grab them then wait 10 seconds\n" +
                 "/ads skipper [on|off] - control XA Slave's current-run dialog/cutscene fallback\n" +
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
+                "/ads shopper - open Shop Lists\n" +
                 "/ads shop <itemID> <quantity> - buy an exact additional quantity from a supported sheet-resolved shop\n" +
                 "/ads repair self|npc|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
@@ -2798,6 +2865,12 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("enterinn", StringComparison.OrdinalIgnoreCase))
         {
             StartInnEntry();
+            return;
+        }
+
+        if (trimmed.Equals("shopper", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenShopListsUi();
             return;
         }
 

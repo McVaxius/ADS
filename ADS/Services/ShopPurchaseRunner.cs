@@ -81,6 +81,8 @@ internal sealed class ShopPurchaseRunner
     private IReadOnlyDictionary<uint, long> lastVerifiedOutputs = new Dictionary<uint, long>();
     private readonly List<string> candidateFailures = [];
     private bool sawUiCandidateFailure;
+    private bool? keepShopOpenOnSuccessOverride;
+    private bool cancelRequested;
     private string lastValidationDiagnostic = string.Empty;
     private string lastStartError = string.Empty;
     private ShopPurchaseStatusSnapshot status = EmptyStatus();
@@ -103,6 +105,66 @@ internal sealed class ShopPurchaseRunner
 
     public bool IsRunning => status.Running;
     public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
+
+    public ShopPurchasePreviewResult Preview(ShopPurchaseRequest purchaseRequest)
+    {
+        if (!ShopPurchaseRequest.TryCreate(
+                purchaseRequest.ItemId,
+                purchaseRequest.Quantity,
+                out purchaseRequest,
+                out var validationError))
+        {
+            return new ShopPurchasePreviewResult(
+                purchaseRequest,
+                string.Empty,
+                null,
+                [],
+                ShopPurchaseFailureCodes.InvalidRequest,
+                validationError,
+                0,
+                0,
+                0,
+                0);
+        }
+
+        try
+        {
+            var (nextResolution, nextSelection) = ResolvePlan(purchaseRequest);
+            var failureCode = nextSelection.FailureCode;
+            var message = nextSelection.Message;
+            if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
+            {
+                failureCode = ShopPurchaseFailureCodes.MissingDependency;
+                message = "The selected shop route requires the Lifestream plugin.";
+            }
+
+            return new ShopPurchasePreviewResult(
+                purchaseRequest,
+                nextResolution.ItemName,
+                nextSelection.Selected == null ? null : ShopOfferSelector.ToStatus(nextSelection.Selected),
+                AlternativeStatuses(nextSelection.Selected, nextSelection.Alternatives),
+                failureCode,
+                message,
+                nextResolution.Offers.Count,
+                nextResolution.UnsupportedOfferCount,
+                nextResolution.NonDivisibleOfferCount,
+                nextResolution.UnresolvedRouteCount);
+        }
+        catch (Exception ex)
+        {
+            return new ShopPurchasePreviewResult(
+                purchaseRequest,
+                string.Empty,
+                null,
+                [],
+                ShopPurchaseFailureCodes.UnsupportedOffer,
+                $"Shop catalog resolution failed: {ex.Message}",
+                0,
+                0,
+                0,
+                0);
+        }
+    }
 
     /// <summary>
     /// Keep a successfully used shop open so the next purchase from the SAME shop can reuse it.
@@ -137,6 +199,12 @@ internal sealed class ShopPurchaseRunner
     }
 
     public bool Start(ShopPurchaseRequest purchaseRequest)
+        => StartCore(purchaseRequest, null);
+
+    internal bool Start(ShopPurchaseRequest purchaseRequest, bool holdShopOpenOnSuccess)
+        => StartCore(purchaseRequest, holdShopOpenOnSuccess);
+
+    private bool StartCore(ShopPurchaseRequest purchaseRequest, bool? holdShopOpenOnSuccess)
     {
         if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out purchaseRequest, out var validationError))
             return RejectStart(validationError);
@@ -148,19 +216,16 @@ internal sealed class ShopPurchaseRunner
             return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.");
         if (!runtime.HasVnavmesh)
             return RejectStart("Shop purchasing requires the vnavmesh plugin.");
-        // Under KeepShopOpen a visible shop is expected -- it is the one this runner deliberately left
-        // open -- so it is not rejected here. It still has to be the RIGHT shop, which cannot be judged
-        // until the offer is resolved, so that check moves below rather than being dropped.
+        var reusableOwnedShopVisible = shopUiOwned && runtime.IsAnyShopVisible;
         if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible
-            || (!KeepShopOpen && runtime.IsAnyShopVisible))
+            || (!reusableOwnedShopVisible && runtime.IsAnyShopVisible))
             return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.");
 
         ShopCatalogResolution nextResolution;
         ShopOfferSelectionResult nextSelection;
         try
         {
-            nextResolution = catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
-            nextSelection = ShopOfferSelector.Select(nextResolution, BuildSelectionContext());
+            (nextResolution, nextSelection) = ResolvePlan(purchaseRequest);
         }
         catch (Exception ex)
         {
@@ -210,6 +275,8 @@ internal sealed class ShopPurchaseRunner
             ?? new Dictionary<uint, long>();
         candidateFailures.Clear();
         sawUiCandidateFailure = false;
+        keepShopOpenOnSuccessOverride = holdShopOpenOnSuccess;
+        cancelRequested = false;
         lastValidationDiagnostic = string.Empty;
         startedAtUtc = clock.UtcNow;
         lastStartError = string.Empty;
@@ -367,9 +434,20 @@ internal sealed class ShopPurchaseRunner
 
     public void Cancel(string reason)
     {
-        if (!IsRunning)
+        if (!IsRunning || cancelRequested)
             return;
-        Finish(false, RunnerPhase.Cancelled, ShopPurchaseFailureCodes.Cancelled, $"Shop purchase cancelled: {reason}");
+
+        cancelRequested = true;
+        var message = $"Shop purchase cancelled: {reason}";
+        if (navigationOwned)
+        {
+            BeginStoppingNavigation(
+                "Stopping ADS-owned navigation after shop purchase cancellation.",
+                () => Finish(false, RunnerPhase.Cancelled, ShopPurchaseFailureCodes.Cancelled, message));
+            return;
+        }
+
+        Finish(false, RunnerPhase.Cancelled, ShopPurchaseFailureCodes.Cancelled, message);
     }
 
     private void UpdateResolving()
@@ -1098,6 +1176,13 @@ internal sealed class ShopPurchaseRunner
             () => runtime.CurrentGrandCompany,
             () => runtime.CurrentGrandCompanyRank);
 
+    private (ShopCatalogResolution Resolution, ShopOfferSelectionResult Selection) ResolvePlan(
+        ShopPurchaseRequest purchaseRequest)
+    {
+        var nextResolution = catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
+        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext()));
+    }
+
     private void Complete()
         => Finish(
             true,
@@ -1118,7 +1203,7 @@ internal sealed class ShopPurchaseRunner
         RefreshAcquiredTruth();
         // Hold the shop open only when the run succeeded and the caller opted in: a FAILED run must
         // still tear the UI down, or a half-open shop is left for the next caller to trip over.
-        if (!(KeepShopOpen && succeeded))
+        if (!((keepShopOpenOnSuccessOverride ?? KeepShopOpen) && succeeded))
             CloseOwnedShopUi();
         navigationStoppedContinuation = null;
         var previous = phase;

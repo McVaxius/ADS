@@ -211,6 +211,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Higher / Lower", plugin.ToggleHigherLowerUi),
             ("Treasure Routes", plugin.OpenTreasureRouteEditorUi),
             ("Reflection", plugin.ToggleReflectionUi),
+            ("Shop Lists", plugin.OpenShopListsUi),
             ("Desynth Controls", plugin.OpenDesynthConfigUi),
             ("Extract Materia", () => plugin.StartExtractMateria()));
 

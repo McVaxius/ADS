@@ -2,6 +2,8 @@
 
 ## 2026-08-20
 
+- Added a startup warning when LazyLoot is loaded, with actions to open `/ads loot` or permanently dismiss the message. Existing loot automation and ADS's owned-duty LazyLoot disable behavior are unchanged.
+- Added persisted Shop Lists, opened with `/ads shopper`, compact Controls, or Main > Tools. TeamCraft, Crafting as a Service, and Artisan clipboard imports resolve locally; live inventory and current-character XA Database retainer holdings reduce desired totals; previewed purchases run sequentially through the existing fail-closed shop runner with same-shop reuse and immediate stop/cancel behavior. Existing `/ads shop` and IPC contracts are unchanged.
 - Map openers now include Leather Sacks in normal treasure-coffer planning, allowing the existing sack priority to beat Arcane Sphere progression instead of repeatedly targeting the sphere. Treasure-follower loot handling and the existing coffer distance, vertical, and rule gates are unchanged.
 
 ## 2026-08-17

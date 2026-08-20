@@ -38,6 +38,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool ReflectionHasOriginalMaxLoadDistance { get; set; } = false;
     public float ReflectionOriginalMaxLoadDistance { get; set; } = 500f;
     public LootRollMode LootMode { get; set; } = LootRollMode.Off;
+    public bool LazyLootWarningDismissed { get; set; } = false;
     public bool LootGlamourNeedingEnabled { get; set; } = false;
     public bool LootRegistrableNeedingEnabled { get; set; } = false;
     public bool LootRegistrableMountsEnabled { get; set; } = true;
