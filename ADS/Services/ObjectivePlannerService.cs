@@ -119,9 +119,7 @@ public sealed class ObjectivePlannerService
         var nearestTreasureCoffer = considerTreasureCoffers
             && !isRawTreasureFollower
             ? GetBestInteractable(
-                observation.LiveInteractables.Where(x =>
-                    x.Classification == InteractableClass.TreasureCoffer
-                    && !LooksLikeTreasureFollowerLootSackName(x.Name)),
+                observation.LiveInteractables.Where(x => x.Classification == InteractableClass.TreasureCoffer),
                 playerPosition,
                 context)
             : null;

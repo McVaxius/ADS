@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-20
+
+- Map openers now include Leather Sacks in normal treasure-coffer planning, allowing the existing sack priority to beat Arcane Sphere progression instead of repeatedly targeting the sphere. Treasure-follower loot handling and the existing coffer distance, vertical, and rule gates are unchanged.
+
 ## 2026-08-17
 
 - Higher/Lower cash-out recovery now makes one `OpenChest` callback attempt against the hidden `TreasureHighLow` addon after the existing 25-second missing-surface wait, then remains blocked if the callback cannot be sent or verified. It never substitutes a High/Low direction and does not resend the recovery attempt.

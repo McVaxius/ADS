@@ -86,6 +86,28 @@ public sealed class AdsRulePrecedenceTests
         Assert.Equal("Side Console", fixture.Planner.Current.TargetName);
     }
 
+    [Fact]
+    public void MapOpenerTreasureSackPriorityBeatsCloserArcaneSphere()
+    {
+        using var fixture = new PlannerFixture(
+            Vector3.Zero,
+            Rule("Leather Sack", InteractableClass.TreasureCoffer, priority: 500),
+            Rule("Arcane Sphere", InteractableClass.Expendable, priority: 1000));
+
+        fixture.Planner.Update(
+            Context(),
+            Observation(interactables:
+            [
+                Interactable("Arcane Sphere", InteractableClass.Expendable, new Vector3(2f, 0f, 0f)),
+                Interactable("Leather Sack", InteractableClass.TreasureCoffer, new Vector3(10f, 0f, 0f)),
+            ]),
+            OwnershipMode.OwnedStartInside,
+            considerTreasureCoffers: true);
+
+        Assert.Equal(PlannerObjectiveKind.TreasureCoffer, fixture.Planner.Current.ObjectiveKind);
+        Assert.Equal("Leather Sack", fixture.Planner.Current.TargetName);
+    }
+
     [Theory]
     [InlineData(5f, 0f)]
     [InlineData(null, 2f)]
