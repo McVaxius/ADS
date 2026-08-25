@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-25
+
+- ADS now checks the BotologyUpdates JSON cache hourly while loaded and starts the existing refresh only when a cache file is missing or older than 24 hours.
+
 ## 2026-08-20
 
 - Fixed the v0.6.2.1 release build by correcting URL-safe Base64 padding handling for shop-list imports.

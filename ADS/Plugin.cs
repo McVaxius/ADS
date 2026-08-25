@@ -31,6 +31,7 @@ public sealed class Plugin : IDalamudPlugin
 {
     private static readonly TimeSpan TreasureDutyRecoveryTtl = TimeSpan.FromHours(8);
     private static readonly TimeSpan TreasureDutyRecoveryRefreshInterval = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan RemoteJsonStaleCheckInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan FrameworkSlowLogCooldown = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ObjectExplorerMapFlagInspectionInterval = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan HigherLowerRecentSignalWindow = TimeSpan.FromSeconds(20);
@@ -164,6 +165,7 @@ public sealed class Plugin : IDalamudPlugin
     private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
     private bool treasureDutyRecoveryAttemptedThisLoad;
     private readonly Queue<RemoteJsonReloadStep> pendingRemoteJsonReloadSteps = new();
+    private DateTime nextRemoteJsonStaleCheckUtc;
     private DateTime nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
     private DateTime nextFrameworkSlowLogUtc = DateTime.MinValue;
     private double lastFrameworkSlowUpdateMs;
@@ -194,6 +196,7 @@ public sealed class Plugin : IDalamudPlugin
         TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
         RemoteJsonUpdateService.TryStartStartupRefresh("startup");
+        nextRemoteJsonStaleCheckUtc = DateTime.UtcNow + RemoteJsonStaleCheckInterval;
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
@@ -2059,6 +2062,13 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        var utcNow = DateTime.UtcNow;
+        if (utcNow >= nextRemoteJsonStaleCheckUtc)
+        {
+            nextRemoteJsonStaleCheckUtc = utcNow + RemoteJsonStaleCheckInterval;
+            RemoteJsonUpdateService.TryStartStaleUpdate("hourly stale check");
+        }
+
         var frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled;
         if (!frameworkHitchProfilerEnabled)
             ClearFrameworkHitchState();
