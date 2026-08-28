@@ -45,6 +45,7 @@ public sealed class ExecutionService
     private const float RecoveryGhostRetireRadius = 8.0f;
     private const float RecoveryClusterArrivalRange = RecoveryGhostRetireRadius;
     private const float RecoveryTargetSimilarityRadius = RecoveryGhostRetireRadius;
+    private const float RecoveryNavigationNoProgressDistance = 0.5f;
     private const float CloseRangeInteractFallbackHorizontalDistance = 2.5f;
     private const float CloseRangeInteractFallbackVerticalCap = 4.0f;
     private const float CloseRangeInteractFallbackProgressMargin = 0.2f;
@@ -68,6 +69,7 @@ public sealed class ExecutionService
     private static readonly TimeSpan MapFlagNavigationRetryCooldown = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan MountedCombatAttemptCooldown = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan RecoveryTruthSettleDelay = TimeSpan.FromSeconds(1.0);
+    private static readonly TimeSpan RecoveryNavigationNoProgressTimeout = TimeSpan.FromSeconds(12.0);
     private static readonly TimeSpan ProgressionInteractResultSettleDelay = TimeSpan.FromSeconds(6.0);
     private static readonly TimeSpan TreasureCofferNoProgressTimeout = TimeSpan.FromSeconds(30.0);
     private static readonly TimeSpan TreasureCofferMaxNavigationDuration = TimeSpan.FromSeconds(75.0);
@@ -119,6 +121,10 @@ public sealed class ExecutionService
     private PlannerObjectiveKind recoveryTargetObjectiveKind = PlannerObjectiveKind.None;
     private Vector3? recoveryTargetPosition;
     private DateTime recoveryTargetReachedUtc;
+    private PlannerObjectiveKind recoveryNavigationObjectiveKind = PlannerObjectiveKind.None;
+    private string? recoveryNavigationTargetKey;
+    private Vector3? recoveryNavigationBaselinePosition;
+    private DateTime recoveryNavigationLastProgressUtc;
     private ObservedInteractable? pendingProgressionInteractable;
     private DungeonFrontierPoint? pendingTreasureDoorTransitionPoint;
     private DungeonFrontierPoint? pendingSatisfiedManualDestination;
@@ -251,6 +257,7 @@ public sealed class ExecutionService
     private readonly record struct MountedCombatTargetResolution(MountedCombatAction Action, MountedCombatTarget Target, bool UseGroundTarget, string TargetSummary, bool UsedRearPreference);
     private readonly record struct TreasureRouteNavigationDecision(Vector3 Destination, bool ForceNavigationRestart, bool NudgeApplied, int NudgeAttempt, bool CandidateFailed);
     private readonly record struct TreasureDoorNavigationDecision(Vector3 Destination, ulong NavigationTargetId, string StatusText, bool StuckRecoveryExhausted);
+    private readonly record struct RecoveryGhostTarget(string Key, Vector3 Position);
 
     public OwnershipMode CurrentMode { get; private set; } = OwnershipMode.Idle;
     public ExecutionPhase CurrentPhase { get; private set; } = ExecutionPhase.Idle;
@@ -505,6 +512,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("outside start");
         ClearTreasureFollowerPostTransitSettle("outside start");
+        ResetRecoveryHold();
         CurrentMode = OwnershipMode.OwnedStartOutside;
         SetPhase(ExecutionPhase.OutsideQueue, "Queued outside start. ADS will claim ownership when you enter instanced duty.");
         return true;
@@ -517,6 +525,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside start");
         ClearTreasureFollowerPostTransitSettle("inside start");
+        ResetRecoveryHold();
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -540,6 +549,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside resume");
         ClearTreasureFollowerPostTransitSettle("inside resume");
+        ResetRecoveryHold();
         if (!context.InInstancedDuty)
         {
             CurrentMode = OwnershipMode.Idle;
@@ -653,6 +663,16 @@ public sealed class ExecutionService
         string dialogAutomationStatus)
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
+        if (!pluginEnabled
+            || !IsActiveOwnedDutyMode()
+            || !context.InInstancedDuty
+            || context.IsUnsafeTransition
+            || context.InCombat
+            || planner.Mode != PlannerMode.Recovery)
+        {
+            ResetRecoveryNavigationProgress();
+        }
+
         UpdateCardinalGhostRecovery(context);
         UpdateUnsafeTransitionNavigationStop(context);
         UpdateTreasureFollowerRouteTransitClearStop(context, planner);
@@ -1094,19 +1114,23 @@ public sealed class ExecutionService
             return;
         }
 
-        var ghostPosition = ResolveRecoveryGhostPosition(planner, observation, playerPosition.Value);
-        if (!ghostPosition.HasValue)
+        var ghostTarget = ResolveRecoveryGhostTarget(planner, observation, playerPosition.Value);
+        if (!ghostTarget.HasValue)
         {
+            ResetRecoveryHold();
             StopMovementAssists();
             SetPhase(ExecutionPhase.RecoveryHint, $"{prefix} Recovery phase selected but no matching ghost position was resolved: {planner.Objective}");
             return;
         }
 
-        var targetDistance = Vector3.Distance(playerPosition.Value, ghostPosition.Value);
+        var targetDistance = Vector3.Distance(playerPosition.Value, ghostTarget.Value.Position);
         if (targetDistance > RecoveryClusterArrivalRange)
         {
-            ResetRecoveryHold();
-            var preferredApproachPoint = BuildPreferredApproachPoint(playerPosition.Value, ghostPosition.Value, PreferredRecoveryArrivalRange);
+            ResetRecoveryArrivalHold();
+            if (TryRetireRecoveryGhostForNoProgress(planner, ghostTarget.Value, playerPosition.Value, prefix))
+                return;
+
+            var preferredApproachPoint = BuildPreferredApproachPoint(playerPosition.Value, ghostTarget.Value.Position, PreferredRecoveryArrivalRange);
             TryBeginNavigation(BuildRecoveryTargetId(planner), preferredApproachPoint);
             SetPhase(
                 ExecutionPhase.NavigatingToRecoveryObjective,
@@ -1116,10 +1140,10 @@ public sealed class ExecutionService
 
         StopMovementAssists();
         var now = DateTime.UtcNow;
-        if (!MatchesRecoveryTarget(planner.ObjectiveKind, ghostPosition.Value))
+        if (!MatchesRecoveryTarget(planner.ObjectiveKind, ghostTarget.Value.Position))
         {
             recoveryTargetObjectiveKind = planner.ObjectiveKind;
-            recoveryTargetPosition = ghostPosition.Value;
+            recoveryTargetPosition = ghostTarget.Value.Position;
             recoveryTargetReachedUtc = now;
             SetPhase(
                 ExecutionPhase.RecoveryHint,
@@ -1137,7 +1161,7 @@ public sealed class ExecutionService
 
         var retiredCount = observationMemoryService.RetireNearbyRecoveryGhosts(
             planner.ObjectiveKind,
-            ghostPosition.Value,
+            ghostTarget.Value.Position,
             RecoveryGhostRetireRadius);
         ResetRecoveryHold();
         SetPhase(
@@ -4823,9 +4847,71 @@ public sealed class ExecutionService
 
     private void ResetRecoveryHold()
     {
+        ResetRecoveryArrivalHold();
+        ResetRecoveryNavigationProgress();
+    }
+
+    private void ResetRecoveryArrivalHold()
+    {
         recoveryTargetObjectiveKind = PlannerObjectiveKind.None;
         recoveryTargetPosition = null;
         recoveryTargetReachedUtc = DateTime.MinValue;
+    }
+
+    private bool TryRetireRecoveryGhostForNoProgress(
+        PlannerSnapshot planner,
+        RecoveryGhostTarget ghostTarget,
+        Vector3 playerPosition,
+        string prefix)
+    {
+        var now = DateTime.UtcNow;
+        if (recoveryNavigationObjectiveKind != planner.ObjectiveKind
+            || !string.Equals(recoveryNavigationTargetKey, ghostTarget.Key, StringComparison.Ordinal)
+            || !recoveryNavigationBaselinePosition.HasValue)
+        {
+            StartRecoveryNavigationProgressTracking(planner.ObjectiveKind, ghostTarget.Key, playerPosition, now);
+            return false;
+        }
+
+        var playerMovement = Vector3.Distance(playerPosition, recoveryNavigationBaselinePosition.Value);
+        if (playerMovement >= RecoveryNavigationNoProgressDistance)
+        {
+            StartRecoveryNavigationProgressTracking(planner.ObjectiveKind, ghostTarget.Key, playerPosition, now);
+            return false;
+        }
+
+        var noProgressAge = now - recoveryNavigationLastProgressUtc;
+        if (noProgressAge < RecoveryNavigationNoProgressTimeout)
+            return false;
+
+        StopMovementAssists();
+        var retired = observationMemoryService.RetireRecoveryGhost(planner.ObjectiveKind, ghostTarget.Key);
+        SetPhase(
+            ExecutionPhase.RecoveryHint,
+            retired
+                ? $"{prefix} Recovery navigation made less than {RecoveryNavigationNoProgressDistance:0.0}y of player movement for {noProgressAge.TotalSeconds:0.0}s toward {planner.Objective}. ADS stopped navigation, retired the selected ghost, and will replan."
+                : $"{prefix} Recovery navigation made less than {RecoveryNavigationNoProgressDistance:0.0}y of player movement for {noProgressAge.TotalSeconds:0.0}s toward {planner.Objective}. ADS stopped navigation; the selected ghost was already absent, so ADS will replan.");
+        return true;
+    }
+
+    private void StartRecoveryNavigationProgressTracking(
+        PlannerObjectiveKind objectiveKind,
+        string targetKey,
+        Vector3 playerPosition,
+        DateTime now)
+    {
+        recoveryNavigationObjectiveKind = objectiveKind;
+        recoveryNavigationTargetKey = targetKey;
+        recoveryNavigationBaselinePosition = playerPosition;
+        recoveryNavigationLastProgressUtc = now;
+    }
+
+    private void ResetRecoveryNavigationProgress()
+    {
+        recoveryNavigationObjectiveKind = PlannerObjectiveKind.None;
+        recoveryNavigationTargetKey = null;
+        recoveryNavigationBaselinePosition = null;
+        recoveryNavigationLastProgressUtc = DateTime.MinValue;
     }
 
     private void ResetLeaveState()
@@ -5439,22 +5525,27 @@ public sealed class ExecutionService
         return hash;
     }
 
-    private Vector3? ResolveRecoveryGhostPosition(PlannerSnapshot planner, ObservationSnapshot observation, Vector3 playerPosition)
+    private RecoveryGhostTarget? ResolveRecoveryGhostTarget(PlannerSnapshot planner, ObservationSnapshot observation, Vector3 playerPosition)
     {
-        return planner.ObjectiveKind switch
+        if (planner.ObjectiveKind == PlannerObjectiveKind.MonsterGhost)
         {
-            PlannerObjectiveKind.MonsterGhost => observation.MonsterGhosts
+            var monster = observation.MonsterGhosts
                 .Where(x => x.Name.Equals(planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(x => MathF.Abs(Vector3.Distance(x.Position, playerPosition) - (planner.TargetDistance ?? Vector3.Distance(x.Position, playerPosition))))
-                .Select(x => (Vector3?)x.Position)
-                .FirstOrDefault(),
-            PlannerObjectiveKind.InteractableGhost => observation.InteractableGhosts
+                .FirstOrDefault();
+            return monster is null ? null : new RecoveryGhostTarget(monster.Key, monster.Position);
+        }
+
+        if (planner.ObjectiveKind == PlannerObjectiveKind.InteractableGhost)
+        {
+            var interactable = observation.InteractableGhosts
                 .Where(x => x.Name.Equals(planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(x => MathF.Abs(Vector3.Distance(x.Position, playerPosition) - (planner.TargetDistance ?? Vector3.Distance(x.Position, playerPosition))))
-                .Select(x => (Vector3?)x.Position)
-                .FirstOrDefault(),
-            _ => null,
-        };
+                .FirstOrDefault();
+            return interactable is null ? null : new RecoveryGhostTarget(interactable.Key, interactable.Position);
+        }
+
+        return null;
     }
 
     private ObservedInteractable? ResolveObservedInteractable(PlannerSnapshot planner, ObservationSnapshot observation)
@@ -5737,6 +5828,7 @@ public sealed class ExecutionService
     {
         cardinalHoldInputService.Release("movement assists stopped");
         StopNavigationIfNeeded();
+        ResetRecoveryNavigationProgress();
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -5754,6 +5846,7 @@ public sealed class ExecutionService
 
     private void PauseMovementAssistsForHigherLower()
     {
+        ResetRecoveryNavigationProgress();
         navigationActive = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
@@ -5858,6 +5951,7 @@ public sealed class ExecutionService
 
     private void StopNavigationForTreasureFollowerPostTransitSettle()
     {
+        ResetRecoveryNavigationProgress();
         if (!treasureFollowerPostTransitSettleStopSent || navigationActive || mapFlagNavigationActive || movementTargetGameObjectId != 0)
             TrySendCommand("/vnav stop");
 
@@ -5948,6 +6042,7 @@ public sealed class ExecutionService
     private void StopNavigationForUnsafeTransition(DutyContextSnapshot context)
     {
         InterruptCardinalHold("unsafe transition navigation stop");
+        ResetRecoveryNavigationProgress();
         if (unsafeTransitionNavigationStopLatched)
             return;
 
@@ -6091,6 +6186,7 @@ public sealed class ExecutionService
 
     private void StopNavigationForTreasureRouteTransit()
     {
+        ResetRecoveryNavigationProgress();
         StopNavigationForTreasureRouteNudge();
         ResetTreasureRouteStuckTracking();
         PauseTreasureFollowerDoorFollowThrough();

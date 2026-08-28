@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-28
+
+- Recovery navigation now retires only the selected stuck ghost and replans when player movement stays under 0.5y for 12 seconds, instead of resending the same unreachable destination indefinitely.
+
 ## 2026-08-25
 
 - ADS now checks the BotologyUpdates JSON cache hourly while loaded and starts the existing refresh only when a cache file is missing or older than 24 hours.

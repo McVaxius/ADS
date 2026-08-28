@@ -498,6 +498,25 @@ public sealed class ObservationMemoryService
         };
     }
 
+    internal bool RetireRecoveryGhost(PlannerObjectiveKind objectiveKind, string key)
+    {
+        if (objectiveKind == PlannerObjectiveKind.MonsterGhost
+            && knownMonsters.Remove(key, out var monster))
+        {
+            log.Information($"[ADS] Retired selected monster ghost {monster.Name} at {Quantize(monster.Position)} after navigation made no player progress.");
+            return true;
+        }
+
+        if (objectiveKind == PlannerObjectiveKind.InteractableGhost
+            && knownInteractables.Remove(key, out var interactable))
+        {
+            log.Information($"[ADS] Retired selected interactable ghost {interactable.Name} at {Quantize(interactable.Position)} after navigation made no player progress.");
+            return true;
+        }
+
+        return false;
+    }
+
     private static ObservedMonster CreateMonster(IGameObject gameObject, string name, uint mapId, DateTime now)
         => new()
         {
