@@ -108,6 +108,63 @@ public sealed class AdsRulePrecedenceTests
         Assert.Equal("Leather Sack", fixture.Planner.Current.TargetName);
     }
 
+    [Fact]
+    public void SoloHyperFixatedAttackTargetPreemptsForceMarchAndCarriesExactIdentity()
+    {
+        using var fixture = new PlannerFixture(
+            Vector3.Zero,
+            HyperRule("Same Name", priority: 10));
+        fixture.SetFrontier(ManualXyz("Force March", priority: 0, allowCombatBypass: true), FrontierMode.XyzDestination);
+
+        fixture.Planner.Update(
+            TestDutyContextFactory.Create(DutyCategory.Solo, territoryId: 100, cfcId: 200, inCombat: true),
+            Observation(monsters:
+            [
+                HyperMonster(21, "Same Name", new Vector3(10f, 0f, 0f)),
+                HyperMonster(22, "Same Name", new Vector3(4f, 0f, 0f)),
+            ]),
+            OwnershipMode.OwnedStartInside,
+            considerTreasureCoffers: false);
+
+        Assert.Equal(PlannerObjectiveKind.HyperFixatedAttackTarget, fixture.Planner.Current.ObjectiveKind);
+        Assert.Equal((ulong)22, fixture.Planner.Current.TargetGameObjectId);
+    }
+
+    [Fact]
+    public void HyperFixatedAttackTargetsUseRulePriorityBeforeDistance()
+    {
+        using var fixture = new PlannerFixture(
+            Vector3.Zero,
+            HyperRule("Far Priority", priority: 10),
+            HyperRule("Near Lower Priority", priority: 20));
+
+        fixture.Planner.Update(
+            TestDutyContextFactory.Create(DutyCategory.Solo, territoryId: 100, cfcId: 200),
+            Observation(monsters:
+            [
+                HyperMonster(31, "Near Lower Priority", new Vector3(2f, 0f, 0f)),
+                HyperMonster(32, "Far Priority", new Vector3(20f, 0f, 0f)),
+            ]),
+            OwnershipMode.OwnedStartInside,
+            considerTreasureCoffers: false);
+
+        Assert.Equal((ulong)32, fixture.Planner.Current.TargetGameObjectId);
+    }
+
+    [Fact]
+    public void HyperFixatedAttackTargetDoesNotActivateOutsideSoloDuty()
+    {
+        using var fixture = new PlannerFixture(Vector3.Zero, HyperRule("Target", priority: 10));
+
+        fixture.Planner.Update(
+            TestDutyContextFactory.Create(DutyCategory.FourMan, territoryId: 100, cfcId: 200),
+            Observation(monsters: [HyperMonster(21, "Target", new Vector3(4f, 0f, 0f))]),
+            OwnershipMode.OwnedStartInside,
+            considerTreasureCoffers: false);
+
+        Assert.Equal(PlannerObjectiveKind.Monster, fixture.Planner.Current.ObjectiveKind);
+    }
+
     [Theory]
     [InlineData(5f, 0f)]
     [InlineData(null, 2f)]
@@ -153,6 +210,16 @@ public sealed class AdsRulePrecedenceTests
             PriorityVerticalRadius = verticalRadius,
         };
 
+    private static ObjectPriorityRule HyperRule(string name, int priority)
+        => new()
+        {
+            ObjectKind = ObjectKind.BattleNpc.ToString(),
+            ObjectName = name,
+            NameMatchMode = "Exact",
+            Classification = InteractableClass.HyperFixatedAttackTarget.ToString(),
+            Priority = priority,
+        };
+
     private static ObservedInteractable Interactable(
         string name,
         InteractableClass classification,
@@ -176,6 +243,18 @@ public sealed class AdsRulePrecedenceTests
         {
             Key = name,
             GameObjectId = 2,
+            DataId = 200,
+            MapId = 1,
+            Name = name,
+            Position = position,
+            LastSeenUtc = DateTime.UtcNow,
+        };
+
+    private static ObservedMonster HyperMonster(ulong gameObjectId, string name, Vector3 position)
+        => new()
+        {
+            Key = $"{name}:{gameObjectId}",
+            GameObjectId = gameObjectId,
             DataId = 200,
             MapId = 1,
             Name = name,

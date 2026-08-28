@@ -101,6 +101,7 @@ public sealed class Plugin : IDalamudPlugin
     public DungeonFrontierService DungeonFrontierService { get; }
     public ObjectivePlannerService ObjectivePlannerService { get; }
     public ExecutionService ExecutionService { get; }
+    public HyperFocusLeaseService HyperFocusLeaseService { get; }
     public DialogAutomationService DialogAutomationService { get; }
     public AdsIpcService AdsIpcService { get; }
     public BmrReflectionService BmrReflectionService { get; }
@@ -206,9 +207,10 @@ public sealed class Plugin : IDalamudPlugin
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, ObservationMemoryService);
         MapFlagService = new MapFlagService(PluginInterface, DataManager, ClientState, Condition, Log);
+        HyperFocusLeaseService = HyperFocusLeaseService.Create(PluginInterface);
         TreasureDoorStrafeInputService = new TreasureDoorStrafeInputService(KeyState, Log);
         CardinalHoldInputService = new CardinalHoldInputService(KeyState, Log);
-        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, TreasureDoorStrafeInputService, CardinalHoldInputService, Configuration, Log);
+        ExecutionService = new ExecutionService(DataManager, ObjectTable, TargetManager, CommandManager, ObservationMemoryService, DungeonFrontierService, MapFlagService, ObjectPriorityRuleService, HyperFocusLeaseService, TreasureDoorStrafeInputService, CardinalHoldInputService, Configuration, Log);
         CameraRecoveryService = new CameraRecoveryService(
             new DalamudCameraRecoveryRuntime(KeyState, CommandManager, Log),
             new SystemCameraRecoveryClock(),
@@ -1610,6 +1612,7 @@ public sealed class Plugin : IDalamudPlugin
                 higherLowerAutomation = HigherLowerAutomationService.CaptureDebugState(),
                 mounted = DutyContextService.Current.Mounted,
                 targetName = ObjectivePlannerService.Current.TargetName,
+                targetGameObjectId = ObjectivePlannerService.Current.TargetGameObjectId,
                 targetDistance = ObjectivePlannerService.Current.TargetDistance,
                 targetVerticalDelta = ObjectivePlannerService.Current.TargetVerticalDelta,
                 capturedAtUtc = ObjectivePlannerService.Current.CapturedAtUtc,

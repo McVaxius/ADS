@@ -19,4 +19,5 @@ public enum InteractableClass
     CardinalHoldEast = 14,
     CardinalHoldSouth = 15,
     CardinalHoldWest = 16,
+    HyperFixatedAttackTarget = 17,
 }

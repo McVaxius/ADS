@@ -14,7 +14,8 @@ internal static class TestDutyContextFactory
         bool cutscene = false,
         uint territoryId = 777,
         uint cfcId = 888,
-        string? alliance = null)
+        string? alliance = null,
+        bool inCombat = false)
         => new()
         {
             PluginEnabled = pluginEnabled,
@@ -30,7 +31,7 @@ internal static class TestDutyContextFactory
             OccupiedInEvent = false,
             OccupiedInCutSceneEvent = cutscene,
             WatchingCutscene = false,
-            InCombat = false,
+            InCombat = inCombat,
             Mounted = false,
             TerritoryTypeId = territoryId,
             MapId = 1,

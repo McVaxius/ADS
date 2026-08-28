@@ -107,6 +107,9 @@ public sealed class ObjectivePlannerService
         var nearestBossFightMonster = GetBestBossFightBattleNpc(liveMonsterEligibility);
         var nearestMonster = GetBestBattleNpc(liveMonsterEligibility);
         var nearestFollowTarget = GetBestBattleNpc(liveFollowTargetEligibility);
+        var hyperFixatedAttackTarget = context.CurrentDuty?.Category == DutyCategory.Solo
+            ? GetBestHyperFixatedAttackTarget(liveMonsterEligibility)
+            : null;
 
         var nearestRequiredInteractable = GetBestInteractable(
             observation.LiveInteractables.Where(x => IsProgressionInteractable(context, x, playerPosition)),
@@ -137,6 +140,25 @@ public sealed class ObjectivePlannerService
             && dungeonFrontierService.CurrentTarget is { IsForceMarchManualDestination: true } forceMarchManualDestination
                 ? forceMarchManualDestination
                 : null;
+
+        if (hyperFixatedAttackTarget is not null)
+        {
+            var distance = GetDistance(playerPosition, hyperFixatedAttackTarget.Position);
+            var verticalDelta = GetVerticalDelta(playerPosition, hyperFixatedAttackTarget.Position);
+            Current = new PlannerSnapshot
+            {
+                Mode = PlannerMode.Progression,
+                ObjectiveKind = PlannerObjectiveKind.HyperFixatedAttackTarget,
+                Objective = $"Hyper-focus attack target: {hyperFixatedAttackTarget.Name}",
+                Explanation = BuildHyperFixatedAttackTargetExplanation(context, hyperFixatedAttackTarget, playerPosition),
+                TargetName = hyperFixatedAttackTarget.Name,
+                TargetGameObjectId = hyperFixatedAttackTarget.GameObjectId,
+                TargetDistance = distance,
+                TargetVerticalDelta = verticalDelta,
+                CapturedAtUtc = now,
+            };
+            return;
+        }
 
         if (currentForceMarchManualDestination is not null)
         {
@@ -584,6 +606,19 @@ public sealed class ObjectivePlannerService
             .FirstOrDefault();
     }
 
+    private static ObservedMonster? GetBestHyperFixatedAttackTarget(
+        IEnumerable<BattleNpcPlanningEligibility> candidates)
+    {
+        return candidates
+            .Where(x => x.IsEligibleBlocker)
+            .Where(x => x.EffectiveClassification == InteractableClass.HyperFixatedAttackTarget)
+            .OrderBy(x => x.EffectiveRule!.Priority)
+            .ThenBy(x => x.Distance ?? float.MaxValue)
+            .ThenBy(x => x.VerticalDelta ?? float.MaxValue)
+            .Select(x => x.Monster)
+            .FirstOrDefault();
+    }
+
     private string BuildMonsterExplanation(
         DutyContextSnapshot context,
         ObservationSnapshot observation,
@@ -619,6 +654,19 @@ public sealed class ObjectivePlannerService
             : string.Empty;
 
         return $"{combatText}ADS selected live boss-fight target {monster.Name} via {priorityText}. BossFight BattleNpc rules beat nearby trash, treasure, ghosts, and frontier/manual follow-through once the rule distance/Y gates pass.";
+    }
+
+    private string BuildHyperFixatedAttackTargetExplanation(
+        DutyContextSnapshot context,
+        ObservedMonster monster,
+        Vector3? playerPosition)
+    {
+        var rule = objectPriorityRuleService.GetEffectiveBattleNpcRule(
+            context,
+            monster,
+            GetDistance(playerPosition, monster.Position),
+            GetVerticalDelta(playerPosition, monster.Position));
+        return $"Solo-duty HyperFixatedAttackTarget rule priority {rule?.Priority ?? ObjectPriorityRuleService.DefaultPriority} selected exact live BattleNpc {monster.Name} ({monster.GameObjectId}). ADS will request FrenRider hyper-focus before movement or targeting.";
     }
 
     private string BuildFollowTargetExplanation(

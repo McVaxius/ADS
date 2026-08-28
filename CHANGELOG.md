@@ -2,6 +2,7 @@
 
 ## 2026-08-28
 
+- Added the user-configured `HyperFixatedAttackTarget` rule for live, targetable BattleNpcs in validated solo duties. It preempts normal ADS objectives, keeps exact object identity across planning/execution, acquires and heartbeats FrenRider's five-second hyper-focus lease before targeting or movement, approaches to 2.0y, chains directly to another valid hyper target, and stops/reports if the lease is unavailable. ADS still sends no rotation commands.
 - Recovery navigation now retires only the selected stuck ghost and replans when player movement stays under 0.5y for 12 seconds, instead of resending the same unreachable destination indefinitely.
 
 ## 2026-08-25

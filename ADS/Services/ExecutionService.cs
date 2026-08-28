@@ -100,6 +100,7 @@ public sealed class ExecutionService
     private readonly DungeonFrontierService dungeonFrontierService;
     private readonly MapFlagService mapFlagService;
     private readonly ObjectPriorityRuleService objectPriorityRuleService;
+    private readonly HyperFocusLeaseService hyperFocusLeaseService;
     private readonly TreasureDoorStrafeInputService treasureDoorStrafeInputService;
     private readonly CardinalHoldInputService cardinalHoldInputService;
     private readonly Configuration configuration;
@@ -115,6 +116,7 @@ public sealed class ExecutionService
     private DateTime nextNavigationCommandUtc;
     private ulong movementTargetGameObjectId;
     private bool navigationActive;
+    private ulong hyperFocusTargetGameObjectId;
     private bool mapFlagNavigationActive;
     private bool unsafeTransitionNavigationStopLatched;
     private bool treasureDungeonCombatStopLatched;
@@ -232,6 +234,7 @@ public sealed class ExecutionService
         DungeonFrontierService dungeonFrontierService,
         MapFlagService mapFlagService,
         ObjectPriorityRuleService objectPriorityRuleService,
+        HyperFocusLeaseService hyperFocusLeaseService,
         TreasureDoorStrafeInputService treasureDoorStrafeInputService,
         CardinalHoldInputService cardinalHoldInputService,
         Configuration configuration,
@@ -245,6 +248,7 @@ public sealed class ExecutionService
         this.dungeonFrontierService = dungeonFrontierService;
         this.mapFlagService = mapFlagService;
         this.objectPriorityRuleService = objectPriorityRuleService;
+        this.hyperFocusLeaseService = hyperFocusLeaseService;
         this.treasureDoorStrafeInputService = treasureDoorStrafeInputService;
         this.cardinalHoldInputService = cardinalHoldInputService;
         this.configuration = configuration;
@@ -462,6 +466,7 @@ public sealed class ExecutionService
 
     public void ReleaseHeldMovementKeys(string reason)
     {
+        ReleaseHyperFocus(reason);
         InterruptCardinalHold(reason);
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
         var hadAquapolisWiggle = aquapolisRouteWiggleTargetKey != null || aquapolisRouteWiggleUntilUtc != DateTime.MinValue;
@@ -575,6 +580,7 @@ public sealed class ExecutionService
             return false;
         }
 
+        ReleaseHyperFocus("leave request");
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -600,6 +606,7 @@ public sealed class ExecutionService
             return false;
         }
 
+        ReleaseHyperFocus("duty completion treasure sweep");
         StopMovementAssists();
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -617,6 +624,7 @@ public sealed class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        ReleaseHyperFocus("stop");
         InterruptCardinalHold("stop");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -637,6 +645,7 @@ public sealed class ExecutionService
 
     public void CompleteDuty(string dutyName)
     {
+        ReleaseHyperFocus("duty complete");
         ResetCardinalHolds("duty complete");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -663,6 +672,15 @@ public sealed class ExecutionService
         string dialogAutomationStatus)
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
+        if (!pluginEnabled
+            || context.IsUnsafeTransition
+            || !IsActiveOwnedDutyMode()
+            || !context.InInstancedDuty
+            || planner.ObjectiveKind != PlannerObjectiveKind.HyperFixatedAttackTarget)
+        {
+            ReleaseHyperFocus("ADS hyper-focus objective no longer active");
+        }
+
         if (!pluginEnabled
             || !IsActiveOwnedDutyMode()
             || !context.InInstancedDuty
@@ -822,6 +840,12 @@ public sealed class ExecutionService
             ResetRecoveryHold();
             StopMovementAssists(preserveTreasureFollowerDoorFollowThrough: ShouldPreserveTreasureFollowerDoorFollowThroughForTransit(context));
             SetPhase(ExecutionPhase.TransitionHold, $"{prefix} Waiting for safe post-transition duty truth before advancing.");
+            return;
+        }
+
+        if (planner.ObjectiveKind == PlannerObjectiveKind.HyperFixatedAttackTarget)
+        {
+            TryAdvanceHyperFixatedAttackTarget(planner, observation, prefix);
             return;
         }
 
@@ -1169,6 +1193,88 @@ public sealed class ExecutionService
             retiredCount > 0
                 ? $"{prefix} Reached the recovery cluster area for {planner.Objective} ({targetDistance:0.0}y). No stronger live truth appeared, so ADS retired {retiredCount} nearby ghost hint(s) and will advance to the next recovery candidate."
                 : $"{prefix} Reached the recovery cluster area for {planner.Objective} ({targetDistance:0.0}y). Waiting for stronger live truth.");
+    }
+
+    private void TryAdvanceHyperFixatedAttackTarget(PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
+    {
+        var observedMonster = ResolveObservedMonster(planner, observation);
+        if (observedMonster is null || planner.TargetGameObjectId is not > 0)
+        {
+            ReleaseHyperFocus("exact live hyper-focus target disappeared");
+            SetPhase(
+                ExecutionPhase.ReadyForMonsterObjective,
+                $"{prefix} Hyper-focus target is no longer available in live BattleNpc truth; FrenRider lease released.");
+            return;
+        }
+
+        if (!hyperFocusLeaseService.EnsureLease(out var leaseStatus))
+        {
+            StopMovementAssists();
+            ClearHyperFocusTarget();
+            SetPhase(
+                ExecutionPhase.Failure,
+                $"{prefix} Hyper-focus lease unavailable; ADS stopped target movement. {leaseStatus}");
+            return;
+        }
+
+        var gameObject = ResolveGameObject(observedMonster);
+        if (gameObject is null || gameObject.GameObjectId != planner.TargetGameObjectId.Value)
+        {
+            ReleaseHyperFocus("exact live hyper-focus game object disappeared");
+            SetPhase(
+                ExecutionPhase.ReadyForMonsterObjective,
+                $"{prefix} Hyper-focus target {observedMonster.Name} was no longer targetable; FrenRider lease released.");
+            return;
+        }
+
+        var playerPosition = objectTable.LocalPlayer?.Position;
+        if (!playerPosition.HasValue)
+        {
+            StopMovementAssists();
+            SetPhase(
+                ExecutionPhase.ReadyForMonsterObjective,
+                $"{prefix} Local player position was unavailable while retaining hyper-focus target {observedMonster.Name}.");
+            return;
+        }
+
+        hyperFocusTargetGameObjectId = gameObject.GameObjectId;
+        targetManager.Target = gameObject;
+        var targetDistance = Vector3.Distance(gameObject.Position, playerPosition.Value);
+        if (targetDistance > PreferredMonsterArrivalRange)
+        {
+            LogLiveTargetNavigation("hyper-focus", gameObject.GameObjectId, observedMonster.Name, playerPosition.Value, gameObject.Position, targetDistance, mountedCombat: false);
+            TryBeginNavigation(gameObject.GameObjectId, gameObject.Position);
+            SetPhase(
+                ExecutionPhase.NavigatingToMonsterObjective,
+                $"{prefix} Hyper-focused {observedMonster.Name} ({targetDistance:0.0}y); FrenRider lease active and ADS is approaching the exact target to {PreferredMonsterArrivalRange:0.0}y.");
+            return;
+        }
+
+        StopMovementAssists();
+        SetPhase(
+            ExecutionPhase.ReadyForMonsterObjective,
+            $"{prefix} Hyper-focused exact target {observedMonster.Name} at {targetDistance:0.0}y; FrenRider lease active and combat owns actions.");
+    }
+
+    private void ReleaseHyperFocus(string reason)
+    {
+        if (!hyperFocusLeaseService.IsActive && hyperFocusTargetGameObjectId == 0)
+            return;
+
+        StopMovementAssists();
+        ClearHyperFocusTarget();
+        hyperFocusLeaseService.Release(reason);
+    }
+
+    private void ClearHyperFocusTarget()
+    {
+        if (hyperFocusTargetGameObjectId == 0)
+            return;
+
+        if (targetManager.Target?.GameObjectId == hyperFocusTargetGameObjectId)
+            targetManager.Target = null;
+
+        hyperFocusTargetGameObjectId = 0;
     }
 
     private void TryAdvanceMonsterObjective(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -5459,8 +5565,9 @@ public sealed class ExecutionService
 
     private ObservedMonster? ResolveObservedMonster(PlannerSnapshot planner, ObservationSnapshot observation)
     {
-        var candidates = observation.LiveMonsters
-            .Where(x => x.Name.Equals(planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+        var candidates = planner.TargetGameObjectId is { } targetGameObjectId && targetGameObjectId > 0
+            ? observation.LiveMonsters.Where(x => x.GameObjectId == targetGameObjectId)
+            : observation.LiveMonsters.Where(x => x.Name.Equals(planner.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
         if (planner.TargetDistance.HasValue)
         {

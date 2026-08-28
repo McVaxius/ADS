@@ -7,6 +7,7 @@ public sealed class PlannerSnapshot
     public required string Objective { get; init; }
     public required string Explanation { get; init; }
     public string? TargetName { get; init; }
+    public ulong? TargetGameObjectId { get; init; }
     public float? TargetDistance { get; init; }
     public float? TargetVerticalDelta { get; init; }
     public required DateTime CapturedAtUtc { get; init; }

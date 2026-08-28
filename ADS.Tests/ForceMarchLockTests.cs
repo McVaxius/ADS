@@ -386,6 +386,11 @@ public sealed class ForceMarchLockTests
                 Frontier,
                 null!,
                 RuleService,
+                new HyperFocusLeaseService(
+                    _ => "{\"ok\":true,\"reason\":\"test\",\"contractVersion\":1}",
+                    _ => "{\"ok\":true,\"reason\":\"test\",\"contractVersion\":1}",
+                    _ => "{\"ok\":true,\"reason\":\"test\",\"contractVersion\":1}",
+                    () => "{}"),
                 new TreasureDoorStrafeInputService(keyState, log),
                 new CardinalHoldInputService(keyState, log),
                 new Configuration(),

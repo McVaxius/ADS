@@ -20,4 +20,5 @@ public enum PlannerObjectiveKind
     XyzForceMarchDestination = 15,
     TreasureDoor = 16,
     TreasureFollowerLoot = 17,
+    HyperFixatedAttackTarget = 18,
 }
