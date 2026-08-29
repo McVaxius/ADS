@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using ADS.Models;
 using Dalamud.Game;
 using Dalamud.Plugin.Services;
+using Lumina.Excel;
 using Lumina.Excel.Sheets;
 
 namespace ADS.Services;
@@ -39,6 +40,8 @@ public sealed class DutyCatalogService
 
         var contentFinderSheet = dataManager.GetExcelSheet<ContentFinderCondition>();
         var englishSheet = dataManager.GetExcelSheet<ContentFinderCondition>(ClientLanguage.English);
+        var questSheet = dataManager.GetExcelSheet<Quest>();
+        var englishQuestSheet = dataManager.GetExcelSheet<Quest>(ClientLanguage.English);
         if (contentFinderSheet is null)
         {
             log.Warning("[ADS] ContentFinderCondition sheet was unavailable; ADS duty catalog is empty.");
@@ -47,7 +50,9 @@ public sealed class DutyCatalogService
 
         foreach (var row in contentFinderSheet)
         {
-            if (row.ContentType.ValueNullable is null)
+            var isQuestBattle = TryGetLinkedQuestId(row, out var linkedQuestId);
+            var contentType = row.ContentType.ValueNullable;
+            if (!isQuestBattle && contentType is null)
                 continue;
 
             if (row.TerritoryType.ValueNullable is null || row.ContentMemberType.ValueNullable is null)
@@ -57,22 +62,30 @@ public sealed class DutyCatalogService
                 + row.ContentMemberType.Value.HealersPerParty
                 + row.ContentMemberType.Value.MeleesPerParty
                 + row.ContentMemberType.Value.RangedPerParty;
-            var localizedName = NormalizeName(row.Name.ToString());
+            var localizedName = isQuestBattle
+                ? GetQuestName(questSheet, linkedQuestId)
+                : NormalizeName(row.Name.ToString());
             if (string.IsNullOrWhiteSpace(localizedName))
                 continue;
 
             var englishRow = englishSheet?.GetRow(row.RowId) ?? row;
-            var englishName = NormalizeName(englishRow.Name.ToString());
+            var englishName = isQuestBattle
+                ? GetQuestName(englishQuestSheet, linkedQuestId)
+                : NormalizeName(englishRow.Name.ToString());
             if (string.IsNullOrWhiteSpace(englishName))
                 englishName = localizedName;
 
-            var contentTypeName = NormalizeName(row.ContentType.Value.Name.ToString());
-            var category = ClassifyDutyCategory(
-                territoryTypeId: row.TerritoryType.Value.RowId,
-                contentTypeRowId: row.ContentType.Value.RowId,
-                contentMemberTypeRowId: row.ContentMemberType.Value.RowId,
-                partySize: partySize,
-                contentTypeName: contentTypeName);
+            var contentTypeName = isQuestBattle
+                ? "Quest Battle"
+                : NormalizeName(contentType!.Value.Name.ToString());
+            var category = isQuestBattle
+                ? DutyCategory.Solo
+                : ClassifyDutyCategory(
+                    territoryTypeId: row.TerritoryType.Value.RowId,
+                    contentTypeRowId: contentType!.Value.RowId,
+                    contentMemberTypeRowId: row.ContentMemberType.Value.RowId,
+                    partySize: partySize,
+                    contentTypeName: contentTypeName);
             var entry = new DutyCatalogEntry
             {
                 ContentFinderConditionId = row.RowId,
@@ -85,7 +98,7 @@ public sealed class DutyCatalogService
                 LevelRequired = row.ClassJobLevelRequired,
                 SortKey = row.SortKey,
                 ExVersion = row.TerritoryType.Value.ExVersion.ValueNullable?.RowId ?? 0,
-                ContentTypeRowId = row.ContentType.Value.RowId,
+                ContentTypeRowId = contentType?.RowId ?? 0,
                 ContentMemberTypeRowId = row.ContentMemberType.Value.RowId,
                 PartySize = partySize,
                 Category = category,
@@ -371,6 +384,24 @@ public sealed class DutyCatalogService
 
     private static string NormalizeName(string name)
         => DutyMaturityCatalog.NormalizeText(name);
+
+    private static bool TryGetLinkedQuestId(ContentFinderCondition row, out uint questId)
+    {
+        questId = 0;
+        if (!row.Content.TryGetValue<QuestBattle>(out var questBattle)
+            || !questBattle.Quest.Is<Quest>())
+        {
+            return false;
+        }
+
+        questId = questBattle.Quest.RowId;
+        return questId != 0;
+    }
+
+    private static string GetQuestName(ExcelSheet<Quest>? questSheet, uint questId)
+        => questSheet is not null && questSheet.TryGetRow(questId, out var quest)
+            ? NormalizeName(quest.Name.ToString())
+            : string.Empty;
 
     private static DutyCategory ClassifyDutyCategory(
         uint territoryTypeId,
