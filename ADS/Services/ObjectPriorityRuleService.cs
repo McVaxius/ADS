@@ -14,6 +14,9 @@ public sealed class ObjectPriorityRuleService
     internal const int DefaultPriority = 1000;
     internal const float BattleNpcPlanningVerticalSanityCap = 100f;
     public const string DefaultPresetName = "DEFAULT";
+    public const string MatureProposalsPresetName = "MATURE-PROPOSALS";
+    public const string MatureProposalsMirrorFileName = "duty-object-rules-mature-proposals.json";
+    public static readonly TimeSpan MatureProposalProtectionInterval = TimeSpan.FromHours(24);
     private const string FileName = "duty-object-rules.json";
     private const string PresetDirectoryName = "rule-presets";
     private const string MapXzDestinationType = "MapXZ";
@@ -33,23 +36,36 @@ public sealed class ObjectPriorityRuleService
     private readonly IDataManager dataManager;
     private readonly string configPath;
     private readonly string presetDirectoryPath;
+    private readonly string matureProposalsMirrorPath;
+    private readonly string matureProposalsPresetPath;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
+    private bool matureProposalMirrorExists;
+    private bool matureProposalPresetExists;
+    private DateTime? matureProposalMirrorWriteUtc;
+    private DateTime? matureProposalPresetWriteUtc;
 
-    public ObjectPriorityRuleService(IPluginLog log, IDataManager dataManager, string configDirectory)
+    public ObjectPriorityRuleService(
+        IPluginLog log,
+        IDataManager dataManager,
+        string configDirectory)
     {
         this.log = log;
         this.dataManager = dataManager;
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
+        matureProposalsMirrorPath = Path.Combine(configDirectory, MatureProposalsMirrorFileName);
+        matureProposalsPresetPath = Path.Combine(presetDirectoryPath, $"{MatureProposalsPresetName}.json");
         Directory.CreateDirectory(presetDirectoryPath);
         LastSyncStatus = "DEFAULT object rules load from the plugin config cache; the remote updater refreshes this file from botologyupdates.";
+        LastMatureProposalStatus = "MATURE-PROPOSALS mirror not checked yet.";
 
         EnsureSeeded();
         Reload();
+        TrySynchronizeMatureProposals(force: false, out _);
     }
 
     public string ConfigPath
@@ -58,9 +74,28 @@ public sealed class ObjectPriorityRuleService
     public string PresetDirectoryPath
         => presetDirectoryPath;
 
+    public string MatureProposalsMirrorPath
+        => matureProposalsMirrorPath;
+
+    public string MatureProposalsPresetPath
+        => matureProposalsPresetPath;
+
     public string LastLoadStatus { get; private set; } = "Rules not loaded yet.";
 
     public string LastSyncStatus { get; private set; }
+
+    public string LastMatureProposalStatus { get; private set; }
+
+    public DateTime? NextMatureProposalResetUtc { get; private set; }
+
+    public MatureProposalMirrorStatus MatureProposalStatus
+        => new(
+            matureProposalMirrorExists,
+            matureProposalPresetExists,
+            matureProposalMirrorWriteUtc,
+            matureProposalPresetWriteUtc,
+            NextMatureProposalResetUtc,
+            LastMatureProposalStatus);
 
     public ObjectPriorityRuleManifest Current { get; private set; } = new();
 
@@ -81,9 +116,15 @@ public sealed class ObjectPriorityRuleService
     public bool IsDefaultPreset(string presetName)
         => string.Equals(presetName, DefaultPresetName, StringComparison.OrdinalIgnoreCase);
 
+    public bool IsMatureProposalsPreset(string presetName)
+        => string.Equals(presetName, MatureProposalsPresetName, StringComparison.OrdinalIgnoreCase);
+
     public IReadOnlyList<string> GetPresetNames()
     {
         var names = new List<string> { DefaultPresetName };
+        if (File.Exists(matureProposalsMirrorPath) || File.Exists(matureProposalsPresetPath))
+            names.Add(MatureProposalsPresetName);
+
         if (!Directory.Exists(presetDirectoryPath))
             return names;
 
@@ -92,6 +133,7 @@ public sealed class ObjectPriorityRuleService
                 .Select(Path.GetFileNameWithoutExtension)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Where(x => !string.Equals(x, DefaultPresetName, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(x, MatureProposalsPresetName, StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)!);
         return names;
@@ -100,6 +142,8 @@ public sealed class ObjectPriorityRuleService
     public string GetPresetPath(string presetName)
         => IsDefaultPreset(presetName)
             ? configPath
+            : IsMatureProposalsPreset(presetName)
+                ? matureProposalsPresetPath
             : Path.Combine(presetDirectoryPath, $"{SanitizePresetName(presetName)}.json");
 
     public string SanitizePresetName(string presetName)
@@ -112,6 +156,8 @@ public sealed class ObjectPriorityRuleService
 
         if (IsDefaultPreset(cleaned))
             cleaned = $"{DefaultPresetName}-copy";
+        else if (IsMatureProposalsPreset(cleaned))
+            cleaned = $"{MatureProposalsPresetName}-copy";
 
         return cleaned;
     }
@@ -183,6 +229,11 @@ public sealed class ObjectPriorityRuleService
             WriteManifestToPath(path, manifest);
             if (!IsDefaultPreset(presetName))
             {
+                if (IsMatureProposalsPreset(presetName))
+                {
+                    RefreshMatureProposalSchedule(DateTime.UtcNow);
+                }
+
                 LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active rule(s) to preset {presetName} at {path}.";
                 log.Information($"[ADS] {LastLoadStatus}");
                 return true;
@@ -241,6 +292,12 @@ public sealed class ObjectPriorityRuleService
             return false;
         }
 
+        if (IsMatureProposalsPreset(presetName))
+        {
+            status = "MATURE-PROPOSALS is a protected preset and cannot be deleted. Copy it to another preset if you need a disposable version.";
+            return false;
+        }
+
         try
         {
             var path = GetPresetPath(presetName);
@@ -259,6 +316,139 @@ public sealed class ObjectPriorityRuleService
             status = $"Failed to delete preset {presetName}: {ex.Message}";
             return false;
         }
+    }
+
+    public void RefreshMatureProposalSchedule()
+        => RefreshMatureProposalSchedule(DateTime.UtcNow);
+
+    public bool TrySynchronizeMatureProposals(bool force, out string status)
+    {
+        var now = DateTime.UtcNow;
+        RefreshMatureProposalSchedule(now);
+
+        if (!matureProposalMirrorExists || !matureProposalMirrorWriteUtc.HasValue)
+        {
+            status = LastMatureProposalStatus;
+            return false;
+        }
+
+        var decision = DecideMatureProposalSync(
+            matureProposalMirrorExists,
+            matureProposalMirrorWriteUtc,
+            matureProposalPresetExists,
+            matureProposalPresetWriteUtc,
+            now,
+            MatureProposalProtectionInterval,
+            force);
+
+        if (!decision.ShouldApply)
+        {
+            NextMatureProposalResetUtc = decision.NextResetUtc;
+            status = BuildMatureProposalStatus(decision, now);
+            LastMatureProposalStatus = status;
+            return false;
+        }
+
+        if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var loadStatus))
+        {
+            NextMatureProposalResetUtc = null;
+            status = $"MATURE-PROPOSALS clean mirror was not applied. {loadStatus}";
+            LastMatureProposalStatus = status;
+            log.Warning($"[ADS] {status}");
+            return false;
+        }
+
+        try
+        {
+            WriteManifestToPath(matureProposalsPresetPath, mirrorManifest);
+            RefreshMatureProposalSchedule(now);
+            status = force
+                ? $"Reset MATURE-PROPOSALS from the clean mirror at {matureProposalsMirrorPath}."
+                : $"Applied the clean MATURE-PROPOSALS mirror to {matureProposalsPresetPath}.";
+            LastMatureProposalStatus = status;
+            log.Information($"[ADS] {status}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            NextMatureProposalResetUtc = null;
+            status = $"Failed to apply the MATURE-PROPOSALS clean mirror: {ex.Message}";
+            LastMatureProposalStatus = status;
+            log.Warning(ex, $"[ADS] {status}");
+            return false;
+        }
+    }
+
+    internal static MatureProposalSyncDecision DecideMatureProposalSync(
+        bool mirrorExists,
+        DateTime? mirrorWriteUtc,
+        bool presetExists,
+        DateTime? presetWriteUtc,
+        DateTime utcNow,
+        TimeSpan protectionInterval,
+        bool force)
+    {
+        if (!mirrorExists || !mirrorWriteUtc.HasValue)
+            return new MatureProposalSyncDecision(false, false, null, MatureProposalSyncReason.MirrorMissing);
+
+        if (force)
+            return new MatureProposalSyncDecision(true, false, null, MatureProposalSyncReason.Forced);
+
+        if (!presetExists || !presetWriteUtc.HasValue)
+            return new MatureProposalSyncDecision(true, false, null, MatureProposalSyncReason.PresetMissing);
+
+        if (presetWriteUtc.Value >= mirrorWriteUtc.Value)
+            return new MatureProposalSyncDecision(false, false, null, MatureProposalSyncReason.EditableCurrent);
+
+        var nextResetUtc = presetWriteUtc.Value + protectionInterval;
+        return utcNow >= nextResetUtc
+            ? new MatureProposalSyncDecision(true, false, nextResetUtc, MatureProposalSyncReason.ProtectionExpired)
+            : new MatureProposalSyncDecision(false, true, nextResetUtc, MatureProposalSyncReason.ProtectionActive);
+    }
+
+    private void RefreshMatureProposalSchedule(DateTime utcNow)
+    {
+        matureProposalMirrorExists = File.Exists(matureProposalsMirrorPath);
+        matureProposalPresetExists = File.Exists(matureProposalsPresetPath);
+        matureProposalMirrorWriteUtc = matureProposalMirrorExists
+            ? File.GetLastWriteTimeUtc(matureProposalsMirrorPath)
+            : null;
+        matureProposalPresetWriteUtc = matureProposalPresetExists
+            ? File.GetLastWriteTimeUtc(matureProposalsPresetPath)
+            : null;
+
+        var decision = DecideMatureProposalSync(
+            matureProposalMirrorExists,
+            matureProposalMirrorWriteUtc,
+            matureProposalPresetExists,
+            matureProposalPresetWriteUtc,
+            utcNow,
+            MatureProposalProtectionInterval,
+            force: false);
+        NextMatureProposalResetUtc = decision.NextResetUtc;
+        LastMatureProposalStatus = BuildMatureProposalStatus(decision, utcNow);
+    }
+
+    private static string BuildMatureProposalStatus(MatureProposalSyncDecision decision, DateTime utcNow)
+        => decision.Reason switch
+        {
+            MatureProposalSyncReason.MirrorMissing => "MATURE-PROPOSALS clean mirror is missing; the remote updater must download it before reset or seeding.",
+            MatureProposalSyncReason.PresetMissing => "MATURE-PROPOSALS editable preset is missing and is ready to seed from the clean mirror.",
+            MatureProposalSyncReason.EditableCurrent => "MATURE-PROPOSALS is protected: its editable preset is as new as or newer than the clean mirror.",
+            MatureProposalSyncReason.ProtectionActive => $"A newer MATURE-PROPOSALS clean mirror is pending. Automatic reset in {FormatMatureProposalDuration(decision.NextResetUtc!.Value - utcNow)} ({decision.NextResetUtc.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}).",
+            MatureProposalSyncReason.ProtectionExpired => "MATURE-PROPOSALS protection has expired and its newer clean mirror is ready to apply.",
+            MatureProposalSyncReason.Forced => "MATURE-PROPOSALS clean mirror is ready for a forced reset.",
+            _ => "MATURE-PROPOSALS status is unavailable.",
+        };
+
+    private static string FormatMatureProposalDuration(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+            duration = TimeSpan.Zero;
+
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}h {duration.Minutes}m"
+            : $"{duration.Minutes}m {duration.Seconds}s";
     }
 
     public bool TryImportManifestText(string text, out ObjectPriorityRuleManifest manifest, out string status)
@@ -891,6 +1081,27 @@ public sealed class ObjectPriorityRuleService
         var path = GetPresetPath(presetName);
         if (File.Exists(path))
             return path;
+
+        if (IsMatureProposalsPreset(presetName))
+        {
+            if (File.Exists(matureProposalsMirrorPath))
+            {
+                if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var mirrorStatus))
+                    throw new InvalidDataException(mirrorStatus);
+
+                WriteManifestToPath(path, mirrorManifest);
+            }
+            else
+            {
+                WriteManifestToPath(path, new ObjectPriorityRuleManifest
+                {
+                    Description = "Editable MATURE-PROPOSALS preset; awaiting the clean botologyupdates mirror.",
+                });
+            }
+
+            RefreshMatureProposalSchedule(DateTime.UtcNow);
+            return path;
+        }
 
         if (File.Exists(configPath))
         {
@@ -1696,4 +1907,28 @@ public sealed class ObjectPriorityRuleService
   ]
 }
 """;
+}
+
+public sealed record MatureProposalMirrorStatus(
+    bool MirrorExists,
+    bool EditablePresetExists,
+    DateTime? MirrorWriteUtc,
+    DateTime? EditablePresetWriteUtc,
+    DateTime? NextResetUtc,
+    string Status);
+
+internal sealed record MatureProposalSyncDecision(
+    bool ShouldApply,
+    bool IsPending,
+    DateTime? NextResetUtc,
+    MatureProposalSyncReason Reason);
+
+internal enum MatureProposalSyncReason
+{
+    MirrorMissing,
+    PresetMissing,
+    EditableCurrent,
+    ProtectionActive,
+    ProtectionExpired,
+    Forced,
 }

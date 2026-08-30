@@ -5,7 +5,7 @@ namespace ADS.Models;
 public sealed record DutyCategoryDisplayEntry(
     DutyCategory Category,
     string FilterLabel,
-    string ReadinessLabel,
+    string RuntimeLabel,
     string MaturityLabel,
     Vector4 Accent);
 

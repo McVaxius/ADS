@@ -37,9 +37,11 @@ public sealed class Plugin : IDalamudPlugin
     private static readonly TimeSpan HigherLowerRecentSignalWindow = TimeSpan.FromSeconds(20);
     private const double FrameworkSlowLogThresholdMs = 100d;
 
-    private enum RemoteJsonReloadStep
+    internal enum RemoteJsonReloadStep
     {
         ObjectRules,
+        MatureProposalRules,
+        MatureProposalRulesForced,
         DialogRules,
         DutyMaturity,
         TreasureRoutes,
@@ -529,6 +531,9 @@ public sealed class Plugin : IDalamudPlugin
     public void OpenRuleEditorUi()
         => objectRuleEditorWindow.IsOpen = true;
 
+    public void OpenRuleEditorUi(DutyCatalogEntry duty)
+        => objectRuleEditorWindow.OpenForDuty(duty);
+
     public void OpenRuleGuideUi()
         => ruleGuideWindow.IsOpen = true;
 
@@ -540,6 +545,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenDutyMaturityEditorUi()
         => dutyMaturityEditorWindow.IsOpen = true;
+
+    public void OpenMissingDutyWorkUi()
+        => dutyMaturityEditorWindow.OpenMissingDutyWork();
 
     public void ToggleHigherLowerUi()
         => higherLowerWindow.IsOpen = !higherLowerWindow.IsOpen;
@@ -585,6 +593,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ForceRemoteJsonUpdate()
         => RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button");
+
+    public void ForceMatureProposalRefresh()
+        => RemoteJsonUpdateService.TryStartMatureProposalRefresh("operator Refresh Now confirmation");
 
     public void SetLootMode(LootRollMode mode)
     {
@@ -1770,6 +1781,29 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    public void RevealPathInExplorer(string path)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                UseShellExecute = true,
+            };
+            if (File.Exists(fullPath))
+                startInfo.ArgumentList.Add("/select,");
+            startInfo.ArgumentList.Add(File.Exists(fullPath) || Directory.Exists(fullPath)
+                ? fullPath
+                : Path.GetDirectoryName(fullPath) ?? fullPath);
+            Process.Start(startInfo);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, $"[ADS] Failed to reveal path in Explorer: {path}");
+        }
+    }
+
     public void PrintStatus(string message)
         => ChatGui.Print($"[ADS] {message}");
 
@@ -2089,6 +2123,12 @@ public sealed class Plugin : IDalamudPlugin
         {
             nextRemoteJsonStaleCheckUtc = utcNow + RemoteJsonStaleCheckInterval;
             RemoteJsonUpdateService.TryStartStaleUpdate("hourly stale check");
+        }
+
+        if (ObjectPriorityRuleService.NextMatureProposalResetUtc is { } proposalResetUtc
+            && utcNow >= proposalResetUtc)
+        {
+            ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: false, out _);
         }
 
         var frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled;
@@ -2426,14 +2466,43 @@ public sealed class Plugin : IDalamudPlugin
 
     private void QueueCompletedRemoteJsonReload()
     {
-        if (!RemoteJsonUpdateService.TryConsumeCompletedUpdate())
+        if (!RemoteJsonUpdateService.TryConsumeCompletedUpdate(out var completion))
             return;
 
-        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.ObjectRules);
-        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.DialogRules);
-        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.DutyMaturity);
-        pendingRemoteJsonReloadSteps.Enqueue(RemoteJsonReloadStep.TreasureRoutes);
-        Log.Information("[ADS] Remote config update completed; queued cache reload across framework frames.");
+        foreach (var step in BuildRemoteJsonReloadSteps(completion))
+            pendingRemoteJsonReloadSteps.Enqueue(step);
+        Log.Information($"[ADS] Remote config update completed; queued reload for {string.Join(", ", completion.ChangedFiles)}.");
+    }
+
+    internal static IReadOnlyList<RemoteJsonReloadStep> BuildRemoteJsonReloadSteps(RemoteJsonUpdateCompletion completion)
+    {
+        var steps = new List<RemoteJsonReloadStep>();
+        foreach (var fileName in completion.ChangedFiles)
+        {
+            switch (fileName)
+            {
+                case RemoteJsonUpdateService.ObjectRulesFileName:
+                    steps.Add(RemoteJsonReloadStep.ObjectRules);
+                    break;
+                case RemoteJsonUpdateService.MatureProposalRulesFileName:
+                    steps.Add(
+                        completion.ForceMatureProposalApply
+                            ? RemoteJsonReloadStep.MatureProposalRulesForced
+                            : RemoteJsonReloadStep.MatureProposalRules);
+                    break;
+                case RemoteJsonUpdateService.DialogRulesFileName:
+                    steps.Add(RemoteJsonReloadStep.DialogRules);
+                    break;
+                case RemoteJsonUpdateService.DutyMaturityFileName:
+                    steps.Add(RemoteJsonReloadStep.DutyMaturity);
+                    break;
+                case RemoteJsonUpdateService.TreasureRoutesFileName:
+                    steps.Add(RemoteJsonReloadStep.TreasureRoutes);
+                    break;
+            }
+        }
+
+        return steps;
     }
 
     private void UpdateJsonReloads()
@@ -2492,6 +2561,12 @@ public sealed class Plugin : IDalamudPlugin
         {
             case RemoteJsonReloadStep.ObjectRules:
                 ObjectPriorityRuleService.Reload();
+                break;
+            case RemoteJsonReloadStep.MatureProposalRules:
+                ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: false, out _);
+                break;
+            case RemoteJsonReloadStep.MatureProposalRulesForced:
+                ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: true, out _);
                 break;
             case RemoteJsonReloadStep.DialogRules:
                 DialogYesNoRuleService.Reload();

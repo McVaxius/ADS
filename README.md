@@ -58,13 +58,13 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 | Surface | Purpose |
 |---|---|
 | Main > Overview | Operator truth: duty, ownership, phase, objective, explanation, warnings, options, status |
-| Main > Duties | Searchable responsive duty dashboard with family filters, maturity cards, compact catalog, selected-duty details, and collapsible rule coverage |
+| Main > Duties | Compact current-duty and coverage summary with launchers for Duty Manager, missing-duty work, and current-duty rules |
 | Main > Tools | Authoring, treasure, desynthesis, diagnostics, settings, updates, support links |
 | Main > Diagnostics | Territory/map/CFC, frontier, treasure follow, observations, JSON evidence |
 | Guided Setup | Five independent Duty, Rules, Utilities, Treasure/Follow, and Diagnostics/Recovery walkthroughs |
 | Settings | General, automation, data/rules, advanced display, about/support |
 | Compact Controls | Full-label primary actions, tool shortcuts, concise live status |
-| Rules Editors | Live `DEFAULT` rules plus parked presets |
+| Rules Editors | Live `DEFAULT`, parked presets, three explicit partial-import modes, bulk editing, duty deep-links, and protected `MATURE-PROPOSALS` review |
 | Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
 ## Documentation

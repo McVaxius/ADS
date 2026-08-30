@@ -1,3 +1,5 @@
+using ADS.Services;
+
 namespace ADS.Models;
 
 public enum DutyRuleCoverageFilter
@@ -8,19 +10,31 @@ public enum DutyRuleCoverageFilter
     DenseRules = 3,
 }
 
+public enum DutyWaypointCoverageFilter
+{
+    All = 0,
+    NoWaypoints = 1,
+    HasWaypoints = 2,
+}
+
 public sealed class DutyMaturityFilterState
 {
     public string Search { get; set; } = string.Empty;
     public HashSet<DutyCategory> Families { get; } = Enum.GetValues<DutyCategory>().ToHashSet();
     public HashSet<DutyClearanceStatus> ClearanceStatuses { get; } = Enum.GetValues<DutyClearanceStatus>().ToHashSet();
+    // Retained for source/wire compatibility. Duty Manager no longer gives this legacy field UI meaning.
     public HashSet<DutySupportLevel> SupportLevels { get; } = Enum.GetValues<DutySupportLevel>().ToHashSet();
+    public uint? ExpansionId { get; set; }
     public bool MainScenarioOnly { get; set; }
     public bool PlannedOnly { get; set; }
     public bool OverridesOnly { get; set; }
     public bool ChangedOnly { get; set; }
     public bool CurrentDutyOnly { get; set; }
     public bool HasNoteOnly { get; set; }
+    public bool DawntrailOnly { get; set; }
+    public bool SelectedOnly { get; set; }
     public DutyRuleCoverageFilter RuleCoverage { get; set; }
+    public DutyWaypointCoverageFilter WaypointCoverage { get; set; }
 
     public void SetAllFamilies(bool enabled)
     {
@@ -47,10 +61,10 @@ public sealed class DutyMaturityFilterState
         SupportLevels.Clear();
         if (!enabled)
             return;
-
         foreach (var value in Enum.GetValues<DutySupportLevel>())
             SupportLevels.Add(value);
     }
+
 }
 
 public static class DutyMaturityFilterHelper
@@ -60,6 +74,19 @@ public static class DutyMaturityFilterHelper
         DutyMaturityFilterState filters,
         DutyContextSnapshot currentContext,
         int explicitRuleCount)
+        => Matches(
+            row,
+            filters,
+            currentContext,
+            new DutyRuleCoverage(explicitRuleCount, explicitRuleCount, 0, 0),
+            isSelected: false);
+
+    internal static bool Matches(
+        IDutyMaturityCatalogRow row,
+        DutyMaturityFilterState filters,
+        DutyContextSnapshot currentContext,
+        DutyRuleCoverage coverage,
+        bool isSelected)
     {
         if (!filters.Families.Contains(row.Category))
             return false;
@@ -67,7 +94,13 @@ public static class DutyMaturityFilterHelper
         if (!filters.ClearanceStatuses.Contains(row.ClearanceStatus))
             return false;
 
-        if (!filters.SupportLevels.Contains(row.SupportLevel))
+        if (filters.ExpansionId.HasValue && filters.ExpansionId.Value != row.ExVersion)
+            return false;
+
+        if (filters.DawntrailOnly && row.ExVersion != 5)
+            return false;
+
+        if (filters.SelectedOnly && !isSelected)
             return false;
 
         if (filters.MainScenarioOnly && !row.IsMainScenario)
@@ -88,7 +121,10 @@ public static class DutyMaturityFilterHelper
         if (filters.HasNoteOnly && !DutyMaturityCatalog.HasCustomSupportNote(row.SupportNote))
             return false;
 
-        if (!RuleCoverageMatches(filters.RuleCoverage, explicitRuleCount))
+        if (!RuleCoverageMatches(filters.RuleCoverage, coverage.AssociatedRuleCount))
+            return false;
+
+        if (!WaypointCoverageMatches(filters.WaypointCoverage, coverage.EnabledValidWaypointCount))
             return false;
 
         var search = filters.Search.Trim();
@@ -104,6 +140,14 @@ public static class DutyMaturityFilterHelper
             _ => true,
         };
 
+    private static bool WaypointCoverageMatches(DutyWaypointCoverageFilter filter, int waypointCount)
+        => filter switch
+        {
+            DutyWaypointCoverageFilter.NoWaypoints => waypointCount == 0,
+            DutyWaypointCoverageFilter.HasWaypoints => waypointCount > 0,
+            _ => true,
+        };
+
     private static bool SearchMatches(IDutyMaturityCatalogRow row, string search)
     {
         var family = DutyCategoryDisplayCatalog.Get(row.Category).FilterLabel;
@@ -114,9 +158,7 @@ public static class DutyMaturityFilterHelper
                || row.ContentTypeName.Contains(search, StringComparison.OrdinalIgnoreCase)
                || row.SupportNote.Contains(search, StringComparison.OrdinalIgnoreCase)
                || DutyMaturityDisplayCatalog.GetClearanceLabel(row.ClearanceStatus).Contains(search, StringComparison.OrdinalIgnoreCase)
-               || DutyMaturityDisplayCatalog.GetSupportLevelLabel(row.SupportLevel).Contains(search, StringComparison.OrdinalIgnoreCase)
                || row.ClearanceStatus.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
-               || row.SupportLevel.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
                || (row.IsMainScenario && "MSQ".Contains(search, StringComparison.OrdinalIgnoreCase))
                || row.TerritoryTypeId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
                || row.ContentFinderConditionId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase);

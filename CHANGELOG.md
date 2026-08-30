@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-30
+
+- Rebuilt Main > Duties as a compact current-duty coverage surface and replaced the former maturity/readiness editor with Duty Manager: numeric M0-M3 display, expansion/family/rule/waypoint/Dawntrail/current/changed/selected/MSQ/planned/override/note filters, clipped rows, selected-duty editing, and diagnostic rule deep-links. Coverage is now one O(duties + rules) snapshot per draw and reports associated, enabled, valid-waypoint, redundant-scope, global, and unresolved counts while runtime scope matching remains conjunctive.
+- Expanded Object Rules with clipped rows, final-column bulk selection, exact affected-scope deletion confirmation, one-step deletion/partial-import undo, complete-duty/delta/current-filter import modes, protected globals, matching partial exports, and dirty-draft-safe external refresh conflicts. `MATURE-PROPOSALS` is an editable non-default preset with a last-write-based 24-hour refresh clock, confirmed Refresh Now, and a clean saved JSON contribution helper.
+- Remote JSON completion now reports the exact changed files so ADS reloads only affected data. The shared proposal candidate remains outside `DEFAULT`, and no IPC or JSON schema version changed.
+
 ## 2026-08-29
 
 - Expanded Shop Lists with stable preset/row IDs, targeted refill and spend-until-currency/capacity modes, exact per-preset currency triggers, per-row repeatable and inventory/retainer ownership rules, vendor-bundle refill ceilings, Base64 sharing, deterministic vendor/NPC/territory/XYZ catalog search, purchase-free Test previews, and correlation-bound JSON IPC. Non-repeatable completion is reported per operation for Dad associations; ADS never deletes Dad plans or schedules. Existing `/ads shop` and `ADS.StartShopPurchase` remain exact-additional single purchases.

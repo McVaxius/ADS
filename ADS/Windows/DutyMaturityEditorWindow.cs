@@ -8,25 +8,19 @@ namespace ADS.Windows;
 
 public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 {
-    private static readonly string[] RuleCoverageLabels =
-    [
-        "All",
-        "No explicit rules",
-        "Has rules",
-        "Dense rules",
-    ];
+    private static readonly string[] RuleCoverageLabels = ["All rules", "No rules", "Has rules", "Dense rules"];
+    private static readonly string[] WaypointCoverageLabels = ["All waypoints", "No waypoints", "Has waypoints"];
 
     private readonly Plugin plugin;
     private readonly DutyMaturityFilterState filters = new();
     private readonly List<DutyMaturityDraftRow> draftRows = [];
     private readonly HashSet<string> selectedKeys = new(StringComparer.Ordinal);
     private string? focusedKey;
-    private int bulkClearanceIndex;
-    private int bulkSupportIndex;
-    private string editorStatus = "Duty maturity editor ready.";
+    private int bulkMaturityIndex;
+    private string editorStatus = "Duty Manager ready.";
 
     public DutyMaturityEditorWindow(Plugin plugin)
-        : base("ADS Duty Maturity Editor###ADSDutyMaturityEditor")
+        : base("ADS Duty Manager###ADSDutyMaturityEditor")
     {
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
@@ -41,31 +35,39 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     {
     }
 
+    public void OpenMissingDutyWork()
+    {
+        filters.RuleCoverage = DutyRuleCoverageFilter.NoExplicitRules;
+        filters.SelectedOnly = false;
+        IsOpen = true;
+    }
+
     public override void Draw()
     {
         FinalizePendingWindowPlacement();
         EnsureDraftRowsLoaded();
 
-        var ruleCounts = DutyRuleCoverageHelper.BuildExplicitRuleCountsByDuty(
-            plugin.DutyCatalogService.Entries,
-            plugin.ObjectPriorityRuleService);
         var currentContext = plugin.DutyContextService.Current;
-
-        DrawToolbar();
-        ImGui.Spacing();
-
+        var coverage = DutyRuleCoverageHelper.BuildSnapshot(
+            plugin.DutyCatalogService.Entries,
+            plugin.ObjectPriorityRuleService.Current.Rules);
+        var hasDraftChanges = draftRows.Any(row => row.IsChanged);
         var visibleRows = draftRows
             .Where(row => DutyMaturityFilterHelper.Matches(
                 row,
                 filters,
                 currentContext,
-                ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(row))))
+                coverage.Get(row),
+                selectedKeys.Contains(DutyMaturityCatalog.BuildDutyCatalogKey(row))))
             .ToList();
-        PruneStaleSelection();
-        DrawBulkActions(visibleRows);
 
-        ImGui.Spacing();
-        ImGui.TextDisabled($"Rows shown: {visibleRows.Count} / {draftRows.Count} | Selected: {selectedKeys.Count} | {(HasDraftChanges() ? "unsaved changes" : "saved")}");
+        DrawToolbar(hasDraftChanges);
+        DrawFilters();
+        DrawBulkActions(visibleRows);
+        ImGui.TextDisabled(
+            $"Rows: {visibleRows.Count}/{draftRows.Count} | Selected: {selectedKeys.Count} | " +
+            $"Global rules: {coverage.GlobalRuleCount} | Unresolved rules: {coverage.UnresolvedRuleCount} | " +
+            (hasDraftChanges ? "unsaved changes" : "saved"));
         ImGui.TextWrapped(editorStatus);
 
         if (visibleRows.Count == 0)
@@ -75,33 +77,31 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         }
 
         var focusedRow = ResolveFocusedRow(visibleRows, currentContext);
-        var availableWidth = ImGui.GetContentRegionAvail().X;
-        if (availableWidth >= 1180f)
+        var focusedCoverage = coverage.Get(focusedRow);
+        if (ImGui.GetContentRegionAvail().X >= 1180f)
         {
-            if (!ImGui.BeginTable("ADSDutyMaturityEditorLayout", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+            if (!ImGui.BeginTable("ADSDutyManagerLayout", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
                 return;
-
-            ImGui.TableSetupColumn("Duties", ImGuiTableColumnFlags.WidthStretch, 2.1f);
+            ImGui.TableSetupColumn("Duties", ImGuiTableColumnFlags.WidthStretch, 2.2f);
             ImGui.TableSetupColumn("Details", ImGuiTableColumnFlags.WidthStretch, 1f);
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            DrawDutyTable(visibleRows, ruleCounts, 520f);
+            DrawDutyTable(visibleRows, coverage, 520f);
             ImGui.TableSetColumnIndex(1);
-            DrawDetails(focusedRow, ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(focusedRow)));
+            DrawDetails(focusedRow, focusedCoverage);
             ImGui.EndTable();
             return;
         }
 
-        DrawDutyTable(visibleRows, ruleCounts, 320f);
+        DrawDutyTable(visibleRows, coverage, 320f);
         ImGui.Spacing();
-        DrawDetails(focusedRow, ruleCounts.GetValueOrDefault(DutyMaturityCatalog.BuildDutyCatalogKey(focusedRow)));
+        DrawDetails(focusedRow, focusedCoverage);
     }
 
     private void EnsureDraftRowsLoaded()
     {
         if (draftRows.Count == plugin.DutyCatalogService.Entries.Count && draftRows.Count != 0)
             return;
-
         LoadDraftRows(clearSelection: true);
     }
 
@@ -111,25 +111,25 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         draftRows.AddRange(plugin.DutyCatalogService.Entries.Select(DutyMaturityDraftRow.FromEntry));
         if (clearSelection)
             selectedKeys.Clear();
-
         focusedKey = null;
     }
 
-    private void DrawToolbar()
+    private void DrawToolbar(bool hasDraftChanges)
     {
-        ImGui.SetNextItemWidth(360f);
+        ImGui.TextUnformatted("Duty Manager");
+        if (!ImGui.BeginTable("ADSDutyManagerToolbar", 2, ImGuiTableFlags.SizingStretchProp))
+            return;
+        ImGui.TableSetupColumn("Search", ImGuiTableColumnFlags.WidthStretch, 1f);
+        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 205f);
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        ImGui.SetNextItemWidth(-1f);
         var search = filters.Search;
-        if (ImGui.InputTextWithHint(
-            "##ADSDutyMaturitySearch",
-            "search duty, family, note, status, territory ID, or CFC ID",
-            ref search,
-            160))
-        {
+        if (ImGui.InputTextWithHint("##ADSDutyManagerSearch", "search duty, family, expansion, note, territory, or CFC", ref search, 160))
             filters.Search = search;
-        }
 
-        ImGui.SameLine();
-        using (new ImGuiDisabledBlock(!HasDraftChanges()))
+        ImGui.TableSetColumnIndex(1);
+        using (new ImGuiDisabledBlock(!hasDraftChanges))
         {
             if (ImGui.Button("Save"))
             {
@@ -140,11 +140,9 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
                     selectedKeys.Clear();
                     focusedKey = null;
                 }
-
                 editorStatus = plugin.DutyCatalogService.LastMaturityLoadStatus;
             }
         }
-
         ImGui.SameLine();
         if (ImGui.Button("Reload"))
         {
@@ -152,446 +150,300 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             LoadDraftRows(clearSelection: true);
             editorStatus = plugin.DutyCatalogService.LastMaturityLoadStatus;
         }
-
         ImGui.SameLine();
         if (ImGui.Button("Open JSON"))
             plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath);
+        ImGui.EndTable();
+    }
+
+    private void DrawFilters()
+    {
+        if (!ImGui.CollapsingHeader("Filters", ImGuiTreeNodeFlags.DefaultOpen))
+            return;
 
         DrawFamilyFilters();
-        DrawEnumFilters();
-        DrawToggleFilters();
+        ImGui.TextUnformatted("Maturity");
+        if (ImGui.SmallButton("All##DutyMaturityAll"))
+            filters.SetAllClearanceStatuses(true);
+        ImGui.SameLine();
+        if (ImGui.SmallButton("None##DutyMaturityNone"))
+            filters.SetAllClearanceStatuses(false);
+        foreach (var status in DutyMaturityDisplayCatalog.ClearanceValues)
+        {
+            ImGui.SameLine();
+            var enabled = filters.ClearanceStatuses.Contains(status);
+            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetClearanceColor(status));
+            if (ImGui.Checkbox($"{DutyMaturityDisplayCatalog.GetClearanceLabel(status)}##DutyMaturity{status}", ref enabled))
+                SetMembership(filters.ClearanceStatuses, status, enabled);
+            ImGui.PopStyleColor();
+        }
+
+        var expansions = draftRows
+            .Select(row => (row.ExVersion, row.ExpansionName))
+            .Distinct()
+            .OrderBy(value => value.ExVersion)
+            .ToList();
+        var expansionIndex = filters.ExpansionId.HasValue
+            ? expansions.FindIndex(value => value.ExVersion == filters.ExpansionId.Value) + 1
+            : 0;
+        var expansionLabels = new[] { "All expansions" }.Concat(expansions.Select(value => value.ExpansionName)).ToArray();
+        ImGui.SetNextItemWidth(170f);
+        if (ImGui.Combo("Expansion", ref expansionIndex, expansionLabels, expansionLabels.Length))
+            filters.ExpansionId = expansionIndex == 0 ? null : expansions[expansionIndex - 1].ExVersion;
+
+        ImGui.SameLine();
+        var ruleCoverage = (int)filters.RuleCoverage;
+        ImGui.SetNextItemWidth(145f);
+        if (ImGui.Combo("Rules", ref ruleCoverage, RuleCoverageLabels, RuleCoverageLabels.Length))
+            filters.RuleCoverage = (DutyRuleCoverageFilter)ruleCoverage;
+        ImGui.SameLine();
+        var waypointCoverage = (int)filters.WaypointCoverage;
+        ImGui.SetNextItemWidth(155f);
+        if (ImGui.Combo("Waypoints", ref waypointCoverage, WaypointCoverageLabels, WaypointCoverageLabels.Length))
+            filters.WaypointCoverage = (DutyWaypointCoverageFilter)waypointCoverage;
+
+        DrawFilterToggle("Dawntrail", filters.DawntrailOnly, value => filters.DawntrailOnly = value);
+        DrawFilterToggle("Current duty", filters.CurrentDutyOnly, value => filters.CurrentDutyOnly = value);
+        DrawFilterToggle("Changed", filters.ChangedOnly, value => filters.ChangedOnly = value);
+        DrawFilterToggle("Selected", filters.SelectedOnly, value => filters.SelectedOnly = value);
+        DrawFilterToggle("MSQ", filters.MainScenarioOnly, value => filters.MainScenarioOnly = value);
+        DrawFilterToggle("Planned", filters.PlannedOnly, value => filters.PlannedOnly = value);
+        DrawFilterToggle("Override", filters.OverridesOnly, value => filters.OverridesOnly = value);
+        DrawFilterToggle("Has note", filters.HasNoteOnly, value => filters.HasNoteOnly = value);
     }
 
     private void DrawFamilyFilters()
     {
         ImGui.TextUnformatted("Families");
         if (ImGui.SmallButton("All##DutyFamilyAll"))
-            filters.SetAllFamilies(enabled: true);
-
+            filters.SetAllFamilies(true);
         ImGui.SameLine();
         if (ImGui.SmallButton("None##DutyFamilyNone"))
-            filters.SetAllFamilies(enabled: false);
-
-        var availableWidth = ImGui.GetContentRegionAvail().X;
-        var columnCount = availableWidth >= 1120f ? 4 : availableWidth >= 640f ? 2 : 1;
-        if (!ImGui.BeginTable("ADSDutyMaturityFamilyFilters", columnCount, ImGuiTableFlags.SizingStretchSame))
-            return;
-
-        for (var index = 0; index < DutyCategoryDisplayCatalog.Entries.Count; index++)
+            filters.SetAllFamilies(false);
+        foreach (var entry in DutyCategoryDisplayCatalog.Entries)
         {
-            if (index % columnCount == 0)
-                ImGui.TableNextRow();
-
-            ImGui.TableSetColumnIndex(index % columnCount);
-            var entry = DutyCategoryDisplayCatalog.Entries[index];
+            ImGui.SameLine();
             var enabled = filters.Families.Contains(entry.Category);
             ImGui.PushStyleColor(ImGuiCol.Text, entry.Accent);
-            if (ImGui.Checkbox($"{entry.FilterLabel}##DutyMaturityFamily{entry.Category}", ref enabled))
+            if (ImGui.Checkbox($"{entry.FilterLabel}##DutyFamily{entry.Category}", ref enabled))
                 SetMembership(filters.Families, entry.Category, enabled);
             ImGui.PopStyleColor();
         }
-
-        ImGui.EndTable();
     }
 
-    private void DrawEnumFilters()
+    private static void DrawFilterToggle(string label, bool current, Action<bool> set)
     {
-        if (!ImGui.BeginTable("ADSDutyMaturityEnumFilters", 2, ImGuiTableFlags.SizingStretchSame))
-            return;
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        DrawClearanceFilters();
-        ImGui.TableSetColumnIndex(1);
-        DrawSupportFilters();
-        ImGui.EndTable();
-    }
-
-    private void DrawClearanceFilters()
-    {
-        ImGui.TextUnformatted("Clearance");
-        if (ImGui.SmallButton("All##DutyClearanceAll"))
-            filters.SetAllClearanceStatuses(enabled: true);
         ImGui.SameLine();
-        if (ImGui.SmallButton("None##DutyClearanceNone"))
-            filters.SetAllClearanceStatuses(enabled: false);
-
-        foreach (var status in DutyMaturityDisplayCatalog.ClearanceValues)
-        {
-            var enabled = filters.ClearanceStatuses.Contains(status);
-            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetClearanceColor(status));
-            if (ImGui.Checkbox($"{DutyMaturityDisplayCatalog.GetClearanceLabel(status)}##DutyClearanceFilter{status}", ref enabled))
-                SetMembership(filters.ClearanceStatuses, status, enabled);
-            ImGui.PopStyleColor();
-        }
-    }
-
-    private void DrawSupportFilters()
-    {
-        ImGui.TextUnformatted("Support");
-        if (ImGui.SmallButton("All##DutySupportAll"))
-            filters.SetAllSupportLevels(enabled: true);
-        ImGui.SameLine();
-        if (ImGui.SmallButton("None##DutySupportNone"))
-            filters.SetAllSupportLevels(enabled: false);
-
-        foreach (var support in DutyMaturityDisplayCatalog.SupportValues)
-        {
-            var enabled = filters.SupportLevels.Contains(support);
-            ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetSupportLevelColor(support));
-            if (ImGui.Checkbox($"{DutyMaturityDisplayCatalog.GetSupportLevelLabel(support)}##DutySupportFilter{support}", ref enabled))
-                SetMembership(filters.SupportLevels, support, enabled);
-            ImGui.PopStyleColor();
-        }
-    }
-
-    private void DrawToggleFilters()
-    {
-        var mainScenarioOnly = filters.MainScenarioOnly;
-        if (ImGui.Checkbox("MSQ only", ref mainScenarioOnly))
-            filters.MainScenarioOnly = mainScenarioOnly;
-        ImGui.SameLine();
-        var plannedOnly = filters.PlannedOnly;
-        if (ImGui.Checkbox("Planned only", ref plannedOnly))
-            filters.PlannedOnly = plannedOnly;
-        ImGui.SameLine();
-        var overridesOnly = filters.OverridesOnly;
-        if (ImGui.Checkbox("Overrides only", ref overridesOnly))
-            filters.OverridesOnly = overridesOnly;
-        ImGui.SameLine();
-        var changedOnly = filters.ChangedOnly;
-        if (ImGui.Checkbox("Changed only", ref changedOnly))
-            filters.ChangedOnly = changedOnly;
-        ImGui.SameLine();
-        var currentDutyOnly = filters.CurrentDutyOnly;
-        if (ImGui.Checkbox("Current duty", ref currentDutyOnly))
-            filters.CurrentDutyOnly = currentDutyOnly;
-        ImGui.SameLine();
-        var hasNoteOnly = filters.HasNoteOnly;
-        if (ImGui.Checkbox("Has note", ref hasNoteOnly))
-            filters.HasNoteOnly = hasNoteOnly;
-
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(170f);
-        var coverageIndex = (int)filters.RuleCoverage;
-        if (ImGui.Combo("Rule coverage", ref coverageIndex, RuleCoverageLabels, RuleCoverageLabels.Length))
-            filters.RuleCoverage = (DutyRuleCoverageFilter)Math.Clamp(coverageIndex, 0, RuleCoverageLabels.Length - 1);
+        var value = current;
+        if (ImGui.Checkbox(label, ref value))
+            set(value);
     }
 
     private void DrawBulkActions(IReadOnlyList<DutyMaturityDraftRow> visibleRows)
     {
-        if (ImGui.Button("Select Visible"))
+        if (!ImGui.CollapsingHeader("Bulk changes"))
+            return;
+        if (ImGui.SmallButton("Select Visible"))
         {
             foreach (var row in visibleRows)
                 selectedKeys.Add(DutyMaturityCatalog.BuildDutyCatalogKey(row));
         }
-
         ImGui.SameLine();
-        if (ImGui.Button("Clear Selection"))
+        if (ImGui.SmallButton("Clear Selection"))
             selectedKeys.Clear();
-
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(80f);
+        ImGui.Combo("##BulkMaturity", ref bulkMaturityIndex, DutyMaturityDisplayCatalog.ClearanceLabels, DutyMaturityDisplayCatalog.ClearanceLabels.Length);
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(selectedKeys.Count == 0))
         {
-            ImGui.SetNextItemWidth(160f);
-            ImGui.Combo("##BulkClearance", ref bulkClearanceIndex, DutyMaturityDisplayCatalog.ClearanceLabels, DutyMaturityDisplayCatalog.ClearanceLabels.Length);
+            if (ImGui.SmallButton("Set Maturity"))
+                ApplyToSelected(row => row.ClearanceStatus = DutyMaturityDisplayCatalog.ClearanceValues[bulkMaturityIndex]);
             ImGui.SameLine();
-            if (ImGui.Button("Set Clearance"))
-                ApplyToSelected(row => row.ClearanceStatus = DutyMaturityDisplayCatalog.ClearanceValues[Math.Clamp(bulkClearanceIndex, 0, DutyMaturityDisplayCatalog.ClearanceValues.Length - 1)]);
-
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(150f);
-            ImGui.Combo("##BulkSupport", ref bulkSupportIndex, DutyMaturityDisplayCatalog.SupportLabels, DutyMaturityDisplayCatalog.SupportLabels.Length);
-            ImGui.SameLine();
-            if (ImGui.Button("Set Support"))
-                ApplyToSelected(row => row.SupportLevel = DutyMaturityDisplayCatalog.SupportValues[Math.Clamp(bulkSupportIndex, 0, DutyMaturityDisplayCatalog.SupportValues.Length - 1)]);
-
-            ImGui.SameLine();
-            if (ImGui.Button("Planned On"))
+            if (ImGui.SmallButton("Planned On"))
                 ApplyToSelected(row => row.IsPlannedTest = true);
             ImGui.SameLine();
-            if (ImGui.Button("Planned Off"))
+            if (ImGui.SmallButton("Planned Off"))
                 ApplyToSelected(row => row.IsPlannedTest = false);
             ImGui.SameLine();
-            if (ImGui.Button("MSQ On"))
+            if (ImGui.SmallButton("MSQ On"))
                 ApplyToSelected(row => row.IsMainScenario = true);
             ImGui.SameLine();
-            if (ImGui.Button("MSQ Off"))
+            if (ImGui.SmallButton("MSQ Off"))
                 ApplyToSelected(row => row.IsMainScenario = false);
             ImGui.SameLine();
-            if (ImGui.Button("Reset Selected"))
+            if (ImGui.SmallButton("Reset Selected"))
                 ApplyToSelected(row => row.ResetToDefaults());
         }
     }
 
     private DutyMaturityDraftRow ResolveFocusedRow(IReadOnlyList<DutyMaturityDraftRow> visibleRows, DutyContextSnapshot currentContext)
     {
-        var focusedRow = visibleRows.FirstOrDefault(row => DutyMaturityCatalog.BuildDutyCatalogKey(row) == focusedKey);
-        if (focusedRow is not null)
-            return focusedRow;
-
-        focusedRow = visibleRows.FirstOrDefault(row => DutyMaturityCatalog.DutyMatchesCurrentContext(row, currentContext))
-                     ?? visibleRows[0];
-        focusedKey = DutyMaturityCatalog.BuildDutyCatalogKey(focusedRow);
-        return focusedRow;
+        var row = visibleRows.FirstOrDefault(value => DutyMaturityCatalog.BuildDutyCatalogKey(value) == focusedKey)
+                  ?? visibleRows.FirstOrDefault(value => DutyMaturityCatalog.DutyMatchesCurrentContext(value, currentContext))
+                  ?? visibleRows[0];
+        focusedKey = DutyMaturityCatalog.BuildDutyCatalogKey(row);
+        return row;
     }
 
-    private void DrawDutyTable(
-        IReadOnlyList<DutyMaturityDraftRow> rows,
-        IReadOnlyDictionary<string, int> ruleCounts,
-        float height)
+    private void DrawDutyTable(IReadOnlyList<DutyMaturityDraftRow> rows, DutyRuleCoverageSnapshot snapshot, float height)
     {
         if (!ImGui.BeginTable(
-                "ADSDutyMaturityRows",
-                10,
+                "ADSDutyManagerRows",
+                9,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
                 new Vector2(-1f, height)))
-        {
             return;
-        }
-
         ImGui.TableSetupColumn("Sel", ImGuiTableColumnFlags.WidthFixed, 34f);
         ImGui.TableSetupColumn("Duty");
-        ImGui.TableSetupColumn("Family", ImGuiTableColumnFlags.WidthFixed, 92f);
-        ImGui.TableSetupColumn("Level / Expansion", ImGuiTableColumnFlags.WidthFixed, 116f);
-        ImGui.TableSetupColumn("Clearance", ImGuiTableColumnFlags.WidthFixed, 174f);
-        ImGui.TableSetupColumn("Support", ImGuiTableColumnFlags.WidthFixed, 146f);
-        ImGui.TableSetupColumn("MSQ", ImGuiTableColumnFlags.WidthFixed, 48f);
-        ImGui.TableSetupColumn("Planned", ImGuiTableColumnFlags.WidthFixed, 66f);
-        ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 52f);
-        ImGui.TableSetupColumn("Note", ImGuiTableColumnFlags.WidthFixed, 170f);
+        ImGui.TableSetupColumn("Family", ImGuiTableColumnFlags.WidthFixed, 88f);
+        ImGui.TableSetupColumn("Level / Expansion", ImGuiTableColumnFlags.WidthFixed, 130f);
+        ImGui.TableSetupColumn("Maturity", ImGuiTableColumnFlags.WidthFixed, 62f);
+        ImGui.TableSetupColumn("Enabled / Total", ImGuiTableColumnFlags.WidthFixed, 96f);
+        ImGui.TableSetupColumn("Waypoints", ImGuiTableColumnFlags.WidthFixed, 76f);
+        ImGui.TableSetupColumn("Scope", ImGuiTableColumnFlags.WidthFixed, 58f);
+        ImGui.TableSetupColumn("Note", ImGuiTableColumnFlags.WidthFixed, 54f);
+        ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
-
-        foreach (var row in rows)
+        var clipper = new ImGuiListClipper();
+        clipper.Begin(rows.Count);
+        while (clipper.Step())
         {
-            var key = DutyMaturityCatalog.BuildDutyCatalogKey(row);
-            var ruleCount = ruleCounts.GetValueOrDefault(key);
-            ImGui.PushID(key);
-            ImGui.TableNextRow();
-
-            ImGui.TableSetColumnIndex(0);
-            var selected = selectedKeys.Contains(key);
-            if (ImGui.Checkbox("##Selected", ref selected))
-                SetMembership(selectedKeys, key, selected);
-
-            ImGui.TableSetColumnIndex(1);
-            var highlight = row.IsChanged
-                ? new Vector4(1.0f, 0.86f, 0.24f, 1f)
-                : DutyMaturityDisplayCatalog.GetClearanceColor(row.ClearanceStatus);
-            ImGui.PushStyleColor(ImGuiCol.Text, highlight);
-            if (ImGui.Selectable($"{row.EnglishName}##Focus", key == focusedKey))
-                focusedKey = key;
-            ImGui.PopStyleColor();
-
-            ImGui.TableSetColumnIndex(2);
-            var family = DutyCategoryDisplayCatalog.Get(row.Category);
-            ImGui.PushStyleColor(ImGuiCol.Text, family.Accent);
-            ImGui.TextUnformatted(family.FilterLabel);
-            ImGui.PopStyleColor();
-
-            ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted($"Lv {row.LevelRequired} / {row.ExpansionName}");
-
-            ImGui.TableSetColumnIndex(4);
-            DrawClearanceCombo(row, "##Clearance");
-
-            ImGui.TableSetColumnIndex(5);
-            DrawSupportCombo(row, "##Support");
-
-            ImGui.TableSetColumnIndex(6);
-            var msq = row.IsMainScenario;
-            if (ImGui.Checkbox("##MSQ", ref msq))
-            {
-                row.IsMainScenario = msq;
-                focusedKey = key;
-                MarkDirty(row);
-            }
-
-            ImGui.TableSetColumnIndex(7);
-            var planned = row.IsPlannedTest;
-            if (ImGui.Checkbox("##Planned", ref planned))
-            {
-                row.IsPlannedTest = planned;
-                focusedKey = key;
-                MarkDirty(row);
-            }
-
-            ImGui.TableSetColumnIndex(8);
-            DrawRuleCount(row, ruleCount);
-
-            ImGui.TableSetColumnIndex(9);
-            DrawNoteSnippet(row);
-            ImGui.PopID();
+            for (var index = clipper.DisplayStart; index < clipper.DisplayEnd; index++)
+                DrawDutyTableRow(rows[index], snapshot.Get(rows[index]));
         }
-
+        clipper.End();
         ImGui.EndTable();
     }
 
-    private void DrawDetails(DutyMaturityDraftRow row, int ruleCount)
+    private void DrawDutyTableRow(DutyMaturityDraftRow row, DutyRuleCoverage coverage)
     {
-        var cfcLabel = row.ContentFinderConditionId == 0
-            ? "-"
-            : row.ContentFinderConditionId.ToString();
+        var key = DutyMaturityCatalog.BuildDutyCatalogKey(row);
+        ImGui.PushID(key);
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        var selected = selectedKeys.Contains(key);
+        if (ImGui.Checkbox("##Selected", ref selected))
+            SetMembership(selectedKeys, key, selected);
+        ImGui.TableSetColumnIndex(1);
+        ImGui.PushStyleColor(ImGuiCol.Text, row.IsChanged ? new Vector4(1f, .86f, .24f, 1f) : DutyMaturityDisplayCatalog.GetClearanceColor(row.ClearanceStatus));
+        if (ImGui.Selectable($"{row.EnglishName}##Focus", focusedKey == key))
+            focusedKey = key;
+        ImGui.PopStyleColor();
+        ImGui.TableSetColumnIndex(2);
+        var family = DutyCategoryDisplayCatalog.Get(row.Category);
+        ImGui.TextColored(family.Accent, family.FilterLabel);
+        ImGui.TableSetColumnIndex(3);
+        ImGui.TextUnformatted($"Lv {row.LevelRequired} / {row.ExpansionName}");
+        ImGui.TableSetColumnIndex(4);
+        ImGui.TextColored(DutyMaturityDisplayCatalog.GetClearanceColor(row.ClearanceStatus), DutyMaturityDisplayCatalog.GetClearanceLabel(row.ClearanceStatus));
+        ImGui.TableSetColumnIndex(5);
+        ImGui.TextUnformatted($"{coverage.EnabledRuleCount} / {coverage.AssociatedRuleCount}");
+        ImGui.TableSetColumnIndex(6);
+        ImGui.TextUnformatted(coverage.EnabledValidWaypointCount.ToString());
+        ImGui.TableSetColumnIndex(7);
+        if (coverage.RedundantScopeMismatchCount > 0)
+            ImGui.TextColored(new Vector4(1f, .55f, .3f, 1f), $"! {coverage.RedundantScopeMismatchCount}");
+        else
+            ImGui.TextDisabled("-");
+        ImGui.TableSetColumnIndex(8);
+        ImGui.TextUnformatted(DutyMaturityCatalog.HasCustomSupportNote(row.SupportNote) ? "YES" : "-");
+        ImGui.PopID();
+    }
+
+    private void DrawDetails(DutyMaturityDraftRow row, DutyRuleCoverage coverage)
+    {
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
-        if (ImGui.BeginChild("ADSDutyMaturityDetail", new Vector2(-1f, -1f), true))
+        if (ImGui.BeginChild("ADSDutyManagerDetail", new Vector2(-1f, -1f), true))
         {
             ImGui.TextColored(DutyMaturityDisplayCatalog.GetClearanceColor(row.ClearanceStatus), row.EnglishName);
-            ImGui.SameLine();
-            ImGui.TextColored(DutyMaturityDisplayCatalog.GetMsqColor(row.IsMainScenario), row.IsMainScenario ? "MSQ" : "non-MSQ");
             ImGui.TextColored(DutyCategoryDisplayCatalog.Get(row.Category).Accent, DutyCategoryDisplayCatalog.Get(row.Category).FilterLabel);
-            ImGui.Spacing();
-
-            if (ImGui.BeginTable("ADSDutyMaturityDetailFacts", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV))
+            if (ImGui.BeginTable("ADSDutyManagerDetailFacts", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV))
             {
                 ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Level", row.LevelRequired.ToString());
-                DrawDutyDetailFact(1, "Expansion", row.ExpansionName);
+                DrawFact(0, "Level / Expansion", $"{row.LevelRequired} / {row.ExpansionName}");
+                DrawFact(1, "CFC / Territory", $"{row.ContentFinderConditionId} / {row.TerritoryTypeId}");
                 ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Party Size", row.PartySize.ToString());
-                DrawDutyDetailFact(1, "Content Type", row.ContentTypeName);
+                DrawFact(0, "Enabled / Total Rules", $"{coverage.EnabledRuleCount} / {coverage.AssociatedRuleCount}");
+                DrawFact(1, "Valid Waypoints", coverage.EnabledValidWaypointCount.ToString());
                 ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Territory ID", row.TerritoryTypeId.ToString());
-                DrawDutyDetailFact(1, "CFC ID", cfcLabel);
-                ImGui.TableNextRow();
-                DrawDutyDetailFact(0, "Explicit Rules", ruleCount.ToString());
-                DrawDutyDetailFact(1, "Unsaved Change", row.IsChanged ? "YES" : "NO");
+                DrawFact(0, "Scope Warnings", coverage.RedundantScopeMismatchCount.ToString());
+                DrawFact(1, "Unsaved Change", row.IsChanged ? "YES" : "NO");
                 ImGui.EndTable();
             }
-
             ImGui.Spacing();
-            DrawClearanceCombo(row, "Clearance");
-            DrawSupportCombo(row, "Support");
-
+            DrawMaturityCombo(row, "Maturity");
             var msq = row.IsMainScenario;
             if (ImGui.Checkbox("MSQ", ref msq))
             {
                 row.IsMainScenario = msq;
                 MarkDirty(row);
             }
-
             ImGui.SameLine();
             var planned = row.IsPlannedTest;
-            if (ImGui.Checkbox("Planned test", ref planned))
+            if (ImGui.Checkbox("Planned", ref planned))
             {
                 row.IsPlannedTest = planned;
                 MarkDirty(row);
             }
-
-            ImGui.Spacing();
-            ImGui.TextUnformatted("Support Note");
+            ImGui.TextUnformatted("Note");
             var note = row.SupportNote;
-            if (ImGui.InputTextMultiline("##ADSSupportNote", ref note, 2048, new Vector2(-1f, 220f)))
+            if (ImGui.InputTextMultiline("##ADSDutyNote", ref note, 2048, new Vector2(-1f, 180f)))
             {
                 row.SupportNote = note;
                 MarkDirty(row);
             }
-
-            if (ImGui.Button("Reset Row"))
+            if (ImGui.Button("Reset"))
             {
                 row.ResetToDefaults();
                 MarkDirty(row);
             }
+            ImGui.SameLine();
+            if (ImGui.Button("Manage Rules"))
+                plugin.OpenRuleEditorUi(ResolveCatalogEntry(row));
+            ImGui.SameLine();
+            if (ImGui.Button("Open Rules"))
+                plugin.OpenRuleEditorUi();
         }
-
         ImGui.EndChild();
         ImGui.PopStyleVar();
     }
 
-    private void DrawClearanceCombo(DutyMaturityDraftRow row, string label)
+    private DutyCatalogEntry ResolveCatalogEntry(DutyMaturityDraftRow row)
+        => plugin.DutyCatalogService.Entries.First(entry =>
+            DutyMaturityCatalog.BuildDutyCatalogKey(entry) == DutyMaturityCatalog.BuildDutyCatalogKey(row));
+
+    private void DrawMaturityCombo(DutyMaturityDraftRow row, string label)
     {
-        var clearanceIndex = Math.Max(0, Array.IndexOf(DutyMaturityDisplayCatalog.ClearanceValues, row.ClearanceStatus));
-        if (ImGui.Combo(label, ref clearanceIndex, DutyMaturityDisplayCatalog.ClearanceLabels, DutyMaturityDisplayCatalog.ClearanceLabels.Length))
-        {
-            row.ClearanceStatus = DutyMaturityDisplayCatalog.ClearanceValues[Math.Clamp(clearanceIndex, 0, DutyMaturityDisplayCatalog.ClearanceValues.Length - 1)];
-            focusedKey = DutyMaturityCatalog.BuildDutyCatalogKey(row);
-            MarkDirty(row);
-        }
+        var index = Math.Max(0, Array.IndexOf(DutyMaturityDisplayCatalog.ClearanceValues, row.ClearanceStatus));
+        if (!ImGui.Combo(label, ref index, DutyMaturityDisplayCatalog.ClearanceLabels, DutyMaturityDisplayCatalog.ClearanceLabels.Length))
+            return;
+        row.ClearanceStatus = DutyMaturityDisplayCatalog.ClearanceValues[index];
+        MarkDirty(row);
     }
 
-    private void DrawSupportCombo(DutyMaturityDraftRow row, string label)
-    {
-        var supportIndex = Math.Max(0, Array.IndexOf(DutyMaturityDisplayCatalog.SupportValues, row.SupportLevel));
-        if (ImGui.Combo(label, ref supportIndex, DutyMaturityDisplayCatalog.SupportLabels, DutyMaturityDisplayCatalog.SupportLabels.Length))
-        {
-            row.SupportLevel = DutyMaturityDisplayCatalog.SupportValues[Math.Clamp(supportIndex, 0, DutyMaturityDisplayCatalog.SupportValues.Length - 1)];
-            focusedKey = DutyMaturityCatalog.BuildDutyCatalogKey(row);
-            MarkDirty(row);
-        }
-    }
-
-    private static void DrawDutyDetailFact(int column, string label, string value)
+    private static void DrawFact(int column, string label, string value)
     {
         ImGui.TableSetColumnIndex(column);
         ImGui.TextDisabled(label.ToUpperInvariant());
         ImGui.TextWrapped(value);
     }
 
-    private static void DrawRuleCount(IDutyMaturityCatalogRow row, int ruleCount)
-    {
-        if (!DutyMaturityCatalog.IsDefaultMaturityEntry(row) && ruleCount == 0)
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.43f, 0.35f, 1f));
-        else if (!DutyMaturityCatalog.IsDefaultMaturityEntry(row) && ruleCount > DutyMaturityCatalog.DenseRuleThreshold)
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.86f, 0.24f, 1f));
-
-        ImGui.TextUnformatted(ruleCount.ToString());
-        if (!DutyMaturityCatalog.IsDefaultMaturityEntry(row)
-            && (ruleCount == 0 || ruleCount > DutyMaturityCatalog.DenseRuleThreshold))
-        {
-            ImGui.PopStyleColor();
-        }
-    }
-
-    private static void DrawNoteSnippet(IDutyMaturityCatalogRow row)
-    {
-        if (!DutyMaturityCatalog.HasCustomSupportNote(row.SupportNote))
-        {
-            ImGui.TextDisabled("-");
-            return;
-        }
-
-        ImGui.TextUnformatted(BuildNoteSnippet(row.SupportNote));
-    }
-
     private void ApplyToSelected(Action<DutyMaturityDraftRow> action)
     {
         var count = 0;
-        foreach (var row in draftRows)
+        foreach (var row in draftRows.Where(row => selectedKeys.Contains(DutyMaturityCatalog.BuildDutyCatalogKey(row))))
         {
-            if (!selectedKeys.Contains(DutyMaturityCatalog.BuildDutyCatalogKey(row)))
-                continue;
-
             action(row);
             count++;
         }
-
-        editorStatus = count == 0
-            ? "No selected duty rows to update."
-            : $"Updated {count} selected duty row(s). Save to write duty-maturity.json.";
+        editorStatus = count == 0 ? "No selected duties to update." : $"Updated {count} selected duties. Save to persist them.";
     }
 
     private void MarkDirty(DutyMaturityDraftRow row)
     {
         focusedKey = DutyMaturityCatalog.BuildDutyCatalogKey(row);
         editorStatus = $"{row.EnglishName}: unsaved draft change.";
-    }
-
-    private bool HasDraftChanges()
-        => draftRows.Any(row => row.IsChanged);
-
-    private void PruneStaleSelection()
-    {
-        var validKeys = draftRows
-            .Select(DutyMaturityCatalog.BuildDutyCatalogKey)
-            .ToHashSet(StringComparer.Ordinal);
-        selectedKeys.RemoveWhere(key => !validKeys.Contains(key));
-    }
-
-    private static string BuildNoteSnippet(string note)
-    {
-        var normalized = DutyMaturityCatalog.NormalizeText(note);
-        return normalized.Length <= 32
-            ? normalized
-            : $"{normalized[..29]}...";
     }
 
     private static void SetMembership<T>(ISet<T> values, T value, bool enabled)
@@ -605,14 +457,12 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     private readonly ref struct ImGuiDisabledBlock
     {
         private readonly bool disabled;
-
         public ImGuiDisabledBlock(bool disabled)
         {
             this.disabled = disabled;
             if (disabled)
                 ImGui.BeginDisabled();
         }
-
         public void Dispose()
         {
             if (disabled)

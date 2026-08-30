@@ -139,7 +139,7 @@ public sealed class DutyCatalogService
                 .GroupBy(x => x.Category)
                 .OrderBy(x => x.Key)
                 .Select(x => $"{x.Key}={x.Count()}"));
-        log.Information($"[ADS] Built instanced duty catalog with {entries.Count} rows. Categories: {categorySummary}. Pilot-active rows: {entries.Count(x => x.SupportLevel == DutySupportLevel.ActiveSupported)}.");
+        log.Information($"[ADS] Built instanced duty catalog with {entries.Count} rows. Categories: {categorySummary}.");
     }
 
     public IReadOnlyList<DutyCatalogEntry> Entries

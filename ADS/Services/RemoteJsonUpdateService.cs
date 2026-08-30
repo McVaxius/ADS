@@ -10,6 +10,7 @@ namespace ADS.Services;
 public sealed class RemoteJsonUpdateService : IDisposable
 {
     public const string ObjectRulesFileName = "duty-object-rules.json";
+    public const string MatureProposalRulesFileName = ObjectPriorityRuleService.MatureProposalsMirrorFileName;
     public const string DialogRulesFileName = "dialog-yesno-rules.json";
     public const string DutyMaturityFileName = "duty-maturity.json";
     public const string TreasureRoutesFileName = TreasureDungeonData.FileName;
@@ -20,6 +21,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
     private static readonly RemoteJsonFile[] Files =
     [
         new(ObjectRulesFileName, RemoteJsonKind.ObjectRules),
+        new(MatureProposalRulesFileName, RemoteJsonKind.ObjectRules),
         new(DialogRulesFileName, RemoteJsonKind.DialogRules),
         new(DutyMaturityFileName, RemoteJsonKind.DutyMaturity),
         new(TreasureRoutesFileName, RemoteJsonKind.TreasureRoutes),
@@ -42,6 +44,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
     private readonly IPluginLog log;
     private readonly string configDirectory;
+    private readonly string matureProposalPresetPath;
     private readonly HttpClient httpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(30),
@@ -50,11 +53,16 @@ public sealed class RemoteJsonUpdateService : IDisposable
     private Task? activeUpdateTask;
     private int completedUpdateSerial;
     private int consumedUpdateSerial;
+    private RemoteJsonUpdateCompletion completedUpdate = new([], false);
 
     public RemoteJsonUpdateService(IPluginLog log, string configDirectory)
     {
         this.log = log;
         this.configDirectory = configDirectory;
+        matureProposalPresetPath = Path.Combine(
+            configDirectory,
+            "rule-presets",
+            $"{ObjectPriorityRuleService.MatureProposalsPresetName}.json");
         Directory.CreateDirectory(configDirectory);
         LastUpdateStatus = "Remote config cache not checked yet.";
     }
@@ -73,11 +81,22 @@ public sealed class RemoteJsonUpdateService : IDisposable
     public string GetConfigPath(string fileName)
         => Path.Combine(configDirectory, fileName);
 
+    public string MatureProposalPresetPath
+        => matureProposalPresetPath;
+
+    public RemoteMatureProposalRefreshDecision GetMatureProposalRefreshDecision()
+        => DecideMatureProposalRefresh(
+            File.Exists(matureProposalPresetPath),
+            File.Exists(matureProposalPresetPath) ? File.GetLastWriteTimeUtc(matureProposalPresetPath) : null,
+            DateTime.UtcNow,
+            RefreshInterval,
+            force: false);
+
     public IReadOnlyList<string> GetCacheStatusLines()
         => Files
             .Select(file =>
             {
-                var path = GetConfigPath(file.FileName);
+                var path = GetRefreshClockPath(file.FileName);
                 if (!File.Exists(path))
                     return $"{file.FileName}: missing";
 
@@ -91,7 +110,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
     public bool TryStartMissingUpdate(string reason)
     {
         var missing = Files
-            .Where(file => !File.Exists(GetConfigPath(file.FileName)))
+            .Where(file => !File.Exists(GetRefreshClockPath(file.FileName)))
             .Select(file => file.FileName)
             .ToList();
         if (missing.Count == 0)
@@ -142,17 +161,37 @@ public sealed class RemoteJsonUpdateService : IDisposable
             }
 
             LastUpdateStatus = $"Remote config update queued: {reason}.";
-            activeUpdateTask = Task.Run(() => RunUpdateAsync(reason));
+            activeUpdateTask = Task.Run(() => RunUpdateAsync(reason, matureProposalOnly: false, forceMatureProposal: false));
             return true;
         }
     }
 
-    public bool TryConsumeCompletedUpdate()
+    public bool TryStartMatureProposalRefresh(string reason)
+    {
+        lock (updateGate)
+        {
+            if (activeUpdateTask is { IsCompleted: false })
+            {
+                LastUpdateStatus = $"Remote config update already running; ignored {reason}.";
+                return false;
+            }
+
+            LastUpdateStatus = $"MATURE-PROPOSALS refresh queued: {reason}.";
+            activeUpdateTask = Task.Run(() => RunUpdateAsync(reason, matureProposalOnly: true, forceMatureProposal: true));
+            return true;
+        }
+    }
+
+    public bool TryConsumeCompletedUpdate(out RemoteJsonUpdateCompletion completion)
     {
         if (completedUpdateSerial == consumedUpdateSerial)
+        {
+            completion = new RemoteJsonUpdateCompletion([], false);
             return false;
+        }
 
         consumedUpdateSerial = completedUpdateSerial;
+        completion = completedUpdate;
         return true;
     }
 
@@ -171,12 +210,17 @@ public sealed class RemoteJsonUpdateService : IDisposable
             Files.Select(file =>
             {
                 var path = GetConfigPath(file.FileName);
+                if (file.FileName == MatureProposalRulesFileName)
+                    path = matureProposalPresetPath;
                 return File.Exists(path)
                     ? new RemoteJsonCacheFileState(file.FileName, true, File.GetLastWriteTimeUtc(path))
                     : new RemoteJsonCacheFileState(file.FileName, false, DateTime.MinValue);
             }),
             utcNow,
             RefreshInterval);
+
+    private string GetRefreshClockPath(string fileName)
+        => fileName == MatureProposalRulesFileName ? matureProposalPresetPath : GetConfigPath(fileName);
 
     internal static RemoteJsonRefreshDecision DecideRefresh(
         IEnumerable<RemoteJsonCacheFileState> fileStates,
@@ -225,15 +269,37 @@ public sealed class RemoteJsonUpdateService : IDisposable
             stale);
     }
 
-    private async Task RunUpdateAsync(string reason)
+    internal static RemoteMatureProposalRefreshDecision DecideMatureProposalRefresh(
+        bool presetExists,
+        DateTime? presetWriteUtc,
+        DateTime utcNow,
+        TimeSpan refreshInterval,
+        bool force)
+    {
+        if (force)
+            return new RemoteMatureProposalRefreshDecision(true, null, "forced refresh is ready");
+        if (!presetExists || !presetWriteUtc.HasValue)
+            return new RemoteMatureProposalRefreshDecision(true, null, "editable preset is missing");
+
+        var nextRefreshUtc = presetWriteUtc.Value + refreshInterval;
+        return utcNow >= nextRefreshUtc
+            ? new RemoteMatureProposalRefreshDecision(true, nextRefreshUtc, "24-hour refresh window has elapsed")
+            : new RemoteMatureProposalRefreshDecision(false, nextRefreshUtc, $"protected until {nextRefreshUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
+    }
+
+    private async Task RunUpdateAsync(string reason, bool matureProposalOnly, bool forceMatureProposal)
     {
         var tempPaths = new List<string>();
+        var pendingWrites = new List<(RemoteJsonFile File, string TempPath)>();
         var refreshedFiles = new List<RemoteJsonRefreshResult>();
+        var selectedFiles = matureProposalOnly
+            ? Files.Where(file => file.FileName == MatureProposalRulesFileName).ToList()
+            : Files.Where(file => file.FileName != MatureProposalRulesFileName || ShouldRefreshMatureProposal(force: false)).ToList();
         var cacheBustToken = Guid.NewGuid().ToString("N");
         try
         {
             LastUpdateStatus = $"Remote config update running: {reason}.";
-            foreach (var file in Files)
+            foreach (var file in selectedFiles)
             {
                 var url = BuildRemoteUrl(file.FileName, cacheBustToken);
                 log.Debug($"[ADS] Remote config fetching {file.FileName} from {url}.");
@@ -242,20 +308,29 @@ public sealed class RemoteJsonUpdateService : IDisposable
                 var json = DecodeUtf8Json(bytes);
                 ValidateJson(file.Kind, json, url);
 
+                var targetPath = GetConfigPath(file.FileName);
+                var unchanged = File.Exists(targetPath)
+                                && (await File.ReadAllBytesAsync(targetPath).ConfigureAwait(false)).AsSpan().SequenceEqual(bytes);
+                if (unchanged && file.FileName != MatureProposalRulesFileName)
+                    continue;
+
                 var tempPath = Path.Combine(configDirectory, $"{file.FileName}.{Guid.NewGuid():N}.tmp");
                 await File.WriteAllBytesAsync(tempPath, bytes).ConfigureAwait(false);
                 tempPaths.Add(tempPath);
+                pendingWrites.Add((file, tempPath));
                 refreshedFiles.Add(new RemoteJsonRefreshResult(file.FileName, bytes.Length));
             }
 
-            for (var index = 0; index < Files.Length; index++)
-            {
-                var targetPath = GetConfigPath(Files[index].FileName);
-                AtomicReplace(tempPaths[index], targetPath);
-            }
+            foreach (var pendingWrite in pendingWrites)
+                AtomicReplace(pendingWrite.TempPath, GetConfigPath(pendingWrite.File.FileName));
 
             tempPaths.Clear();
-            LastUpdateStatus = $"Remote config update complete: refreshed {FormatRefreshSummary(refreshedFiles)} from botologyupdates.";
+            LastUpdateStatus = refreshedFiles.Count == 0
+                ? "Remote config update complete: downloaded files matched the local cache; no reload is needed."
+                : $"Remote config update complete: refreshed {FormatRefreshSummary(refreshedFiles)} from botologyupdates.";
+            completedUpdate = new RemoteJsonUpdateCompletion(
+                refreshedFiles.Select(file => file.FileName).ToList(),
+                forceMatureProposal);
             completedUpdateSerial++;
             log.Information($"[ADS] {LastUpdateStatus}");
         }
@@ -279,6 +354,17 @@ public sealed class RemoteJsonUpdateService : IDisposable
                 }
             }
         }
+    }
+
+    private bool ShouldRefreshMatureProposal(bool force)
+    {
+        var decision = DecideMatureProposalRefresh(
+            File.Exists(matureProposalPresetPath),
+            File.Exists(matureProposalPresetPath) ? File.GetLastWriteTimeUtc(matureProposalPresetPath) : null,
+            DateTime.UtcNow,
+            RefreshInterval,
+            force);
+        return decision.ShouldRefresh;
     }
 
     private static string BuildRemoteUrl(string fileName, string cacheBustToken)
@@ -372,3 +458,12 @@ internal sealed record RemoteJsonRefreshDecision(
     string Status,
     IReadOnlyList<string> MissingFiles,
     IReadOnlyList<string> StaleFiles);
+
+public sealed record RemoteJsonUpdateCompletion(
+    IReadOnlyList<string> ChangedFiles,
+    bool ForceMatureProposalApply);
+
+public sealed record RemoteMatureProposalRefreshDecision(
+    bool ShouldRefresh,
+    DateTime? NextRefreshUtc,
+    string Status);

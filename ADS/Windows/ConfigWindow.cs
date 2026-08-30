@@ -219,13 +219,13 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted("Duty Maturity");
+        ImGui.TextUnformatted("Duty Manager");
         ImGui.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
         DrawActionGrid(
             "ADSDutyMaturityActions",
-            ("Open duty maturity JSON", () => plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath)),
-            ("Open maturity editor", plugin.OpenDutyMaturityEditorUi),
-            ("Reload duty maturity JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
+            ("Open duty metadata JSON", () => plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath)),
+            ("Open Duty Manager", plugin.OpenDutyMaturityEditorUi),
+            ("Reload duty metadata JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
         ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
     }
 
@@ -258,7 +258,6 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
     {
         ImGui.TextUnformatted($"{PluginInfo.DisplayName} v{PluginInfo.GetVersion()}");
         ImGui.TextWrapped(PluginInfo.Summary);
-        ImGui.TextWrapped(PluginInfo.PilotDutySummary);
         ImGui.Spacing();
         DrawActionGrid(
             "ADSAboutLinks",

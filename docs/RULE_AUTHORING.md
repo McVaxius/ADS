@@ -1,6 +1,6 @@
 # ADS Rule Authoring
 
-This guide covers live object/dialog rules, parked presets, and duty-maturity testing. Use [Troubleshooting](TROUBLESHOOTING.md) when collecting failure evidence.
+This guide covers live object/dialog rules, parked presets, Duty Manager, and maturity testing. Use [Troubleshooting](TROUBLESHOOTING.md) when collecting failure evidence.
 
 ## Data Surfaces
 
@@ -13,6 +13,8 @@ During scouting, edit and prove live runtime data first. Promote maintainer data
 
 Remote update overwrites live `DEFAULT` cache files. It does not overwrite parked presets.
 
+The remote updater downloads `duty-object-rules-mature-proposals.json` into the editable non-default preset `rule-presets/MATURE-PROPOSALS.json` through a validated clean mirror.
+
 ## Editors And Presets
 
 Object Rules and Dialog Rules use the same preset model:
@@ -21,6 +23,10 @@ Object Rules and Dialog Rules use the same preset model:
 - Other presets are parked full-manifest datasets.
 - Saving/importing into `DEFAULT` changes runtime behavior.
 - Saving a parked preset does not change runtime behavior.
+- `MATURE-PROPOSALS` is editable and copyable, but its reserved name cannot be created or deleted.
+- The editable preset file's last-write time is its refresh clock. General updates skip it while it is younger than 24 hours, and every successful Save restarts that countdown.
+- `Refresh Now` bypasses the countdown after confirmation. If an in-memory draft is dirty, the disk preset refreshes while the draft stays open; Save overwrites that disk refresh and Reload discards the draft.
+- The contribution helper is available only for a clean saved proposal draft. It validates and reveals the exact JSON or copies its path; copy the preset under another name for unrestricted editing.
 
 Common editor controls:
 
@@ -34,6 +40,14 @@ Common editor controls:
 | `Disk+` | Full-manifest disk import/export |
 | `+` / `-` | Create/delete parked preset |
 | `@` | Load current live `DEFAULT` cache into `DEFAULT` draft |
+| `Select Visible` / `Clear Selection` | Manage bulk selection without losing hidden selections |
+| `Delete Selected` | Confirm and remove selected rows with exact affected duty/global counts |
+| `Undo` | Restore the one most recent bulk delete or partial-manifest replacement |
+| `Export Duties` / `Export Delta` / `Export Filter` | Export complete selected duty groups, exact selected rows, or the current filtered row set |
+
+Full-manifest clipboard and disk imports open a preview instead of replacing the draft immediately. Incoming rows are associated by CFC, then unique territory, then normalized English name. **Complete duties** replaces complete selected groups, **Delta rows** appends exactly the chosen rows without deduplication, and **Current filter** replaces the exact row indices frozen when the preview opened. Globals require a separate opt-in, and changing a current-filter preview's filters invalidates it.
+
+The editor watches the selected preset file for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; overwriting the newer file, reloading, or switching away requires an explicit confirmation. Invalid external JSON is reported without emptying the current draft.
 
 New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlighted until saved.
 
@@ -264,7 +278,9 @@ Important fields:
 
 By default, dialog rules can run whenever ADS is enabled, logged in, and not zoning. Disable **Process dialog rules outside owned duties** to require owned/leaving duty execution.
 
-## Duty Maturity Testing
+## Duty Manager And Maturity Testing
+
+Main > Duties is a compact current-duty summary. Open **Duty Manager** for the clipped catalog, numeric maturity filters, rule/waypoint/scope-warning coverage, bulk changes, selected-duty notes, and rule deep-links. The Rules deep-link is session-only and preserves the active preset and dirty draft; it uses diagnostic association so redundant scope mismatches remain visible. Runtime rule matching still requires every populated scope field to agree.
 
 Goal: prove a duty completes cleanly enough to justify maturity promotion and capture enough evidence for durable fixes.
 
@@ -279,12 +295,14 @@ Goal: prove a duty completes cleanly enough to justify maturity promotion and ca
 9. Record party size/sync conditions matching proposed maturity.
 10. Promote maintainer JSON and maturity only after repeatable success.
 
-Maturity states:
+Maturity states retain their existing JSON enum values and display numerically:
 
-- `[Not Cleared]`
-- `[1P Unsync Cleared]`
-- `[1P Duty Support]`
-- `[Synced Party Cleared]`
+- `M0` = `NotCleared`
+- `M1` = `OnePlayerUnsyncCleared`
+- `M2` = `OnePlayerDutySupport`
+- `M3` = `FourPlayerSyncCleared`
+
+The legacy `SupportLevel` field remains load-compatible but has no Duty Manager control, label, column, card, or tooltip.
 
 Catalog maturity describes validation. It does not replace live instanced-duty truth.
 

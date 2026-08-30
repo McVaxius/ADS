@@ -76,13 +76,9 @@ public sealed class DutyMaturityDraftAndFilterTests
         clearance.ClearanceStatuses.Add(DutyClearanceStatus.OnePlayerUnsyncCleared);
         Assert.True(Matches(row, clearance, current, explicitRules: 0));
 
-        var support = new DutyMaturityFilterState();
-        support.SetAllSupportLevels(enabled: false);
-        support.SupportLevels.Add(DutySupportLevel.PassiveOnly);
-        Assert.False(Matches(row, support, current, explicitRules: 0));
-        support.SupportLevels.Clear();
-        support.SupportLevels.Add(DutySupportLevel.ActiveSupported);
-        Assert.True(Matches(row, support, current, explicitRules: 0));
+        var legacySupport = new DutyMaturityFilterState();
+        legacySupport.SetAllSupportLevels(enabled: false);
+        Assert.True(Matches(row, legacySupport, current, explicitRules: 0));
 
         Assert.True(Matches(row, new DutyMaturityFilterState { PlannedOnly = true }, current, explicitRules: 0));
         Assert.True(Matches(row, new DutyMaturityFilterState { MainScenarioOnly = true }, current, explicitRules: 0));
@@ -96,11 +92,94 @@ public sealed class DutyMaturityDraftAndFilterTests
         Assert.True(Matches(row, new DutyMaturityFilterState { RuleCoverage = DutyRuleCoverageFilter.HasRules }, current, explicitRules: 1));
         Assert.True(Matches(row, new DutyMaturityFilterState { RuleCoverage = DutyRuleCoverageFilter.DenseRules }, current, explicitRules: DutyMaturityCatalog.DenseRuleThreshold + 1));
 
+        Assert.True(Matches(row, new DutyMaturityFilterState { ExpansionId = row.ExVersion }, current, explicitRules: 0));
+        Assert.False(Matches(row, new DutyMaturityFilterState { ExpansionId = row.ExVersion + 1 }, current, explicitRules: 0));
+
         Assert.True(Matches(row, new DutyMaturityFilterState { Search = "support note" }, current, explicitRules: 0));
         Assert.False(Matches(row, new DutyMaturityFilterState { Search = "does-not-exist" }, current, explicitRules: 0));
 
         row.SupportNote = "changed draft note";
         Assert.True(Matches(row, new DutyMaturityFilterState { ChangedOnly = true }, current, explicitRules: 0));
+    }
+
+    [Fact]
+    public void CoverageAggregationMatchesAllConfiguredDutyScopeFieldsInOnePass()
+    {
+        var first = CreateDuty();
+        first = CloneDuty(first, 101, 202, "The Test Duty");
+        var second = CloneDuty(first, 102, 203, "Other Duty");
+        var rules = new List<ObjectPriorityRule>
+        {
+            new() { ContentFinderConditionId = 101 },
+            new() { TerritoryTypeId = 202 },
+            new() { DutyEnglishName = "Test Duty" },
+            new() { ContentFinderConditionId = 101, TerritoryTypeId = 202, DutyEnglishName = "test duty" },
+            new() { Enabled = false, ContentFinderConditionId = 101 },
+            new() { ContentFinderConditionId = 101, TerritoryTypeId = 999 },
+            new() { ContentFinderConditionId = 101, DutyEnglishName = "Other Duty" },
+            new() { ContentFinderConditionId = 101, Alliance = "A" },
+            new(),
+        };
+
+        var snapshot = DutyRuleCoverageHelper.BuildSnapshot([first, second], rules);
+        var firstCoverage = snapshot.Get(first);
+
+        Assert.Equal(8, firstCoverage.AssociatedRuleCount);
+        Assert.Equal(7, firstCoverage.EnabledRuleCount);
+        Assert.Equal(2, firstCoverage.RedundantScopeMismatchCount);
+        Assert.Equal(0, snapshot.Get(second).AssociatedRuleCount);
+        Assert.Equal(1, snapshot.GlobalRuleCount);
+        Assert.Equal(0, snapshot.UnresolvedRuleCount);
+    }
+
+    [Theory]
+    [InlineData(DutyClearanceStatus.NotCleared, "M0")]
+    [InlineData(DutyClearanceStatus.OnePlayerUnsyncCleared, "M1")]
+    [InlineData(DutyClearanceStatus.OnePlayerDutySupport, "M2")]
+    [InlineData(DutyClearanceStatus.FourPlayerSyncCleared, "M3")]
+    public void MaturityDisplayUsesNumericTiers(DutyClearanceStatus status, string expected)
+        => Assert.Equal(expected, DutyMaturityDisplayCatalog.GetClearanceLabel(status));
+
+    [Fact]
+    public void CoverageCountsOnlyEnabledFiniteWaypoints()
+    {
+        var duty = CreateDuty();
+        var snapshot = DutyRuleCoverageHelper.BuildSnapshot(
+            [duty],
+            [
+                new ObjectPriorityRule { ContentFinderConditionId = duty.ContentFinderConditionId, Enabled = true, Classification = "XYZ", WorldCoordinates = "1,2,3" },
+                new ObjectPriorityRule { ContentFinderConditionId = duty.ContentFinderConditionId, Enabled = false, Classification = "XYZ", WorldCoordinates = "1,2,3" },
+                new ObjectPriorityRule { ContentFinderConditionId = duty.ContentFinderConditionId, Enabled = true, Classification = "MapXzDestination", MapCoordinates = "NaN,2" },
+            ]);
+
+        Assert.Equal(1, snapshot.Get(duty).EnabledValidWaypointCount);
+    }
+
+    [Fact]
+    public void DutyManagerSpecificFiltersUseWaypointDawntrailAndSelectionTruth()
+    {
+        var duty = CreateDuty();
+        var row = DutyMaturityDraftRow.FromEntry(duty);
+        var context = CreateContext(row);
+        var coverage = new DutyRuleCoverage(2, 1, 1, 0);
+
+        Assert.True(DutyMaturityFilterHelper.Matches(
+            row,
+            new DutyMaturityFilterState
+            {
+                DawntrailOnly = true,
+                SelectedOnly = true,
+                WaypointCoverage = DutyWaypointCoverageFilter.HasWaypoints,
+            },
+            context,
+            coverage,
+            isSelected: true));
+        Assert.False(DutyMaturityFilterHelper.Matches(
+            row,
+            new DutyMaturityFilterState { SelectedOnly = true },
+            context,
+            coverage,
+            isSelected: false));
     }
 
     private static bool Matches(
@@ -122,7 +201,7 @@ public sealed class DutyMaturityDraftAndFilterTests
             SupportNote = DutyCatalogService.DefaultSupportNote,
             LevelRequired = 1,
             SortKey = 1,
-            ExVersion = 1,
+            ExVersion = 5,
             ContentTypeRowId = 1,
             ContentMemberTypeRowId = 4,
             PartySize = 4,
@@ -131,6 +210,33 @@ public sealed class DutyMaturityDraftAndFilterTests
             ClearanceStatus = DutyClearanceStatus.NotCleared,
             IsPlannedTest = false,
             IsMainScenario = false,
+        };
+
+    private static DutyCatalogEntry CloneDuty(
+        DutyCatalogEntry source,
+        uint contentFinderConditionId,
+        uint territoryTypeId,
+        string englishName)
+        => new()
+        {
+            ContentFinderConditionId = contentFinderConditionId,
+            TerritoryTypeId = territoryTypeId,
+            Name = englishName,
+            EnglishName = englishName,
+            ContentTypeName = source.ContentTypeName,
+            ExpansionName = source.ExpansionName,
+            SupportNote = source.SupportNote,
+            LevelRequired = source.LevelRequired,
+            SortKey = source.SortKey,
+            ExVersion = source.ExVersion,
+            ContentTypeRowId = source.ContentTypeRowId,
+            ContentMemberTypeRowId = source.ContentMemberTypeRowId,
+            PartySize = source.PartySize,
+            Category = source.Category,
+            SupportLevel = source.SupportLevel,
+            ClearanceStatus = source.ClearanceStatus,
+            IsPlannedTest = source.IsPlannedTest,
+            IsMainScenario = source.IsMainScenario,
         };
 
     private static DutyContextSnapshot CreateContext(IDutyMaturityCatalogRow row, uint? territoryTypeId = null)

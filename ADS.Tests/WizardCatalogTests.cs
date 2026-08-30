@@ -64,7 +64,7 @@ public sealed class WizardCatalogTests
 
         Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
 
-        Assert.Equal(21, configuration.Version);
+        Assert.Equal(22, configuration.Version);
         Assert.True(configuration.WizardHubSeen);
         Assert.False(configuration.DutyOperationsWizardCompleted);
         Assert.False(configuration.RulesDataWizardCompleted);
