@@ -10,7 +10,7 @@ ADS includes policy-driven desynthesis with local presets, skill-up filtering, t
 
 ## Shop Purchasing
 
-ADS can resolve deterministic NPC vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. Supported families include gil, direct/FATE-routed special exchanges, Inclusion, Grand Company, and Free Company shops, including exact divisible coproduct bundles and mixed one-to-three-currency costs. Turn-in, sale, random, ambiguous, and unprovable offers remain callback-free. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
+ADS can resolve deterministic NPC vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. Shop List presets add currency-filtered vendor discovery, targeted refill or spend-until-limit modes, inventory/retainer ownership rules, purchase-free previews, and stable Dad-facing operation IPC without changing the single-purchase contract. Supported families include gil, direct/FATE-routed special exchanges, Inclusion, Grand Company, and Free Company shops. Turn-in, sale, random, ambiguous, and unprovable offers remain callback-free. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
 
 ## Loot Automation
 

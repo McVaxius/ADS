@@ -7,12 +7,19 @@ namespace ADS.Services;
 
 public sealed class ShopListService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private readonly ShopListPresetStore presetStore;
     private readonly ShopListImportService importService;
     private readonly UtilityAutomationService utilityAutomation;
     private readonly Func<string, string> searchCurrentCharacterItemsJson;
     private readonly IPluginLog log;
     private ShopListRetainerSnapshot retainerSnapshot = ShopListRetainerSnapshot.Empty;
+    private Guid ownershipPresetId;
 
     public ShopListService(
         ShopListPresetStore presetStore,
@@ -55,6 +62,19 @@ public sealed class ShopListService
     public bool RenameActivePreset(string name, out string error)
         => presetStore.RenameActive(name, out error);
 
+    public bool ConfigureActivePreset(
+        ShopListMode mode,
+        ShopCurrencyKind currencyKind,
+        uint currencyItemId,
+        long currencyThreshold,
+        out string error)
+    {
+        var succeeded = presetStore.ConfigureActive(mode, currencyKind, currencyItemId, currencyThreshold, out error);
+        if (succeeded)
+            InvalidateOwnership("Preset currency settings changed; test the preset before running.");
+        return succeeded;
+    }
+
     public bool DeleteActivePreset(out string error)
     {
         var succeeded = presetStore.DeleteActive(out error);
@@ -63,19 +83,62 @@ public sealed class ShopListService
         return succeeded;
     }
 
-    public bool SetItem(uint itemId, int quantity, out string error)
+    public bool SetItem(
+        uint itemId,
+        int triggerBelow,
+        int refillToAtLeast,
+        bool repeatable,
+        ShopListOwnershipScope ownershipScope,
+        out string error)
     {
-        var succeeded = presetStore.SetItem(itemId, quantity, out error);
+        var succeeded = presetStore.SetItem(
+            itemId,
+            triggerBelow,
+            refillToAtLeast,
+            repeatable,
+            ownershipScope,
+            out error);
         if (succeeded)
-            InvalidateOwnership("Shop-list quantities changed; refresh XA Database retainer holdings before running.");
+            InvalidateOwnership("Shop-list row changed; test the preset before running.");
         return succeeded;
     }
 
-    public bool RemoveItem(uint itemId, out string error)
+    public bool UpdateItem(
+        Guid rowId,
+        int triggerBelow,
+        int refillToAtLeast,
+        bool repeatable,
+        ShopListOwnershipScope ownershipScope,
+        out string error)
     {
-        var succeeded = presetStore.RemoveItem(itemId, out error);
+        var succeeded = presetStore.UpdateItem(
+            rowId,
+            triggerBelow,
+            refillToAtLeast,
+            repeatable,
+            ownershipScope,
+            out error);
+        if (succeeded)
+            InvalidateOwnership("Shop-list row changed; test the preset before running.");
+        return succeeded;
+    }
+
+    public bool RemoveItem(Guid rowId, out string error)
+    {
+        var succeeded = presetStore.RemoveItem(rowId, out error);
         if (succeeded)
             InvalidateOwnership("Shop-list contents changed; refresh XA Database retainer holdings before running.");
+        return succeeded;
+    }
+
+    public string ExportActivePresetBase64()
+        => presetStore.ExportActiveBase64();
+
+    public bool ImportPresetBase64(string encoded, out string error)
+    {
+        var succeeded = presetStore.ImportBase64(encoded, out error);
+        if (succeeded)
+            InvalidateOwnership("Imported preset selected; test it before running.");
         return succeeded;
     }
 
@@ -104,14 +167,24 @@ public sealed class ShopListService
     }
 
     public bool RefreshOwnership(out string status)
+        => RefreshOwnership(presetStore.ActivePreset, out status);
+
+    private bool RefreshOwnership(ShopListPreset preset, out string status)
     {
-        var itemIds = presetStore.ActivePreset.Items
+        var itemIds = preset.Items
+            .Where(item => item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers)
             .Select(item => item.ItemId)
             .Distinct()
-            .Order()
             .ToArray();
         if (itemIds.Length == 0)
-            return FailOwnership("The active shop-list preset has no items to query.", out status);
+        {
+            retainerSnapshot = ShopListRetainerSnapshot.Empty;
+            ownershipPresetId = preset.PresetId;
+            OwnershipAvailable = true;
+            OwnershipStatus = "This preset uses inventory-only ownership; XA Database was not queried.";
+            status = OwnershipStatus;
+            return true;
+        }
 
         var request = JsonSerializer.Serialize(new
         {
@@ -130,6 +203,7 @@ public sealed class ShopListService
                 return FailOwnership($"XA Database retainer ownership is unavailable: {parseError}", out status);
 
             retainerSnapshot = parsed;
+            ownershipPresetId = preset.PresetId;
             OwnershipAvailable = true;
             OwnershipStatus = parsed.Warnings.Count == 0
                 ? $"XA Database returned current-character retainer holdings for {itemIds.Length} item(s)."
@@ -145,34 +219,114 @@ public sealed class ShopListService
     }
 
     public IReadOnlyList<ShopListPreviewRow> BuildPreviewRows()
+        => BuildPreviewRows(presetStore.ActivePreset, new HashSet<Guid>());
+
+    private IReadOnlyList<ShopListPreviewRow> BuildPreviewRows(
+        ShopListPreset preset,
+        IReadOnlySet<Guid> associationCompletedRowIds)
     {
         var rows = new List<ShopListPreviewRow>();
-        foreach (var item in presetStore.ActivePreset.Items)
+        var spendPurchasePlanned = false;
+        foreach (var item in preset.Items)
         {
             var liveQuantity = utilityAutomation.GetLiveShopItemCount(item.ItemId);
-            var retainerQuantity = retainerSnapshot.Quantities.GetValueOrDefault(item.ItemId);
-            var needed = Math.Max(0L, item.Quantity - Math.Max(0L, liveQuantity));
-            needed = Math.Max(0L, needed - retainerQuantity);
-            var purchaseQuantity = needed > int.MaxValue ? int.MaxValue : (int)needed;
-            var lookupQuantity = Math.Max(1, purchaseQuantity);
-            var purchasePreview = utilityAutomation.PreviewShopPurchase(item.ItemId, lookupQuantity);
+            var usesRetainers = item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers;
+            var retainerQuantity = usesRetainers && ownershipPresetId == preset.PresetId
+                ? retainerSnapshot.Quantities.GetValueOrDefault(item.ItemId)
+                : 0;
+            var owned = Math.Max(0L, liveQuantity) + Math.Max(0L, retainerQuantity);
+            var associationCompleted = !item.Repeatable && associationCompletedRowIds.Contains(item.RowId);
+            ShopPurchasePreviewResult purchasePreview;
+            var purchaseQuantity = 0;
+            var outcome = "pending";
+            string message;
+            string? failureCode = null;
+
+            if (associationCompleted)
+            {
+                purchasePreview = utilityAutomation.PreviewShopPurchase(item.ItemId, 1, preset.Currency);
+                outcome = "association-completed";
+                message = "This exact association already completed the non-repeatable row.";
+            }
+            else if (preset.Mode == ShopListMode.TargetedRefill && owned >= item.TriggerBelow)
+            {
+                purchasePreview = utilityAutomation.PreviewShopPurchase(item.ItemId, 1, preset.Currency);
+                outcome = "already-satisfied";
+                message = $"Owned quantity {owned} is not below trigger {item.TriggerBelow}.";
+            }
+            else if (preset.Mode == ShopListMode.SpendUntilCurrencyOrCapacity && spendPurchasePlanned)
+            {
+                purchasePreview = utilityAutomation.PreviewAnyShopPurchaseBundle(item.ItemId, preset.Currency);
+                failureCode = purchasePreview.FailureCode;
+                if (!purchasePreview.CanPurchase
+                    && failureCode is not (ShopPurchaseFailureCodes.InsufficientCurrency
+                        or ShopPurchaseFailureCodes.InventoryCapacity))
+                {
+                    outcome = "failed";
+                    message = purchasePreview.Message;
+                }
+                else
+                {
+                    outcome = "deferred";
+                    failureCode = null;
+                    message = "Structurally valid; deferred until execution because an earlier stored-order row has first claim on currency and capacity.";
+                }
+            }
+            else
+            {
+                purchasePreview = preset.Mode == ShopListMode.TargetedRefill
+                    ? utilityAutomation.PreviewShopPurchaseAtLeast(
+                        item.ItemId,
+                        checked((int)(item.RefillToAtLeast - owned)),
+                        preset.Currency)
+                    : utilityAutomation.PreviewMaximumShopPurchase(item.ItemId, preset.Currency);
+                purchaseQuantity = purchasePreview.CanPurchase ? purchasePreview.Request.Quantity : 0;
+                failureCode = purchasePreview.FailureCode;
+                if (purchasePreview.CanPurchase)
+                {
+                    outcome = "pending";
+                    if (preset.Mode == ShopListMode.SpendUntilCurrencyOrCapacity)
+                        spendPurchasePlanned = true;
+                    message = preset.Mode == ShopListMode.TargetedRefill
+                        ? $"Would buy {purchaseQuantity} to refill from {owned} to at least {item.RefillToAtLeast}; vendor bundles may exceed the target."
+                        : $"First eligible stored-order row would buy up to {purchaseQuantity} whole-bundle item(s); later rows are evaluated only after its verified result.";
+                }
+                else if (preset.Mode == ShopListMode.SpendUntilCurrencyOrCapacity
+                         && failureCode is ShopPurchaseFailureCodes.InsufficientCurrency
+                             or ShopPurchaseFailureCodes.InventoryCapacity)
+                {
+                    outcome = "skipped";
+                    message = purchasePreview.Message;
+                }
+                else
+                {
+                    outcome = "failed";
+                    message = purchasePreview.Message;
+                }
+            }
+
             var itemName = string.IsNullOrWhiteSpace(purchasePreview.ItemName)
                 ? $"Item {item.ItemId.ToString(CultureInfo.InvariantCulture)}"
                 : purchasePreview.ItemName;
-            var message = purchaseQuantity == 0 && purchasePreview.CanPurchase
-                ? "No purchase needed; live inventory and retainer holdings meet the desired total."
-                : purchasePreview.Message;
 
             rows.Add(new ShopListPreviewRow(
+                item.RowId,
                 item.ItemId,
                 itemName,
-                item.Quantity,
+                item.TriggerBelow,
+                item.RefillToAtLeast,
+                item.Repeatable,
+                OwnershipScopeName(item.OwnershipScope),
                 liveQuantity,
                 retainerQuantity,
+                owned,
                 purchaseQuantity,
-                retainerSnapshot.Locations.GetValueOrDefault(item.ItemId) ?? [],
-                purchasePreview.SelectedOffer,
-                purchasePreview.FailureCode,
+                outcome,
+                usesRetainers && ownershipPresetId == preset.PresetId
+                    ? retainerSnapshot.Locations.GetValueOrDefault(item.ItemId) ?? []
+                    : [],
+                purchaseQuantity > 0 ? purchasePreview.SelectedOffer : null,
+                failureCode,
                 message));
         }
 
@@ -181,38 +335,432 @@ public sealed class ShopListService
 
     internal bool TryStartBatch(out string status)
     {
-        if (!RefreshOwnership(out status))
-            return false;
-
-        var items = new List<ShopListBatchItem>();
-        foreach (var item in presetStore.ActivePreset.Items)
+        var request = new ShopListPresetStartRequest
         {
-            var preview = utilityAutomation.PreviewShopPurchase(item.ItemId, Math.Max(1, item.Quantity));
-            items.Add(new ShopListBatchItem(
-                item.ItemId,
-                string.IsNullOrWhiteSpace(preview.ItemName) ? $"Item {item.ItemId}" : preview.ItemName,
-                item.Quantity,
-                retainerSnapshot.Quantities.GetValueOrDefault(item.ItemId)));
+            Version = 1,
+            OperationId = Guid.NewGuid().ToString("D"),
+            PresetId = presetStore.ActivePresetId,
+            CompletedRowIds = [],
+        };
+        var response = StartPreset(request);
+        status = response.Message;
+        return response.Accepted;
+    }
+
+    internal ShopListPresetPreviewResponse PreviewActivePreset()
+    {
+        var preset = presetStore.ActivePreset;
+        if (!RefreshOwnership(preset, out var ownershipStatus))
+        {
+            return new ShopListPresetPreviewResponse(
+                1,
+                preset.PresetId,
+                "error",
+                -1,
+                [],
+                ownershipStatus,
+                []);
         }
 
-        if (!utilityAutomation.StartShopListBatch(items))
+        return EvaluatePreset(preset, new HashSet<Guid>());
+    }
+
+    public string GetShopListPresetsJson()
+        => JsonSerializer.Serialize(new ShopListPresetCatalogResponse(
+            1,
+            presetStore.ActivePresetId,
+            presetStore.Presets.Select(preset => new ShopListPresetSummary(
+                preset.PresetId,
+                preset.Name,
+                ModeName(preset.Mode),
+                ShopOfferSelector.CurrencyKindName(preset.CurrencyKind),
+                preset.CurrencyItemId,
+                preset.CurrencyThreshold,
+                preset.Items.Count)).ToArray()), JsonOptions);
+
+    public string PreviewShopListPresetJson(string requestJson)
+    {
+        if (!TryParsePresetRequest(requestJson, requireOperationId: false, out var request, out var error))
+            return SerializePreviewError(request?.PresetId ?? Guid.Empty, error);
+        if (!TryGetPreset(request!.PresetId, out var preset))
+            return SerializePreviewError(request.PresetId, $"Shop-list preset '{request.PresetId:D}' was not found.");
+        if (!TryValidateCompletedRows(preset, request.CompletedRowIds, out var completedRows, out error))
+            return SerializePreviewError(preset.PresetId, error);
+        if (!RefreshOwnership(preset, out var ownershipStatus))
+            return SerializePreviewError(preset.PresetId, ownershipStatus);
+
+        var preview = EvaluatePreset(preset, completedRows);
+        return JsonSerializer.Serialize(preview, JsonOptions);
+    }
+
+    public string StartShopListPresetJson(string requestJson)
+    {
+        if (!TryParsePresetRequest(requestJson, requireOperationId: true, out var request, out var error))
+            return SerializeStart(new ShopListPresetStartResponse(
+                1, false, request?.OperationId ?? string.Empty, request?.PresetId ?? Guid.Empty, "error", [], error));
+        return SerializeStart(StartPreset(request!));
+    }
+
+    public string RejectShopListPresetStartJson(string requestJson, string message)
+    {
+        TryParsePresetRequest(requestJson, requireOperationId: true, out var request, out _);
+        return SerializeStart(new ShopListPresetStartResponse(
+            1,
+            false,
+            request?.OperationId ?? string.Empty,
+            request?.PresetId ?? Guid.Empty,
+            "error",
+            [],
+            message));
+    }
+
+    public string GetShopListPresetStatusJson(string operationId)
+    {
+        var normalized = operationId?.Trim() ?? string.Empty;
+        var status = utilityAutomation.ShopListBatchStatus;
+        if (!string.IsNullOrEmpty(normalized)
+            && string.Equals(status.OperationId, normalized, StringComparison.Ordinal))
         {
-            status = utilityAutomation.StatusMessage;
-            return false;
+            return JsonSerializer.Serialize(status, JsonOptions);
         }
 
-        status = utilityAutomation.StatusMessage;
+        return JsonSerializer.Serialize(new ShopListBatchStatusSnapshot(
+            1,
+            normalized,
+            Guid.Empty,
+            false,
+            false,
+            null,
+            "operation-not-found",
+            0,
+            0,
+            0,
+            string.Empty,
+            [],
+            [],
+            "operation-not-found",
+            "No shop-list preset operation with that exact operation ID is active or retained.",
+            "No matching operation was found.",
+            [],
+            null), JsonOptions);
+    }
+
+    public bool CancelShopListPreset(string operationId)
+        => utilityAutomation.CancelShopListPreset(operationId);
+
+    public string SearchShopCatalogJson(string requestJson)
+    {
+        try
+        {
+            var request = JsonSerializer.Deserialize<ShopCatalogSearchRequest>(requestJson, JsonOptions)
+                          ?? throw new InvalidDataException("Catalog search request was empty.");
+            if (request.Version != 1)
+                throw new InvalidDataException("Catalog search request version must be 1.");
+            ShopCurrencyIdentity? currency = null;
+            if (!string.IsNullOrWhiteSpace(request.CurrencyKind))
+            {
+                if (!TryParseCurrencyKind(request.CurrencyKind, out var currencyKind))
+                    throw new InvalidDataException("Catalog search currencyKind is unsupported.");
+                ValidateCurrency(currencyKind, request.CurrencyItemId);
+                currency = new ShopCurrencyIdentity(currencyKind, request.CurrencyItemId);
+            }
+            else if (request.CurrencyItemId != 0)
+            {
+                throw new InvalidDataException("currencyItemId must be zero when currencyKind is omitted for discovery search.");
+            }
+            var response = utilityAutomation.SearchShopCatalog(
+                request.Query,
+                currency,
+                request.Limit is < 1 or > 100 ? 50 : request.Limit);
+            return JsonSerializer.Serialize(response, JsonOptions);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        {
+            return JsonSerializer.Serialize(new ShopCatalogSearchResponse(
+                1, string.Empty, string.Empty, 0, false, [], $"Catalog search failed safely: {ex.Message}"), JsonOptions);
+        }
+    }
+
+    private ShopListPresetStartResponse StartPreset(ShopListPresetStartRequest request)
+    {
+        if (!TryGetPreset(request.PresetId, out var preset))
+            return StartError(request, $"Shop-list preset '{request.PresetId:D}' was not found.");
+        if (!TryValidateCompletedRows(preset, request.CompletedRowIds, out var completedRows, out var error))
+            return StartError(request, error);
+        var retained = utilityAutomation.ShopListBatchStatus;
+        if (!string.IsNullOrEmpty(retained.OperationId)
+            && string.Equals(retained.OperationId, request.OperationId, StringComparison.Ordinal))
+        {
+            return StartError(request, "That operation ID has already been used; ADS will not replay it.");
+        }
+        if (utilityAutomation.IsRunning)
+            return StartError(request, $"Another ADS utility is active: {utilityAutomation.StatusMessage}");
+        if (!RefreshOwnership(preset, out var ownershipStatus))
+            return StartError(request, ownershipStatus);
+
+        var preview = EvaluatePreset(preset, completedRows);
+        if (!string.Equals(preview.Disposition, "ready", StringComparison.Ordinal))
+        {
+            if (preview.Disposition is "fulfilled" or "not-triggered")
+            {
+                if (!utilityAutomation.RetainShopListPresetNoOp(
+                    request.OperationId,
+                    preset.PresetId,
+                    preview.Disposition,
+                    preview.Message,
+                    preview.Rows,
+                    preview.CompletedNonRepeatableRowIds))
+                {
+                    return StartError(request, "Another ADS utility became active before the no-op result could be retained.");
+                }
+            }
+            return new ShopListPresetStartResponse(
+                1,
+                false,
+                request.OperationId,
+                preset.PresetId,
+                preview.Disposition,
+                preview.CompletedNonRepeatableRowIds,
+                preview.Message);
+        }
+
+        var rowsById = preview.Rows.ToDictionary(row => row.RowId);
+        var definition = new ShopListBatchDefinition(
+            request.OperationId,
+            preset.PresetId,
+            preset.Mode,
+            preset.Currency,
+            preset.CurrencyThreshold,
+            completedRows.ToArray(),
+            preview.CompletedNonRepeatableRowIds,
+            preset.Items.Select(item =>
+            {
+                var previewRow = rowsById[item.RowId];
+                return new ShopListBatchItem(
+                    item.RowId,
+                    item.ItemId,
+                    previewRow.ItemName,
+                    item.TriggerBelow,
+                    item.RefillToAtLeast,
+                    item.Repeatable,
+                    item.OwnershipScope,
+                    item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
+                        ? previewRow.RetainerQuantity
+                        : 0);
+            }).ToArray());
+
+        if (!utilityAutomation.StartShopListBatch(definition))
+            return StartError(request, utilityAutomation.StatusMessage);
+
+        return new ShopListPresetStartResponse(
+            1,
+            true,
+            request.OperationId,
+            preset.PresetId,
+            "started",
+            preview.CompletedNonRepeatableRowIds,
+            utilityAutomation.StatusMessage);
+    }
+
+    private ShopListPresetPreviewResponse EvaluatePreset(
+        ShopListPreset preset,
+        IReadOnlySet<Guid> completedRows)
+    {
+        if (preset.Items.Count == 0)
+        {
+            return new ShopListPresetPreviewResponse(
+                1,
+                preset.PresetId,
+                "error",
+                -1,
+                [],
+                "The exact preset has no rows; ADS will not treat an empty list as fulfilled.",
+                []);
+        }
+
+        var rows = BuildPreviewRows(preset, completedRows);
+        var completedNonRepeatableRowIds = rows
+            .Where(row => !row.Repeatable
+                          && row.Outcome is "association-completed" or "already-satisfied")
+            .Select(row => row.RowId)
+            .ToArray();
+        var available = utilityAutomation.GetAvailableShopCurrency(preset.Currency);
+        if (available < 0)
+        {
+            return new ShopListPresetPreviewResponse(
+                1, preset.PresetId, "error", available,
+                completedNonRepeatableRowIds,
+                "The exact selected currency balance is unavailable; ADS will not guess.", rows);
+        }
+
+        if (available < preset.CurrencyThreshold)
+        {
+            return new ShopListPresetPreviewResponse(
+                1,
+                preset.PresetId,
+                "not-triggered",
+                available,
+                completedNonRepeatableRowIds,
+                $"Selected currency balance {available} has not reached trigger {preset.CurrencyThreshold}.",
+                rows);
+        }
+
+        var failed = rows.FirstOrDefault(row => row.Outcome == "failed");
+        if (failed != null)
+        {
+            return new ShopListPresetPreviewResponse(
+                1,
+                preset.PresetId,
+                "error",
+                available,
+                completedNonRepeatableRowIds,
+                $"{failed.ItemName}: {failed.StatusMessage}",
+                rows);
+        }
+
+        var ready = rows.Any(row => row.Outcome == "pending" && row.PurchaseQuantity > 0);
+        return new ShopListPresetPreviewResponse(
+            1,
+            preset.PresetId,
+            ready ? "ready" : "fulfilled",
+            available,
+            completedNonRepeatableRowIds,
+            ready
+                ? "Preset test passed against current truth. Start re-evaluates rows in stored order after each verified purchase. No purchase was made."
+                : "Preset is fulfilled or already at its requested currency/capacity limit; no purchase is needed.",
+            rows);
+    }
+
+    private bool TryGetPreset(Guid presetId, out ShopListPreset preset)
+    {
+        preset = presetStore.Presets.FirstOrDefault(value => value.PresetId == presetId)!;
+        return preset != null;
+    }
+
+    private static bool TryValidateCompletedRows(
+        ShopListPreset preset,
+        IReadOnlyList<Guid>? requested,
+        out IReadOnlySet<Guid> completed,
+        out string error)
+    {
+        var values = requested ?? [];
+        if (values.Any(value => value == Guid.Empty) || values.Distinct().Count() != values.Count)
+        {
+            completed = new HashSet<Guid>();
+            error = "completedRowIds must contain distinct, nonempty row IDs.";
+            return false;
+        }
+        var known = preset.Items.Select(item => item.RowId).ToHashSet();
+        var repeatable = preset.Items.Where(item => item.Repeatable).Select(item => item.RowId).ToHashSet();
+        completed = values.Where(value => known.Contains(value) && !repeatable.Contains(value)).ToHashSet();
+        error = string.Empty;
         return true;
+    }
+
+    private static bool TryParsePresetRequest(
+        string json,
+        bool requireOperationId,
+        out ShopListPresetStartRequest? request,
+        out string error)
+    {
+        request = null;
+        try
+        {
+            request = JsonSerializer.Deserialize<ShopListPresetStartRequest>(json, JsonOptions);
+            if (request == null)
+                throw new InvalidDataException("Preset request was empty.");
+            if (request.Version != 1)
+                throw new InvalidDataException("Preset request version must be 1.");
+            if (request.PresetId == Guid.Empty)
+                throw new InvalidDataException("presetId must be a nonempty GUID.");
+            request.OperationId = request.OperationId?.Trim() ?? string.Empty;
+            if (requireOperationId && (request.OperationId.Length is < 1 or > 128))
+                throw new InvalidDataException("operationId must contain 1 through 128 characters.");
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        {
+            error = $"Preset request failed safely: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static string SerializePreviewError(Guid presetId, string message)
+        => JsonSerializer.Serialize(new ShopListPresetPreviewResponse(
+            1, presetId, "error", -1, [], message, []), JsonOptions);
+
+    private static string SerializeStart(ShopListPresetStartResponse response)
+        => JsonSerializer.Serialize(response, JsonOptions);
+
+    private static ShopListPresetStartResponse StartError(ShopListPresetStartRequest request, string message)
+        => new(1, false, request.OperationId, request.PresetId, "error", [], message);
+
+    internal static string ModeName(ShopListMode mode)
+        => mode == ShopListMode.SpendUntilCurrencyOrCapacity
+            ? "spend-until-currency-or-capacity"
+            : "targeted-refill";
+
+    internal static bool TryParseCurrencyKind(string? value, out ShopCurrencyKind kind)
+    {
+        foreach (var candidate in Enum.GetValues<ShopCurrencyKind>())
+        {
+            if (string.Equals(value?.Trim(), ShopOfferSelector.CurrencyKindName(candidate), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value?.Trim(), candidate.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                kind = candidate;
+                return true;
+            }
+        }
+
+        kind = default;
+        return false;
+    }
+
+    private static void ValidateCurrency(ShopCurrencyKind kind, uint itemId)
+    {
+        if (kind == ShopCurrencyKind.Gil && itemId != 1)
+            throw new InvalidDataException("Gil requires currencyItemId 1.");
+        if (kind == ShopCurrencyKind.FreeCompanyCredit && itemId != 0)
+            throw new InvalidDataException("Free Company credits require currencyItemId 0.");
+        if (kind is not (ShopCurrencyKind.Gil or ShopCurrencyKind.FreeCompanyCredit) && itemId == 0)
+            throw new InvalidDataException("This currency kind requires a nonzero currencyItemId.");
+    }
+
+    private static string OwnershipScopeName(ShopListOwnershipScope scope)
+        => scope == ShopListOwnershipScope.InventoryOnly
+            ? "inventory-only"
+            : "inventory-and-retainers";
+
+    private sealed class ShopListPresetStartRequest
+    {
+        public int Version { get; set; }
+        public string OperationId { get; set; } = string.Empty;
+        public Guid PresetId { get; set; }
+        public List<Guid>? CompletedRowIds { get; set; }
+    }
+
+    private sealed class ShopCatalogSearchRequest
+    {
+        public int Version { get; set; }
+        public string Query { get; set; } = string.Empty;
+        public string CurrencyKind { get; set; } = string.Empty;
+        public uint CurrencyItemId { get; set; }
+        public int Limit { get; set; } = 50;
     }
 
     private void InvalidateOwnership(string reason)
     {
+        ownershipPresetId = Guid.Empty;
+        retainerSnapshot = ShopListRetainerSnapshot.Empty;
         OwnershipAvailable = false;
         OwnershipStatus = reason;
     }
 
     private bool FailOwnership(string message, out string status)
     {
+        ownershipPresetId = Guid.Empty;
+        retainerSnapshot = ShopListRetainerSnapshot.Empty;
         OwnershipAvailable = false;
         OwnershipStatus = message;
         status = message;

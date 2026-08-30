@@ -18,6 +18,12 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartShopPurchase(uint itemId, int quantity) -> bool`
 - `ADS.SetShopKeepOpen(bool enabled) -> bool`
 - `ADS.GetShopPurchaseStatusJson() -> string`
+- `ADS.GetShopListPresetsJson() -> string`
+- `ADS.PreviewShopListPreset(string requestJson) -> string`
+- `ADS.StartShopListPreset(string requestJson) -> string`
+- `ADS.GetShopListPresetStatusJson(string operationId) -> string`
+- `ADS.CancelShopListPreset(string operationId) -> bool`
+- `ADS.SearchShopCatalogJson(string requestJson) -> string`
 - `ADS.CancelUtility() -> bool`
 - `ADS.OpenDesynthConfigUi() -> bool`
 - `ADS.IsDutyOwned() -> bool`
@@ -110,6 +116,58 @@ The action is additive and capability schema version remains `1`.
 The additive `shopKind` values are `special-shop-mixed`, `inclusion-shop`, `grand-company-shop`, and `free-company-shop`. Additive currency kinds include `company-seal`, `mgp`, `wolf-mark`, `allied-seal`, `currency-manager`, and `free-company-credit`. `outputs` describes every deterministic output per transaction. `availabilityKnown` is false when a sheet gate or balance must be proven in the live shop, such as Free Company credits.
 
 The stable failure-code vocabulary is `invalid-request`, `busy`, `unsupported-offer`, `no-route`, `insufficient-currency`, `ambiguous-currency`, `missing-dependency`, `inventory-capacity`, `ui-mismatch`, `timeout`, and `cancelled`. Accepted runs place an applicable terminal code in `failureCode`. Rejected starts preserve the prior `failureCode` and update only `lastStartError`; they do not replace the last accepted purchase result. Unrelated utility runs also leave that result intact. Capability schema version remains `1`.
+
+## Shop List Presets
+
+All Shop List JSON uses camelCase schema version `1`. `ADS.GetShopListPresetsJson()` returns rename-safe preset identities:
+
+```json
+{"version":1,"activePresetId":"00000000-0000-0000-0000-000000000001","presets":[{"presetId":"00000000-0000-0000-0000-000000000001","name":"Poetics","mode":"targeted-refill","currencyKind":"tomestone","currencyItemId":28,"currencyThreshold":1500,"rowCount":2}]}
+```
+
+`ADS.PreviewShopListPreset` is strictly purchase-free. It may read live inventory and current-character XA Database retainers, but it never starts travel, opens a shop, or spends currency:
+
+```json
+{"version":1,"presetId":"00000000-0000-0000-0000-000000000001","completedRowIds":[]}
+```
+
+The response contains `version`, `presetId`, `disposition`, `currencyAvailable`, `completedNonRepeatableRowIds`, `message`, and stored-order `rows`. Dispositions are `ready`, `not-triggered`, `fulfilled`, or `error`. Each preview row contains `rowId`, `itemId`, `itemName`, `triggerBelow`, `refillToAtLeast`, `repeatable`, `ownershipScope`, `liveInventoryQuantity`, `retainerQuantity`, `ownedQuantity`, `purchaseQuantity`, `outcome`, retainer evidence, `selectedOffer`, `failureCode`, and `statusMessage`. Spend preview assigns live currency/capacity only to the first eligible stored-order row and reports later rows as `deferred`.
+
+Start is an atomic re-evaluate-and-start operation:
+
+```text
+ADS.StartShopListPreset("{\"version\":1,\"operationId\":\"dad-plan-42-run-7\",\"presetId\":\"00000000-0000-0000-0000-000000000001\",\"completedRowIds\":[]}")
+```
+
+It returns:
+
+```json
+{"version":1,"accepted":true,"operationId":"dad-plan-42-run-7","presetId":"00000000-0000-0000-0000-000000000001","disposition":"started","completedNonRepeatableRowIds":[],"message":"Starting shop-list batch with 2 row(s)."}
+```
+
+`accepted:false` with `not-triggered` or `fulfilled` is a successful purchase-free disposition, not an execution failure. ADS retains a correlation-bound terminal status for both, with `done:true`, `succeeded:true`, and the exact subset of non-repeatable rows already proven complete. `not-triggered` can leave rows pending, and a spend-limit result can leave capacity/currency-skipped non-repeatable rows incomplete. Consumers must merge only `completedNonRepeatableRowIds`, never infer row completion from generic success or `completedRows`. Stale removed/rotated completion IDs are ignored; repeatable IDs are never skipped. An `error` disposition does not start or retain an operation.
+
+Poll only the exact operation:
+
+```text
+ADS.GetShopListPresetStatusJson("dad-plan-42-run-7")
+```
+
+The response contains `version`, `operationId`, `presetId`, `running`, `done`, `succeeded`, `disposition`, row counts/current item, `completedNonRepeatableRowIds`, association-supplied `skippedRowIds`, `failureCode`, messages, `completedAtUtc`, and stored-order rows. Operation dispositions are `running`, `not-triggered`, `fulfilled`, `succeeded`, `failed`, or `cancelled` (`operation-not-found` is returned for a mismatched correlation ID):
+
+```json
+{"rowId":"00000000-0000-0000-0000-000000000002","itemId":123,"itemName":"Example","repeatable":false,"ownershipScope":"inventory-and-retainers","triggerBelow":10,"refillToAtLeast":20,"ownedQuantity":4,"requestedQuantity":16,"purchasedQuantity":16,"outcome":"purchased","message":"Verified purchase acquired 16 item(s)."}
+```
+
+Row outcomes are `association-completed`, `already-satisfied`, `pending`, `running`, `purchased`, `deferred`, `skipped`, `failed`, or `cancelled`. Dad should merge `completedNonRepeatableRowIds` into only the exact Plan/Schedule association; ADS never globally completes a preset row or deletes Dad objects. `ADS.CancelShopListPreset(operationId)` cancels only a matching active operation and returns `false` for a mismatch or terminal/no-op operation.
+
+Catalog search accepts item/vendor/NPC/territory/currency text. Supply an exact currency identity to filter, or omit `currencyKind` with `currencyItemId:0` to discover identities:
+
+```json
+{"version":1,"query":"Radz-at-Han","currencyKind":"tomestone","currencyItemId":28,"limit":50}
+```
+
+Rows return item/bundle, shop kind/ID/row/name, NPC ID/name, territory ID/name, numeric `x`/`y`/`z`, `copyableXyz`, and exact single-currency kind/item/name/cost. Search is local and never purchases.
 
 Capability schema version is `1`. `ADS.Invoke` returns:
 

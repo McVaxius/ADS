@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-29
+
+- Expanded Shop Lists with stable preset/row IDs, targeted refill and spend-until-currency/capacity modes, exact per-preset currency triggers, per-row repeatable and inventory/retainer ownership rules, vendor-bundle refill ceilings, Base64 sharing, deterministic vendor/NPC/territory/XYZ catalog search, purchase-free Test previews, and correlation-bound JSON IPC. Non-repeatable completion is reported per operation for Dad associations; ADS never deletes Dad plans or schedules. Existing `/ads shop` and `ADS.StartShopPurchase` remain exact-additional single purchases.
+
 ## 2026-08-28
 
 - Added the user-configured `HyperFixatedAttackTarget` rule for live, targetable BattleNpcs in validated solo duties. It preempts normal ADS objectives, keeps exact object identity across planning/execution, acquires and heartbeats FrenRider's five-second hyper-focus lease before targeting or movement, approaches to 2.0y, chains directly to another valid hyper target, and stops/reports if the lease is unavailable. ADS still sends no rotation commands.

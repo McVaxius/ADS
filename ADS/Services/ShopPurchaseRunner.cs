@@ -85,6 +85,7 @@ internal sealed class ShopPurchaseRunner
     private bool cancelRequested;
     private string lastValidationDiagnostic = string.Empty;
     private string lastStartError = string.Empty;
+    private string? lastStartFailureCode;
     private ShopPurchaseStatusSnapshot status = EmptyStatus();
 
     public ShopPurchaseRunner(
@@ -105,8 +106,14 @@ internal sealed class ShopPurchaseRunner
 
     public bool IsRunning => status.Running;
     public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
+    internal string? LastStartFailureCode => lastStartFailureCode;
 
     public ShopPurchasePreviewResult Preview(ShopPurchaseRequest purchaseRequest)
+        => Preview(purchaseRequest, null);
+
+    internal ShopPurchasePreviewResult Preview(
+        ShopPurchaseRequest purchaseRequest,
+        ShopCurrencyIdentity? requiredCurrency)
     {
         if (!ShopPurchaseRequest.TryCreate(
                 purchaseRequest.ItemId,
@@ -129,7 +136,7 @@ internal sealed class ShopPurchaseRunner
 
         try
         {
-            var (nextResolution, nextSelection) = ResolvePlan(purchaseRequest);
+            var (nextResolution, nextSelection) = ResolvePlan(purchaseRequest, requiredCurrency);
             var failureCode = nextSelection.FailureCode;
             var message = nextSelection.Message;
             if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
@@ -199,41 +206,50 @@ internal sealed class ShopPurchaseRunner
     }
 
     public bool Start(ShopPurchaseRequest purchaseRequest)
-        => StartCore(purchaseRequest, null);
+        => StartCore(purchaseRequest, null, null);
 
     internal bool Start(ShopPurchaseRequest purchaseRequest, bool holdShopOpenOnSuccess)
-        => StartCore(purchaseRequest, holdShopOpenOnSuccess);
+        => StartCore(purchaseRequest, holdShopOpenOnSuccess, null);
 
-    private bool StartCore(ShopPurchaseRequest purchaseRequest, bool? holdShopOpenOnSuccess)
+    internal bool Start(
+        ShopPurchaseRequest purchaseRequest,
+        bool holdShopOpenOnSuccess,
+        ShopCurrencyIdentity requiredCurrency)
+        => StartCore(purchaseRequest, holdShopOpenOnSuccess, requiredCurrency);
+
+    private bool StartCore(
+        ShopPurchaseRequest purchaseRequest,
+        bool? holdShopOpenOnSuccess,
+        ShopCurrencyIdentity? requiredCurrency)
     {
         if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out purchaseRequest, out var validationError))
-            return RejectStart(validationError);
+            return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
         if (IsRunning)
-            return RejectStart("Cannot start a shop purchase while another shop purchase is active.");
+            return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
         if (isDutyOwned() || isInnEntryRunning())
-            return RejectStart("Cannot start a shop purchase while ADS owns a duty or inn entry is active.");
+            return RejectStart("Cannot start a shop purchase while ADS owns a duty or inn entry is active.", ShopPurchaseFailureCodes.Busy);
         if (!runtime.IsPlayerAvailable)
-            return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.");
+            return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.", ShopPurchaseFailureCodes.Busy);
         if (!runtime.HasVnavmesh)
-            return RejectStart("Shop purchasing requires the vnavmesh plugin.");
+            return RejectStart("Shop purchasing requires the vnavmesh plugin.", ShopPurchaseFailureCodes.MissingDependency);
         var reusableOwnedShopVisible = shopUiOwned && runtime.IsAnyShopVisible;
         if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible
             || (!reusableOwnedShopVisible && runtime.IsAnyShopVisible))
-            return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.");
+            return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.", ShopPurchaseFailureCodes.UiMismatch);
 
         ShopCatalogResolution nextResolution;
         ShopOfferSelectionResult nextSelection;
         try
         {
-            (nextResolution, nextSelection) = ResolvePlan(purchaseRequest);
+            (nextResolution, nextSelection) = ResolvePlan(purchaseRequest, requiredCurrency);
         }
         catch (Exception ex)
         {
-            return RejectStart($"Shop catalog resolution failed: {ex.Message}");
+            return RejectStart($"Shop catalog resolution failed: {ex.Message}", ShopPurchaseFailureCodes.UnsupportedOffer);
         }
 
         if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
-            return RejectStart("The selected shop route requires the Lifestream plugin.");
+            return RejectStart("The selected shop route requires the Lifestream plugin.", ShopPurchaseFailureCodes.MissingDependency);
 
         // Deferred from the entry gate: a shop is on screen, so decide whether it is the one this
         // offer needs. IsExpectedShopVisible only matches the addon KIND, but that is enough to enter
@@ -245,7 +261,7 @@ internal sealed class ShopPurchaseRunner
             if (nextSelection.Selected != null && runtime.IsExpectedShopVisible(nextSelection.Selected.Offer.Kind))
                 reuseOpenShop = true;
             else
-                return RejectStart("A different shop is already open; close it before starting shop purchasing.");
+                return RejectStart("A different shop is already open; close it before starting shop purchasing.", ShopPurchaseFailureCodes.UiMismatch);
         }
 
         request = purchaseRequest;
@@ -280,6 +296,7 @@ internal sealed class ShopPurchaseRunner
         lastValidationDiagnostic = string.Empty;
         startedAtUtc = clock.UtcNow;
         lastStartError = string.Empty;
+        lastStartFailureCode = null;
         if (reuseOpenShop)
         {
             // The NPC is already engaged and its shop is open, so navigation, interaction and menu
@@ -313,8 +330,12 @@ internal sealed class ShopPurchaseRunner
     }
 
     public bool RejectStart(string message)
+        => RejectStart(message, ShopPurchaseFailureCodes.Busy);
+
+    private bool RejectStart(string message, string failureCode)
     {
         lastStartError = string.IsNullOrWhiteSpace(message) ? "Shop purchase was rejected." : message.Trim();
+        lastStartFailureCode = failureCode;
         status = status with { LastStartError = lastStartError };
         return false;
     }
@@ -1177,10 +1198,11 @@ internal sealed class ShopPurchaseRunner
             () => runtime.CurrentGrandCompanyRank);
 
     private (ShopCatalogResolution Resolution, ShopOfferSelectionResult Selection) ResolvePlan(
-        ShopPurchaseRequest purchaseRequest)
+        ShopPurchaseRequest purchaseRequest,
+        ShopCurrencyIdentity? requiredCurrency = null)
     {
         var nextResolution = catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
-        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext()));
+        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(), requiredCurrency));
     }
 
     private void Complete()

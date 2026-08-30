@@ -10,7 +10,14 @@ Start a purchase with:
 
 ## Shop Lists
 
-Open the dedicated window with `/ads shopper`, compact Controls (`/ads mini`), or Main > Tools > Treasure And Operations > **Shop Lists**. Each persisted preset stores item IDs and desired total quantities from `1` through `9999`; this does not change `/ads shop`, whose quantity remains an exact additional amount.
+Open the dedicated window with `/ads shopper`, compact Controls (`/ads mini`), or Main > Tools > Treasure And Operations > **Shop Lists**. Presets and rows have stable IDs; names can be renamed, and Base64 export/import preserves those IDs. Changing a row's fulfillment semantics, preset mode, or exact currency rotates affected row IDs so an old Dad association cannot suppress changed work. Removing or rotating a row does not make a stale association ID fatal.
+
+Each preset selects one exact currency identity and an inclusive `available >= threshold` trigger, plus one mode:
+
+- **Targeted refill** evaluates a row only when owned quantity is below its `triggerBelow` value, then buys enough whole vendor receive bundles to reach at least `refillToAtLeast`.
+- **Spend until selected currency / capacity** processes eligible rows in stored order and buys whole transactions until the selected currency or inventory capacity stops further verified work. Reaching that requested limit is success, including a no-purchase limit already in effect.
+
+Every row independently selects inventory-only or inventory plus current-character XA Database retainers and whether it is repeatable. Retainer-scoped Test/Start fails closed if XA Database ownership truth is unavailable; ADS never silently falls back to inventory-only. A completed non-repeatable row ID is exposed to Dad for the exact Plan/Schedule association. ADS does not globally complete the row and never deletes a Dad object.
 
 The three clipboard import buttons replace the active preset only after producing at least one valid consolidated vendor item:
 
@@ -20,11 +27,11 @@ The three clipboard import buttons replace the active preset only after producin
 
 Malformed or empty imports leave the active preset unchanged. Successful partial imports report every skipped or unresolved row and save only the consolidated result. No importer calls TeamCraft, Crafting as a Service, Artisan, Firestore, or another web service.
 
-The preview shows each desired total, current live inventory, current-character XA Database retainer quantity and location evidence, calculated purchase amount, selected sheet-resolved vendor, and any unsupported or route error. Returned `lastSeenUtc` and `snapshotQuality` values are displayed as supplied; ADS does not invent a freshness cutoff. Retainer quantities reduce the purchase amount but ADS does not withdraw those items.
+**Test preset (preview only)** refreshes required ownership, evaluates the exact currency trigger and supported offers, and shows current inventory, retainer evidence, trigger/refill rule, current whole-bundle purchase estimate, selected vendor, and errors. It never travels, opens a shop, or purchases. The preview is a current snapshot, not a transactional reservation: Start re-evaluates rows in stored order after every verified purchase because shared currency, inventory capacity, and coproduct ownership can change. Spend preview gives the first eligible stored-order row first claim on live currency/capacity and marks later structurally valid rows deferred rather than claiming they can all spend the same balance. Returned `lastSeenUtc` and `snapshotQuality` values are displayed as supplied; ADS does not invent a freshness cutoff. Retainer quantities reduce targeted refill demand but ADS does not withdraw those items.
 
-Run remains disabled until the active preset has a successful XA Database retainer lookup. Starting a batch repeats that lookup immediately, then recalculates each row as `max(0, desired - live inventory - retainer holdings)` just before purchase. Zero-needed rows are skipped. Purchases run sequentially through the existing single-purchase runner; consecutive rows reuse an ADS-owned shop only when their selected shop kind and ID match, otherwise ADS closes the shop before normal travel.
+The vendor catalog searches item, shop, NPC, territory, and currency text and returns exact item/vendor/NPC/territory identities plus copyable world XYZ. Discovery can show currency identities; filtered search and execution require the preset's exact single-currency identity. Purchases run sequentially through the existing fail-closed runner; consecutive rows reuse an ADS-owned shop only when their selected shop kind and ID match, otherwise ADS closes the shop before normal travel.
 
-The first failure stops the batch and preserves completed and partially acquired quantities. Cancel prevents later rows, stops ADS-owned navigation through the existing bounded cleanup, and closes ADS-owned shop UI. Shop Lists adds no batch IPC and does not change existing command or IPC contracts.
+The first unreadable, ambiguous, unsupported, or runtime failure stops the batch and preserves verified row acquisition and non-repeatable completion IDs. Cancel prevents later rows, stops ADS-owned navigation through the existing bounded cleanup, and closes ADS-owned shop UI. Correlation-bound Shop List IPC is additive; `/ads shop` and the existing single-purchase IPC remain unchanged.
 
 ## Supported Offers
 
@@ -36,7 +43,7 @@ ADS supports deterministic acquisition offers from:
 - `GCShop` seal exchanges;
 - `FccShop` Free Company credit exchanges.
 
-The requested quantity must divide exactly by the offer's receive count. ADS does not round quantities or overbuy. A deterministic non-HQ multi-output exchange is supported only when every coproduct has capacity and every output delta can be verified exactly. One-to-three mixed currency costs are normalized through physical items, `TomestonesItem`, the audited virtual-currency map, company seals, MGP, Wolf Marks, Allied Seals, and `CurrencyManager`.
+The single-purchase requested quantity must divide exactly by the offer's receive count. ADS does not alter it. Targeted Shop Lists instead calculate a whole-bundle ceiling before submitting that exact additional quantity to the same runner. A deterministic non-HQ multi-output exchange is supported only when every coproduct has capacity and every output delta can be verified exactly. One-to-three mixed currency costs are normalized through physical items, `TomestonesItem`, the audited virtual-currency map, company seals, MGP, Wolf Marks, Allied Seals, and `CurrencyManager`.
 
 High-quality target rows, collectability costs, overbuying, unresolved currency codes, and ambiguous currency choices fail closed. `CollectablesShop` and `DisposalShop` are turn-in/sale surfaces; `LotteryExchangeShop` is nondeterministic. They return `unsupported-offer` without travel or callbacks.
 

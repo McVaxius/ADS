@@ -30,7 +30,13 @@ public sealed class AdsIpcService : IDisposable
         Func<string, string> patchConfigurationJson,
         Func<string> getDesynthStatusJson,
         Func<string> getExtractMateriaStatusJson,
-        Func<string> getShopPurchaseStatusJson)
+        Func<string> getShopPurchaseStatusJson,
+        Func<string> getShopListPresetsJson,
+        Func<string, string> previewShopListPreset,
+        Func<string, string> startShopListPreset,
+        Func<string, string> getShopListPresetStatusJson,
+        Func<string, bool> cancelShopListPreset,
+        Func<string, string> searchShopCatalogJson)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -55,6 +61,12 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.GetDesynthStatusJson", getDesynthStatusJson);
         Register(pluginInterface, "ADS.GetExtractMateriaStatusJson", getExtractMateriaStatusJson);
         Register(pluginInterface, "ADS.GetShopPurchaseStatusJson", getShopPurchaseStatusJson);
+        Register(pluginInterface, "ADS.GetShopListPresetsJson", getShopListPresetsJson);
+        Register(pluginInterface, "ADS.PreviewShopListPreset", previewShopListPreset);
+        Register(pluginInterface, "ADS.StartShopListPreset", startShopListPreset);
+        Register(pluginInterface, "ADS.GetShopListPresetStatusJson", getShopListPresetStatusJson);
+        Register(pluginInterface, "ADS.CancelShopListPreset", cancelShopListPreset);
+        Register(pluginInterface, "ADS.SearchShopCatalogJson", searchShopCatalogJson);
     }
 
     public void Dispose()

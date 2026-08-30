@@ -207,6 +207,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly DesynthPolicyService desynthPolicyService;
     private readonly DesynthPresetStore desynthPresetStore;
     private readonly DesynthDutyLedgerStore desynthDutyLedgerStore;
+    private readonly ShopCatalogService shopCatalogService;
     private readonly ShopPurchaseRunner shopPurchaseRunner;
     private readonly IShopPurchaseRuntime shopPurchaseRuntime;
     private readonly Func<bool> isDutyOwned;
@@ -271,9 +272,16 @@ public sealed unsafe class UtilityAutomationService
     private string lastDesynthPresetName = string.Empty;
     private DateTime nextSlowUtilityLogUtc = DateTime.MinValue;
     private IReadOnlyList<ShopListBatchItem> shopListBatchItems = [];
+    private ShopListBatchDefinition? shopListBatchDefinition;
+    private List<ShopListBatchRowStatus> shopListBatchRows = [];
+    private readonly HashSet<Guid> shopListBatchCompletedNonRepeatableRowIds = [];
+    private readonly HashSet<Guid> shopListBatchSkippedRowIds = [];
     private int shopListBatchIndex;
     private int shopListBatchCompletedRows;
+    private int shopListBatchVerifiedPurchaseRows;
+    private bool shopListSpendCyclePurchased;
     private bool shopListBatchChildAccepted;
+    private int shopListBatchChildPurchasedBaseline;
     private bool shopListBatchCancelRequested;
     private string shopListBatchTerminalFailureMessage = string.Empty;
     private ShopOfferIdentity? shopListHeldShop;
@@ -308,10 +316,10 @@ public sealed unsafe class UtilityAutomationService
         this.isDutyOwned = isDutyOwned;
         this.isInnEntryRunning = isInnEntryRunning;
         Action<string> shopDiagnostic = message => log.Information("[ADS][Shop] {Diagnostic}", message);
-        var catalog = new ShopCatalogService(new LuminaShopSheetSource(dataManager, log), shopDiagnostic);
+        shopCatalogService = new ShopCatalogService(new LuminaShopSheetSource(dataManager, log), shopDiagnostic);
         shopPurchaseRuntime = new DalamudShopPurchaseRuntime(objectTable, targetManager, commandManager, clientState, condition, log);
         shopPurchaseRunner = new ShopPurchaseRunner(
-            catalog,
+            shopCatalogService,
             shopPurchaseRuntime,
             new SystemShopPurchaseClock(),
             this.isDutyOwned,
@@ -383,6 +391,111 @@ public sealed unsafe class UtilityAutomationService
                 0,
                 0,
                 0);
+
+    internal ShopPurchasePreviewResult PreviewShopPurchase(
+        uint itemId,
+        int quantity,
+        ShopCurrencyIdentity requiredCurrency)
+        => ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error)
+            ? shopPurchaseRunner.Preview(request, requiredCurrency)
+            : new ShopPurchasePreviewResult(
+                default,
+                string.Empty,
+                null,
+                [],
+                ShopPurchaseFailureCodes.InvalidRequest,
+                error,
+                0,
+                0,
+                0,
+                0);
+
+    internal ShopPurchasePreviewResult PreviewShopPurchaseAtLeast(
+        uint itemId,
+        int minimumQuantity,
+        ShopCurrencyIdentity requiredCurrency)
+    {
+        ShopPurchasePreviewResult? best = null;
+        foreach (var bundle in shopCatalogService.GetReceiveBundleCounts(itemId))
+        {
+            var quantity = checked(((minimumQuantity + bundle - 1) / bundle) * bundle);
+            if (quantity > ShopPurchaseRequest.MaximumQuantity)
+                continue;
+            var candidate = PreviewShopPurchase(itemId, quantity, requiredCurrency);
+            if (candidate.CanPurchase && (best == null || candidate.Request.Quantity < best.Request.Quantity))
+                best = candidate;
+        }
+
+        return best ?? PreviewShopPurchase(itemId, Math.Clamp(minimumQuantity, 1, ShopPurchaseRequest.MaximumQuantity), requiredCurrency);
+    }
+
+    internal ShopPurchasePreviewResult PreviewMaximumShopPurchase(
+        uint itemId,
+        ShopCurrencyIdentity requiredCurrency)
+    {
+        ShopPurchasePreviewResult? best = null;
+        ShopPurchasePreviewResult? lastFailure = null;
+        foreach (var bundle in shopCatalogService.GetReceiveBundleCounts(itemId))
+        {
+            var low = 1;
+            var high = ShopPurchaseRequest.MaximumQuantity / bundle;
+            while (low <= high)
+            {
+                var transactions = low + ((high - low) / 2);
+                var candidate = PreviewShopPurchase(itemId, transactions * bundle, requiredCurrency);
+                if (candidate.CanPurchase)
+                {
+                    if (best == null || candidate.Request.Quantity > best.Request.Quantity)
+                        best = candidate;
+                    low = transactions + 1;
+                }
+                else if (candidate.FailureCode is ShopPurchaseFailureCodes.InsufficientCurrency
+                         or ShopPurchaseFailureCodes.InventoryCapacity)
+                {
+                    lastFailure = candidate;
+                    high = transactions - 1;
+                }
+                else
+                {
+                    lastFailure = candidate;
+                    break;
+                }
+            }
+        }
+
+        return best ?? lastFailure ?? PreviewShopPurchase(itemId, 1, requiredCurrency);
+    }
+
+    internal ShopPurchasePreviewResult PreviewAnyShopPurchaseBundle(
+        uint itemId,
+        ShopCurrencyIdentity requiredCurrency)
+    {
+        ShopPurchasePreviewResult? resourceLimited = null;
+        ShopPurchasePreviewResult? structuralFailure = null;
+        foreach (var bundle in shopCatalogService.GetReceiveBundleCounts(itemId))
+        {
+            var candidate = PreviewShopPurchase(itemId, bundle, requiredCurrency);
+            if (candidate.CanPurchase)
+                return candidate;
+            if (candidate.FailureCode is ShopPurchaseFailureCodes.InsufficientCurrency
+                or ShopPurchaseFailureCodes.InventoryCapacity)
+            {
+                resourceLimited ??= candidate;
+            }
+            else
+            {
+                structuralFailure ??= candidate;
+            }
+        }
+
+        return resourceLimited ?? structuralFailure ?? PreviewShopPurchase(itemId, 1, requiredCurrency);
+    }
+
+    internal long GetAvailableShopCurrency(ShopCurrencyIdentity currency)
+        => shopPurchaseRuntime.GetAvailableCurrency(new ShopCurrencyCost(currency.Kind, currency.ItemId, string.Empty, 1));
+
+    internal ShopCatalogSearchResponse SearchShopCatalog(string? query, ShopCurrencyIdentity? currency, int limit)
+        => shopCatalogService.Search(query, currency, limit);
 
     internal long GetLiveShopItemCount(uint itemId)
         => shopPurchaseRuntime.GetItemCount(itemId);
@@ -640,8 +753,9 @@ public sealed unsafe class UtilityAutomationService
         return true;
     }
 
-    internal bool StartShopListBatch(IReadOnlyList<ShopListBatchItem> items)
+    internal bool StartShopListBatch(ShopListBatchDefinition definition)
     {
+        var items = definition.Items;
         if (items.Count == 0)
         {
             StatusMessage = "The active shop-list preset has no rows.";
@@ -670,9 +784,19 @@ public sealed unsafe class UtilityAutomationService
 
         foreach (var item in items)
         {
-            if (!ShopPurchaseRequest.TryCreate(item.ItemId, item.DesiredQuantity, out _, out var error))
+            if (!ShopPurchaseRequest.TryCreate(item.ItemId, item.RefillToAtLeast, out _, out var error))
             {
                 StatusMessage = $"Shop-list batch row {item.ItemId} is invalid: {error}";
+                return false;
+            }
+            if (item.RowId == Guid.Empty)
+            {
+                StatusMessage = $"Shop-list batch row {item.ItemId} has no stable row ID.";
+                return false;
+            }
+            if (item.TriggerBelow < 1 || item.RefillToAtLeast < item.TriggerBelow)
+            {
+                StatusMessage = $"Shop-list batch row {item.ItemId} has an invalid trigger/refill rule.";
                 return false;
             }
             if (item.RetainerQuantity < 0)
@@ -682,13 +806,43 @@ public sealed unsafe class UtilityAutomationService
             }
         }
 
+        var rowIds = items.Select(item => item.RowId).ToHashSet();
+        var nonRepeatableRowIds = items.Where(item => !item.Repeatable).Select(item => item.RowId).ToHashSet();
+        if (rowIds.Count != items.Count
+            || definition.AssociationCompletedRowIds.Distinct().Count() != definition.AssociationCompletedRowIds.Count
+            || definition.AssociationCompletedRowIds.Any(rowId => !rowIds.Contains(rowId))
+            || definition.InitiallyCompletedNonRepeatableRowIds.Any(rowId => !nonRepeatableRowIds.Contains(rowId)))
+        {
+            StatusMessage = "Shop-list batch row IDs or association-completed row IDs are invalid for this preset.";
+            return false;
+        }
+        var availableCurrency = GetAvailableShopCurrency(definition.Currency);
+        if (availableCurrency < 0)
+        {
+            StatusMessage = "The selected currency balance is unavailable; ADS will not start the preset.";
+            return false;
+        }
+        if (availableCurrency < definition.CurrencyThreshold)
+        {
+            StatusMessage = $"The selected currency balance {availableCurrency} has not reached trigger {definition.CurrencyThreshold}.";
+            return false;
+        }
+
         shopPurchaseRunner.ReleaseHeldShopUi();
         ResetState();
         activeTask = UtilityTask.ShopListBatch;
         startedAtUtc = DateTime.UtcNow;
+        shopListBatchDefinition = definition;
         shopListBatchItems = items.ToArray();
+        shopListBatchRows = [];
+        shopListBatchCompletedNonRepeatableRowIds.Clear();
+        foreach (var rowId in definition.InitiallyCompletedNonRepeatableRowIds)
+            shopListBatchCompletedNonRepeatableRowIds.Add(rowId);
+        shopListBatchSkippedRowIds.Clear();
         shopListBatchIndex = 0;
         shopListBatchCompletedRows = 0;
+        shopListBatchVerifiedPurchaseRows = 0;
+        shopListSpendCyclePurchased = false;
         shopListBatchChildAccepted = false;
         shopListBatchCancelRequested = false;
         shopListBatchTerminalFailureMessage = string.Empty;
@@ -696,19 +850,119 @@ public sealed unsafe class UtilityAutomationService
         LastSuccessMessage = string.Empty;
         LastFailureMessage = string.Empty;
         LastCompletionUtc = DateTime.MinValue;
+        var associationCompleted = definition.AssociationCompletedRowIds.ToHashSet();
+        foreach (var item in shopListBatchItems)
+        {
+            var inventory = Math.Max(0L, shopPurchaseRuntime.GetItemCount(item.ItemId));
+            var owned = inventory + (item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
+                ? item.RetainerQuantity
+                : 0);
+            var skipped = !item.Repeatable && associationCompleted.Contains(item.RowId);
+            if (skipped)
+            {
+                shopListBatchSkippedRowIds.Add(item.RowId);
+                shopListBatchCompletedRows++;
+                if (!item.Repeatable)
+                    shopListBatchCompletedNonRepeatableRowIds.Add(item.RowId);
+            }
+            shopListBatchRows.Add(new ShopListBatchRowStatus(
+                item.RowId,
+                item.ItemId,
+                item.ItemName,
+                item.Repeatable,
+                OwnershipScopeName(item.OwnershipScope),
+                item.TriggerBelow,
+                item.RefillToAtLeast,
+                owned,
+                0,
+                0,
+                skipped ? "association-completed" : "pending",
+                skipped ? "Skipped because this exact association already completed the non-repeatable row." : "Pending evaluation."));
+        }
         StatusMessage = $"Starting shop-list batch with {items.Count} row(s).";
         shopListBatchStatus = new ShopListBatchStatusSnapshot(
+            1,
+            definition.OperationId,
+            definition.PresetId,
             true,
             false,
             null,
-            0,
+            "running",
+            shopListBatchCompletedRows,
             items.Count,
             0,
             string.Empty,
+            CurrentCompletedNonRepeatableRowIds(),
+            CurrentSkippedRowIds(),
+            null,
             StatusMessage,
             string.Empty,
+            shopListBatchRows.ToArray(),
             null);
-        log.Information("[ADS][ShopLists] Accepted batch with {Count} consolidated row(s).", items.Count);
+        log.Information(
+            "[ADS][ShopLists] Accepted preset={PresetId} operation={OperationId} with {Count} row(s).",
+            definition.PresetId,
+            definition.OperationId,
+            items.Count);
+        return true;
+    }
+
+    internal bool RetainShopListPresetNoOp(
+        string operationId,
+        Guid presetId,
+        string disposition,
+        string message,
+        IReadOnlyList<ShopListPreviewRow> previewRows,
+        IReadOnlyList<Guid> completedNonRepeatableRowIds)
+    {
+        if (IsRunning)
+            return false;
+
+        var rows = previewRows.Select(row => new ShopListBatchRowStatus(
+            row.RowId,
+            row.ItemId,
+            row.ItemName,
+            row.Repeatable,
+            row.OwnershipScope,
+            row.TriggerBelow,
+            row.RefillToAtLeast,
+            row.OwnedQuantity,
+            row.PurchaseQuantity,
+            0,
+            row.Outcome,
+            row.StatusMessage)).ToArray();
+        var skipped = rows.Where(row => row.Outcome == "association-completed")
+            .Select(row => row.RowId)
+            .ToArray();
+        var completedAt = DateTime.UtcNow;
+        shopListBatchStatus = new ShopListBatchStatusSnapshot(
+            1,
+            operationId,
+            presetId,
+            false,
+            true,
+            true,
+            disposition,
+            rows.Count(row => row.Outcome is "association-completed" or "already-satisfied"),
+            rows.Length,
+            0,
+            string.Empty,
+            completedNonRepeatableRowIds,
+            skipped,
+            null,
+            message,
+            string.Empty,
+            rows,
+            completedAt);
+        LastSuccessMessage = message;
+        LastFailureMessage = string.Empty;
+        LastCompletionUtc = completedAt;
+        StatusMessage = $"Shop-list preset {disposition}: {message}";
+        log.Information(
+            "[ADS][ShopLists] Retained no-op preset={PresetId} operation={OperationId} disposition={Disposition}.",
+            presetId,
+            operationId,
+            disposition);
         return true;
     }
 
@@ -850,6 +1104,19 @@ public sealed unsafe class UtilityAutomationService
         log.Warning($"[ADS][Utility] Cancelled {GetTaskLabel(activeTask)}: {reason}");
         ResetState();
         StatusMessage = message;
+    }
+
+    public bool CancelShopListPreset(string operationId)
+    {
+        if (activeTask != UtilityTask.ShopListBatch
+            || shopListBatchDefinition == null
+            || !string.Equals(shopListBatchDefinition.OperationId, operationId?.Trim(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        Cancel($"matching preset operation {shopListBatchDefinition.OperationId}");
+        return true;
     }
 
     private bool TryStartTask(UtilityTask task, string statusMessage)
@@ -2387,7 +2654,7 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateShopListBatch()
     {
-        if (activeTask != UtilityTask.ShopListBatch)
+        if (activeTask != UtilityTask.ShopListBatch || shopListBatchDefinition == null)
             return;
 
         if (shopPurchaseRunner.IsRunning)
@@ -2400,7 +2667,18 @@ public sealed unsafe class UtilityAutomationService
                 StatusMessage = running.StatusMessage,
                 CurrentItemId = running.ItemId,
                 CurrentItemName = running.ItemName,
+                Rows = shopListBatchRows.ToArray(),
             };
+            if (shopListBatchChildAccepted && shopListBatchIndex < shopListBatchRows.Count)
+            {
+                var row = shopListBatchRows[shopListBatchIndex];
+                shopListBatchRows[shopListBatchIndex] = row with
+                {
+                    PurchasedQuantity = checked(shopListBatchChildPurchasedBaseline + running.AcquiredQuantity),
+                    Message = running.StatusMessage,
+                };
+                SyncShopListBatchStatus();
+            }
             if (running.Running)
                 return;
         }
@@ -2411,7 +2689,11 @@ public sealed unsafe class UtilityAutomationService
             shopListBatchChildAccepted = false;
             if (!string.IsNullOrEmpty(shopListBatchTerminalFailureMessage))
             {
-                FinishShopListBatch(false, shopListBatchTerminalFailureMessage);
+                if (child.Succeeded == true && child.SelectedOffer != null)
+                    RecordSuccessfulShopListChild(child);
+                else
+                    MarkCurrentBatchRow("failed", shopListBatchTerminalFailureMessage, child.AcquiredQuantity);
+                FinishShopListBatch(false, shopListBatchTerminalFailureMessage, child.FailureCode ?? "batch-failed");
                 return;
             }
             if (shopListBatchCancelRequested)
@@ -2419,75 +2701,123 @@ public sealed unsafe class UtilityAutomationService
                 var cleanupDetail = child.FailureCode == ShopPurchaseFailureCodes.Cancelled
                     ? string.Empty
                     : $" Cleanup result: {child.FailureMessage}";
+                if (child.Succeeded == true && child.SelectedOffer != null)
+                    RecordSuccessfulShopListChild(child);
+                else
+                    MarkCurrentBatchRow("cancelled", child.FailureMessage, child.AcquiredQuantity);
                 FinishShopListBatch(
                     false,
-                    $"Shop-list batch cancelled after {shopListBatchCompletedRows} completed row(s); current row acquired {child.AcquiredQuantity} of {child.RequestedQuantity}.{cleanupDetail}");
+                    $"Shop-list batch cancelled after {shopListBatchCompletedRows} completed row(s); current row acquired {child.AcquiredQuantity} of {child.RequestedQuantity}.{cleanupDetail}",
+                    ShopPurchaseFailureCodes.Cancelled);
                 return;
             }
             if (child.Succeeded != true)
             {
+                MarkCurrentBatchRow("failed", child.FailureMessage, child.AcquiredQuantity);
                 FinishShopListBatch(
                     false,
-                    $"Shop-list batch stopped on {child.ItemName}: {child.FailureMessage} Acquired {child.AcquiredQuantity} of {child.RequestedQuantity} before stopping.");
+                    $"Shop-list batch stopped on {child.ItemName}: {child.FailureMessage} Acquired {child.AcquiredQuantity} of {child.RequestedQuantity} before stopping.",
+                    child.FailureCode ?? "batch-failed");
                 return;
             }
             if (child.SelectedOffer == null)
             {
-                FinishShopListBatch(false, "Shop-list batch child completed without a selected shop identity.");
+                MarkCurrentBatchRow("failed", "Purchase completed without a selected shop identity.", child.AcquiredQuantity);
+                FinishShopListBatch(false, "Shop-list batch child completed without a selected shop identity.", ShopPurchaseFailureCodes.UiMismatch);
                 return;
             }
 
-            shopListHeldShop = ShopOfferIdentity.From(child.SelectedOffer);
-            shopListBatchCompletedRows++;
-            shopListBatchIndex++;
+            RecordSuccessfulShopListChild(child);
         }
 
         if (!string.IsNullOrEmpty(shopListBatchTerminalFailureMessage))
         {
-            FinishShopListBatch(false, shopListBatchTerminalFailureMessage);
+            FinishShopListBatch(false, shopListBatchTerminalFailureMessage, "batch-failed");
             return;
         }
         if (shopListBatchCancelRequested)
         {
-            FinishShopListBatch(false, $"Shop-list batch cancelled after {shopListBatchCompletedRows} completed row(s).");
+            FinishShopListBatch(
+                false,
+                $"Shop-list batch cancelled after {shopListBatchCompletedRows} completed row(s).",
+                ShopPurchaseFailureCodes.Cancelled);
             return;
         }
 
         while (shopListBatchIndex < shopListBatchItems.Count)
         {
             var item = shopListBatchItems[shopListBatchIndex];
-            var liveQuantity = shopPurchaseRuntime.GetItemCount(item.ItemId);
-            var needed = Math.Max(0L, item.DesiredQuantity - Math.Max(0L, liveQuantity));
-            needed = Math.Max(0L, needed - item.RetainerQuantity);
-            if (needed == 0)
+            var row = shopListBatchRows[shopListBatchIndex];
+            if (row.Outcome == "association-completed"
+                || (shopListBatchDefinition.Mode == ShopListMode.SpendUntilCurrencyOrCapacity
+                    && !item.Repeatable
+                    && row.Outcome == "purchased"))
             {
-                shopListBatchCompletedRows++;
                 shopListBatchIndex++;
-                shopListBatchStatus = shopListBatchStatus with
-                {
-                    CompletedRows = shopListBatchCompletedRows,
-                    CurrentItemId = item.ItemId,
-                    CurrentItemName = item.ItemName,
-                    StatusMessage = $"Skipped {item.ItemName}; live inventory and retainer holdings already meet the desired total.",
-                };
                 continue;
             }
 
-            if (needed > ShopPurchaseRequest.MaximumQuantity)
+            var owned = GetShopListOwnedQuantity(item);
+            if (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill && owned >= item.TriggerBelow)
             {
-                FinishShopListBatch(
-                    false,
-                    $"{item.ItemName} needs {needed}, above the existing single-purchase limit of {ShopPurchaseRequest.MaximumQuantity}.");
-                return;
+                shopListBatchRows[shopListBatchIndex] = row with
+                {
+                    OwnedQuantity = owned,
+                    Outcome = "already-satisfied",
+                    Message = $"Owned quantity {owned} is not below trigger {item.TriggerBelow}.",
+                };
+                if (!item.Repeatable)
+                    shopListBatchCompletedNonRepeatableRowIds.Add(item.RowId);
+                shopListBatchCompletedRows++;
+                shopListBatchIndex++;
+                SyncShopListBatchStatus();
+                continue;
             }
 
-            var purchaseQuantity = (int)needed;
-            var purchasePreview = PreviewShopPurchase(item.ItemId, purchaseQuantity);
+            ShopPurchasePreviewResult purchasePreview;
+            if (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill)
+            {
+                var minimum = item.RefillToAtLeast - owned;
+                if (minimum <= 0 || minimum > ShopPurchaseRequest.MaximumQuantity)
+                {
+                    var message = $"{item.ItemName} requires invalid additional quantity {minimum}.";
+                    MarkCurrentBatchRow("failed", message);
+                    FinishShopListBatch(false, message, ShopPurchaseFailureCodes.InvalidRequest);
+                    return;
+                }
+                purchasePreview = PreviewShopPurchaseAtLeast(item.ItemId, (int)minimum, shopListBatchDefinition.Currency);
+            }
+            else
+            {
+                purchasePreview = PreviewMaximumShopPurchase(item.ItemId, shopListBatchDefinition.Currency);
+            }
+
             if (!purchasePreview.CanPurchase || purchasePreview.SelectedOffer == null)
             {
+                if (shopListBatchDefinition.Mode == ShopListMode.SpendUntilCurrencyOrCapacity
+                    && purchasePreview.FailureCode is ShopPurchaseFailureCodes.InsufficientCurrency
+                        or ShopPurchaseFailureCodes.InventoryCapacity)
+                {
+                    shopListBatchRows[shopListBatchIndex] = row with
+                    {
+                        OwnedQuantity = owned,
+                        Outcome = row.PurchasedQuantity > 0 ? "purchased" : "skipped",
+                        Message = row.PurchasedQuantity > 0
+                            ? $"{purchasePreview.Message} Preserved {row.PurchasedQuantity} previously verified purchased item(s)."
+                            : purchasePreview.Message,
+                    };
+                    shopListBatchIndex++;
+                    SyncShopListBatchStatus();
+                    continue;
+                }
+
                 shopPurchaseRunner.ReleaseHeldShopUi();
                 shopListHeldShop = null;
-                FinishShopListBatch(false, $"{item.ItemName} cannot be purchased: {purchasePreview.Message}");
+                MarkCurrentBatchRow("failed", purchasePreview.Message);
+                FinishShopListBatch(
+                    false,
+                    $"{item.ItemName} cannot be purchased with the selected currency: {purchasePreview.Message}",
+                    purchasePreview.FailureCode ?? ShopPurchaseFailureCodes.UnsupportedOffer);
                 return;
             }
 
@@ -2498,43 +2828,78 @@ public sealed unsafe class UtilityAutomationService
                 shopListHeldShop = null;
             }
 
-            var request = new ShopPurchaseRequest(item.ItemId, purchaseQuantity);
-            if (!shopPurchaseRunner.Start(request, holdShopOpenOnSuccess: true))
+            var request = purchasePreview.Request;
+            if (!shopPurchaseRunner.Start(request, holdShopOpenOnSuccess: true, shopListBatchDefinition.Currency))
             {
                 shopPurchaseRunner.ReleaseHeldShopUi();
                 shopListHeldShop = null;
-                FinishShopListBatch(false, $"{item.ItemName} could not start: {shopPurchaseRunner.Status.LastStartError}");
+                MarkCurrentBatchRow("failed", shopPurchaseRunner.Status.LastStartError);
+                FinishShopListBatch(
+                    false,
+                    $"{item.ItemName} could not start: {shopPurchaseRunner.Status.LastStartError}",
+                    shopPurchaseRunner.LastStartFailureCode ?? ShopPurchaseFailureCodes.Busy);
                 return;
             }
 
+            shopListBatchChildPurchasedBaseline = row.PurchasedQuantity;
+            shopListBatchRows[shopListBatchIndex] = row with
+            {
+                OwnedQuantity = owned,
+                RequestedQuantity = checked(row.RequestedQuantity + request.Quantity),
+                Outcome = "running",
+                Message = shopPurchaseRunner.Status.StatusMessage,
+            };
             shopListBatchChildAccepted = true;
             StatusMessage = shopPurchaseRunner.Status.StatusMessage;
-            shopListBatchStatus = shopListBatchStatus with
-            {
-                CompletedRows = shopListBatchCompletedRows,
-                CurrentItemId = item.ItemId,
-                CurrentItemName = item.ItemName,
-                StatusMessage = StatusMessage,
-            };
+            SyncShopListBatchStatus(item.ItemId, item.ItemName, StatusMessage);
             return;
         }
 
-        FinishShopListBatch(true, $"Shop-list batch completed {shopListBatchCompletedRows} row(s) without overbuying.");
+        if (shopListBatchDefinition.Mode == ShopListMode.SpendUntilCurrencyOrCapacity)
+        {
+            if (shopListSpendCyclePurchased)
+            {
+                shopListSpendCyclePurchased = false;
+                shopListBatchIndex = 0;
+                SyncShopListBatchStatus();
+                return;
+            }
+            if (shopListBatchVerifiedPurchaseRows > 0)
+            {
+                FinishShopListBatch(true, "Spend preset reached the selected currency or inventory-capacity limit after verified purchases.");
+                return;
+            }
+            FinishShopListBatch(true, "Spend preset is already at the selected currency or inventory-capacity limit; no purchase was needed.");
+            return;
+        }
+
+        FinishShopListBatch(true, $"Targeted refill preset completed {shopListBatchCompletedRows} row(s) without overbuying.");
     }
 
-    private void FinishShopListBatch(bool succeeded, string message)
+    private void FinishShopListBatch(bool succeeded, string message, string? failureCode = null)
     {
         shopPurchaseRunner.ReleaseHeldShopUi();
         shopListHeldShop = null;
         var completedAt = DateTime.UtcNow;
+        if (succeeded)
+            shopListBatchCompletedRows = shopListBatchRows.Count;
         shopListBatchStatus = shopListBatchStatus with
         {
             Running = false,
             Done = true,
             Succeeded = succeeded,
+            Disposition = succeeded
+                ? "succeeded"
+                : failureCode == ShopPurchaseFailureCodes.Cancelled
+                    ? "cancelled"
+                    : "failed",
             CompletedRows = shopListBatchCompletedRows,
+            CompletedNonRepeatableRowIds = CurrentCompletedNonRepeatableRowIds(),
+            SkippedRowIds = CurrentSkippedRowIds(),
+            FailureCode = succeeded ? null : failureCode,
             StatusMessage = message,
             FailureMessage = succeeded ? string.Empty : message,
+            Rows = shopListBatchRows.ToArray(),
             CompletedAtUtc = completedAt,
         };
         LastSuccessMessage = succeeded ? message : string.Empty;
@@ -2548,6 +2913,89 @@ public sealed unsafe class UtilityAutomationService
         ResetState();
         StatusMessage = message;
     }
+
+    private long GetShopListOwnedQuantity(ShopListBatchItem item)
+    {
+        var inventory = Math.Max(0L, shopPurchaseRuntime.GetItemCount(item.ItemId));
+        return inventory + (item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
+            ? item.RetainerQuantity
+            : 0);
+    }
+
+    private void RecordSuccessfulShopListChild(ShopPurchaseStatusSnapshot child)
+    {
+        if (shopListBatchDefinition == null
+            || child.SelectedOffer == null
+            || shopListBatchIndex < 0
+            || shopListBatchIndex >= shopListBatchItems.Count)
+        {
+            return;
+        }
+
+        var completedItem = shopListBatchItems[shopListBatchIndex];
+        var completedRow = shopListBatchRows[shopListBatchIndex];
+        shopListBatchRows[shopListBatchIndex] = completedRow with
+        {
+            PurchasedQuantity = checked(shopListBatchChildPurchasedBaseline + child.AcquiredQuantity),
+            Outcome = "purchased",
+            Message = $"Verified purchase acquired {child.AcquiredQuantity} item(s).",
+        };
+        if (!completedItem.Repeatable)
+            shopListBatchCompletedNonRepeatableRowIds.Add(completedItem.RowId);
+        if (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill || !completedItem.Repeatable)
+            shopListBatchCompletedRows++;
+        shopListBatchVerifiedPurchaseRows++;
+        shopListSpendCyclePurchased = true;
+        shopListHeldShop = ShopOfferIdentity.From(child.SelectedOffer);
+        shopListBatchIndex++;
+        SyncShopListBatchStatus();
+    }
+
+    private void MarkCurrentBatchRow(string outcome, string message, int acquiredQuantity = 0)
+    {
+        if (shopListBatchIndex < 0 || shopListBatchIndex >= shopListBatchRows.Count)
+            return;
+        var row = shopListBatchRows[shopListBatchIndex];
+        shopListBatchRows[shopListBatchIndex] = row with
+        {
+            PurchasedQuantity = Math.Max(
+                row.PurchasedQuantity,
+                checked(shopListBatchChildPurchasedBaseline + acquiredQuantity)),
+            Outcome = outcome,
+            Message = message,
+        };
+        SyncShopListBatchStatus();
+    }
+
+    private void SyncShopListBatchStatus(
+        uint? currentItemId = null,
+        string? currentItemName = null,
+        string? message = null)
+        => shopListBatchStatus = shopListBatchStatus with
+        {
+            CompletedRows = shopListBatchCompletedRows,
+            CurrentItemId = currentItemId ?? shopListBatchStatus.CurrentItemId,
+            CurrentItemName = currentItemName ?? shopListBatchStatus.CurrentItemName,
+            CompletedNonRepeatableRowIds = CurrentCompletedNonRepeatableRowIds(),
+            SkippedRowIds = CurrentSkippedRowIds(),
+            StatusMessage = message ?? shopListBatchStatus.StatusMessage,
+            Rows = shopListBatchRows.ToArray(),
+        };
+
+    private IReadOnlyList<Guid> CurrentCompletedNonRepeatableRowIds()
+        => shopListBatchItems.Where(item => shopListBatchCompletedNonRepeatableRowIds.Contains(item.RowId))
+            .Select(item => item.RowId)
+            .ToArray();
+
+    private IReadOnlyList<Guid> CurrentSkippedRowIds()
+        => shopListBatchItems.Where(item => shopListBatchSkippedRowIds.Contains(item.RowId))
+            .Select(item => item.RowId)
+            .ToArray();
+
+    private static string OwnershipScopeName(ShopListOwnershipScope scope)
+        => scope == ShopListOwnershipScope.InventoryOnly
+            ? "inventory-only"
+            : "inventory-and-retainers";
 
     private void Complete(string message)
     {
@@ -2623,7 +3071,10 @@ public sealed unsafe class UtilityAutomationService
         maximumDesynthLevel = 0;
         desynthGearsetItemIds = null;
         shopListBatchItems = [];
+        shopListBatchDefinition = null;
+        shopListBatchRows = [];
         shopListBatchIndex = 0;
+        shopListBatchChildPurchasedBaseline = 0;
         shopListBatchChildAccepted = false;
         shopListBatchCancelRequested = false;
         shopListBatchTerminalFailureMessage = string.Empty;
@@ -2649,15 +3100,23 @@ public sealed unsafe class UtilityAutomationService
 
     private static ShopListBatchStatusSnapshot EmptyShopListBatchStatus()
         => new(
+            1,
+            string.Empty,
+            Guid.Empty,
             false,
             false,
             null,
+            "none",
             0,
             0,
             0,
             string.Empty,
+            [],
+            [],
+            null,
             "No shop-list batch has been started.",
             string.Empty,
+            [],
             null);
 
     private static string GetDesynthCategoryLabel(AgentSalvage.SalvageItemCategory category)

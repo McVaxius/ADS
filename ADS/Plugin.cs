@@ -313,7 +313,13 @@ public sealed class Plugin : IDalamudPlugin
             PatchConfigurationJson,
             GetDesynthStatusJson,
             GetExtractMateriaStatusJson,
-            GetShopPurchaseStatusJson);
+            GetShopPurchaseStatusJson,
+            ShopListService.GetShopListPresetsJson,
+            ShopListService.PreviewShopListPresetJson,
+            StartShopListPresetJson,
+            ShopListService.GetShopListPresetStatusJson,
+            ShopListService.CancelShopListPreset,
+            ShopListService.SearchShopCatalogJson);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -1201,6 +1207,19 @@ public sealed class Plugin : IDalamudPlugin
         var result = ShopListService.TryStartBatch(out status);
         PrintStatus(result ? status : $"Shop list not started: {status}");
         return result;
+    }
+
+    public string StartShopListPresetJson(string requestJson)
+    {
+        if (AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+            || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId))
+        {
+            return ShopListService.RejectShopListPresetStartJson(
+                requestJson,
+                $"Shop-list purchasing is unavailable: {AutomationTerritoryPolicy.InactiveStatus}");
+        }
+
+        return ShopListService.StartShopListPresetJson(requestJson);
     }
 
     public bool RejectShopPurchaseStart(string message)

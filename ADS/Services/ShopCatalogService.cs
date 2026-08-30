@@ -35,6 +35,189 @@ internal sealed class ShopCatalogService(
 
         return ShopCatalogBuilder.Resolve(current, itemId, quantity, diagnostic);
     }
+
+    public IReadOnlyList<int> GetReceiveBundleCounts(uint itemId)
+    {
+        var current = GetSnapshot();
+        var counts = new HashSet<int>();
+        if (current.GilShopRows.Any(row => row.ItemId == itemId)
+            || (current.GrandCompanyShopRows ?? []).Any(row => row.ItemId == itemId)
+            || (current.FreeCompanyShopRows ?? []).Any(row => row.ItemId == itemId))
+        {
+            counts.Add(1);
+        }
+
+        foreach (var receive in current.SpecialShopRows
+                     .SelectMany(row => row.ReceiveItems)
+                     .Where(receive => receive.ItemId == itemId && !receive.IsHq && receive.Count > 0))
+        {
+            if (receive.Count <= ShopPurchaseRequest.MaximumQuantity)
+                counts.Add((int)receive.Count);
+        }
+
+        return counts.Order().ToArray();
+    }
+
+    public ShopCatalogSearchResponse Search(
+        string? query,
+        ShopCurrencyIdentity? currency,
+        int limit)
+    {
+        var current = GetSnapshot();
+        var normalized = query?.Trim() ?? string.Empty;
+        limit = Math.Clamp(limit, 1, 100);
+        // Currency text is evaluated from the resolved offer below. Candidate pruning cannot
+        // safely see that text, so keep the full deterministic item set for both discovery and
+        // exact-currency searches.
+        var candidateIds = FindCandidateItemIds(current, string.Empty);
+        var rows = new List<ShopCatalogSearchRow>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var itemId in candidateIds)
+        {
+            foreach (var bundle in GetReceiveBundleCounts(itemId))
+            {
+                var resolution = ShopCatalogBuilder.Resolve(current, itemId, bundle, diagnostic);
+                foreach (var offer in resolution.Offers
+                             .Where(offer => offer.Currencies.Count == 1
+                                             && (!currency.HasValue || HasExactCurrency(offer.Currencies, currency.Value)))
+                             .Where(offer => SearchMatches(normalized, resolution.ItemId, resolution.ItemName, offer, offer.Currencies[0]))
+                             .OrderBy(offer => offer.TerritoryName, StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(offer => offer.NpcName, StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(offer => offer.ShopName, StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(offer => offer.SheetRowIndex))
+                {
+                    var cost = offer.Currencies[0];
+                    var identity = FormattableString.Invariant(
+                        $"{resolution.ItemId}:{offer.Kind}:{offer.ShopId}:{offer.SheetRowIndex}:{offer.ReceiveCount}:{offer.NpcId}:{offer.TerritoryId}:{offer.NpcPosition.X:R}:{offer.NpcPosition.Y:R}:{offer.NpcPosition.Z:R}:{cost.Kind}:{cost.ItemId}");
+                    if (!seen.Add(identity))
+                        continue;
+                    rows.Add(new ShopCatalogSearchRow(
+                        resolution.ItemId,
+                        resolution.ItemName,
+                        offer.ReceiveCount,
+                        ShopOfferSelector.KindName(offer.Kind),
+                        offer.ShopId,
+                        offer.ShopName,
+                        offer.SheetRowIndex,
+                        offer.NpcId,
+                        offer.NpcName,
+                        offer.TerritoryId,
+                        offer.TerritoryName,
+                        offer.NpcPosition.X,
+                        offer.NpcPosition.Y,
+                        offer.NpcPosition.Z,
+                        FormattableString.Invariant($"{offer.NpcPosition.X:0.###}, {offer.NpcPosition.Y:0.###}, {offer.NpcPosition.Z:0.###}"),
+                        ShopOfferSelector.CurrencyKindName(cost.Kind),
+                        cost.ItemId,
+                        cost.Name,
+                        cost.AmountPerTransaction));
+                    if (rows.Count > limit)
+                        break;
+                }
+
+                if (rows.Count > limit)
+                    break;
+            }
+
+            if (rows.Count > limit)
+                break;
+        }
+
+        var truncated = rows.Count > limit;
+        if (truncated)
+            rows.RemoveRange(limit, rows.Count - limit);
+        return new ShopCatalogSearchResponse(
+            1,
+            normalized,
+            currency.HasValue ? ShopOfferSelector.CurrencyKindName(currency.Value.Kind) : string.Empty,
+            currency?.ItemId ?? 0,
+            truncated,
+            rows,
+            rows.Count == 0
+                ? "No deterministic vendor offers matched the exact currency and search text."
+                : $"Found {rows.Count} deterministic vendor offer(s){(truncated ? " (result limit reached)" : string.Empty)}.");
+    }
+
+    private ShopCatalogSnapshot GetSnapshot()
+    {
+        var current = snapshot;
+        if (current != null)
+            return current;
+        lock (sync)
+            return snapshot ??= sheetSource.BuildSnapshot();
+    }
+
+    private static IReadOnlyList<uint> FindCandidateItemIds(ShopCatalogSnapshot snapshot, string query)
+    {
+        var allIds = snapshot.GilShopRows.Select(row => row.ItemId)
+            .Concat(snapshot.SpecialShopRows.SelectMany(row => row.ReceiveItems).Select(item => item.ItemId))
+            .Concat((snapshot.GrandCompanyShopRows ?? []).Select(row => row.ItemId))
+            .Concat((snapshot.FreeCompanyShopRows ?? []).Select(row => row.ItemId))
+            .Where(itemId => itemId != 0)
+            .Distinct()
+            .ToArray();
+        if (string.IsNullOrEmpty(query))
+            return allIds.Order().ToArray();
+
+        var matchingShopIds = snapshot.GilShopRows
+            .Where(row => Contains(row.ShopName, query) || row.ShopId.ToString().Equals(query, StringComparison.Ordinal))
+            .Select(row => (ShopSheetKind.Gil, row.ShopId))
+            .Concat(snapshot.SpecialShopRows
+                .Where(row => Contains(row.ShopName, query) || row.ShopId.ToString().Equals(query, StringComparison.Ordinal))
+                .Select(row => (ShopSheetKind.Special, row.ShopId)))
+            .Concat((snapshot.GrandCompanyShopRows ?? [])
+                .Where(row => Contains(row.ShopName, query) || row.ShopId.ToString().Equals(query, StringComparison.Ordinal))
+                .Select(row => (ShopSheetKind.GrandCompany, row.ShopId)))
+            .Concat((snapshot.FreeCompanyShopRows ?? [])
+                .Where(row => Contains(row.ShopName, query) || row.ShopId.ToString().Equals(query, StringComparison.Ordinal))
+                .Select(row => (ShopSheetKind.FreeCompany, row.ShopId)))
+            .ToHashSet();
+        foreach (var link in snapshot.NpcLinks.Where(link => Contains(link.NpcName, query) || link.NpcId.ToString().Equals(query, StringComparison.Ordinal)))
+            matchingShopIds.Add((link.ShopKind, link.ShopId));
+        var territoryNpcIds = snapshot.NpcPlacements
+            .Where(row => Contains(row.TerritoryName, query) || row.TerritoryId.ToString().Equals(query, StringComparison.Ordinal))
+            .Select(row => row.NpcId)
+            .ToHashSet();
+        foreach (var link in snapshot.NpcLinks.Where(link => territoryNpcIds.Contains(link.NpcId)))
+            matchingShopIds.Add((link.ShopKind, link.ShopId));
+
+        return allIds.Where(itemId =>
+                snapshot.Items.TryGetValue(itemId, out var item)
+                && (Contains(item.Name, query) || itemId.ToString().Equals(query, StringComparison.Ordinal)
+                    || snapshot.GilShopRows.Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.Gil, row.ShopId)))
+                    || snapshot.SpecialShopRows.Any(row => row.ReceiveItems.Any(receive => receive.ItemId == itemId)
+                                                        && matchingShopIds.Contains((ShopSheetKind.Special, row.ShopId)))
+                    || (snapshot.GrandCompanyShopRows ?? []).Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.GrandCompany, row.ShopId)))
+                    || (snapshot.FreeCompanyShopRows ?? []).Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.FreeCompany, row.ShopId)))))
+            .Order()
+            .ToArray();
+    }
+
+    private static bool SearchMatches(
+        string query,
+        uint itemId,
+        string itemName,
+        ShopOffer offer,
+        ShopCurrencyCost currency)
+        => string.IsNullOrEmpty(query)
+           || Contains(itemName, query)
+           || itemId.ToString().Equals(query, StringComparison.Ordinal)
+           || Contains(offer.ShopName, query)
+           || offer.ShopId.ToString().Equals(query, StringComparison.Ordinal)
+           || Contains(offer.NpcName, query)
+           || offer.NpcId.ToString().Equals(query, StringComparison.Ordinal)
+           || Contains(offer.TerritoryName, query)
+           || offer.TerritoryId.ToString().Equals(query, StringComparison.Ordinal)
+           || Contains(currency.Name, query)
+           || Contains(ShopOfferSelector.CurrencyKindName(currency.Kind), query)
+           || currency.ItemId.ToString().Equals(query, StringComparison.Ordinal);
+
+    private static bool HasExactCurrency(IReadOnlyList<ShopCurrencyCost> costs, ShopCurrencyIdentity currency)
+        => costs.Count == 1 && costs[0].Identity == currency;
+
+    private static bool Contains(string value, string query)
+        => value.Contains(query, StringComparison.OrdinalIgnoreCase);
 }
 
 internal static class ShopAetheryteRouteBuilder
@@ -811,11 +994,31 @@ internal sealed record ShopSelectionContext(
 
 internal static class ShopOfferSelector
 {
-    public static ShopOfferSelectionResult Select(ShopCatalogResolution resolution, ShopSelectionContext context)
+    public static ShopOfferSelectionResult Select(
+        ShopCatalogResolution resolution,
+        ShopSelectionContext context,
+        ShopCurrencyIdentity? requiredCurrency = null)
     {
         var evaluated = resolution.Offers
             .Select(offer => Evaluate(offer, resolution, context))
             .ToArray();
+
+        if (requiredCurrency.HasValue)
+        {
+            evaluated = evaluated
+                .Where(offer => offer.Currencies.Count == 1
+                                && offer.Currencies[0].Currency.Identity == requiredCurrency.Value)
+                .ToArray();
+            if (evaluated.Length == 0 && resolution.Offers.Count > 0)
+            {
+                return new ShopOfferSelectionResult(
+                    null,
+                    [],
+                    [],
+                    ShopPurchaseFailureCodes.UnsupportedOffer,
+                    $"No deterministic offer spends only the selected {CurrencyKindName(requiredCurrency.Value.Kind)} identity {requiredCurrency.Value.ItemId}.");
+            }
+        }
 
         if (resolution.Offers.Count == 0)
         {
@@ -1108,7 +1311,7 @@ internal static class ShopOfferSelector
             .ThenBy(currency => currency.Currency.ItemId)
             .Select(currency => $"{(int)currency.Currency.Kind}:{currency.Currency.ItemId}:{currency.RequiredAmount}"));
 
-    private static string KindName(ShopOfferKind kind)
+    internal static string KindName(ShopOfferKind kind)
         => kind switch
         {
             ShopOfferKind.GilShop => "gil-shop",
@@ -1121,7 +1324,7 @@ internal static class ShopOfferSelector
             _ => "unsupported",
         };
 
-    private static string CurrencyKindName(ShopCurrencyKind kind)
+    internal static string CurrencyKindName(ShopCurrencyKind kind)
         => kind switch
         {
             ShopCurrencyKind.Gil => "gil",
