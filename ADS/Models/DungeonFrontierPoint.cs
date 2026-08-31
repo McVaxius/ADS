@@ -10,6 +10,7 @@ public sealed class DungeonFrontierPoint
     public required uint LevelRowId { get; init; }
     public uint MapId { get; init; }
     public int Priority { get; init; } = 1000;
+    internal ObjectPriorityRule? SourceRule { get; init; }
     public Vector2? MapCoordinates { get; init; }
     public bool UsePlayerYForNavigation { get; init; }
     public ManualDestinationKind ManualDestinationKind { get; init; }

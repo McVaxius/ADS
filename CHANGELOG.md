@@ -2,6 +2,7 @@
 
 ## 2026-08-30
 
+- Object Rules now names the exact authored rule driving the current planner objective and highlights its clean saved `DEFAULT` row, with a direct action that clears hiding filters and scrolls to it.
 - Rebuilt Main > Duties as a compact current-duty coverage surface and replaced the former maturity/readiness editor with Duty Manager: numeric M0-M3 display, expansion/family/rule/waypoint/Dawntrail/current/changed/selected/MSQ/planned/override/note filters, clipped rows, selected-duty editing, and diagnostic rule deep-links. Coverage is now one O(duties + rules) snapshot per draw and reports associated, enabled, valid-waypoint, redundant-scope, global, and unresolved counts while runtime scope matching remains conjunctive.
 - Expanded Object Rules with clipped rows, final-column bulk selection, exact affected-scope deletion confirmation, one-step deletion/partial-import undo, complete-duty/delta/current-filter import modes, protected globals, matching partial exports, and dirty-draft-safe external refresh conflicts. `MATURE-PROPOSALS` is an editable non-default preset with a last-write-based 24-hour refresh clock, confirmed Refresh Now, and a clean saved JSON contribution helper.
 - Remote JSON completion now reports the exact changed files so ADS reloads only affected data. The shared proposal candidate remains outside `DEFAULT`, and no IPC or JSON schema version changed.

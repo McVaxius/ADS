@@ -1214,6 +1214,7 @@ public sealed class DungeonFrontierService
                 LevelRowId = 0,
                 MapId = map.RowId,
                 Priority = rule.Priority,
+                SourceRule = rule,
                 MapCoordinates = mapCoordinates,
                 UsePlayerYForNavigation = true,
                 ManualDestinationKind = ManualDestinationKind.MapXz,
@@ -1267,6 +1268,7 @@ public sealed class DungeonFrontierService
                 LevelRowId = 0,
                 MapId = map.RowId,
                 Priority = rule.Priority,
+                SourceRule = rule,
                 ManualDestinationKind = ManualDestinationKind.Xyz,
                 AllowCombatBypass = allowCombatBypass,
                 ArrivalRadius3d = allowCombatBypass
@@ -3818,6 +3820,7 @@ public sealed class DungeonFrontierService
             LevelRowId = point.LevelRowId,
             MapId = point.MapId,
             Priority = point.Priority,
+            SourceRule = point.SourceRule,
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = true,
             ManualDestinationKind = point.ManualDestinationKind,

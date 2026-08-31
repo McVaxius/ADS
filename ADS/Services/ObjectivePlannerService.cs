@@ -155,6 +155,7 @@ public sealed class ObjectivePlannerService
                 TargetGameObjectId = hyperFixatedAttackTarget.GameObjectId,
                 TargetDistance = distance,
                 TargetVerticalDelta = verticalDelta,
+                ActiveRule = GetActiveRule(context, hyperFixatedAttackTarget, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -191,6 +192,7 @@ public sealed class ObjectivePlannerService
                     TargetName = nearestCombatFriendlyInteractable.Name,
                     TargetDistance = combatFriendlyDistance,
                     TargetVerticalDelta = combatFriendlyVerticalDelta,
+                    ActiveRule = GetActiveRule(context, nearestCombatFriendlyInteractable, playerPosition),
                     CapturedAtUtc = now,
                 };
                 return;
@@ -209,6 +211,7 @@ public sealed class ObjectivePlannerService
                     TargetName = nearestBossFightMonster.Name,
                     TargetDistance = distance,
                     TargetVerticalDelta = verticalDelta,
+                    ActiveRule = GetActiveRule(context, nearestBossFightMonster, playerPosition),
                     CapturedAtUtc = now,
                 };
                 return;
@@ -250,6 +253,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestBossFightMonster.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = verticalDelta,
+                ActiveRule = GetActiveRule(context, nearestBossFightMonster, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -324,6 +328,7 @@ public sealed class ObjectivePlannerService
                     TargetName = nearestTreasureCoffer.Name,
                     TargetDistance = treasureDistance,
                     TargetVerticalDelta = treasureVerticalDelta,
+                    ActiveRule = GetActiveRule(context, nearestTreasureCoffer, playerPosition),
                     CapturedAtUtc = now,
                 };
                 return;
@@ -362,6 +367,7 @@ public sealed class ObjectivePlannerService
                     TargetName = nearestRequiredInteractable.Name,
                     TargetDistance = interactableDistance,
                     TargetVerticalDelta = interactableVerticalDelta,
+                    ActiveRule = GetActiveRule(context, nearestRequiredInteractable, playerPosition),
                     CapturedAtUtc = now,
                 };
                 return;
@@ -382,6 +388,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestMonster.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = playerPosition.HasValue ? MathF.Abs(nearestMonster.Position.Y - playerPosition.Value.Y) : null,
+                ActiveRule = GetActiveRule(context, nearestMonster, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -401,6 +408,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestRequiredInteractable.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = playerPosition.HasValue ? MathF.Abs(nearestRequiredInteractable.Position.Y - playerPosition.Value.Y) : null,
+                ActiveRule = GetActiveRule(context, nearestRequiredInteractable, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -422,6 +430,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestFollowTarget.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = playerPosition.HasValue ? MathF.Abs(nearestFollowTarget.Position.Y - playerPosition.Value.Y) : null,
+                ActiveRule = GetActiveRule(context, nearestFollowTarget, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -492,6 +501,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestRuleBackedInteractableGhost.Name,
                 TargetDistance = distance,
                 TargetVerticalDelta = verticalDelta,
+                ActiveRule = GetActiveRule(context, nearestRuleBackedInteractableGhost, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -530,6 +540,7 @@ public sealed class ObjectivePlannerService
                 TargetName = nearestOptionalInteractable.Name,
                 TargetDistance = playerPosition.HasValue ? Vector3.Distance(nearestOptionalInteractable.Position, playerPosition.Value) : null,
                 TargetVerticalDelta = playerPosition.HasValue ? MathF.Abs(nearestOptionalInteractable.Position.Y - playerPosition.Value.Y) : null,
+                ActiveRule = GetActiveRule(context, nearestOptionalInteractable, playerPosition),
                 CapturedAtUtc = now,
             };
             return;
@@ -781,6 +792,26 @@ public sealed class ObjectivePlannerService
             ? Vector3.Distance(playerPosition.Value, targetPosition.Value)
             : null;
 
+    private ObjectPriorityRule? GetActiveRule(
+        DutyContextSnapshot context,
+        ObservedMonster monster,
+        Vector3? playerPosition)
+        => objectPriorityRuleService.GetEffectiveBattleNpcRule(
+            context,
+            monster,
+            GetDistance(playerPosition, monster.Position),
+            GetVerticalDelta(playerPosition, monster.Position));
+
+    private ObjectPriorityRule? GetActiveRule(
+        DutyContextSnapshot context,
+        ObservedInteractable interactable,
+        Vector3? playerPosition)
+        => objectPriorityRuleService.GetEffectiveRule(
+            context,
+            interactable,
+            GetDistance(playerPosition, interactable.Position),
+            GetVerticalDelta(playerPosition, interactable.Position));
+
     private static float? GetVerticalDelta(Vector3? playerPosition, Vector3? targetPosition)
         => playerPosition.HasValue && targetPosition.HasValue
             ? MathF.Abs(targetPosition.Value.Y - playerPosition.Value.Y)
@@ -1019,6 +1050,11 @@ public sealed class ObjectivePlannerService
             TargetName = selected.Interactable.Name,
             TargetDistance = selected.Distance,
             TargetVerticalDelta = selected.VerticalDelta,
+            ActiveRule = objectPriorityRuleService.GetEffectiveRule(
+                context,
+                selected.Interactable,
+                selected.Distance,
+                selected.VerticalDelta),
             CapturedAtUtc = now,
         };
         return true;
@@ -1145,6 +1181,7 @@ public sealed class ObjectivePlannerService
             TargetName = frontierPoint.Name,
             TargetDistance = distance,
             TargetVerticalDelta = verticalDelta,
+            ActiveRule = frontierPoint.SourceRule,
             CapturedAtUtc = now,
         };
     }
@@ -1231,6 +1268,7 @@ public sealed class ObjectivePlannerService
             TargetName = frontierPoint.Name,
             TargetDistance = distance,
             TargetVerticalDelta = verticalDelta,
+            ActiveRule = frontierPoint.SourceRule,
             CapturedAtUtc = capturedAtUtc,
         };
     }

@@ -10,5 +10,6 @@ public sealed class PlannerSnapshot
     public ulong? TargetGameObjectId { get; init; }
     public float? TargetDistance { get; init; }
     public float? TargetVerticalDelta { get; init; }
+    internal ObjectPriorityRule? ActiveRule { get; init; }
     public required DateTime CapturedAtUtc { get; init; }
 }

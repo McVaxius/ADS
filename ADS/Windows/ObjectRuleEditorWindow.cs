@@ -118,6 +118,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawMatureProposalsBanner();
         DrawCurrentScopeBanner();
         DrawDutyFilterBanner();
+        var activeDraftRule = DrawActiveRuleBanner();
         if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
             ImGui.TextWrapped("Runtime ADS still reads DEFAULT/live rules. Non-default presets are parked datasets until you import or copy them back into DEFAULT.");
         ImGui.TextWrapped(editorStatus);
@@ -139,7 +140,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawToolbar(visibleRuleIndices);
         ImGui.Spacing();
         if (!draftStructureChangedThisDraw)
-            DrawRulesTable(visibleRuleIndices);
+            DrawRulesTable(visibleRuleIndices, activeDraftRule);
     }
 
     private void DrawToolbar(IReadOnlyList<int> visibleRuleIndices)
@@ -538,6 +539,132 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         }
     }
 
+    private ObjectPriorityRule? DrawActiveRuleBanner()
+    {
+        var activeRule = plugin.ObjectivePlannerService.Current.ActiveRule;
+        if (activeRule is null)
+        {
+            ImGui.TextDisabled("No authored rule drives the current objective.");
+            return null;
+        }
+
+        var classification = string.IsNullOrWhiteSpace(activeRule.Classification)
+            ? "(unclassified)"
+            : activeRule.Classification.Trim();
+        ImGui.TextWrapped($"Active rule: {classification} — {GetActiveRuleTarget(activeRule)} — priority {activeRule.Priority}");
+
+        var activeDraftRule = TryGetAlignedActiveDraftRule(activeRule, out var unavailableReason);
+        using (new ImGuiDisabledBlock(activeDraftRule is null))
+        {
+            if (ImGui.SmallButton("Go to active row") && activeDraftRule is not null)
+            {
+                if (FindVisibleDisplayIndex(BuildVisibleRuleIndices(), activeDraftRule) < 0)
+                {
+                    dutyFilter = null;
+                    dutyFilterIdentity = null;
+                    dutyFilterTerritoryUnique = false;
+                    dutyFilterNameUnique = false;
+                    ruleTextFilter = string.Empty;
+                    if (plugin.Configuration.RuleEditorFilterMode != 0)
+                    {
+                        plugin.Configuration.RuleEditorFilterMode = 0;
+                        plugin.SaveConfiguration();
+                    }
+
+                    editorStatus = "Cleared the duty and text filters, selected All, and queued the exact active DEFAULT row.";
+                }
+
+                pendingScrollRule = activeDraftRule;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(unavailableReason))
+            ImGui.TextDisabled(unavailableReason);
+
+        return activeDraftRule;
+    }
+
+    private ObjectPriorityRule? TryGetAlignedActiveDraftRule(ObjectPriorityRule activeRule, out string reason)
+    {
+        if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
+        {
+            reason = $"Exact highlighting unavailable while viewing preset {selectedPresetName}; the runtime rule comes from DEFAULT.";
+            return null;
+        }
+
+        if (dirty)
+        {
+            reason = "Exact highlighting unavailable while the DEFAULT draft has unsaved edits.";
+            return null;
+        }
+
+        var runtimeRules = plugin.ObjectPriorityRuleService.Current.Rules;
+        var runtimeIndex = runtimeRules.FindIndex(rule => ReferenceEquals(rule, activeRule));
+        if (runtimeIndex < 0)
+        {
+            reason = "Exact highlighting unavailable because the planner snapshot and current DEFAULT runtime rules are no longer aligned.";
+            return null;
+        }
+
+        if (!RulesAlignByIndex(runtimeRules, draft.Rules))
+        {
+            reason = "Exact highlighting unavailable because the clean DEFAULT draft and current runtime rows are misaligned.";
+            return null;
+        }
+
+        reason = string.Empty;
+        return draft.Rules[runtimeIndex];
+    }
+
+    private static bool RulesAlignByIndex(IReadOnlyList<ObjectPriorityRule> runtimeRules, IReadOnlyList<ObjectPriorityRule> draftRules)
+    {
+        if (runtimeRules.Count != draftRules.Count)
+            return false;
+
+        for (var index = 0; index < runtimeRules.Count; index++)
+        {
+            if (!RuleValuesEqual(runtimeRules[index], draftRules[index]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool RuleValuesEqual(ObjectPriorityRule left, ObjectPriorityRule right)
+        => left.Enabled == right.Enabled
+           && left.TerritoryTypeId == right.TerritoryTypeId
+           && left.ContentFinderConditionId == right.ContentFinderConditionId
+           && string.Equals(left.DutyEnglishName, right.DutyEnglishName, StringComparison.Ordinal)
+           && string.Equals(left.Alliance, right.Alliance, StringComparison.Ordinal)
+           && string.Equals(left.ObjectKind, right.ObjectKind, StringComparison.Ordinal)
+           && left.BaseId == right.BaseId
+           && string.Equals(left.ObjectName, right.ObjectName, StringComparison.Ordinal)
+           && string.Equals(left.NameMatchMode, right.NameMatchMode, StringComparison.Ordinal)
+           && string.Equals(left.Classification, right.Classification, StringComparison.Ordinal)
+           && string.Equals(left.DestinationType, right.DestinationType, StringComparison.Ordinal)
+           && string.Equals(left.Layer, right.Layer, StringComparison.Ordinal)
+           && string.Equals(left.MapCoordinates, right.MapCoordinates, StringComparison.Ordinal)
+           && string.Equals(left.WorldCoordinates, right.WorldCoordinates, StringComparison.Ordinal)
+           && string.Equals(left.ObjectMapCoordinates, right.ObjectMapCoordinates, StringComparison.Ordinal)
+           && string.Equals(left.ObjectWorldCoordinates, right.ObjectWorldCoordinates, StringComparison.Ordinal)
+           && left.ObjectMatchRadius == right.ObjectMatchRadius
+           && left.Priority == right.Priority
+           && left.PriorityVerticalRadius == right.PriorityVerticalRadius
+           && left.MaxDistance == right.MaxDistance
+           && left.WaitAtDestinationSeconds == right.WaitAtDestinationSeconds
+           && left.WaitAfterInteractSeconds == right.WaitAfterInteractSeconds
+           && string.Equals(left.Notes, right.Notes, StringComparison.Ordinal);
+
+    private static string GetActiveRuleTarget(ObjectPriorityRule rule)
+    {
+        var name = NormalizeEditorText(rule.ObjectName);
+        if (!string.IsNullOrWhiteSpace(name))
+            return name;
+
+        var coordinates = NormalizeEditorText(GetUnifiedCoordinatesValue(rule));
+        return string.IsNullOrWhiteSpace(coordinates) ? "(unnamed)" : coordinates;
+    }
+
     private ObjectPriorityRule CreateNewDraftRule(out string status)
     {
         var rule = plugin.ObjectPriorityRuleService.CreateBlankRule();
@@ -818,7 +945,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         IsOpen = true;
     }
 
-    private void DrawRulesTable(IReadOnlyList<int> visibleRuleIndices)
+    private void DrawRulesTable(IReadOnlyList<int> visibleRuleIndices, ObjectPriorityRule? activeDraftRule)
     {
         const ImGuiTableFlags tableFlags =
             ImGuiTableFlags.Borders
@@ -831,7 +958,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginTable("ADSRulesEditorTable", 21, tableFlags, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 40f);
+        ImGui.TableSetupColumn("On", ImGuiTableColumnFlags.WidthFixed, 100f);
         ImGui.TableSetupColumn("Duty", ImGuiTableColumnFlags.WidthFixed, 260f);
         ImGui.TableSetupColumn("Terr", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("CFC", ImGuiTableColumnFlags.WidthFixed, 48f);
@@ -869,12 +996,18 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 {
                     var ruleIndex = visibleRuleIndices[displayIndex];
                     var rule = draft.Rules[ruleIndex];
+                    var isActiveRule = ReferenceEquals(rule, activeDraftRule);
                     var rowChanged = false;
                     var semantics = RuleSemanticsCatalog.Find(rule.Classification ?? string.Empty);
                     var missingRequiredFields = RuleSemanticsCatalog.GetMissingRequiredFields(rule).ToHashSet(StringComparer.Ordinal);
                     ImGui.PushID(ruleIndex);
                     ImGui.TableNextRow();
-                    if (unsavedNewRules.Contains(rule))
+                    if (isActiveRule)
+                    {
+                        var rowHighlight = ImGui.ColorConvertFloat4ToU32(new Vector4(0.03f, 0.29f, 0.35f, 0.78f));
+                        ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, rowHighlight);
+                    }
+                    else if (unsavedNewRules.Contains(rule))
                     {
                         var rowHighlight = ImGui.ColorConvertFloat4ToU32(new Vector4(0.20f, 0.34f, 0.18f, 0.65f));
                         ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, rowHighlight);
@@ -887,6 +1020,13 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                     {
                         rule.Enabled = enabled;
                         rowChanged = true;
+                    }
+                    if (isActiveRule)
+                    {
+                        ImGui.SameLine(0f, 4f);
+                        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.20f, 0.92f, 1f, 1f));
+                        ImGui.TextUnformatted("ACTIVE");
+                        ImGui.PopStyleColor();
                     }
                     if (ReferenceEquals(rule, pendingScrollRule))
                     {
