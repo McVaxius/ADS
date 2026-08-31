@@ -2170,6 +2170,8 @@ public sealed class ExecutionService
             Priority = point.Priority,
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = point.UsePlayerYForNavigation,
+            IsAreaBoundary = point.IsAreaBoundary,
+            ConnectedMapId = point.ConnectedMapId,
             ManualDestinationKind = point.ManualDestinationKind,
             AllowCombatBypass = point.AllowCombatBypass,
             ArrivalRadiusXz = point.ArrivalRadiusXz,
@@ -2319,9 +2321,11 @@ public sealed class ExecutionService
                     : isTreasureFollowerPassageCandidate ? "treasure-dungeon follower passage candidate" : "treasure-dungeon route point"
             : isMapXzDestination
                 ? "map XZ destination"
-                : isXyzDestination
-                    ? "XYZ destination"
-                : "map frontier";
+            : isXyzDestination
+                ? "XYZ destination"
+                : frontierPoint.IsAreaBoundary
+                    ? "area boundary"
+                    : "map frontier";
         var frontierReason = isMapXzDestination
             ? "because a human-authored Map XZ destination is configured for this no-live-object gap."
             : isXyzDestination
@@ -2338,7 +2342,9 @@ public sealed class ExecutionService
                     : "because ADS inferred map-opener/default treasure role and LootGoblin-derived treasure-dungeon routing data is available for this territory with no live duty objects currently visible."
             : dungeonFrontierService.CurrentMode == FrontierMode.HeadingScout
                 ? "because Lumina frontier labels were unavailable and no live duty objects are currently visible."
-                : "because no live duty objects are currently visible.";
+                : frontierPoint.IsAreaBoundary
+                    ? "because the active map exposes this game-authored same-territory area boundary and no live duty objects are currently visible."
+                    : "because no live duty objects are currently visible.";
         var treasureRouteRadiusStatus = BuildTreasureRouteRadiusStatus(
             frontierPoint,
             isTreasureFollowerPassageCandidate);
@@ -2368,6 +2374,9 @@ public sealed class ExecutionService
             out var targetVerticalDelta,
             out var arrivalRange,
             out var xyzArrivalRange);
+        if (frontierPoint.IsAreaBoundary)
+            destinationReached = false;
+
         string? forceMarchCompletionReason = null;
         if (frontierPoint.IsForceMarchManualDestination)
         {
@@ -2448,7 +2457,7 @@ public sealed class ExecutionService
             var treasureRouteNudgeDestination = Vector3.Zero;
             if (!usedMapFlagNavigation)
             {
-                var originalNavigationDestination = isTreasureRoutePoint || isMapXzDestination || isXyzDestination
+                var originalNavigationDestination = isTreasureRoutePoint || isMapXzDestination || isXyzDestination || frontierPoint.IsAreaBoundary
                     ? frontierPoint.Position
                     : BuildPreferredApproachPoint(playerPosition.Value, frontierPoint.Position, PreferredFrontierArrivalRange);
                 var navigationDecision = ResolveTreasureRouteNavigationDecision(
@@ -2500,7 +2509,9 @@ public sealed class ExecutionService
                 : string.Empty;
             SetPhase(
                 GetFrontierNavigatingPhase(isMapXzDestination, isXyzDestination),
-                isXyzDestination
+                frontierPoint.IsAreaBoundary
+                    ? $"{prefix} Advancing through {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}) {navigationMethod}. ADS will keep seeking the game marker until the existing unsafe-transition hold takes over. {frontierReason}"
+                    : isXyzDestination
                     ? $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (3D {targetDistance:0.0}y, XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {xyzArrivalRange:0.0}y) {navigationMethod}{treasureRouteNudgeStatus} {frontierReason}{treasureRouteRadiusStatus}"
                     : $"{prefix} Advancing toward {frontierLabel} {frontierPoint.Name} (XZ {targetHorizontalDistance:0.0}y, Y {targetVerticalDelta:0.0}; ghost radius {arrivalRange:0.0}y) {navigationMethod}{treasureRouteNudgeStatus} {frontierReason}{treasureRouteRadiusStatus}");
             return;

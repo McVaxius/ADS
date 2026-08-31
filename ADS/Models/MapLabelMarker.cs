@@ -11,6 +11,7 @@ public sealed class MapLabelMarker
     public required string MapName { get; init; }
     public required ushort SubrowId { get; init; }
     public required byte DataType { get; init; }
+    internal uint DataKeyRowId { get; init; }
     public required ushort Icon { get; init; }
     public required short TextureX { get; init; }
     public required short TextureY { get; init; }

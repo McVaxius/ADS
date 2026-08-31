@@ -8,7 +8,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 22;
+    public int Version { get; set; } = 23;
     public bool PluginEnabled { get; set; } = true;
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
@@ -27,6 +27,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool RuleEditorNewRowCurrentLabel { get; set; } = false;
     public int RuleEditorFilterMode { get; set; } = 0;
     public bool RuleEditorSeedObjectPosition { get; set; } = false;
+    public string ActiveObjectRulePreset { get; set; } = "DEFAULT";
     public bool HigherLowerDiagnosticsEnabled { get; set; } = true;
     public bool HigherLowerAutomationEnabled { get; set; } = true;
     public bool HigherLowerVfxDataminingEnabled { get; set; } = false;

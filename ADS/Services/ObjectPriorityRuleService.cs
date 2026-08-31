@@ -40,7 +40,7 @@ public sealed class ObjectPriorityRuleService
     private readonly string matureProposalsPresetPath;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
-    private DateTime lastObservedRulesWriteUtc;
+    private DateTime? lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
     private bool matureProposalMirrorExists;
     private bool matureProposalPresetExists;
@@ -50,7 +50,8 @@ public sealed class ObjectPriorityRuleService
     public ObjectPriorityRuleService(
         IPluginLog log,
         IDataManager dataManager,
-        string configDirectory)
+        string configDirectory,
+        string activePresetName = DefaultPresetName)
     {
         this.log = log;
         this.dataManager = dataManager;
@@ -64,7 +65,12 @@ public sealed class ObjectPriorityRuleService
         LastMatureProposalStatus = "MATURE-PROPOSALS mirror not checked yet.";
 
         EnsureSeeded();
-        Reload();
+        if (!TryActivatePreset(activePresetName, out var activationStatus))
+        {
+            log.Warning($"[ADS] Configured object-rule preset '{activePresetName}' was not activated. {activationStatus}");
+            TryActivatePreset(DefaultPresetName, out _);
+        }
+
         TrySynchronizeMatureProposals(force: false, out _);
     }
 
@@ -99,6 +105,8 @@ public sealed class ObjectPriorityRuleService
 
     public ObjectPriorityRuleManifest Current { get; private set; } = new();
 
+    public string ActivePresetName { get; private set; } = DefaultPresetName;
+
     public int ActiveRuleCount
         => Current.Rules.Count(x => x.Enabled);
 
@@ -118,6 +126,9 @@ public sealed class ObjectPriorityRuleService
 
     public bool IsMatureProposalsPreset(string presetName)
         => string.Equals(presetName, MatureProposalsPresetName, StringComparison.OrdinalIgnoreCase);
+
+    public bool IsActivePreset(string presetName)
+        => string.Equals(presetName, ActivePresetName, StringComparison.OrdinalIgnoreCase);
 
     public IReadOnlyList<string> GetPresetNames()
     {
@@ -166,17 +177,20 @@ public sealed class ObjectPriorityRuleService
     {
         try
         {
-            EnsureSeeded();
-            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status))
+            if (IsDefaultPreset(ActivePresetName))
+                EnsureSeeded();
+
+            var activePath = GetPresetPath(ActivePresetName);
+            if (!TryLoadManifestFromPath(activePath, out var manifest, out var status))
             {
-                Current = new ObjectPriorityRuleManifest();
                 LastLoadStatus = status;
+                RememberCurrentRulesWriteTime();
                 log.Warning($"[ADS] {LastLoadStatus}");
                 return false;
             }
 
             Current = manifest;
-            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(activePath);
             LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
             return true;
@@ -184,8 +198,7 @@ public sealed class ObjectPriorityRuleService
         catch (Exception ex)
         {
             RememberCurrentRulesWriteTime();
-            Current = new ObjectPriorityRuleManifest();
-            LastLoadStatus = $"Failed to load {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to load active object-rule preset {ActivePresetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
         }
@@ -201,8 +214,13 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            EnsureSeeded();
-            var currentWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            if (IsDefaultPreset(ActivePresetName))
+                EnsureSeeded();
+
+            var activePath = GetPresetPath(ActivePresetName);
+            var currentWriteUtc = File.Exists(activePath)
+                ? File.GetLastWriteTimeUtc(activePath)
+                : (DateTime?)null;
             if (currentWriteUtc == lastObservedRulesWriteUtc)
                 return false;
 
@@ -225,26 +243,80 @@ public sealed class ObjectPriorityRuleService
         try
         {
             manifest.Rules ??= [];
-            var path = EnsurePresetSeeded(presetName);
+            if (IsDefaultPreset(presetName))
+                EnsureSeeded();
+
+            var path = GetPresetPath(presetName);
             WriteManifestToPath(path, manifest);
-            if (!IsDefaultPreset(presetName))
-            {
-                if (IsMatureProposalsPreset(presetName))
-                {
-                    RefreshMatureProposalSchedule(DateTime.UtcNow);
-                }
+            if (IsMatureProposalsPreset(presetName))
+                RefreshMatureProposalSchedule(DateTime.UtcNow);
 
-                LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active rule(s) to preset {presetName} at {path}.";
-                log.Information($"[ADS] {LastLoadStatus}");
-                return true;
-            }
+            if (IsActivePreset(presetName))
+                return Reload();
 
-            return Reload();
+            LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active rule(s) to preset {presetName} at {path}.";
+            log.Information($"[ADS] {LastLoadStatus}");
+            return true;
         }
         catch (Exception ex)
         {
             LastLoadStatus = $"Failed to save preset {presetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
+            return false;
+        }
+    }
+
+    public bool TryActivatePreset(string presetName, out string status)
+    {
+        status = "Preset was not activated.";
+        var requestedName = presetName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(requestedName))
+        {
+            status = "Object-rule preset name was blank.";
+            return false;
+        }
+
+        if (IsMatureProposalsPreset(requestedName))
+        {
+            status = "MATURE-PROPOSALS is edit-only and cannot become the runtime object-rule preset.";
+            return false;
+        }
+
+        var resolvedName = IsDefaultPreset(requestedName)
+            ? DefaultPresetName
+            : GetPresetNames().FirstOrDefault(name =>
+                !IsMatureProposalsPreset(name)
+                && string.Equals(name, requestedName, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(resolvedName))
+        {
+            status = $"Object-rule preset '{requestedName}' does not exist.";
+            return false;
+        }
+
+        try
+        {
+            if (IsDefaultPreset(resolvedName))
+                EnsureSeeded();
+
+            var path = GetPresetPath(resolvedName);
+            if (!TryLoadManifestFromPath(path, out var manifest, out status))
+            {
+                LastLoadStatus = status;
+                return false;
+            }
+
+            Current = manifest;
+            ActivePresetName = resolvedName;
+            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(path);
+            LastLoadStatus = status;
+            log.Information($"[ADS] Activated object-rule preset {ActivePresetName}. {LastLoadStatus}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to activate object-rule preset {requestedName}: {ex.Message}";
+            LastLoadStatus = status;
+            log.Warning(ex, $"[ADS] {status}");
             return false;
         }
     }
@@ -256,7 +328,24 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            var path = EnsurePresetSeeded(presetName);
+            string path;
+            if (IsDefaultPreset(presetName))
+            {
+                EnsureSeeded();
+                path = configPath;
+            }
+            else
+            {
+                path = IsMatureProposalsPreset(presetName)
+                    ? EnsureMatureProposalsPresetSeeded()
+                    : GetPresetPath(presetName);
+            }
+            if (!File.Exists(path))
+            {
+                status = $"Preset {presetName} does not exist at {path}.";
+                return false;
+            }
+
             return TryLoadManifestFromPath(path, out manifest, out status);
         }
         catch (Exception ex)
@@ -307,8 +396,33 @@ public sealed class ObjectPriorityRuleService
                 return false;
             }
 
+            ObjectPriorityRuleManifest? defaultManifest = null;
+            if (IsActivePreset(presetName))
+            {
+                EnsureSeeded();
+                if (!TryLoadManifestFromPath(configPath, out var loadedDefaultManifest, out var defaultStatus))
+                {
+                    status = $"Preset {presetName} was not deleted because DEFAULT could not be loaded. {defaultStatus}";
+                    return false;
+                }
+
+                defaultManifest = loadedDefaultManifest;
+            }
+
             File.Delete(path);
-            status = $"Deleted preset {presetName}.";
+            if (defaultManifest is not null)
+            {
+                Current = defaultManifest;
+                ActivePresetName = DefaultPresetName;
+                lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+                LastLoadStatus = $"Loaded {defaultManifest.Rules.Count(x => x.Enabled)} active rule(s) from {configPath}.";
+                status = $"Deleted active preset {presetName} and returned runtime object rules to DEFAULT.";
+            }
+            else
+            {
+                status = $"Deleted preset {presetName}.";
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1070,46 +1184,28 @@ public sealed class ObjectPriorityRuleService
         log.Warning($"[ADS] {LastSyncStatus}");
     }
 
-    private string EnsurePresetSeeded(string presetName)
+    private string EnsureMatureProposalsPresetSeeded()
     {
-        if (IsDefaultPreset(presetName))
-        {
-            EnsureSeeded();
-            return configPath;
-        }
-
-        var path = GetPresetPath(presetName);
+        var path = matureProposalsPresetPath;
         if (File.Exists(path))
             return path;
 
-        if (IsMatureProposalsPreset(presetName))
+        if (File.Exists(matureProposalsMirrorPath))
         {
-            if (File.Exists(matureProposalsMirrorPath))
-            {
-                if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var mirrorStatus))
-                    throw new InvalidDataException(mirrorStatus);
+            if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var mirrorStatus))
+                throw new InvalidDataException(mirrorStatus);
 
-                WriteManifestToPath(path, mirrorManifest);
-            }
-            else
+            WriteManifestToPath(path, mirrorManifest);
+        }
+        else
+        {
+            WriteManifestToPath(path, new ObjectPriorityRuleManifest
             {
-                WriteManifestToPath(path, new ObjectPriorityRuleManifest
-                {
-                    Description = "Editable MATURE-PROPOSALS preset; awaiting the clean botologyupdates mirror.",
-                });
-            }
-
-            RefreshMatureProposalSchedule(DateTime.UtcNow);
-            return path;
+                Description = "Editable MATURE-PROPOSALS preset; awaiting the clean botologyupdates mirror.",
+            });
         }
 
-        if (File.Exists(configPath))
-        {
-            File.Copy(configPath, path, overwrite: false);
-            return path;
-        }
-
-        File.WriteAllText(path, GetDefaultJson());
+        RefreshMatureProposalSchedule(DateTime.UtcNow);
         return path;
     }
 
@@ -1117,8 +1213,10 @@ public sealed class ObjectPriorityRuleService
     {
         try
         {
-            if (File.Exists(configPath))
-                lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            var activePath = GetPresetPath(ActivePresetName);
+            lastObservedRulesWriteUtc = File.Exists(activePath)
+                ? File.GetLastWriteTimeUtc(activePath)
+                : null;
         }
         catch
         {

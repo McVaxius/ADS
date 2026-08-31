@@ -36,7 +36,7 @@ public sealed class FrontierLabelWindow : PositionedWindow, IDisposable
             .ToList();
 
         ImGui.TextUnformatted("Map Label Marker Inspector");
-        ImGui.TextWrapped("These entries come from the Lumina MapMarker range for the current live map row only, converted from marker texture-space back to world X/Z so you can flag and inspect where the active sub-area thinks named labels live.");
+        ImGui.TextWrapped("These entries come from the Lumina MapMarker range for the current live map row only, converted from marker texture-space back to world X/Z so you can inspect named labels and the DataType 1 area-boundary indicators used by frontier seeking.");
         ImGui.TextUnformatted($"Duty: {context.CurrentDuty?.EnglishName ?? "None"}");
         ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {plugin.DungeonFrontierService.ActiveMapId} / {context.ContentFinderConditionId}");
         ImGui.TextUnformatted($"Active map: {plugin.DungeonFrontierService.ActiveMapName}");
@@ -120,7 +120,7 @@ public sealed class FrontierLabelWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Map XY: {marker.MapCoordinates.X:0.0}, {marker.MapCoordinates.Y:0.0}");
         ImGui.TextUnformatted($"World X/Z: {marker.WorldPosition.X:0.00}, {marker.WorldPosition.Z:0.00}");
         ImGui.TextUnformatted($"Texture XY: {marker.TextureX}, {marker.TextureY}");
-        ImGui.TextUnformatted($"DataType/Icon: {marker.DataType} / {marker.Icon}");
+        ImGui.TextUnformatted($"DataType/DataKey/Icon: {marker.DataType} / {marker.DataKeyRowId} / {marker.Icon}");
         ImGui.TextUnformatted($"Subrow: {marker.SubrowId}");
         ImGui.EndTooltip();
     }

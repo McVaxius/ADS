@@ -122,10 +122,13 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             plugin.ForceRemoteJsonUpdate();
         ImGui.EndDisabled();
         ImGui.TableSetColumnIndex(2);
-        if (ImGui.Button("Disable QSTcomp", new Vector2(-1f, 28f)))
-            plugin.DisableQstCompanion();
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(QstCompanionWarningService.DisableCommand);
+        if (plugin.DebugStrafeService.Enabled)
+        {
+            if (ImGui.Button("Disable QSTcomp", new Vector2(-1f, 28f)))
+                plugin.DisableQstCompanion();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(QstCompanionWarningService.DisableCommand);
+        }
 
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);

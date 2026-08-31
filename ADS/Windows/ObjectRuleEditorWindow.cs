@@ -78,6 +78,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         : base("ADS Rules Editor###ADSRulesEditor")
     {
         this.plugin = plugin;
+        selectedPresetName = plugin.ObjectPriorityRuleService.ActivePresetName;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(1680f, 560f),
@@ -112,15 +113,16 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         draftStructureChangedThisDraw = false;
         PollSelectedPresetFile();
 
-        ImGui.TextWrapped("Quick start: Object Explorer -> RULE -> choose Class -> fill relevant colored fields -> save DEFAULT -> retest.");
+        ImGui.TextWrapped("Quick start: Object Explorer -> RULE -> choose Class -> fill relevant colored fields -> save the active preset -> retest.");
         ImGui.TextWrapped("Field cues: red required (bright red means missing), amber recommended, normal optional, dim ignored. Cues never clear ignored stored values.");
         ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
+        ImGui.TextWrapped($"Runtime object-rule preset: {plugin.ObjectPriorityRuleService.ActivePresetName}");
         DrawMatureProposalsBanner();
         DrawCurrentScopeBanner();
         DrawDutyFilterBanner();
         var activeDraftRule = DrawActiveRuleBanner();
-        if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
-            ImGui.TextWrapped("Runtime ADS still reads DEFAULT/live rules. Non-default presets are parked datasets until you import or copy them back into DEFAULT.");
+        if (!plugin.ObjectPriorityRuleService.IsActivePreset(selectedPresetName))
+            ImGui.TextWrapped($"{selectedPresetName} is edit-only. Runtime ADS continues using {plugin.ObjectPriorityRuleService.ActivePresetName}.");
         ImGui.TextWrapped(editorStatus);
         if (!string.IsNullOrWhiteSpace(presetFileConflictStatus))
         {
@@ -301,7 +303,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         unsavedNewRules.Clear();
         undoState.MarkRestoreDirty();
         presetFileConflictStatus = string.Empty;
-        editorStatus = $"Saved preset {selectedPresetName}.";
+        editorStatus = plugin.ObjectPriorityRuleService.IsActivePreset(selectedPresetName)
+            ? $"Saved and refreshed active runtime preset {selectedPresetName}."
+            : $"Saved edit-only preset {selectedPresetName}.";
         RememberSelectedPresetFileBaseline();
     }
 
@@ -312,7 +316,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.55f, 0.82f, 1f, 1f));
-        ImGui.TextWrapped("MATURE-PROPOSALS is an editable non-default preset. Every successful Save restarts its 24-hour remote-refresh countdown; copy it to another preset for unrestricted editing.");
+        ImGui.TextWrapped($"MATURE-PROPOSALS is edit-only and never becomes the runtime preset. ADS continues using {ruleService.ActivePresetName}. Every successful Save restarts its 24-hour remote-refresh countdown; copy it to another preset for unrestricted editing.");
         ImGui.PopStyleColor();
         var refreshDecision = plugin.RemoteJsonUpdateService.GetMatureProposalRefreshDecision();
         ImGui.TextWrapped(refreshDecision.Status);
@@ -571,7 +575,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                         plugin.SaveConfiguration();
                     }
 
-                    editorStatus = "Cleared the duty and text filters, selected All, and queued the exact active DEFAULT row.";
+                    editorStatus = $"Cleared the duty and text filters, selected All, and queued the exact active {plugin.ObjectPriorityRuleService.ActivePresetName} row.";
                 }
 
                 pendingScrollRule = activeDraftRule;
@@ -586,15 +590,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private ObjectPriorityRule? TryGetAlignedActiveDraftRule(ObjectPriorityRule activeRule, out string reason)
     {
-        if (!plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
+        if (!plugin.ObjectPriorityRuleService.IsActivePreset(selectedPresetName))
         {
-            reason = $"Exact highlighting unavailable while viewing preset {selectedPresetName}; the runtime rule comes from DEFAULT.";
+            reason = $"Exact highlighting unavailable while viewing preset {selectedPresetName}; the runtime rule comes from {plugin.ObjectPriorityRuleService.ActivePresetName}.";
             return null;
         }
 
         if (dirty)
         {
-            reason = "Exact highlighting unavailable while the DEFAULT draft has unsaved edits.";
+            reason = $"Exact highlighting unavailable while the active {selectedPresetName} draft has unsaved edits.";
             return null;
         }
 
@@ -602,13 +606,13 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         var runtimeIndex = runtimeRules.FindIndex(rule => ReferenceEquals(rule, activeRule));
         if (runtimeIndex < 0)
         {
-            reason = "Exact highlighting unavailable because the planner snapshot and current DEFAULT runtime rules are no longer aligned.";
+            reason = $"Exact highlighting unavailable because the planner snapshot and current {selectedPresetName} runtime rules are no longer aligned.";
             return null;
         }
 
         if (!RulesAlignByIndex(runtimeRules, draft.Rules))
         {
-            reason = "Exact highlighting unavailable because the clean DEFAULT draft and current runtime rows are misaligned.";
+            reason = $"Exact highlighting unavailable because the clean {selectedPresetName} draft and current runtime rows are misaligned.";
             return null;
         }
 
@@ -815,7 +819,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void RefreshDraft(string status)
     {
-        if (!plugin.ObjectPriorityRuleService.TryLoadManifest(selectedPresetName, out var loadedDraft, out var loadStatus))
+        if (!TryLoadSelectedPresetForEditor(out var loadedDraft, out var loadStatus))
         {
             draftLoaded = true;
             editorStatus = $"Preset {selectedPresetName} was not loaded; the current in-memory draft was kept unchanged. {loadStatus}";
@@ -826,6 +830,23 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         ApplyLoadedDraft(loadedDraft, $"{status} {loadStatus}");
+    }
+
+    private bool TryLoadSelectedPresetForEditor(out ObjectPriorityRuleManifest loadedDraft, out string loadStatus)
+    {
+        if (!plugin.ObjectPriorityRuleService.IsActivePreset(selectedPresetName))
+            return plugin.ObjectPriorityRuleService.TryLoadManifest(selectedPresetName, out loadedDraft, out loadStatus);
+
+        if (!plugin.ObjectPriorityRuleService.Reload())
+        {
+            loadedDraft = new ObjectPriorityRuleManifest();
+            loadStatus = plugin.ObjectPriorityRuleService.LastLoadStatus;
+            return false;
+        }
+
+        loadedDraft = plugin.ObjectPriorityRuleService.CreateEditableCopy();
+        loadStatus = plugin.ObjectPriorityRuleService.LastLoadStatus;
+        return true;
     }
 
     private void ApplyLoadedDraft(ObjectPriorityRuleManifest loadedDraft, string status)
@@ -880,7 +901,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             return;
         }
 
-        if (!plugin.ObjectPriorityRuleService.TryLoadManifest(selectedPresetName, out var loadedDraft, out var loadStatus))
+        if (!TryLoadSelectedPresetForEditor(out var loadedDraft, out var loadStatus))
         {
             presetFileConflictStatus = $"Disk conflict: preset {selectedPresetName} changed on disk but could not be loaded. The current in-memory draft was kept. {loadStatus}";
             return;
@@ -1853,10 +1874,28 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         var previousPreset = selectedPresetName;
         var discardedDirtyDraft = dirty;
-        if (!plugin.ObjectPriorityRuleService.TryLoadManifest(presetName, out var loadedDraft, out var loadStatus))
+        ObjectPriorityRuleManifest loadedDraft;
+        string loadStatus;
+        if (plugin.ObjectPriorityRuleService.IsMatureProposalsPreset(presetName))
         {
-            editorStatus = $"Could not switch from {previousPreset} to {presetName}; the current preset and in-memory draft were kept unchanged. {loadStatus}";
-            return;
+            if (!plugin.ObjectPriorityRuleService.TryLoadManifest(presetName, out loadedDraft, out loadStatus))
+            {
+                editorStatus = $"Could not switch from {previousPreset} to {presetName}; the current preset and in-memory draft were kept unchanged. {loadStatus}";
+                return;
+            }
+        }
+        else
+        {
+            if (!plugin.ObjectPriorityRuleService.TryActivatePreset(presetName, out loadStatus))
+            {
+                editorStatus = $"Could not switch from {previousPreset} to {presetName}; the current preset, runtime rules, and in-memory draft were kept unchanged. {loadStatus}";
+                return;
+            }
+
+            presetName = plugin.ObjectPriorityRuleService.ActivePresetName;
+            loadedDraft = plugin.ObjectPriorityRuleService.CreateEditableCopy();
+            plugin.Configuration.ActiveObjectRulePreset = presetName;
+            plugin.SaveConfiguration();
         }
 
         selectedPresetName = presetName;
@@ -1883,10 +1922,20 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             {
                 editorStatus = "DEFAULT is reserved; choose a different preset name.";
             }
-            else if (plugin.ObjectPriorityRuleService.SaveManifest(sanitizedName, draft))
+            else if (!plugin.ObjectPriorityRuleService.SaveManifest(sanitizedName, draft))
             {
-                selectedPresetName = sanitizedName;
-                draft = CloneManifest(draft);
+                editorStatus = plugin.ObjectPriorityRuleService.LastLoadStatus;
+            }
+            else if (!plugin.ObjectPriorityRuleService.TryActivatePreset(sanitizedName, out var activationStatus))
+            {
+                editorStatus = $"Created preset {sanitizedName}, but it could not be activated. {activationStatus}";
+            }
+            else
+            {
+                selectedPresetName = plugin.ObjectPriorityRuleService.ActivePresetName;
+                plugin.Configuration.ActiveObjectRulePreset = selectedPresetName;
+                plugin.SaveConfiguration();
+                draft = plugin.ObjectPriorityRuleService.CreateEditableCopy();
                 dirty = false;
                 InvalidateUndoState();
                 ClearDraftReferenceState();
@@ -1897,10 +1946,6 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 SyncDiskTransferPath();
                 RememberSelectedPresetFileBaseline();
                 ImGui.CloseCurrentPopup();
-            }
-            else
-            {
-                editorStatus = plugin.ObjectPriorityRuleService.LastLoadStatus;
             }
         }
 
@@ -1957,7 +2002,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         if (plugin.ObjectPriorityRuleService.TryDeletePreset(selectedPresetName, out var status))
         {
-            selectedPresetName = ObjectPriorityRuleService.DefaultPresetName;
+            selectedPresetName = plugin.ObjectPriorityRuleService.ActivePresetName;
+            plugin.Configuration.ActiveObjectRulePreset = selectedPresetName;
+            plugin.SaveConfiguration();
             RefreshDraft($"{status} Switched back to DEFAULT.");
             return;
         }

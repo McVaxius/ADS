@@ -979,6 +979,9 @@ public sealed class DungeonFrontierService
 
     public void MarkVisited(DungeonFrontierPoint point, Vector3 playerPosition)
     {
+        if (point.IsAreaBoundary)
+            return;
+
         if (TreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             && point.IsTreasureFollowerStagingPoint)
         {
@@ -1710,6 +1713,7 @@ public sealed class DungeonFrontierService
         {
             var territorySheet = dataManager.GetExcelSheet<TerritoryType>();
             var levelSheet = dataManager.GetExcelSheet<Level>();
+            var mapSheet = dataManager.GetExcelSheet<Map>();
             var mapMarkerSheet = dataManager.GetSubrowExcelSheet<MapMarker>();
             if (territorySheet is null || levelSheet is null || mapMarkerSheet is null)
             {
@@ -1732,10 +1736,44 @@ public sealed class DungeonFrontierService
 
             var points = new List<DungeonFrontierPoint>();
             var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+            Map activeMap = default;
+            var hasActiveMap = mapSheet is not null
+                               && mapSheet.TryGetRow(mapId, out activeMap)
+                               && activeMap.TerritoryType.RowId == territoryTypeId;
             foreach (var subrowCollection in mapMarkerSheet)
             {
                 foreach (var marker in subrowCollection)
                 {
+                    if (marker.DataType == 1)
+                    {
+                        if (hasActiveMap
+                            && marker.RowId == (uint)activeMap.MapMarkerRange
+                            && marker.DataKey.RowId != 0
+                            && marker.DataKey.RowId != mapId
+                            && mapSheet!.TryGetRow(marker.DataKey.RowId, out var connectedMap)
+                            && connectedMap.TerritoryType.RowId == territoryTypeId)
+                        {
+                            var boundaryPosition = ConvertTextureToWorld(marker.X, marker.Y, activeMap);
+                            var boundaryKey = $"area-boundary:{territoryTypeId}:{mapId}:{connectedMap.RowId}:{marker.SubrowId}:{marker.X}:{marker.Y}";
+                            if (seenKeys.Add(boundaryKey))
+                            {
+                                points.Add(new DungeonFrontierPoint
+                                {
+                                    Key = boundaryKey,
+                                    Name = $"Area boundary to {BuildMapName(connectedMap)}",
+                                    Position = boundaryPosition,
+                                    LevelRowId = BuildAreaBoundarySortOrder(marker.SubrowId),
+                                    MapId = mapId,
+                                    UsePlayerYForNavigation = true,
+                                    IsAreaBoundary = true,
+                                    ConnectedMapId = connectedMap.RowId,
+                                });
+                            }
+                        }
+
+                        continue;
+                    }
+
                     if (marker.PlaceNameSubtext.ValueNullable is null)
                         continue;
 
@@ -1772,7 +1810,10 @@ public sealed class DungeonFrontierService
             });
 
             if (points.Count > 0)
-                log.Information($"[ADS] Built {points.Count} frontier label point(s) for territory {territoryTypeId} on map {mapId}.");
+            {
+                var areaBoundaryCount = points.Count(point => point.IsAreaBoundary);
+                log.Information($"[ADS] Built {points.Count} frontier label point(s) for territory {territoryTypeId} on map {mapId}, including {areaBoundaryCount} same-territory area boundary marker(s).");
+            }
 
             return points.Count > 0
                 ? points
@@ -1794,23 +1835,41 @@ public sealed class DungeonFrontierService
             return [];
         }
 
-        var points = labels
-            .OrderBy(static label => label.MapId)
-            .ThenBy(static label => label.MarkerRangeId)
-            .ThenBy(static label => label.SubrowId)
-            .ThenBy(static label => label.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(static label => new DungeonFrontierPoint
+        var mapSheet = dataManager.GetExcelSheet<Map>();
+        var points = new List<DungeonFrontierPoint>();
+        foreach (var label in labels
+                     .OrderBy(static label => label.MapId)
+                     .ThenBy(static label => label.MarkerRangeId)
+                     .ThenBy(static label => label.SubrowId)
+                     .ThenBy(static label => label.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var isAreaBoundary = label.DataType == 1;
+            Map connectedMap = default;
+            if (isAreaBoundary
+                && (label.DataKeyRowId == 0
+                    || label.DataKeyRowId == mapId
+                    || mapSheet is null
+                    || !mapSheet.TryGetRow(label.DataKeyRowId, out connectedMap)
+                    || connectedMap.TerritoryType.RowId != territoryTypeId))
+            {
+                continue;
+            }
+
+            points.Add(new DungeonFrontierPoint
             {
                 Key = $"map-marker-range:{label.Key}",
-                Name = label.Name,
+                Name = isAreaBoundary ? $"Area boundary to {BuildMapName(connectedMap)}" : label.Name,
                 Position = label.WorldPosition,
                 LevelRowId = BuildLabelSortOrder(label),
                 MapId = label.MapId,
                 UsePlayerYForNavigation = true,
-            })
-            .ToList();
+                IsAreaBoundary = isAreaBoundary,
+                ConnectedMapId = isAreaBoundary ? connectedMap.RowId : 0,
+            });
+        }
 
-        log.Information($"[ADS] Built {points.Count} frontier MapMarkerRange point(s) for territory {territoryTypeId} on map {mapId} after level-backed frontier was unavailable ({levelBackedFailureReason}).");
+        var areaBoundaryCount = points.Count(point => point.IsAreaBoundary);
+        log.Information($"[ADS] Built {points.Count} frontier MapMarkerRange point(s) for territory {territoryTypeId} on map {mapId}, including {areaBoundaryCount} same-territory area boundary marker(s), after level-backed frontier was unavailable ({levelBackedFailureReason}).");
         return points;
     }
 
@@ -1857,10 +1916,17 @@ public sealed class DungeonFrontierService
                     if (marker.RowId != markerRangeId)
                         continue;
 
-                    if (marker.PlaceNameSubtext.ValueNullable is null)
-                        continue;
+                    var name = marker.PlaceNameSubtext.ValueNullable is not null
+                        ? NormalizeName(marker.PlaceNameSubtext.Value.Name.ToString())
+                        : string.Empty;
+                    if (string.IsNullOrWhiteSpace(name)
+                        && marker.DataType == 1
+                        && marker.DataKey.RowId != 0
+                        && mapSheet.TryGetRow(marker.DataKey.RowId, out var connectedMap))
+                    {
+                        name = BuildMapName(connectedMap);
+                    }
 
-                    var name = NormalizeName(marker.PlaceNameSubtext.Value.Name.ToString());
                     if (string.IsNullOrWhiteSpace(name))
                         continue;
 
@@ -1879,6 +1945,7 @@ public sealed class DungeonFrontierService
                         MapName = mapName,
                         SubrowId = marker.SubrowId,
                         DataType = marker.DataType,
+                        DataKeyRowId = marker.DataKey.RowId,
                         Icon = marker.Icon,
                         TextureX = marker.X,
                         TextureY = marker.Y,
@@ -1990,6 +2057,9 @@ public sealed class DungeonFrontierService
             {
                 continue;
             }
+
+            if (point.IsAreaBoundary)
+                continue;
 
             var horizontalDistance = GetHorizontalDistance(playerPosition, point.Position);
             var verticalDelta = point.UsePlayerYForNavigation
@@ -3804,6 +3874,9 @@ public sealed class DungeonFrontierService
     private static uint BuildLabelSortOrder(MapLabelMarker label)
         => ((label.MapId & 0xFFFF) << 16) | label.SubrowId;
 
+    private static uint BuildAreaBoundarySortOrder(ushort subrowId)
+        => 0xFFFF0000 | subrowId;
+
     private static uint GetDutyKey(DutyContextSnapshot context)
         => context.ContentFinderConditionId != 0 ? context.ContentFinderConditionId : context.TerritoryTypeId;
 
@@ -3823,6 +3896,8 @@ public sealed class DungeonFrontierService
             SourceRule = point.SourceRule,
             MapCoordinates = point.MapCoordinates,
             UsePlayerYForNavigation = true,
+            IsAreaBoundary = point.IsAreaBoundary,
+            ConnectedMapId = point.ConnectedMapId,
             ManualDestinationKind = point.ManualDestinationKind,
             AllowCombatBypass = point.AllowCombatBypass,
             ArrivalRadiusXz = point.ArrivalRadiusXz,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-31
+
+- Object Rules now persists `DEFAULT` or an ordinary selected preset as the active runtime ruleset, reloads valid active-file changes without discarding the last valid rules on failure, and returns to `DEFAULT` when the active preset is explicitly deleted. `MATURE-PROPOSALS`, Dialog Rule presets, and BotologyUpdates file ownership are unchanged. The Main state strip now also shows the current planner object name, or `None` when there is no target.
+- Frontier discovery now includes the game-authored `MapMarker` area-boundary indicators that connect maps inside the current duty territory. ADS seeks the marker as live map truth without treating proximity as completion; the existing `BetweenAreas`/`BetweenAreas51` unsafe-transition hold clears movement during the crossing, and the settled live `MapId` supplies the next subarea. No object-rule kind, authored transition coordinate, packet reader, or transition completion state was added.
+- Quick Controls now shows **Disable QSTcomp** only while ADS debug mode is enabled through `/ads debug on`.
+
 ## 2026-08-30
 
 - Object Rules now names the exact authored rule driving the current planner objective and highlights its clean saved `DEFAULT` row, with a direct action that clears hiding filters and scrolls to it.

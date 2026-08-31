@@ -136,7 +136,7 @@ The BMRAI/VBM setting is enabled by default. When enabled, entering a regular du
 - Open/reload JSON files.
 - Open Object Rules, Dialog Rules, and Frontier Labels.
 
-`DEFAULT` is live runtime data. Parked presets do not affect runtime until copied/imported into `DEFAULT`.
+Object Rules persists `DEFAULT` or the selected ordinary preset as its runtime data; selecting or saving it takes effect immediately. `MATURE-PROPOSALS` remains edit-only, and Dialog Rules presets remain parked unless copied/imported into their `DEFAULT`.
 
 ### Advanced
 
@@ -206,7 +206,7 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 1. Open Object Explorer and select **RULE** on the live object.
 2. In Object Rules, choose the goal-matching **Class**.
 3. Fill red required fields first, then amber recommended identity/scope fields.
-4. Save `DEFAULT`.
+4. Save the active object-rule preset.
 5. Retest immediately.
 
 Field cues are class-specific: red is required, amber recommended, normal optional, and dim ignored. Class selection and cues never clear ignored stored values. Use the row `?` button for focused class help or `[GUIDE]` for the full goal/class matrix and advanced JSON field reference.
@@ -217,8 +217,8 @@ Field cues are class-specific: red is required, amber recommended, normal option
 |---|---|
 | Object Explorer | Identify live object name, kind, character level, guarded Foray level/element (or `—`), base ID, distance, targetability, and position; separate trimmed search terms with `|` for OR matching; use the session-only **Compact** checkbox to retain export/action buttons and filter labels while hiding contextual/status text; use `Filter by Lv.` for the existing Exact/`<=`/`>=` character-level filter; seed object rule |
 | Ghost Inspector | Inspect monster/interactable ghosts and manual-destination recovery state |
-| Frontier Labels | Inspect active-map labels and map resolution |
-| Object Rules | Author live/parked object-rule manifests |
+| Frontier Labels | Inspect active-map labels, game-authored area-boundary markers, and map resolution |
+| Object Rules | Select and author the persisted runtime manifest; review `MATURE-PROPOSALS` without activating it |
 | Dialog Rules | Author live/parked yes/no dialog manifests |
 | Loot Controls | Open with `/ads loot` or `/ads l`; configure base rolling and the default-off XA Database glamour option, which requests Need for missing equippable gear while preserving live Greed/Pass caps and the selected base mode on incomplete IPC data |
 | Shop Lists | Open with `/ads shopper`; manage persisted desired-total vendor lists, import TeamCraft/Crafting as a Service/Artisan clipboard data, inspect live and retainer ownership, and run sequential purchases |

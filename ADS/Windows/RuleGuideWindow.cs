@@ -27,7 +27,7 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
 
         DrawSection("Quick Start");
-        ImGui.TextWrapped("Object Explorer -> RULE -> choose Class -> fill the relevant colored fields -> save DEFAULT -> retest from a clean enough state.");
+        ImGui.TextWrapped("Object Explorer -> RULE -> choose Class -> fill the relevant colored fields -> save the active object-rule preset -> retest from a clean enough state.");
         ImGui.TextWrapped("Field cues: red = required, amber = recommended, normal = optional, dim = ignored by this class. Class selection and cues never clear ignored stored values.");
 
         DrawSection("How A Rule Wins");

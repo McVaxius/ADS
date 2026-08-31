@@ -13,6 +13,8 @@ public sealed class DungeonFrontierPoint
     internal ObjectPriorityRule? SourceRule { get; init; }
     public Vector2? MapCoordinates { get; init; }
     public bool UsePlayerYForNavigation { get; init; }
+    internal bool IsAreaBoundary { get; init; }
+    internal uint ConnectedMapId { get; init; }
     public ManualDestinationKind ManualDestinationKind { get; init; }
     public bool IsManualDestination
         => ManualDestinationKind != ManualDestinationKind.None;

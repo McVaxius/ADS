@@ -51,7 +51,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     {
         var context = plugin.DutyContextService.Current;
         var execution = plugin.ExecutionService;
-        if (!ImGui.BeginTable("ADSPrimaryState", 3, ImGuiTableFlags.SizingStretchSame))
+        var planner = plugin.ObjectivePlannerService.Current;
+        if (!ImGui.BeginTable("ADSPrimaryState", 4, ImGuiTableFlags.SizingStretchSame))
             return;
 
         ImGui.TableNextRow();
@@ -64,6 +65,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TableSetColumnIndex(2);
         ImGui.TextDisabled("EXECUTION PHASE");
         ImGui.TextWrapped(execution.CurrentPhase.ToString());
+        ImGui.TableSetColumnIndex(3);
+        ImGui.TextDisabled("OBJECT NAME");
+        ImGui.TextWrapped(string.IsNullOrWhiteSpace(planner.TargetName) ? "None" : planner.TargetName);
         ImGui.EndTable();
     }
 
