@@ -6,24 +6,23 @@ This guide covers live object/dialog rules, parked presets, Duty Manager, and ma
 
 ADS has two distinct rule locations:
 
-- **Live runtime object rules:** the persisted active object-rule preset in the Dalamud profile config. ADS reads and executes this data.
+- **Live runtime cache:** `DEFAULT` in the Dalamud profile config. ADS reads and executes this data.
 - **Maintainer working copy:** `botologyupdates/ads/*.json`. Remote updates refresh live cache from this source.
 
 During scouting, edit and prove live runtime data first. Promote maintainer data only after behavior is verified.
 
-Remote update overwrites the established `DEFAULT` cache files. It does not overwrite ordinary user presets; when one is active, it remains the runtime selection through a `DEFAULT` refresh.
+Remote update overwrites live `DEFAULT` cache files. It does not overwrite or execute ordinary user presets.
 
 The remote updater downloads `duty-object-rules-mature-proposals.json` into the editable non-default preset `rule-presets/MATURE-PROPOSALS.json` through a validated clean mirror.
 
 ## Editors And Presets
 
-Object Rules and Dialog Rules deliberately differ at runtime:
+Object Rules and Dialog Rules use the same parked-preset model:
 
-- Object Rules starts with `DEFAULT` active. Selecting `DEFAULT` or an existing ordinary preset activates it immediately and persists that selection.
-- Saving or externally updating the active object-rule preset refreshes runtime rules. A missing or invalid update keeps the last valid runtime rules.
-- Deleting the active ordinary object-rule preset explicitly returns runtime rules to `DEFAULT`.
-- Dialog Rule presets retain their parked behavior; only their `DEFAULT` is live.
-- `MATURE-PROPOSALS` is an edit-only object-rule preset. It is editable and copyable, but cannot become active, and its reserved name cannot be created or deleted.
+- `DEFAULT` is the sole live runtime data.
+- Ordinary presets are parked full-manifest editing copies; selecting, creating, saving, externally updating, or deleting one does not change runtime rules.
+- Saving or importing into `DEFAULT` changes runtime behavior. A missing or invalid `DEFAULT` update keeps the last valid runtime rules.
+- `MATURE-PROPOSALS` is editable and copyable, but its reserved name cannot be created or deleted and it never executes.
 - The editable preset file's last-write time is its refresh clock. General updates skip it while it is younger than 24 hours, and every successful Save restarts that countdown.
 - `Refresh Now` bypasses the countdown after confirmation. If an in-memory draft is dirty, the disk preset refreshes while the draft stays open; Save overwrites that disk refresh and Reload discards the draft.
 - The contribution helper is available only for a clean saved proposal draft. It validates and reveals the exact JSON or copies its path; copy the preset under another name for unrestricted editing.
@@ -38,7 +37,7 @@ Common editor controls:
 | `Open JSON` | Open selected JSON file |
 | `Export` / `Import` | Full-manifest clipboard transfer |
 | `Disk+` | Full-manifest disk import/export |
-| `+` / `-` | Create and activate an ordinary object-rule preset / delete it (active deletion returns to `DEFAULT`) |
+| `+` / `-` | Create/delete a parked preset |
 | `@` | Load current live `DEFAULT` cache into `DEFAULT` draft |
 | `Select Visible` / `Clear Selection` | Manage bulk selection without losing hidden selections |
 | `Delete Selected` | Confirm and remove selected rows with exact affected duty/global counts |
@@ -47,7 +46,7 @@ Common editor controls:
 
 Full-manifest clipboard and disk imports open a preview instead of replacing the draft immediately. Incoming rows are associated by CFC, then unique territory, then normalized English name. **Complete duties** replaces complete selected groups, **Delta rows** appends exactly the chosen rows without deduplication, and **Current filter** replaces the exact row indices frozen when the preview opened. Globals require a separate opt-in, and changing a current-filter preview's filters invalidates it.
 
-The editor watches the selected preset file for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; overwriting the newer file, reloading, or switching away requires an explicit confirmation. The runtime watcher independently refreshes the active preset, and invalid external JSON empties neither the current draft nor the last valid runtime rules.
+The editor watches the selected preset file for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; overwriting the newer file, reloading, or switching away requires an explicit confirmation. The runtime watcher independently refreshes only `DEFAULT`, and invalid external JSON empties neither the current draft nor the last valid runtime rules.
 
 New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlighted until saved.
 
@@ -56,7 +55,7 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 1. Open Object Explorer and select **RULE** on the live object.
 2. In Object Rules, choose the **Class** matching the goal.
 3. Fill red required fields, then amber recommended scope/identity fields.
-4. Save the active object-rule preset.
+4. Save `DEFAULT`.
 5. Retest immediately from clean enough state to prove the row.
 6. Check Ghost Inspector, Frontier Labels, Status JSON, and Analysis JSON if behavior remains wrong.
 7. Promote to maintainer data only after repeatable validation.
@@ -115,7 +114,7 @@ ADS removes every identity/scope match that fails `Dist` or `Y` before selecting
 | `Required` | Progression interactable that should normally win when eligible |
 | `Optional` | Interactable usable when stronger truth is absent |
 | `Expendable` | Use/consume object; retry through follow-through until it disappears |
-| `CombatFriendly` | Interactable allowed during combat; supports direct-interact BattleNpc/EventNpc talk targets |
+| `CombatFriendly` | Direct-interact BattleNpc/EventNpc allowed during combat; a normal settled interaction suppresses that position until duty reset unless the progression object is explicitly repeatable |
 | `TreasureCoffer` | Special optional treasure behavior |
 | `TreasureDoor` | Explicit treasure gate/door behavior |
 | `MapXzDestination` | Manual 2D map waypoint |
@@ -280,11 +279,11 @@ By default, dialog rules can run whenever ADS is enabled, logged in, and not zon
 
 ## Duty Manager And Maturity Testing
 
-Main > Duties is a compact current-duty summary. Open **Duty Manager** for the clipped catalog, numeric maturity filters, rule/waypoint/scope-warning coverage, bulk changes, selected-duty notes, and rule deep-links. The Rules deep-link is session-only and preserves the active preset and dirty draft; it uses diagnostic association so redundant scope mismatches remain visible. Runtime rule matching still requires every populated scope field to agree.
+Main > Duties is a compact current-duty summary. Open **Duty Manager** for the clipped catalog, numeric maturity filters, rule/waypoint/scope-warning coverage, bulk changes, selected-duty notes, and rule deep-links. The Rules deep-link is session-only and preserves the selected editing preset and dirty draft; it uses diagnostic association so redundant scope mismatches remain visible. Runtime rule matching still requires every populated scope field to agree.
 
 Goal: prove a duty completes cleanly enough to justify maturity promotion and capture enough evidence for durable fixes.
 
-1. Use the persisted active runtime object-rule preset.
+1. Use live runtime `DEFAULT` rules.
 2. Start/resume ownership and observe one complete attempt.
 3. Fix only proven missing/wrong rules.
 4. Capture fresh Status JSON and Analysis JSON for failures.

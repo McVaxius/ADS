@@ -1,8 +1,13 @@
 # Changelog
 
+## 2026-09-01
+
+- Restored Object Rules so `DEFAULT` is the sole live runtime ruleset; ordinary presets remain parked editing copies, while missing or invalid `DEFAULT` reloads retain the last valid runtime rules.
+- Clarified `CombatFriendly` help: a normal settled interaction suppresses that position until duty reset unless the progression object is explicitly repeatable.
+
 ## 2026-08-31
 
-- Object Rules now persists `DEFAULT` or an ordinary selected preset as the active runtime ruleset, reloads valid active-file changes without discarding the last valid rules on failure, and returns to `DEFAULT` when the active preset is explicitly deleted. `MATURE-PROPOSALS`, Dialog Rule presets, and BotologyUpdates file ownership are unchanged. The Main state strip now also shows the current planner object name, or `None` when there is no target.
+- Object Rules now reloads valid `DEFAULT` file changes without discarding the last valid rules on failure. `MATURE-PROPOSALS`, Dialog Rule presets, and BotologyUpdates file ownership are unchanged. The Main state strip now also shows the current planner object name, or `None` when there is no target.
 - Frontier discovery now includes the game-authored `MapMarker` area-boundary indicators that connect maps inside the current duty territory. ADS seeks the marker as live map truth without treating proximity as completion; the existing `BetweenAreas`/`BetweenAreas51` unsafe-transition hold clears movement during the crossing, and the settled live `MapId` supplies the next subarea. No object-rule kind, authored transition coordinate, packet reader, or transition completion state was added.
 - Quick Controls now shows **Disable QSTcomp** only while ADS debug mode is enabled through `/ads debug on`.
 

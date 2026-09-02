@@ -192,19 +192,17 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
-        var activeObjectRulePreset = plugin.ObjectPriorityRuleService.ActivePresetName;
-        var activeObjectRulePath = plugin.ObjectPriorityRuleService.GetPresetPath(activeObjectRulePreset);
         ImGui.TextUnformatted($"Duty Object Rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active");
-        ImGui.TextWrapped($"Runtime preset: {activeObjectRulePreset} -> {activeObjectRulePath}");
+        ImGui.TextWrapped($"Live DEFAULT: {plugin.ObjectPriorityRuleService.ConfigPath}");
         DrawActionGrid(
             "ADSObjectRuleActions",
-            ("Open active rules JSON", () => plugin.OpenPath(activeObjectRulePath)),
+            ("Open live DEFAULT JSON", () => plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath)),
             ("Open frontier labels", plugin.OpenFrontierLabelUi),
             ("Open rules table", plugin.OpenRuleEditorUi),
-            ("Reload active rules JSON", () => plugin.ObjectPriorityRuleService.Reload()));
+            ("Reload live DEFAULT JSON", () => plugin.ObjectPriorityRuleService.Reload()));
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextDisabled("DEFAULT or an ordinary selected preset is live runtime data. MATURE-PROPOSALS and Dialog Rules presets remain edit-only/parked.");
+        ImGui.TextDisabled("DEFAULT is the sole live object-rule set. Ordinary presets and MATURE-PROPOSALS are parked editing copies.");
 
         ImGui.Spacing();
         ImGui.Separator();

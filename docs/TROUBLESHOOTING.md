@@ -57,7 +57,7 @@ ADS live JSON cache includes object rules, dialog rules, duty maturity, and trea
 
 Manual update bypasses the normal stale-age gate and uses cache-busted remote requests. Runtime reload can defer during unsafe transition frames or visible dialog state; inspect status before assuming update failed.
 
-`DEFAULT` or an ordinary selected Object Rules preset is live runtime data. `MATURE-PROPOSALS` remains edit-only, and Dialog Rules presets remain parked unless copied/imported into their `DEFAULT`.
+`DEFAULT` is the sole live runtime data. Ordinary presets and `MATURE-PROPOSALS` are parked editing copies and do not execute.
 
 ## Specialist Diagnostic Tools
 
@@ -66,7 +66,7 @@ Manual update bypasses the normal stale-age gate and uses cache-busted remote re
 | Object Explorer | Confirm exact live object identity, targetability, distance, Y delta, and position; place flag or seed rule |
 | Ghost Inspector | Inspect monster/interactable ghosts, reasons, ages, map IDs, and manual-destination recovery |
 | Frontier Labels | Confirm active map row/sub-area, available label targets, and game-authored area boundaries |
-| Object Rules | Inspect scope, layer, classification, priority, gates, and active runtime preset status |
+| Object Rules | Inspect scope, layer, classification, priority, gates, and live `DEFAULT` status |
 | Dialog Rules | Inspect prompt match/response/delay and live `DEFAULT` status |
 | Server Event Explorer | Inspect server/map-effect event signals |
 | VFX Explorer | Inspect VFX paths/signals |

@@ -64,7 +64,7 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 | Guided Setup | Five independent Duty, Rules, Utilities, Treasure/Follow, and Diagnostics/Recovery walkthroughs |
 | Settings | General, automation, data/rules, advanced display, about/support |
 | Compact Controls | Full-label primary actions, tool shortcuts, concise live status |
-| Rules Editors | Persisted active object-rule presets, parked dialog presets, three explicit partial-import modes, bulk editing, duty deep-links, and protected edit-only `MATURE-PROPOSALS` review |
+| Rules Editors | Live `DEFAULT` object/dialog rules, parked presets, three explicit partial-import modes, bulk editing, duty deep-links, and protected `MATURE-PROPOSALS` review |
 | Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
 ## Documentation

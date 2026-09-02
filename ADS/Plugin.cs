@@ -203,12 +203,7 @@ public sealed class Plugin : IDalamudPlugin
 
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, configDirectory, Configuration.ActiveObjectRulePreset);
-        if (!string.Equals(Configuration.ActiveObjectRulePreset, ObjectPriorityRuleService.ActivePresetName, StringComparison.Ordinal))
-        {
-            Configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.ActivePresetName;
-            Configuration.Save();
-        }
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, configDirectory);
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
@@ -3600,7 +3595,6 @@ public sealed class Plugin : IDalamudPlugin
 
         if (configuration.Version < 23)
         {
-            configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.DefaultPresetName;
             configuration.Version = 23;
             changed = true;
         }

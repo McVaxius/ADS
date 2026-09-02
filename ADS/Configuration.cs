@@ -27,7 +27,6 @@ public sealed class Configuration : IPluginConfiguration
     public bool RuleEditorNewRowCurrentLabel { get; set; } = false;
     public int RuleEditorFilterMode { get; set; } = 0;
     public bool RuleEditorSeedObjectPosition { get; set; } = false;
-    public string ActiveObjectRulePreset { get; set; } = "DEFAULT";
     public bool HigherLowerDiagnosticsEnabled { get; set; } = true;
     public bool HigherLowerAutomationEnabled { get; set; } = true;
     public bool HigherLowerVfxDataminingEnabled { get; set; } = false;
