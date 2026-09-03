@@ -136,6 +136,7 @@ public sealed class ExecutionService
     private DateTime pendingProgressionInteractAfterWaitUntilUtc;
     private int pendingRequiredInteractionAttemptsSent;
     private bool pendingTreasureFollowerLootFollowThrough;
+    private ObservedInteractable? pendingCloseRecoveryInteractable;
     private DungeonFrontierPoint? committedForceMarchManualDestination;
     private string? interactArrivalWaitKey;
     private DateTime interactArrivalWaitUntilUtc;
@@ -414,6 +415,19 @@ public sealed class ExecutionService
 
         var pendingInteractable = pendingProgressionInteractable;
         var interactableName = pendingInteractable?.Name ?? committedInteractableKey;
+        if (pendingInteractable is not null && IsRetryCapablePendingInteractable(pendingInteractable))
+        {
+            ArmCloseInteractRecovery(pendingInteractable);
+            pendingProgressionInteractResultUntilUtc = DateTime.MinValue;
+            pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
+            StopMovementAssists();
+            log?.Information($"[ADS] Interactable {interactableName} reported invalid interaction location; ADS retained the pending target and armed a {PreferredInteractArrivalRange:0.0}y retry approach.");
+            SetPhase(
+                ExecutionPhase.AttemptingInteractableObjective,
+                $"Interactable {interactableName} reported invalid location; ADS will re-resolve it and close-navigate to {PreferredInteractArrivalRange:0.0}y before retrying.");
+            return true;
+        }
+
         var isTreasureDoor = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureDoor
                              || pendingInteractable?.Classification == InteractableClass.TreasureDoor;
         var attemptText = pendingRequiredInteractionAttemptsSent > 0
@@ -3341,9 +3355,11 @@ public sealed class ExecutionService
         if (TrySkipStuckTreasureCoffer(observedInteractable, targetHorizontalDistance, prefix))
             return;
 
-        var usingCloseRangeInteractFallback = targetDistance > DirectInteractAttemptRange
+        var interactionPolicy = GetInteractionAttemptPolicy(IsCloseInteractRecoveryArmedFor(observedInteractable));
+        var usingCloseRangeInteractFallback = interactionPolicy.AllowCloseXzFallback
+            && targetDistance > interactionPolicy.AttemptRange
             && ShouldUseCloseRangeInteractFallback(observedInteractable, targetHorizontalDistance, targetVerticalDelta);
-        if (targetDistance > DirectInteractAttemptRange && !usingCloseRangeInteractFallback)
+        if (targetDistance > interactionPolicy.AttemptRange && !usingCloseRangeInteractFallback)
         {
             TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint);
 
@@ -3907,6 +3923,32 @@ public sealed class ExecutionService
         ResetInteractArrivalWait();
     }
 
+    internal static (float AttemptRange, bool AllowCloseXzFallback) GetInteractionAttemptPolicy(bool closeRecoveryArmed)
+        => closeRecoveryArmed
+            ? (PreferredInteractArrivalRange, false)
+            : (DirectInteractAttemptRange, true);
+
+    private bool IsCloseInteractRecoveryArmedFor(ObservedInteractable interactable)
+        => pendingCloseRecoveryInteractable is not null
+           && IsEquivalentProgressionInteractable(pendingCloseRecoveryInteractable, interactable);
+
+    private void ArmCloseInteractRecovery(ObservedInteractable interactable)
+    {
+        if (IsCloseInteractRecoveryArmedFor(interactable))
+            return;
+
+        pendingCloseRecoveryInteractable = interactable;
+        ResetCloseRangeInteractFallbackTracking();
+    }
+
+    private bool IsRetryCapablePendingInteractable(ObservedInteractable interactable)
+        => interactable.Classification is InteractableClass.Required
+               or InteractableClass.TreasureDoor
+               or InteractableClass.Expendable
+           || (pendingTreasureFollowerLootFollowThrough
+               && interactable.Classification == InteractableClass.TreasureCoffer
+               && IsTreasureFollowerLootSackName(interactable.Name));
+
     private bool TrySkipStuckTreasureCoffer(ObservedInteractable observedInteractable, float targetHorizontalDistance, string prefix)
     {
         if (observedInteractable.Classification != InteractableClass.TreasureCoffer)
@@ -4235,6 +4277,13 @@ public sealed class ExecutionService
             return true;
         }
 
+        if (pendingLiveInteractable is not null
+            && (!isRequiredFollowThrough || pendingRequiredInteractionAttemptsSent < RequiredInteractionAttemptLimit)
+            && IsRetryCapablePendingInteractable(pendingLiveInteractable))
+        {
+            ArmCloseInteractRecovery(pendingLiveInteractable);
+        }
+
         if (isRequiredFollowThrough && pendingLiveInteractable is not null)
         {
             if (pendingRequiredInteractionAttemptsSent >= RequiredInteractionAttemptLimit)
@@ -4343,6 +4392,7 @@ public sealed class ExecutionService
         pendingProgressionInteractAfterWaitUntilUtc = DateTime.MinValue;
         pendingRequiredInteractionAttemptsSent = 0;
         pendingTreasureFollowerLootFollowThrough = false;
+        pendingCloseRecoveryInteractable = null;
         ResetTreasureDoorJiggleTracking(releaseKeys: true);
     }
 

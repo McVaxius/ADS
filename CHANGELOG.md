@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-03
+
+- Kept initial direct interactions at `2.0y`, but retry-capable required objects, treasure doors, expendables, and treasure-follower sacks now resume navigation to the preferred `0.8y` stand-off after a rejected or unconfirmed attempt. These close-recovery retries retain the pending target and suppress the `2.5y` close-XZ fallback while preserving existing cooldowns, attempt limits, and one-shot behavior.
+
 ## 2026-09-02
 
 - Removed the Object Rules per-frame filter/sort, full-manifest alignment, missing-field allocation, and hidden-column control costs; filtered row indexes are change-driven, while full width scans are limited to loads, structural changes, and explicit auto-fit. Every Object Rules action button now has hover help, including disabled prerequisites, and **All contexts** promotion now copies every saved custom override, including empty and custom-only shards, without being narrowed by row filters.
