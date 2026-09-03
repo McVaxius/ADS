@@ -187,6 +187,56 @@ public sealed class ObjectRuleShardStoreTests
     }
 
     [Fact]
+    public void PromotionContextResolutionUsesAllSavedOverridesOnlyWhenNoContextsAreChecked()
+    {
+        var descriptors = new[]
+        {
+            Descriptor(ObjectRuleShardStore.GlobalFileName, hasDefaultFile: true),
+            Descriptor("1037_rule_objects.json", hasDefaultFile: true, hasCustomOverride: true),
+            Descriptor("1039_rule_objects.json", hasDefaultFile: true, hasCustomOverride: true, isEmptyOverride: true),
+            Descriptor("9000_rule_objects.json", hasCustomOverride: true, isCustomOnly: true),
+            Descriptor("9999_rule_objects.json"),
+        };
+
+        var all = ObjectRuleEditorWindow.ResolvePromotionContextDescriptors(
+            descriptors,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(
+            ["1037_rule_objects.json", "1039_rule_objects.json", "9000_rule_objects.json"],
+            all.Select(descriptor => descriptor.FileName));
+        Assert.Contains(all, descriptor => descriptor.IsEmptyOverride);
+        Assert.Contains(all, descriptor => descriptor.IsCustomOnly);
+        Assert.DoesNotContain(all, descriptor => descriptor.BackingState is ObjectRuleContextBackingState.InheritedDefault or ObjectRuleContextBackingState.NoFileYet);
+
+        var explicitlySelected = ObjectRuleEditorWindow.ResolvePromotionContextDescriptors(
+            descriptors,
+            new HashSet<string>(
+                [ObjectRuleShardStore.GlobalFileName, "1037_rule_objects.json", "9999_rule_objects.json"],
+                StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(["1037_rule_objects.json"], explicitlySelected.Select(descriptor => descriptor.FileName));
+    }
+
+    private static ObjectRuleContextDescriptor Descriptor(
+        string fileName,
+        bool hasDefaultFile = false,
+        bool hasCustomOverride = false,
+        bool isEmptyOverride = false,
+        bool isCustomOnly = false)
+        => new(
+            FileName: fileName,
+            TerritoryTypeId: fileName == ObjectRuleShardStore.GlobalFileName ? null : (uint?)1,
+            Name: fileName,
+            IsDefaultPreset: false,
+            HasDefaultFile: hasDefaultFile,
+            HasCustomOverride: hasCustomOverride,
+            EffectiveRowCount: isEmptyOverride ? 0 : 1,
+            IsEmptyOverride: isEmptyOverride,
+            IsCustomOnly: isCustomOnly,
+            HasUnsavedChanges: false);
+
+    [Fact]
     public void ChangedInheritedContextSavesCompleteOverrideAndFirstCustomOnlyRow()
     {
         using var directory = new TempDirectory();

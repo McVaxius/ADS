@@ -147,6 +147,16 @@ public static class RuleSemanticsCatalog
             .ToList();
     }
 
+    internal static bool IsMissingRequiredField(
+        ObjectPriorityRule rule,
+        RuleClassificationSemantics? semantics,
+        string field)
+        => semantics is null
+            ? string.Equals(field, nameof(ObjectPriorityRule.Classification), StringComparison.Ordinal)
+            : semantics.Fields.TryGetValue(field, out var use)
+              && use == RuleFieldUse.Required
+              && !HasRequiredValue(rule, field);
+
     private static bool HasRequiredValue(ObjectPriorityRule rule, string field)
         => field switch
         {

@@ -2,6 +2,7 @@
 
 ## 2026-09-02
 
+- Removed the Object Rules per-frame filter/sort, full-manifest alignment, missing-field allocation, and hidden-column control costs; filtered row indexes are change-driven, while full width scans are limited to loads, structural changes, and explicit auto-fit. Every Object Rules action button now has hover help, including disabled prerequisites, and **All contexts** promotion now copies every saved custom override, including empty and custom-only shards, without being narrowed by row filters.
 - Replaced the object-rule monolith with indexed Global/territory shards. Custom presets are now persisted executable sparse overlays: missing contexts inherit `DEFAULT`, complete and empty overrides replace one context, custom-only territories work, and invalid active selections fall back safely to `DEFAULT`.
 - Protected ordinary `DEFAULT` editing behind session-only `/ads debug on`, added context-aware shard conflict checks, and rebuilt Object Rules around a responsive compact-capable layout, content-fitted resizable columns, cached file-state labels, and a remembered searchable multi-context checklist.
 - Added batch revert and clean-saved batch promotion for checked custom overrides, including eligible/skipped summaries, empty/custom-only warnings, one-time index updates, local-change confirmation, permanently visible checkout configuration, and a direct Rules walkthrough. Promotion never stages or otherwise mutates Git state.

@@ -49,7 +49,7 @@ public static class WizardCatalog
                 Page("safety", "Complete Saves, Empty Overrides & Revert", "Saving a changed context writes its complete replacement, including rows hidden by text or row filters. An empty custom shard intentionally suppresses every inherited row in that context.",
                     ["Use one checked context when creating the first row for an empty or no-file territory.", "Prefer disabled rows when you want reviewable intent; confirm explicitly before saving an empty override.", "Revert deletes each checked saved override. A custom-only context then disappears because DEFAULT has nothing to inherit."],
                     ["/ads rules"]),
-                Page("steps", "Checkout & Multi-context Promotion", "Configure and validate a local BotologyUpdates checkout in Object Rules or Settings > Data & Rules, then promote every eligible checked saved override in one batch.",
+                Page("steps", "Checkout & Multi-context Promotion", "Configure and validate a local BotologyUpdates checkout in Object Rules or Settings > Data & Rules, then promote eligible checked overrides or use All contexts to promote every saved override in one batch.",
                     ["Keep the draft clean and resolve any disk conflict before promotion.", "Review eligible and skipped context counts; inherited and no-file selections are skipped.", "ADS copies complete saved shards and updates index.json once for new contexts. It never stages, commits, pushes, switches branches, or opens a pull request; GitHub submission stays manual."],
                     ["/ads config", "/ads rules"]),
             ]),
