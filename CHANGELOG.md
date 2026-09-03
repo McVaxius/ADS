@@ -3,8 +3,10 @@
 ## 2026-09-02
 
 - Replaced the object-rule monolith with indexed Global/territory shards. Custom presets are now persisted executable sparse overlays: missing contexts inherit `DEFAULT`, complete and empty overrides replace one context, custom-only territories work, and invalid active selections fall back safely to `DEFAULT`.
-- Protected ordinary `DEFAULT` editing behind session-only `/ads debug on`, added context-aware shard conflict checks and confirmed context reversion, and added a clean-saved-context promotion wizard that writes only the canonical BotologyUpdates shard and a newly required index entry without staging or other Git mutation.
-- Switched remote object-rule updates to complete validated indexed shard downloads and removed current-build MATURE proposal synchronization. The two BotologyUpdates object-rule monoliths remain frozen for legacy builds.
+- Protected ordinary `DEFAULT` editing behind session-only `/ads debug on`, added context-aware shard conflict checks, and rebuilt Object Rules around a responsive compact-capable layout, content-fitted resizable columns, cached file-state labels, and a remembered searchable multi-context checklist.
+- Added batch revert and clean-saved batch promotion for checked custom overrides, including eligible/skipped summaries, empty/custom-only warnings, one-time index updates, local-change confirmation, permanently visible checkout configuration, and a direct Rules walkthrough. Promotion never stages or otherwise mutates Git state.
+- Repaired BotologyUpdates checkout activation: Settings and Object Rules now share one live checkout state, **Use checkout** accepts either the repository root or `ads/territories` (including pasted quoted paths), saves the canonical Git root immediately, and keeps invalid input visible without replacing the last valid checkout. Current-directory detection was removed, and open/promotion actions use the saved root.
+- Switched remote object-rule updates to complete validated indexed shard downloads, made fresh invalid/incomplete shard caches refresh immediately, included obsolete-shard removals in completion summaries, and removed current-build MATURE proposal synchronization. The two BotologyUpdates object-rule monoliths remain frozen for legacy builds.
 - Raised only the direct interaction attempt range from 2.0y to 3.0y; retry identity matching remains 2.0y.
 
 ## 2026-09-01

@@ -294,32 +294,53 @@ internal sealed partial class ObjectRuleShardStore
 
     public bool TryDeleteOverride(string presetName, string fileName, out string status)
     {
-        status = "Context override was not reverted.";
-        if (!TryParseCanonicalFileName(fileName, out _))
-        {
-            status = $"Unknown context shard {fileName}.";
-            return false;
-        }
+        var success = TryDeleteOverrides(presetName, [fileName], out var deleted, out _, out status);
+        return success && deleted.Count == 1;
+    }
+
+    public bool TryDeleteOverrides(
+        string presetName,
+        IEnumerable<string> fileNames,
+        out IReadOnlyList<string> deletedFiles,
+        out IReadOnlyList<string> skippedFiles,
+        out string status)
+    {
+        deletedFiles = [];
+        skippedFiles = [];
         if (string.Equals(presetName, ObjectPriorityRuleService.DefaultPresetName, StringComparison.OrdinalIgnoreCase))
         {
             status = "DEFAULT contexts cannot be reverted to DEFAULT.";
             return false;
         }
+
+        var requested = SortFileNames(fileNames).ToList();
+        var invalid = requested.FirstOrDefault(fileName => !TryParseCanonicalFileName(fileName, out _));
+        if (invalid is not null)
+        {
+            status = $"Unknown context shard {invalid}.";
+            return false;
+        }
+
+        var eligible = requested.Where(fileName => File.Exists(GetShardPath(presetName, fileName))).ToList();
+        var skipped = requested.Except(eligible, StringComparer.OrdinalIgnoreCase).ToList();
+        skippedFiles = skipped;
+        if (eligible.Count == 0)
+        {
+            status = $"No selected contexts in {presetName} have a saved custom override.";
+            return true;
+        }
+
         try
         {
-            var path = GetShardPath(presetName, fileName);
-            if (!File.Exists(path))
-            {
-                status = $"Preset {presetName} already inherits {fileName} from DEFAULT.";
-                return false;
-            }
-            File.Delete(path);
-            status = $"Reverted {fileName} in {presetName} to inherited DEFAULT content.";
+            foreach (var fileName in eligible)
+                File.Delete(GetShardPath(presetName, fileName));
+            deletedFiles = eligible;
+            status = $"Reverted {eligible.Count} saved context override(s) in {presetName}; skipped {skipped.Count} inherited or no-file context(s).";
             return true;
         }
         catch (Exception ex)
         {
-            status = $"Failed to revert {fileName}: {ex.Message}";
+            status = $"Failed to revert selected contexts: {ex.Message}";
             return false;
         }
     }
@@ -340,6 +361,61 @@ internal sealed partial class ObjectRuleShardStore
             .Where(name => !string.Equals(name, LegacyMaturePresetName, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)!);
         return names;
+    }
+
+    public IReadOnlyList<ObjectRuleContextDescriptor> CreateContextDescriptors(
+        string presetName,
+        IReadOnlyDictionary<string, ObjectPriorityRuleManifest> effectiveShards)
+    {
+        var isDefault = string.Equals(presetName, ObjectPriorityRuleService.DefaultPresetName, StringComparison.OrdinalIgnoreCase);
+        var defaultFileNames = TryLoadIndex(IndexPath, out var index, out _)
+            ? index.Files.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fileNames = new HashSet<string>(effectiveShards.Keys, StringComparer.OrdinalIgnoreCase)
+        {
+            GlobalFileName,
+        };
+        foreach (var territoryTypeId in dutyCatalog.Select(entry => entry.TerritoryTypeId).Where(id => id != 0))
+            fileNames.Add(GetTerritoryFileName(territoryTypeId));
+
+        return SortFileNames(fileNames).Select(fileName =>
+        {
+            TryParseCanonicalFileName(fileName, out var territoryTypeId);
+            var hasDefaultFile = defaultFileNames.Contains(fileName);
+            var hasCustomOverride = !isDefault && File.Exists(GetShardPath(presetName, fileName));
+            var rowCount = effectiveShards.GetValueOrDefault(fileName)?.Rules.Count ?? 0;
+            var name = territoryTypeId.HasValue
+                ? ResolveTerritoryName(territoryTypeId.Value)
+                : "Global";
+            return new ObjectRuleContextDescriptor(
+                fileName,
+                territoryTypeId,
+                name,
+                isDefault,
+                hasDefaultFile,
+                hasCustomOverride,
+                rowCount,
+                hasCustomOverride && rowCount == 0,
+                hasCustomOverride && !hasDefaultFile,
+                false);
+        }).ToList();
+    }
+
+    private string ResolveTerritoryName(uint territoryTypeId)
+    {
+        var names = dutyCatalog
+            .Where(entry => entry.TerritoryTypeId == territoryTypeId)
+            .Select(entry => entry.EnglishName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToList();
+        return names.Count switch
+        {
+            0 => $"Territory {territoryTypeId}",
+            1 => names[0],
+            _ => string.Join(" / ", names),
+        };
     }
 
     public ObjectRulePresetFileState CapturePresetState(string presetName)

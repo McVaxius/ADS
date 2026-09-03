@@ -29,6 +29,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool RuleEditorSeedObjectPosition { get; set; } = false;
     public string ActiveObjectRulePreset { get; set; } = "DEFAULT";
     public string BotologyUpdatesCheckoutPath { get; set; } = string.Empty;
+    public List<string> ObjectRuleSelectedContextFileNames { get; set; } = [];
+    public bool ObjectRuleEditorCompactMode { get; set; }
     public bool ObjectRuleShardMigrationComplete { get; set; }
     public List<string> PendingLegacyObjectRulePresets { get; set; } = [];
     public bool HigherLowerDiagnosticsEnabled { get; set; } = true;

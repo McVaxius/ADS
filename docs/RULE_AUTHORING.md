@@ -21,8 +21,10 @@ Object Rules use inherited executable presets:
 
 - Selecting or creating a custom preset activates it immediately and persists the selection.
 - Missing, deleted, or invalid active presets fall back to `DEFAULT` and persist that fallback.
-- The editor still presents one flattened effective table. Saving materializes every changed context as one complete custom shard; moving a row between scopes writes both contexts.
-- `Revert context to DEFAULT` deletes only the selected custom shard and restores inheritance.
+- The editor presents one combined effective table, not one backing JSON file. Saving materializes every changed context as one complete custom shard; moving a row between scopes writes both contexts.
+- The searchable context checklist remembers canonical filenames. No checks means **All**; ordinary clicks toggle multiple contexts without closing the list, and **Current area** selects the live territory directly.
+- Every context is labeled as `DEFAULT file`, `Inherited DEFAULT`, `Override file`, `Empty override`, `Custom-only file`, or `No file yet`, with effective row count and unsaved state.
+- Batch `Revert context(s) to DEFAULT` deletes every checked saved custom override and restores inheritance; inherited/no-file selections are listed as skipped. A reverted custom-only context disappears because no DEFAULT shard exists.
 - Empty overrides require confirmation; disabling rows is normally safer because it preserves authoring intent.
 - Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving for the current session only; disabling debug restores protection.
 - Dialog Rules retain their existing separate DEFAULT/parked-preset behavior.
@@ -31,7 +33,7 @@ Common editor controls:
 
 | Control | Purpose |
 |---|---|
-| `+ Row` | Add a draft row |
+| `+ Row` | Add a draft row; one checked context supplies its exact Global/territory scope, while multiple checks disable the action |
 | `Save` | Write selected preset |
 | `Reload From Disk` | Discard draft and reload selected preset |
 | `Open JSON` | Open the selected preset shard folder |
@@ -39,9 +41,14 @@ Common editor controls:
 | `Disk+` | Full-manifest disk import/export |
 | `+` / `-` | Create and activate/delete a custom preset |
 | `@` | Load current live `DEFAULT` cache into `DEFAULT` draft |
-| `Context` | Show All, Global, or one searchable territory; this selection controls revert/promotion authority |
-| `Revert context to DEFAULT` | Delete the selected custom shard after confirmation |
-| `Promote to PR ready` | Copy one complete clean saved override into a configured BotologyUpdates checkout |
+| `Contexts` | Search and toggle Global, catalog, current, custom-only, and no-file territories; no checks means All |
+| `Revert context(s) to DEFAULT` | Delete every eligible checked custom shard after one confirmation |
+| `Promote selected context(s) to PR-ready checkout` | Copy every eligible complete clean saved override and update the index once for all new contexts |
+| `Use checkout` | Validate the entered BotologyUpdates repository root or its `ads/territories` folder and immediately save the canonical Git root; pressing Enter in the path field does the same thing |
+| `Open checkout` | Open the last successfully saved canonical repository root |
+| `Compact` | Remember a reduced explanatory/secondary-control layout while preserving editing, filters, and context actions |
+| `Auto-fit columns` | Refit headers/current values after manual resizing; edited content grows columns up to long-field caps |
+| `Rules walkthrough` | Open the replayable Rules & Data wizard directly |
 | `Select Visible` / `Clear Selection` | Manage bulk selection without losing hidden selections |
 | `Delete Selected` | Confirm and remove selected rows with exact affected duty/global counts |
 | `Undo` | Restore the one most recent bulk delete or partial-manifest replacement |
@@ -51,7 +58,7 @@ Full-manifest clipboard and disk imports open a preview instead of replacing the
 
 The editor watches the selected preset's shard snapshots for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; saving checks the affected DEFAULT/custom shard snapshots before overwrite. Invalid external JSON empties neither the current draft nor the last valid runtime rules.
 
-Promotion is enabled only for a non-DEFAULT preset, exactly one Global or Territory context, a clean saved draft, and an actual override file. It copies the whole saved context even when text filters hide rows. The checkout must be a Git worktree containing `ads/territories`; forks are allowed. ADS may update the destination shard and add a new canonical filename to the index, but it never stages, commits, pushes, switches branches, opens a pull request, or changes other repository files. Existing local changes in affected paths require explicit overwrite confirmation.
+Promotion is enabled only for a non-DEFAULT preset with at least one explicitly checked saved override, a clean draft, no disk conflict, and a checkout accepted by **Use checkout**. Enter either the BotologyUpdates Git worktree root or its `ads/territories` folder; pasted outer quotes and whitespace are normalized, and forks are allowed. Settings and Object Rules share the same in-memory candidate, status, and validity. A successful Use (or Enter) saves the canonical repository root immediately. Invalid input and its exact reason remain visible without replacing the last valid saved root. **Open checkout** and promotion use that saved root, and promotion revalidates it before writing. Promotion copies every checked saved context in full even when text filters hide rows; inherited and no-file selections are reported as skipped. ADS prevalidates all sources, destinations, and the index, writes the index once after all changed shards, reports changed/no-op contexts separately, and requests one confirmation for existing local changes in affected paths plus the existing explicit confirmation for any empty override. It never scans drives, stages, commits, pushes, switches branches, opens a pull request, or changes unrelated repository files.
 
 New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlighted until saved.
 
@@ -63,7 +70,7 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 4. Save the active custom preset. Use session debug mode only when intentionally editing `DEFAULT` directly.
 5. Retest immediately from clean enough state to prove the row.
 6. Check Ghost Inspector, Frontier Labels, Status JSON, and Analysis JSON if behavior remains wrong.
-7. Select exactly one context and use **Promote to PR ready** only after repeatable validation.
+7. Check the validated contexts and use **Promote selected context(s) to PR-ready checkout** only after repeatable validation.
 
 Editor field cues:
 

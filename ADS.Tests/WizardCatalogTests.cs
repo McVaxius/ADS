@@ -21,6 +21,12 @@ public sealed class WizardCatalogTests
             Assert.Equal(["overview", "safety", "steps"], wizard.Pages.Select(page => page.Id));
             Assert.All(wizard.Pages, page => Assert.False(string.IsNullOrWhiteSpace(page.Body)));
         });
+        var rules = WizardCatalog.All.Single(wizard => wizard.Id == WizardCatalog.RulesDataId);
+        var rulesText = string.Join(' ', rules.Pages.SelectMany(page => page.Steps.Prepend(page.Body).Prepend(page.Title)));
+        Assert.Contains("combined effective", rulesText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("complete replacement", rulesText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("multi-context promotion", rulesText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("checkout", rulesText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -64,7 +70,7 @@ public sealed class WizardCatalogTests
 
         Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
 
-        Assert.Equal(22, configuration.Version);
+        Assert.Equal(24, configuration.Version);
         Assert.True(configuration.WizardHubSeen);
         Assert.False(configuration.DutyOperationsWizardCompleted);
         Assert.False(configuration.RulesDataWizardCompleted);
@@ -72,5 +78,22 @@ public sealed class WizardCatalogTests
         Assert.False(configuration.TreasureFollowWizardCompleted);
         Assert.False(configuration.DiagnosticsRecoveryWizardCompleted);
         Assert.False(WizardCatalog.ShouldAutoOpen(loadedExistingConfiguration: true, configuration));
+    }
+
+    [Fact]
+    public void Schema24ContextDefaultsNormalizeWithoutVersionBump()
+    {
+        var configuration = new Configuration
+        {
+            Version = 24,
+            ObjectRuleSelectedContextFileNames = ["bad.json", "1037_rule_objects.json"],
+            ObjectRuleEditorCompactMode = true,
+        };
+
+        Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
+
+        Assert.Equal(24, configuration.Version);
+        Assert.Equal(["1037_rule_objects.json"], configuration.ObjectRuleSelectedContextFileNames);
+        Assert.True(configuration.ObjectRuleEditorCompactMode);
     }
 }

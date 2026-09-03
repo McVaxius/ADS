@@ -34,6 +34,13 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
         IsOpen = true;
     }
 
+    public void OpenWizard(string wizardId)
+    {
+        selectedWizardId = WizardCatalog.All.Any(wizard => wizard.Id == wizardId) ? wizardId : null;
+        pageIndex = 0;
+        IsOpen = true;
+    }
+
     public override void Draw()
     {
         FinalizePendingWindowPlacement();

@@ -96,6 +96,8 @@ public sealed class Plugin : IDalamudPlugin
     public DutyCatalogService DutyCatalogService { get; }
     public DutyContextService DutyContextService { get; }
     public ObjectPriorityRuleService ObjectPriorityRuleService { get; }
+    internal ObjectRulePromotionService ObjectRulePromotionService { get; }
+    internal ObjectRuleCheckoutState ObjectRuleCheckoutState { get; }
     public ObservationMemoryService ObservationMemoryService { get; }
     public DialogYesNoRuleService DialogYesNoRuleService { get; }
     public DungeonFrontierService DungeonFrontierService { get; }
@@ -197,6 +199,8 @@ public sealed class Plugin : IDalamudPlugin
         TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
+        ObjectRulePromotionService = new ObjectRulePromotionService(DutyCatalogService.Entries);
+        ObjectRuleCheckoutState = new ObjectRuleCheckoutState(ObjectRulePromotionService, Configuration, Configuration.Save);
         ObjectPriorityRuleService = new ObjectPriorityRuleService(
             Log,
             DataManager,
@@ -464,6 +468,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenWizardUi()
         => wizardWindow.OpenHub();
+
+    public void OpenRulesWalkthroughUi()
+        => wizardWindow.OpenWizard(WizardCatalog.RulesDataId);
 
     public void OpenDesynthConfigUi()
         => desynthesisWindow.IsOpen = true;
@@ -3600,6 +3607,8 @@ public sealed class Plugin : IDalamudPlugin
         {
             configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.DefaultPresetName;
             configuration.BotologyUpdatesCheckoutPath = string.Empty;
+            configuration.ObjectRuleSelectedContextFileNames = [];
+            configuration.ObjectRuleEditorCompactMode = false;
             configuration.ObjectRuleShardMigrationComplete = false;
             configuration.PendingLegacyObjectRulePresets = [];
             configuration.Version = 24;
@@ -3607,6 +3616,14 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         configuration.PendingLegacyObjectRulePresets ??= [];
+        var normalizedRuleContexts = ObjectRuleEditorWindow.NormalizeSelectedContextFileNames(
+            configuration.ObjectRuleSelectedContextFileNames).ToList();
+        if (configuration.ObjectRuleSelectedContextFileNames is null
+            || !configuration.ObjectRuleSelectedContextFileNames.SequenceEqual(normalizedRuleContexts, StringComparer.Ordinal))
+        {
+            configuration.ObjectRuleSelectedContextFileNames = normalizedRuleContexts;
+            changed = true;
+        }
         if (string.IsNullOrWhiteSpace(configuration.ActiveObjectRulePreset))
         {
             configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.DefaultPresetName;

@@ -45,6 +45,50 @@ public sealed class RemoteJsonUpdateServiceTests
         Assert.Equal("territory index is younger than 24h and all shared files are present", decision.Status);
     }
 
+    [Fact]
+    public void FreshInvalidTerritoryIndexStillForcesRefresh()
+    {
+        using var directory = new TempDirectory();
+        var territories = Path.Combine(directory.Path, ObjectRuleShardStore.DirectoryName);
+        Directory.CreateDirectory(territories);
+        File.WriteAllText(Path.Combine(territories, ObjectRuleShardStore.IndexFileName), "not json");
+        var now = new DateTime(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var states = RemoteJsonUpdateService.RemoteCacheFileNames
+            .Select(fileName => new RemoteJsonCacheFileState(fileName, true, now - TimeSpan.FromMinutes(1)));
+
+        var cacheState = RemoteJsonUpdateService.InspectLocalObjectRuleCache(directory.Path, []);
+        var decision = RemoteJsonUpdateService.DecideRefresh(states, now, RemoteJsonUpdateService.RefreshInterval, cacheState);
+
+        Assert.False(cacheState.IsValid);
+        Assert.True(decision.ShouldRefresh);
+        Assert.Contains("invalid object-rule cache", decision.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FreshMissingOrInvalidIndexedShardStillForcesRefresh(bool createInvalidShard)
+    {
+        using var directory = new TempDirectory();
+        var territories = Path.Combine(directory.Path, ObjectRuleShardStore.DirectoryName);
+        Directory.CreateDirectory(territories);
+        ObjectRuleShardStore.WriteIndexAtomic(
+            Path.Combine(territories, ObjectRuleShardStore.IndexFileName),
+            new ObjectPriorityRuleShardIndex { Files = ["1037_rule_objects.json"] });
+        if (createInvalidShard)
+            File.WriteAllText(Path.Combine(territories, "1037_rule_objects.json"), "not json");
+        var now = new DateTime(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var states = RemoteJsonUpdateService.RemoteCacheFileNames
+            .Select(fileName => new RemoteJsonCacheFileState(fileName, true, now - TimeSpan.FromMinutes(1)));
+
+        var cacheState = RemoteJsonUpdateService.InspectLocalObjectRuleCache(directory.Path, [Duty(2, 1037, "the Tam-Tara Deepcroft")]);
+        var decision = RemoteJsonUpdateService.DecideRefresh(states, now, RemoteJsonUpdateService.RefreshInterval, cacheState);
+
+        Assert.False(cacheState.IsValid);
+        Assert.Contains("territories/1037_rule_objects.json", cacheState.ProblemFiles);
+        Assert.True(decision.ShouldRefresh);
+    }
+
     [Theory]
     [InlineData("{\"SchemaVersion\":2,\"Files\":[]}")]
     [InlineData("{\"SchemaVersion\":1,\"Files\":[\"1037_rule_objects.json\",\"1037_rule_objects.json\"]}")]

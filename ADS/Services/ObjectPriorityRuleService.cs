@@ -30,6 +30,7 @@ public sealed class ObjectPriorityRuleService
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
     private readonly ObjectRuleShardStore shardStore;
+    private readonly IReadOnlyList<DutyCatalogEntry> dutyCatalog;
     private readonly Configuration? configuration;
     private readonly System.Action? saveConfiguration;
     private readonly System.Action<string>? showToast;
@@ -38,6 +39,7 @@ public sealed class ObjectPriorityRuleService
     private ObjectRulePresetFileState? lastObservedPresetState;
     private DateTime nextReloadPollUtc;
     private string activePresetName = DefaultPresetName;
+    private IReadOnlyList<ObjectRuleContextDescriptor> contextDescriptors = [];
 
     public ObjectPriorityRuleService(
         IPluginLog log,
@@ -58,6 +60,7 @@ public sealed class ObjectPriorityRuleService
     {
         this.log = log;
         this.dataManager = dataManager;
+        this.dutyCatalog = dutyCatalog;
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
         this.showToast = showToast;
@@ -158,10 +161,10 @@ public sealed class ObjectPriorityRuleService
         try
         {
             var fallbackToastShown = false;
-            if (!shardStore.TryLoadEffectivePreset(activePresetName, out var manifest, out _, out var status))
+            if (!shardStore.TryLoadEffectivePreset(activePresetName, out var manifest, out var effectiveShards, out var status))
             {
                 if (IsDefaultPreset(activePresetName)
-                    || !shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out _, out var fallbackStatus))
+                    || !shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out effectiveShards, out var fallbackStatus))
                 {
                     LastLoadStatus = status;
                     lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
@@ -178,6 +181,7 @@ public sealed class ObjectPriorityRuleService
             }
 
             Current = manifest;
+            contextDescriptors = shardStore.CreateContextDescriptors(activePresetName, effectiveShards);
             lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
             LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
@@ -282,20 +286,27 @@ public sealed class ObjectPriorityRuleService
     }
 
     public bool TryLoadManifest(string presetName, out ObjectPriorityRuleManifest manifest, out string status)
-        => shardStore.TryLoadEffectivePreset(presetName, out manifest, out _, out status);
+    {
+        if (!shardStore.TryLoadEffectivePreset(presetName, out manifest, out var effectiveShards, out status))
+            return false;
+        if (string.Equals(presetName, activePresetName, StringComparison.OrdinalIgnoreCase))
+            contextDescriptors = shardStore.CreateContextDescriptors(activePresetName, effectiveShards);
+        return true;
+    }
 
     public bool TryLoadDefaultCacheManifest(out ObjectPriorityRuleManifest manifest, out string status)
         => shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out _, out status);
 
     public bool ActivatePreset(string presetName, bool notify = true)
     {
-        if (!shardStore.TryLoadEffectivePreset(presetName, out var manifest, out _, out var status))
+        if (!shardStore.TryLoadEffectivePreset(presetName, out var manifest, out var effectiveShards, out var status))
         {
             LastLoadStatus = status;
             return false;
         }
         activePresetName = IsDefaultPreset(presetName) ? DefaultPresetName : SanitizePresetName(presetName);
         Current = manifest;
+        contextDescriptors = shardStore.CreateContextDescriptors(activePresetName, effectiveShards);
         lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
         PersistActivePreset();
         LastLoadStatus = status;
@@ -332,9 +343,23 @@ public sealed class ObjectPriorityRuleService
 
     public bool TryRevertContextToDefault(string presetName, string fileName, out string status)
     {
-        if (!shardStore.TryDeleteOverride(presetName, fileName, out status))
+        if (!TryRevertContextsToDefault(presetName, [fileName], out var deletedFiles, out _, out status))
             return false;
-        if (string.Equals(activePresetName, presetName, StringComparison.OrdinalIgnoreCase) && !Reload())
+        return deletedFiles.Count == 1;
+    }
+
+    internal bool TryRevertContextsToDefault(
+        string presetName,
+        IEnumerable<string> fileNames,
+        out IReadOnlyList<string> deletedFiles,
+        out IReadOnlyList<string> skippedFiles,
+        out string status)
+    {
+        if (!shardStore.TryDeleteOverrides(presetName, fileNames, out deletedFiles, out skippedFiles, out status))
+            return false;
+        if (deletedFiles.Count > 0
+            && string.Equals(activePresetName, presetName, StringComparison.OrdinalIgnoreCase)
+            && !Reload())
         {
             status = $"{status} Reload failed: {LastLoadStatus}";
             return false;
@@ -361,9 +386,86 @@ public sealed class ObjectPriorityRuleService
         => shardStore.GetContextFileNames(manifest);
 
     public IReadOnlyList<string> GetAvailableContextFileNames(string presetName)
-        => shardStore.TryLoadEffectivePreset(presetName, out _, out var shards, out _)
-            ? ObjectRuleShardStore.SortFileNames(shards.Keys)
-            : [];
+        => string.Equals(presetName, activePresetName, StringComparison.OrdinalIgnoreCase)
+            ? contextDescriptors.Select(descriptor => descriptor.FileName).ToList()
+            : shardStore.TryLoadEffectivePreset(presetName, out _, out var shards, out _)
+                ? ObjectRuleShardStore.SortFileNames(shards.Keys)
+                : [];
+
+    internal IReadOnlyList<ObjectRuleContextDescriptor> GetContextDescriptors(
+        ObjectPriorityRuleManifest draft,
+        ObjectPriorityRuleManifest baseline,
+        uint currentTerritoryTypeId)
+    {
+        var byFile = contextDescriptors.ToDictionary(descriptor => descriptor.FileName, StringComparer.OrdinalIgnoreCase);
+        if (!shardStore.TrySplitManifest(baseline, out var before, out _)
+            || !shardStore.TrySplitManifest(draft, out var after, out _))
+            return contextDescriptors;
+
+        var changed = before.Keys.Concat(after.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(fileName => !ObjectRuleShardStore.RuleListsEqual(
+                before.GetValueOrDefault(fileName)?.Rules ?? [],
+                after.GetValueOrDefault(fileName)?.Rules ?? []))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fileNames = new HashSet<string>(byFile.Keys, StringComparer.OrdinalIgnoreCase);
+        fileNames.Add(ObjectRuleShardStore.GlobalFileName);
+        foreach (var territoryTypeId in dutyCatalog.Select(entry => entry.TerritoryTypeId).Where(id => id != 0))
+            fileNames.Add(ObjectRuleShardStore.GetTerritoryFileName(territoryTypeId));
+        fileNames.UnionWith(before.Keys);
+        fileNames.UnionWith(after.Keys);
+        if (currentTerritoryTypeId != 0)
+            fileNames.Add(ObjectRuleShardStore.GetTerritoryFileName(currentTerritoryTypeId));
+
+        return ObjectRuleShardStore.SortFileNames(fileNames).Select(fileName =>
+        {
+            if (!byFile.TryGetValue(fileName, out var descriptor))
+            {
+                ObjectRuleShardStore.TryParseCanonicalFileName(fileName, out var territoryTypeId);
+                descriptor = new ObjectRuleContextDescriptor(
+                    fileName,
+                    territoryTypeId,
+                    ResolveTerritoryName(territoryTypeId),
+                    IsDefaultPreset(activePresetName),
+                    false,
+                    false,
+                    0,
+                    false,
+                    false,
+                    false);
+            }
+
+            var rowCount = after.TryGetValue(fileName, out var draftShard)
+                ? draftShard.Rules.Count
+                : changed.Contains(fileName)
+                    ? 0
+                    : descriptor.EffectiveRowCount;
+            return descriptor with
+            {
+                EffectiveRowCount = rowCount,
+                HasUnsavedChanges = changed.Contains(fileName),
+            };
+        }).ToList();
+    }
+
+    private string ResolveTerritoryName(uint? territoryTypeId)
+    {
+        if (!territoryTypeId.HasValue)
+            return "Global";
+        var names = dutyCatalog
+            .Where(entry => entry.TerritoryTypeId == territoryTypeId.Value)
+            .Select(entry => entry.EnglishName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToList();
+        return names.Count switch
+        {
+            0 => $"Territory {territoryTypeId.Value}",
+            1 => names[0],
+            _ => string.Join(" / ", names),
+        };
+    }
 
     private void PersistActivePreset()
     {

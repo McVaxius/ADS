@@ -11,6 +11,133 @@ public sealed class ObjectRulePromotionServiceTests
     [RemoteJsonUpdateServiceTests.Duty(2, 1037, "the Tam-Tara Deepcroft")];
 
     [Fact]
+    public void CheckoutValidationResolvesRepositoryRootAndTerritoriesFolderToSameRoot()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, []);
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var rootValid = service.TryValidateCheckout(checkout.Path, out var rootFromRepository, out var rootStatus);
+        var territoriesValid = service.TryValidateCheckout(territories, out var rootFromTerritories, out var territoriesStatus);
+
+        Assert.True(rootValid, rootStatus);
+        Assert.True(territoriesValid, territoriesStatus);
+        Assert.Equal(rootFromRepository, rootFromTerritories, ignoreCase: true);
+        Assert.Equal(Path.GetFullPath(Git(checkout.Path, "rev-parse", "--show-toplevel").Trim()), rootFromRepository, ignoreCase: true);
+    }
+
+    [Fact]
+    public void CheckoutValidationTrimsWhitespaceAndOuterQuotes()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, []);
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var valid = service.TryValidateCheckout($"  \"{territories}\"  ", out var root, out var status);
+
+        Assert.True(valid, status);
+        Assert.Equal(Path.GetFullPath(Git(checkout.Path, "rev-parse", "--show-toplevel").Trim()), root, ignoreCase: true);
+    }
+
+    [Fact]
+    public void CheckoutValidationReportsMissingAndNonGitFolders()
+    {
+        using var directory = new TempDirectory();
+        var service = new ObjectRulePromotionService(Catalog);
+        var missingPath = Path.Combine(directory.Path, "missing");
+
+        Assert.False(service.TryValidateCheckout(missingPath, out _, out var missingStatus));
+        Assert.Equal($"The checkout path does not exist: {Path.GetFullPath(missingPath)}.", missingStatus);
+
+        Assert.False(service.TryValidateCheckout(directory.Path, out _, out var nonGitStatus));
+        Assert.Contains("Git validation failed", nonGitStatus);
+    }
+
+    [Fact]
+    public void CheckoutValidationRejectsIncorrectLayoutsAndUnsupportedSubfolders()
+    {
+        using var wrongLayout = new TempDirectory();
+        Git(wrongLayout.Path, "init");
+        var service = new ObjectRulePromotionService(Catalog);
+
+        Assert.False(service.TryValidateCheckout(wrongLayout.Path, out _, out var layoutStatus));
+        Assert.Equal("The checkout is missing the expected ads/territories layout.", layoutStatus);
+
+        using var checkout = new TempDirectory();
+        InitializeCheckout(checkout.Path, []);
+        var unsupported = Path.Combine(checkout.Path, "ads");
+
+        Assert.False(service.TryValidateCheckout(unsupported, out _, out var unsupportedStatus));
+        Assert.Equal("Choose either the BotologyUpdates repository root or its ads/territories folder.", unsupportedStatus);
+    }
+
+    [Fact]
+    public void CheckoutValidationReportsInvalidIndex()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, []);
+        File.WriteAllText(Path.Combine(territories, ObjectRuleShardStore.IndexFileName), "not json");
+        var service = new ObjectRulePromotionService(Catalog);
+
+        Assert.False(service.TryValidateCheckout(checkout.Path, out _, out var status));
+        Assert.StartsWith("Invalid territory index:", status);
+    }
+
+    [Fact]
+    public void SharedCheckoutStateKeepsInvalidCandidateSeparateFromSavedCanonicalRoot()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, []);
+        var canonicalRoot = Path.GetFullPath(Git(checkout.Path, "rev-parse", "--show-toplevel").Trim());
+        var configuration = new Configuration { BotologyUpdatesCheckoutPath = canonicalRoot };
+        var saveCount = 0;
+        var settingsState = new ObjectRuleCheckoutState(
+            new ObjectRulePromotionService(Catalog),
+            configuration,
+            () => saveCount++);
+        var objectRulesState = settingsState;
+
+        Assert.True(settingsState.IsValid, settingsState.Status);
+        Assert.True(objectRulesState.IsValid);
+        Assert.Equal(canonicalRoot, objectRulesState.ConfiguredRoot, ignoreCase: true);
+
+        var missingPath = Path.Combine(checkout.Path, "missing");
+        settingsState.SetCandidatePath(missingPath);
+        Assert.False(objectRulesState.IsValid);
+        Assert.Equal(missingPath, objectRulesState.CandidatePath);
+
+        Assert.False(objectRulesState.TryUseCheckout());
+        Assert.Equal($"The checkout path does not exist: {Path.GetFullPath(missingPath)}.", settingsState.Status);
+        Assert.Equal(canonicalRoot, configuration.BotologyUpdatesCheckoutPath, ignoreCase: true);
+        Assert.Equal(canonicalRoot, settingsState.ConfiguredRoot, ignoreCase: true);
+        Assert.Equal(0, saveCount);
+
+        objectRulesState.SetCandidatePath($"\"{territories}\"");
+        Assert.True(settingsState.TryUseCheckout(), settingsState.Status);
+        Assert.True(objectRulesState.IsValid);
+        Assert.Equal(canonicalRoot, objectRulesState.CandidatePath, ignoreCase: true);
+        Assert.Equal(canonicalRoot, configuration.BotologyUpdatesCheckoutPath, ignoreCase: true);
+        Assert.Equal(1, saveCount);
+
+        objectRulesState.SetValidationFailure("Invalid territory index: changed after checkout activation.");
+        Assert.False(settingsState.IsValid);
+        Assert.Equal("Invalid territory index: changed after checkout activation.", settingsState.Status);
+        Assert.Equal(canonicalRoot, settingsState.ConfiguredRoot, ignoreCase: true);
+
+        Assert.True(settingsState.TryUseCheckout(), settingsState.Status);
+        Assert.True(objectRulesState.IsValid);
+        Assert.Equal(2, saveCount);
+
+        settingsState.Clear();
+        Assert.False(objectRulesState.IsValid);
+        Assert.Empty(objectRulesState.CandidatePath);
+        Assert.Empty(objectRulesState.ConfiguredRoot);
+        Assert.Empty(configuration.BotologyUpdatesCheckoutPath);
+        Assert.Equal("No BotologyUpdates checkout is configured.", objectRulesState.Status);
+        Assert.Equal(3, saveCount);
+    }
+
+    [Fact]
     public void PromotionCopiesWholeSavedContextWithoutChangingExistingIndexOrGitState()
     {
         using var checkout = new TempDirectory();
@@ -87,6 +214,172 @@ public sealed class ObjectRulePromotionServiceTests
         Assert.True(confirmed.Success, confirmed.Status);
         Assert.Equal("incoming", ReadShard(targetPath).Rules.Single().ObjectName);
         Assert.Equal(["1037_rule_objects.json"], ReadIndex(territories).Files);
+        Assert.Empty(Git(checkout.Path, "diff", "--cached"));
+    }
+
+    [Fact]
+    public void BatchPromotionCopiesCompleteContextsAndUpdatesIndexForAllNewContexts()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, ["1037_rule_objects.json"]);
+        WriteShard(Path.Combine(territories, "1037_rule_objects.json"), "old");
+        CommitBaseline(checkout.Path);
+        var branch = Git(checkout.Path, "branch", "--show-current").Trim();
+
+        using var source = new TempDirectory();
+        var firstSource = Path.Combine(source.Path, "1037_rule_objects.json");
+        var secondSource = Path.Combine(source.Path, "9000_rule_objects.json");
+        WriteShard(firstSource, "visible", "hidden-by-filter");
+        WriteShard(secondSource, "custom-only", territory: 9000);
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var result = service.Promote(
+            checkout.Path,
+            [
+                new ObjectRulePromotionSource("1037_rule_objects.json", firstSource),
+                new ObjectRulePromotionSource("9000_rule_objects.json", secondSource),
+            ],
+            overwriteConfirmed: false);
+
+        Assert.True(result.Success, result.Status);
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], result.ChangedContexts);
+        Assert.Empty(result.NoOpContexts);
+        Assert.Equal(["visible", "hidden-by-filter"], ReadShard(Path.Combine(territories, "1037_rule_objects.json")).Rules.Select(rule => rule.ObjectName));
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], ReadIndex(territories).Files);
+        Assert.Equal(branch, Git(checkout.Path, "branch", "--show-current").Trim());
+        Assert.Empty(Git(checkout.Path, "diff", "--cached"));
+    }
+
+    [Fact]
+    public void BatchPromotionReportsNoOpAndEmptyContextsSeparately()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, ["1037_rule_objects.json"]);
+        var target = Path.Combine(territories, "1037_rule_objects.json");
+        WriteShard(target, "same");
+        CommitBaseline(checkout.Path);
+
+        using var source = new TempDirectory();
+        var sameSource = Path.Combine(source.Path, "1037_rule_objects.json");
+        var emptySource = Path.Combine(source.Path, "9000_rule_objects.json");
+        WriteShard(sameSource, "same");
+        WriteShard(emptySource, [], 9000);
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var result = service.Promote(
+            checkout.Path,
+            [
+                new ObjectRulePromotionSource("1037_rule_objects.json", sameSource),
+                new ObjectRulePromotionSource("9000_rule_objects.json", emptySource),
+            ],
+            overwriteConfirmed: false);
+
+        Assert.True(result.Success, result.Status);
+        Assert.Equal(["9000_rule_objects.json"], result.ChangedContexts);
+        Assert.Equal(["1037_rule_objects.json"], result.NoOpContexts);
+        Assert.Equal(["9000_rule_objects.json"], result.EmptyContexts);
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], ReadIndex(territories).Files);
+        Assert.Empty(ReadShard(Path.Combine(territories, "9000_rule_objects.json")).Rules);
+    }
+
+    [Fact]
+    public void BatchPromotionPrevalidatesEverySourceBeforeWritingAnything()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, ["1037_rule_objects.json"]);
+        var target = Path.Combine(territories, "1037_rule_objects.json");
+        WriteShard(target, "before");
+        CommitBaseline(checkout.Path);
+
+        using var source = new TempDirectory();
+        var validSource = Path.Combine(source.Path, "1037_rule_objects.json");
+        var invalidSource = Path.Combine(source.Path, "9000_rule_objects.json");
+        WriteShard(validSource, "after");
+        File.WriteAllText(invalidSource, "not json");
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var result = service.Promote(
+            checkout.Path,
+            [
+                new ObjectRulePromotionSource("1037_rule_objects.json", validSource),
+                new ObjectRulePromotionSource("9000_rule_objects.json", invalidSource),
+            ],
+            overwriteConfirmed: false);
+
+        Assert.False(result.Success);
+        Assert.Equal("before", ReadShard(target).Rules.Single().ObjectName);
+        Assert.Equal(["1037_rule_objects.json"], ReadIndex(territories).Files);
+        Assert.Empty(Git(checkout.Path, "status", "--porcelain"));
+    }
+
+    [Fact]
+    public void BatchPromotionPrevalidatesEveryExistingDestinationBeforeWritingAnything()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, ["1037_rule_objects.json", "9000_rule_objects.json"]);
+        var firstTarget = Path.Combine(territories, "1037_rule_objects.json");
+        WriteShard(firstTarget, "before");
+        File.WriteAllText(Path.Combine(territories, "9000_rule_objects.json"), "not json");
+        CommitBaseline(checkout.Path);
+
+        using var source = new TempDirectory();
+        var firstSource = Path.Combine(source.Path, "1037_rule_objects.json");
+        var secondSource = Path.Combine(source.Path, "9000_rule_objects.json");
+        WriteShard(firstSource, "after");
+        WriteShard(secondSource, "valid", territory: 9000);
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var result = service.Promote(
+            checkout.Path,
+            [
+                new ObjectRulePromotionSource("1037_rule_objects.json", firstSource),
+                new ObjectRulePromotionSource("9000_rule_objects.json", secondSource),
+            ],
+            overwriteConfirmed: false);
+
+        Assert.False(result.Success);
+        Assert.Contains("destination is invalid", result.Status);
+        Assert.Equal("before", ReadShard(firstTarget).Rules.Single().ObjectName);
+        Assert.Empty(Git(checkout.Path, "status", "--porcelain"));
+    }
+
+    [Fact]
+    public void BatchPromotionRequestsOneConfirmationForChangesAcrossShardAndIndexPaths()
+    {
+        using var checkout = new TempDirectory();
+        var territories = InitializeCheckout(checkout.Path, ["1037_rule_objects.json"]);
+        var target = Path.Combine(territories, "1037_rule_objects.json");
+        var indexPath = Path.Combine(territories, ObjectRuleShardStore.IndexFileName);
+        WriteShard(target, "baseline");
+        CommitBaseline(checkout.Path);
+        WriteShard(target, "local-target");
+        File.AppendAllText(indexPath, Environment.NewLine);
+
+        using var source = new TempDirectory();
+        var changedSource = Path.Combine(source.Path, "1037_rule_objects.json");
+        var newSource = Path.Combine(source.Path, "9000_rule_objects.json");
+        WriteShard(changedSource, "incoming");
+        WriteShard(newSource, "new", territory: 9000);
+        var sources = new[]
+        {
+            new ObjectRulePromotionSource("1037_rule_objects.json", changedSource),
+            new ObjectRulePromotionSource("9000_rule_objects.json", newSource),
+        };
+        var service = new ObjectRulePromotionService(Catalog);
+
+        var blocked = service.Promote(checkout.Path, sources, overwriteConfirmed: false);
+
+        Assert.False(blocked.Success);
+        Assert.True(blocked.RequiresOverwriteConfirmation);
+        Assert.Contains("1037_rule_objects.json", blocked.Status);
+        Assert.Contains("index.json", blocked.Status);
+        Assert.Equal("local-target", ReadShard(target).Rules.Single().ObjectName);
+
+        var confirmed = service.Promote(checkout.Path, sources, overwriteConfirmed: true);
+
+        Assert.True(confirmed.Success, confirmed.Status);
+        Assert.Equal("incoming", ReadShard(target).Rules.Single().ObjectName);
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], ReadIndex(territories).Files);
         Assert.Empty(Git(checkout.Path, "diff", "--cached"));
     }
 

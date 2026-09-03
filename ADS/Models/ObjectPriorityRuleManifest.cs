@@ -13,6 +13,55 @@ public sealed class ObjectPriorityRuleShardIndex
     public List<string> Files { get; set; } = [];
 }
 
+internal enum ObjectRuleContextBackingState
+{
+    DefaultFile,
+    InheritedDefault,
+    OverrideFile,
+    EmptyOverride,
+    CustomOnlyFile,
+    NoFileYet,
+}
+
+internal sealed record ObjectRuleContextDescriptor(
+    string FileName,
+    uint? TerritoryTypeId,
+    string Name,
+    bool IsDefaultPreset,
+    bool HasDefaultFile,
+    bool HasCustomOverride,
+    int EffectiveRowCount,
+    bool IsEmptyOverride,
+    bool IsCustomOnly,
+    bool HasUnsavedChanges)
+{
+    public ObjectRuleContextBackingState BackingState
+        => IsDefaultPreset
+            ? HasDefaultFile
+                ? ObjectRuleContextBackingState.DefaultFile
+                : ObjectRuleContextBackingState.NoFileYet
+            : HasCustomOverride
+                ? IsEmptyOverride
+                    ? ObjectRuleContextBackingState.EmptyOverride
+                    : IsCustomOnly
+                        ? ObjectRuleContextBackingState.CustomOnlyFile
+                        : ObjectRuleContextBackingState.OverrideFile
+                : HasDefaultFile
+                    ? ObjectRuleContextBackingState.InheritedDefault
+                    : ObjectRuleContextBackingState.NoFileYet;
+
+    public string BackingStateLabel
+        => BackingState switch
+        {
+            ObjectRuleContextBackingState.DefaultFile => "DEFAULT file",
+            ObjectRuleContextBackingState.InheritedDefault => "Inherited DEFAULT",
+            ObjectRuleContextBackingState.OverrideFile => "Override file",
+            ObjectRuleContextBackingState.EmptyOverride => "Empty override",
+            ObjectRuleContextBackingState.CustomOnlyFile => "Custom-only file",
+            _ => "No file yet",
+        };
+}
+
 public sealed class ObjectPriorityRule
 {
     public bool Enabled { get; set; } = true;

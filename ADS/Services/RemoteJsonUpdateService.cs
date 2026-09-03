@@ -166,6 +166,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
     private bool NeedsStaleRefresh(out string status)
     {
+        var objectRuleCacheState = InspectLocalObjectRuleCache(configDirectory, dutyCatalog);
         var decision = DecideRefresh(
             RemoteCacheFileNames.Select(fileName =>
             {
@@ -175,7 +176,8 @@ public sealed class RemoteJsonUpdateService : IDisposable
                     : new RemoteJsonCacheFileState(fileName, false, DateTime.MinValue);
             }),
             DateTime.UtcNow,
-            RefreshInterval);
+            RefreshInterval,
+            objectRuleCacheState);
         status = decision.Status;
         return decision.ShouldRefresh;
     }
@@ -183,7 +185,8 @@ public sealed class RemoteJsonUpdateService : IDisposable
     internal static RemoteJsonRefreshDecision DecideRefresh(
         IEnumerable<RemoteJsonCacheFileState> fileStates,
         DateTime utcNow,
-        TimeSpan refreshInterval)
+        TimeSpan refreshInterval,
+        RemoteJsonObjectRuleCacheState? objectRuleCacheState = null)
     {
         var missing = new List<string>();
         var stale = new List<string>();
@@ -203,14 +206,53 @@ public sealed class RemoteJsonUpdateService : IDisposable
             stale.Add(state.FileName);
             staleDetails.Add($"{state.FileName} {FormatAge(age)} old");
         }
-        if (missing.Count == 0 && stale.Count == 0)
+        if (missing.Count == 0 && stale.Count == 0 && objectRuleCacheState is not { IsValid: false })
             return new RemoteJsonRefreshDecision(false, "territory index is younger than 24h and all shared files are present", missing, stale);
         var parts = new List<string>();
         if (missing.Count > 0)
             parts.Add($"missing {string.Join(", ", missing)}");
         if (staleDetails.Count > 0)
             parts.Add($"stale cache {string.Join(", ", staleDetails)}");
+        if (objectRuleCacheState is { IsValid: false })
+            parts.Add($"invalid object-rule cache: {objectRuleCacheState.Status}");
         return new RemoteJsonRefreshDecision(true, string.Join("; ", parts), missing, stale);
+    }
+
+    internal static RemoteJsonObjectRuleCacheState InspectLocalObjectRuleCache(
+        string configDirectory,
+        IReadOnlyList<DutyCatalogEntry> dutyCatalog)
+    {
+        var indexPath = Path.Combine(configDirectory, TerritoriesIndexFileName.Replace('/', Path.DirectorySeparatorChar));
+        try
+        {
+            if (!File.Exists(indexPath))
+                return new RemoteJsonObjectRuleCacheState(false, $"{TerritoriesIndexFileName} is missing", [TerritoriesIndexFileName]);
+            if (!ObjectRuleShardStore.TryParseIndexJson(File.ReadAllText(indexPath), out var index, out var indexStatus))
+                return new RemoteJsonObjectRuleCacheState(false, indexStatus, [TerritoriesIndexFileName]);
+
+            var problems = new List<string>();
+            var territoriesPath = Path.GetDirectoryName(indexPath)!;
+            foreach (var fileName in index.Files)
+            {
+                var relativePath = $"{ObjectRuleShardStore.DirectoryName}/{fileName}";
+                var path = Path.Combine(territoriesPath, fileName);
+                if (!File.Exists(path))
+                {
+                    problems.Add(relativePath);
+                    continue;
+                }
+                if (!ObjectRuleShardStore.TryValidateShardJson(File.ReadAllText(path), fileName, dutyCatalog, out _, out _))
+                    problems.Add(relativePath);
+            }
+
+            return problems.Count == 0
+                ? new RemoteJsonObjectRuleCacheState(true, $"validated {index.Files.Count} indexed shard(s)", [])
+                : new RemoteJsonObjectRuleCacheState(false, $"missing or invalid {string.Join(", ", problems)}", problems);
+        }
+        catch (Exception ex)
+        {
+            return new RemoteJsonObjectRuleCacheState(false, ex.Message, [TerritoriesIndexFileName]);
+        }
     }
 
     internal static bool TryValidateObjectRulePackage(
@@ -299,6 +341,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
             var keep = index.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var territoriesPath = Path.Combine(configDirectory, ObjectRuleShardStore.DirectoryName);
+            var removedFiles = new List<string>();
             if (Directory.Exists(territoriesPath))
             {
                 foreach (var existing in Directory.EnumerateFiles(territoriesPath, "*_rule_objects.json", SearchOption.TopDirectoryOnly))
@@ -308,6 +351,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
                     {
                         objectRuleApplyStarted = true;
                         File.Delete(existing);
+                        removedFiles.Add($"{ObjectRuleShardStore.DirectoryName}/{fileName}");
                     }
                 }
             }
@@ -315,6 +359,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
             tempPaths.Clear();
 
             var changedFiles = pendingWrites.Select(write => write.RelativePath).ToList();
+            changedFiles.AddRange(removedFiles);
             if (indexChanged)
                 changedFiles.Add(TerritoriesIndexFileName);
             var changedShardCount = changedFiles.Count(file => file.StartsWith($"{ObjectRuleShardStore.DirectoryName}/", StringComparison.Ordinal));
@@ -447,6 +492,11 @@ public sealed class RemoteJsonUpdateService : IDisposable
 }
 
 internal sealed record RemoteJsonCacheFileState(string FileName, bool Exists, DateTime LastWriteUtc);
+
+internal sealed record RemoteJsonObjectRuleCacheState(
+    bool IsValid,
+    string Status,
+    IReadOnlyList<string> ProblemFiles);
 
 internal sealed record RemoteJsonRefreshDecision(
     bool ShouldRefresh,

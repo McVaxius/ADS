@@ -125,6 +125,137 @@ public sealed class ObjectRuleShardStoreTests
         Assert.Equal("after", service.Current.Rules.Single().ObjectName);
     }
 
+    [Fact]
+    public void ContextDescriptorsIncludeCatalogAndCurrentTerritoriesWithBackingState()
+    {
+        using var directory = new TempDirectory();
+        WriteLegacyDefault(directory.Path, Rule(1037, "default"));
+        var service = CreateService(directory.Path);
+        var baseline = service.CreateEditableCopy();
+        var draft = ObjectRuleEditorWindow.CloneManifest(baseline);
+        draft.Rules.Add(Rule(7777, "draft-only"));
+
+        var descriptors = service.GetContextDescriptors(draft, baseline, 7777)
+            .ToDictionary(descriptor => descriptor.FileName, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(ObjectRuleContextBackingState.NoFileYet, descriptors[ObjectRuleShardStore.GlobalFileName].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.DefaultFile, descriptors["1037_rule_objects.json"].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.NoFileYet, descriptors["1039_rule_objects.json"].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.NoFileYet, descriptors["7777_rule_objects.json"].BackingState);
+        Assert.True(descriptors["7777_rule_objects.json"].HasUnsavedChanges);
+        Assert.Equal(1, descriptors["7777_rule_objects.json"].EffectiveRowCount);
+        Assert.Equal("the Tam-Tara Deepcroft", descriptors["1037_rule_objects.json"].Name);
+    }
+
+    [Fact]
+    public void CustomContextDescriptorsReportInheritedOverrideEmptyAndCustomOnlyStates()
+    {
+        using var directory = new TempDirectory();
+        WriteLegacyDefault(directory.Path, Rule(0, "global"), Rule(1037, "default-a"), Rule(1039, "default-b"));
+        var service = CreateService(directory.Path);
+        var custom = service.CreateEditableCopy();
+        custom.Rules.First(rule => rule.TerritoryTypeId == 1037).ObjectName = "override";
+        custom.Rules.RemoveAll(rule => rule.TerritoryTypeId == 1039);
+        custom.Rules.Add(Rule(9000, "custom-only"));
+        Assert.True(service.SaveManifest("Custom", custom));
+
+        var descriptors = service.GetContextDescriptors(service.CreateEditableCopy(), service.CreateEditableCopy(), 0)
+            .ToDictionary(descriptor => descriptor.FileName);
+
+        Assert.Equal(ObjectRuleContextBackingState.InheritedDefault, descriptors[ObjectRuleShardStore.GlobalFileName].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.OverrideFile, descriptors["1037_rule_objects.json"].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.EmptyOverride, descriptors["1039_rule_objects.json"].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.CustomOnlyFile, descriptors["9000_rule_objects.json"].BackingState);
+    }
+
+    [Fact]
+    public void Schema24ContextSelectionPersistsAndInvalidValuesFallBackSafely()
+    {
+        var configuration = new Configuration
+        {
+            ObjectRuleSelectedContextFileNames = ["1037_rule_objects.json", "bad.json", ObjectRuleShardStore.GlobalFileName],
+            ObjectRuleEditorCompactMode = true,
+        };
+        var roundTrip = JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(configuration))!;
+
+        Assert.Equal(24, roundTrip.Version);
+        Assert.True(roundTrip.ObjectRuleEditorCompactMode);
+        Assert.Equal(
+            [ObjectRuleShardStore.GlobalFileName, "1037_rule_objects.json"],
+            ObjectRuleEditorWindow.NormalizeSelectedContextFileNames(roundTrip.ObjectRuleSelectedContextFileNames));
+        Assert.Empty(ObjectRuleEditorWindow.NormalizeSelectedContextFileNames(["bad.json", "1037_RULE_OBJECTS.json"]));
+    }
+
+    [Fact]
+    public void ChangedInheritedContextSavesCompleteOverrideAndFirstCustomOnlyRow()
+    {
+        using var directory = new TempDirectory();
+        WriteLegacyDefault(directory.Path, Rule(1037, "first"), Rule(1037, "second"), Rule(1039, "inherited"));
+        var service = CreateService(directory.Path);
+        Assert.True(service.SaveManifest("Custom", service.CreateEditableCopy()));
+        var baseline = service.CreateEditableCopy();
+        var draft = ObjectRuleEditorWindow.CloneManifest(baseline);
+        draft.Rules.First(rule => rule.ObjectName == "first").ObjectName = "edited";
+        draft.Rules.Add(Rule(9000, "custom-only"));
+
+        Assert.True(service.SaveChangedContexts("Custom", baseline, draft, false, out var saved, out var status), status);
+
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], saved);
+        var completeOverride = JsonSerializer.Deserialize<ObjectPriorityRuleManifest>(
+            File.ReadAllText(service.GetContextShardPath("Custom", "1037_rule_objects.json")))!;
+        Assert.Equal(["edited", "second"], completeOverride.Rules.Select(rule => rule.ObjectName));
+        var descriptors = service.GetContextDescriptors(service.CreateEditableCopy(), service.CreateEditableCopy(), 0)
+            .ToDictionary(descriptor => descriptor.FileName);
+        Assert.Equal(ObjectRuleContextBackingState.OverrideFile, descriptors["1037_rule_objects.json"].BackingState);
+        Assert.Equal(ObjectRuleContextBackingState.CustomOnlyFile, descriptors["9000_rule_objects.json"].BackingState);
+    }
+
+    [Fact]
+    public void BatchRevertSkipsInheritedAndRemovesCustomOnlyContext()
+    {
+        using var directory = new TempDirectory();
+        WriteLegacyDefault(directory.Path, Rule(1037, "default"), Rule(1039, "inherited"));
+        var service = CreateService(directory.Path);
+        var custom = service.CreateEditableCopy();
+        custom.Rules.First(rule => rule.TerritoryTypeId == 1037).ObjectName = "override";
+        custom.Rules.Add(Rule(9000, "custom-only"));
+        Assert.True(service.SaveManifest("Custom", custom));
+
+        Assert.True(service.TryRevertContextsToDefault(
+            "Custom",
+            ["1037_rule_objects.json", "1039_rule_objects.json", "9000_rule_objects.json"],
+            out var deleted,
+            out var skipped,
+            out var status), status);
+
+        Assert.Equal(["1037_rule_objects.json", "9000_rule_objects.json"], deleted);
+        Assert.Equal(["1039_rule_objects.json"], skipped);
+        Assert.Equal(["default", "inherited"], service.Current.Rules.Select(rule => rule.ObjectName));
+        Assert.DoesNotContain(
+            service.GetContextDescriptors(service.CreateEditableCopy(), service.CreateEditableCopy(), 0),
+            descriptor => descriptor.FileName == "9000_rule_objects.json");
+    }
+
+    [Fact]
+    public void SavingDirtyOverrideReloadsUnrelatedRefreshedDefaultContext()
+    {
+        using var directory = new TempDirectory();
+        WriteLegacyDefault(directory.Path, Rule(1037, "default-a"), Rule(1039, "default-b"));
+        var service = CreateService(directory.Path);
+        var custom = service.CreateEditableCopy();
+        custom.Rules.First(rule => rule.TerritoryTypeId == 1037).ObjectName = "custom-a";
+        Assert.True(service.SaveManifest("Custom", custom));
+        var baseline = service.CreateEditableCopy();
+
+        WriteShard(service.GetContextShardPath("DEFAULT", "1039_rule_objects.json"), Rule(1039, "remote-b"));
+        var draft = ObjectRuleEditorWindow.CloneManifest(baseline);
+        draft.Rules.First(rule => rule.TerritoryTypeId == 1037).ObjectName = "custom-a-2";
+
+        Assert.True(service.SaveChangedContexts("Custom", baseline, draft, false, out _, out var status), status);
+        Assert.Equal("custom-a-2", service.Current.Rules.First(rule => rule.TerritoryTypeId == 1037).ObjectName);
+        Assert.Equal("remote-b", service.Current.Rules.First(rule => rule.TerritoryTypeId == 1039).ObjectName);
+    }
+
     private static ObjectPriorityRuleService CreateService(
         string path,
         Configuration? configuration = null,
@@ -139,6 +270,12 @@ public sealed class ObjectRuleShardStoreTests
         => File.WriteAllText(Path.Combine(path, ObjectRuleShardStore.LegacyFileName), JsonSerializer.Serialize(new ObjectPriorityRuleManifest
         {
             Description = "legacy",
+            Rules = [.. rules],
+        }));
+
+    private static void WriteShard(string path, params ObjectPriorityRule[] rules)
+        => ObjectRuleShardStore.WriteJsonAtomic(path, JsonSerializer.Serialize(new ObjectPriorityRuleManifest
+        {
             Rules = [.. rules],
         }));
 

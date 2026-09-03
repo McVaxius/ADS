@@ -8,11 +8,13 @@ namespace ADS.Windows;
 public sealed class ConfigWindow : PositionedWindow, IDisposable
 {
     private readonly Plugin plugin;
+    private readonly ObjectRuleCheckoutState checkoutState;
 
     public ConfigWindow(Plugin plugin)
         : base("ADS Settings###ADSSettings")
     {
         this.plugin = plugin;
+        checkoutState = plugin.ObjectRuleCheckoutState;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(520f, 420f),
@@ -201,9 +203,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             ("Open frontier labels", plugin.OpenFrontierLabelUi),
             ("Open rules table", plugin.OpenRuleEditorUi),
             ("Reload active object rules", () => plugin.ObjectPriorityRuleService.Reload()));
+        if (ImGui.Button("Rules walkthrough", new Vector2(-1f, 28f)))
+            plugin.OpenRulesWalkthroughUi();
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
         ImGui.TextDisabled("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require session debug mode.");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("PR-ready Checkout");
+        DrawCheckoutConfiguration();
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -228,6 +236,35 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             ("Open Duty Manager", plugin.OpenDutyMaturityEditorUi),
             ("Reload duty metadata JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
         ImGui.TextWrapped(plugin.DutyCatalogService.LastMaturityLoadStatus);
+    }
+
+    private void DrawCheckoutConfiguration()
+    {
+        checkoutState.RefreshFromConfiguration();
+
+        ImGui.TextWrapped("ADS only prepares local shard and index files. Reviewing and submitting them to GitHub remains manual.");
+        ImGui.SetNextItemWidth(-1f);
+        var candidatePath = checkoutState.CandidatePath;
+        var submitted = ImGui.InputTextWithHint(
+            "##ADSSettingsCheckoutPath",
+            "repository root or ads\\territories folder",
+            ref candidatePath,
+            512,
+            ImGuiInputTextFlags.EnterReturnsTrue);
+        checkoutState.SetCandidatePath(candidatePath);
+        if (ImGui.Button("Use checkout") || submitted)
+            checkoutState.TryUseCheckout();
+        ImGui.SameLine();
+        if (ImGui.Button("Clear"))
+            checkoutState.Clear();
+        ImGui.SameLine();
+        var cannotOpen = string.IsNullOrWhiteSpace(checkoutState.ConfiguredRoot)
+                         || !Directory.Exists(checkoutState.ConfiguredRoot);
+        ImGui.BeginDisabled(cannotOpen);
+        if (ImGui.Button("Open checkout"))
+            plugin.OpenPath(checkoutState.ConfiguredRoot);
+        ImGui.EndDisabled();
+        ImGui.TextWrapped(checkoutState.Status);
     }
 
     private void DrawAdvanced(ref bool changed)
