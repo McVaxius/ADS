@@ -2243,7 +2243,8 @@ public sealed class Plugin : IDalamudPlugin
                     ObservationSnapshot.Empty,
                     Configuration.PluginEnabled,
                     Configuration.ConsiderTreasureCoffers,
-                    DialogAutomationService.DialogStatus);
+                    DialogAutomationService.DialogStatus,
+                    DebugStrafeService.Enabled);
                 ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
                 TreasureHighLowDiagnosticService.Update(
                     DutyContextService.Current,
@@ -2388,7 +2389,8 @@ public sealed class Plugin : IDalamudPlugin
                 ObservationMemoryService.Current,
                 Configuration.PluginEnabled,
                 Configuration.ConsiderTreasureCoffers,
-                DialogAutomationService.DialogStatus);
+                DialogAutomationService.DialogStatus,
+                DebugStrafeService.Enabled);
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "execution", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)

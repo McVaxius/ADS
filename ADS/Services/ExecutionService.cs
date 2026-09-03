@@ -18,6 +18,7 @@ public sealed class ExecutionService
 {
     private const float NavigationPhaseRange = 6f;
     private const float PreferredInteractArrivalRange = 0.8f;
+    private const float CloseRecoveryInteractAttemptRange = 1.5f;
     internal const float DirectInteractAttemptRange = 2.0f;
     internal const float InteractableIdentityMatchRange = 2.0f;
     private const int RequiredInteractionAttemptLimit = 3;
@@ -223,6 +224,7 @@ public sealed class ExecutionService
     private string lastTreasureFollowerAdsNavFallbackLogKey = string.Empty;
     private string lastTreasureFollowerSelectYesnoPreserveLogKey = string.Empty;
     private string lastTreasureFollowerDoorFollowThroughRetargetLogKey = string.Empty;
+    private string? activeDebugCommandRuleIdentity;
     private readonly CardinalHoldGhostTracker cardinalHoldGhosts = new();
     private CardinalHoldRule? activeCardinalHold;
     private DateTime activeCardinalHoldUntilUtc = DateTime.MinValue;
@@ -684,9 +686,11 @@ public sealed class ExecutionService
         ObservationSnapshot observation,
         bool pluginEnabled,
         bool considerTreasureCoffers,
-        string dialogAutomationStatus)
+        string dialogAutomationStatus,
+        bool sessionDebugEnabled = false)
     {
         currentDialogAutomationStatus = dialogAutomationStatus;
+        UpdateDebugRuleCommand(context, planner, pluginEnabled, sessionDebugEnabled);
         if (!pluginEnabled
             || context.IsUnsafeTransition
             || !IsActiveOwnedDutyMode()
@@ -836,6 +840,53 @@ public sealed class ExecutionService
         ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
+    }
+
+    private void UpdateDebugRuleCommand(
+        DutyContextSnapshot context,
+        PlannerSnapshot planner,
+        bool pluginEnabled,
+        bool sessionDebugEnabled)
+    {
+        if (!pluginEnabled
+            || !context.IsLoggedIn
+            || !context.InInstancedDuty
+            || context.IsUnsafeTransition
+            || planner.Mode == PlannerMode.UnsafeTransition
+            || !IsActiveOwnedDutyMode()
+            || planner.ActiveRule is not { } activeRule)
+        {
+            activeDebugCommandRuleIdentity = null;
+            return;
+        }
+
+        if (!objectPriorityRuleService.TryGetRuleActivationIdentity(
+                activeRule,
+                out var identity,
+                out var isSavedCustomOverride))
+        {
+            return;
+        }
+
+        if (string.Equals(activeDebugCommandRuleIdentity, identity, StringComparison.Ordinal))
+            return;
+
+        activeDebugCommandRuleIdentity = identity;
+        var command = activeRule.DebugCommand?.Trim();
+        if (!sessionDebugEnabled
+            || !isSavedCustomOverride
+            || string.IsNullOrWhiteSpace(command))
+        {
+            return;
+        }
+
+        if (GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
+        {
+            log?.Information($"[ADS][DebugRule] Sent the one-shot debug command for active rule {identity}.");
+            return;
+        }
+
+        log?.Warning($"[ADS][DebugRule] Failed to send the one-shot debug command for active rule {identity}; this activation will not retry.");
     }
 
     private void UpdateOwnedPhase(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
@@ -3925,7 +3976,7 @@ public sealed class ExecutionService
 
     internal static (float AttemptRange, bool AllowCloseXzFallback) GetInteractionAttemptPolicy(bool closeRecoveryArmed)
         => closeRecoveryArmed
-            ? (PreferredInteractArrivalRange, false)
+            ? (CloseRecoveryInteractAttemptRange, false)
             : (DirectInteractAttemptRange, true);
 
     private bool IsCloseInteractRecoveryArmedFor(ObservedInteractable interactable)

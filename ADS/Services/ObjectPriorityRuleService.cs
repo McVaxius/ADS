@@ -370,6 +370,26 @@ public sealed class ObjectPriorityRuleService
     public bool HasContextOverride(string presetName, string fileName)
         => shardStore.HasOverride(presetName, fileName);
 
+    internal bool TryGetRuleActivationIdentity(
+        ObjectPriorityRule rule,
+        out string identity,
+        out bool isSavedCustomOverride)
+    {
+        identity = string.Empty;
+        isSavedCustomOverride = false;
+        var ruleIndex = Current.Rules.FindIndex(candidate => ReferenceEquals(candidate, rule));
+        if (ruleIndex < 0
+            || !ObjectRuleShardStore.TryResolveContextFileName(rule, dutyCatalog, out var fileName, out _))
+        {
+            return false;
+        }
+
+        identity = $"{activePresetName}|{fileName}|{ruleIndex}";
+        isSavedCustomOverride = !IsDefaultPreset(activePresetName)
+                                && shardStore.HasOverride(activePresetName, fileName);
+        return true;
+    }
+
     public string GetContextShardPath(string presetName, string fileName)
         => shardStore.GetShardPath(presetName, fileName);
 
@@ -1419,6 +1439,7 @@ public sealed class ObjectPriorityRuleService
             WaitAtDestinationSeconds = rule.WaitAtDestinationSeconds,
             WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
             Notes = rule.Notes,
+            DebugCommand = rule.DebugCommand,
         };
 
     private bool TryLoadManifestFromPath(string path, out ObjectPriorityRuleManifest manifest, out string status)

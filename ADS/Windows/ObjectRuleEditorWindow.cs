@@ -39,13 +39,16 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private static readonly string[] RuleTableHeaders =
     [
         "On", "Duty", "Terr", "CFC", "Alliance", "Kind", "Name", "Match", "Class", "Layer", "Coords",
-        "R", "Pri", "Y", "Dist", "Wait-before", "Wait-after", "Notes", "Copy", "Paste", "Select",
+        "R", "Pri", "Y", "Dist", "Wait-before", "Wait-after", "Notes", "Copy", "Paste", "Select", "Debug command",
     ];
     private static readonly float[] RuleTableWidthCaps =
     [
         105f, 320f, 100f, 100f, 115f, 160f, 300f, 120f, 230f, 220f, 220f,
-        100f, 110f, 110f, 110f, 125f, 125f, 420f, 80f, 80f, 80f,
+        100f, 110f, 110f, 110f, 125f, 125f, 420f, 80f, 80f, 80f, 420f,
     ];
+
+    private const float FilterControlWidth = 420f;
+    private const float ContextControlWidth = 460f;
 
     private const int FilterModeGlobalOnly = 1;
     private const int FilterModeCurrentAreaOnly = 2;
@@ -93,10 +96,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private string presetFileConflictStatus = string.Empty;
     private int dutySearchRow = -1;
     private ObjectPriorityRule? pendingScrollRule;
-    private readonly float[] ruleTableColumnWidths = new float[21];
+    private readonly float[] ruleTableColumnWidths = new float[22];
     private bool ruleTableNeedsAutoFit = true;
     private bool ruleTableNeedsGrowthCheck;
     private int ruleTableSizingRevision;
+    private bool pendingRuleEditRefresh;
     private IReadOnlyList<int> cachedVisibleRuleIndices = [];
     private VisibleRuleCacheKey? visibleRuleCacheKey;
     private IReadOnlyList<ObjectPriorityRule>? alignedRuntimeRules;
@@ -144,20 +148,22 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
+        TryFinalizePendingRuleEdit();
         draftStructureChangedThisDraw = false;
         PollSelectedPresetFile();
         RefreshContextDescriptorsIfTerritoryChanged();
 
         var compact = plugin.Configuration.ObjectRuleEditorCompactMode;
+        DrawCurrentAreaBanner();
         if (!compact)
         {
             ImGui.TextWrapped("Quick start: Object Explorer -> RULE -> choose Class -> fill relevant colored fields -> save a custom preset -> retest.");
             ImGui.TextWrapped("Field cues: red required (bright red means missing), amber recommended, normal optional, dim ignored. Cues never clear ignored stored values.");
             ImGui.TextWrapped($"Preset: {selectedPresetName} -> {plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName)}");
-            DrawCurrentScopeBanner();
         }
         DrawDutyFilterBanner();
         var activeDraftRule = DrawActiveRuleBanner();
+        DrawClearFiltersAndSelectionsButton();
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.55f, 0.82f, 1f, 1f));
         ImGui.TextWrapped("Combined effective view: this table can merge many backing JSON shards. Missing custom contexts inherit DEFAULT; saving a changed context writes one complete replacement shard.");
         ImGui.PopStyleColor();
@@ -183,6 +189,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
         if (!draftStructureChangedThisDraw)
             DrawRulesTable(visibleRuleIndices, activeDraftRule);
+        TryFinalizePendingRuleEdit();
     }
 
     private void DrawToolbar(IReadOnlyList<int> visibleRuleIndices)
@@ -296,8 +303,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (ImGui.Checkbox("Sort by Duty", ref sortByDutyName))
             InvalidateVisibleRuleCache();
 
-        ImGui.SetNextItemWidth(-1f);
-        if (ImGui.InputTextWithHint("##ADSRuleTextFilter", "filter duty/name/class/layer/notes", ref ruleTextFilter, 128))
+        ImGui.SetNextItemWidth(MathF.Min(FilterControlWidth, ImGui.GetContentRegionAvail().X));
+        if (ImGui.InputTextWithHint("##ADSRuleTextFilter", "filter duty/name/class/layer/notes/debug", ref ruleTextFilter, 128))
             InvalidateVisibleRuleCache();
 
         DrawContextSelector();
@@ -343,7 +350,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 SetSelectedContexts([ObjectRuleShardStore.GetTerritoryFileName(plugin.DutyContextService.Current.TerritoryTypeId)]);
         }
 
-        ImGui.SetNextItemWidth(-1f);
+        ImGui.SetNextItemWidth(MathF.Min(ContextControlWidth, ImGui.GetContentRegionAvail().X));
         var currentLabel = selectedContextFileNames.Count switch
         {
             0 => "All contexts",
@@ -353,7 +360,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginCombo("##ADSRuleContexts", currentLabel))
             return;
 
-        ImGui.SetNextItemWidth(-1f);
+        ImGui.SetNextItemWidth(MathF.Min(FilterControlWidth, ImGui.GetContentRegionAvail().X));
         ImGui.InputTextWithHint("##ADSRuleContextSearch", "search territory, filename, or backing state", ref contextSearch, 96);
         if (ImGui.Selectable("All contexts (clear checks)", selectedContextFileNames.Count == 0, ImGuiSelectableFlags.DontClosePopups))
             SetSelectedContexts([]);
@@ -449,9 +456,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             : "Promote selected context(s) to PR-ready checkout";
         using (new ImGuiDisabledBlock(promoteUnmet.Count > 0))
         {
-            if (ActionButton(
+            if (ImGui.Button(
                     promoteLabel,
-                    string.Empty))
+                    new Vector2(ImGui.GetContentRegionAvail().X, ImGui.GetFrameHeight() * 1.4f)))
             {
                 if (promoteEligible.Any(descriptor => descriptor.IsEmptyOverride))
                     ImGui.OpenPopup("ADSConfirmPromoteEmptyContext");
@@ -580,6 +587,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         }
         if (!result.Success)
             return;
+        if (result.StrippedDebugCommandCount > 0)
+        {
+            var notice = $"Promotion omitted {result.StrippedDebugCommandCount} debug command(s) from PR-ready JSON; the personal preset is unchanged.";
+            Plugin.ToastGui.ShowNormal(notice);
+            plugin.PrintStatus(notice);
+        }
         plugin.RevealPathInExplorer(Path.Combine(result.CheckoutRoot, "ads", "territories"));
     }
 
@@ -715,6 +728,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             ImGui.TextWrapped("All means every saved override in this custom preset, including empty and custom-only shards; row and text filters do not narrow it.");
         else if (action.StartsWith("Promote selected", StringComparison.Ordinal))
             ImGui.TextWrapped("Only explicitly checked saved overrides are promoted; row and text filters do not narrow their complete shards.");
+        if (action.StartsWith("Promote", StringComparison.Ordinal))
+            ImGui.TextWrapped("PR-ready copies omit every debug command. The saved personal custom preset is left unchanged.");
         if (unmetPrerequisites.Count == 0)
         {
             ImGui.TextUnformatted("All prerequisites are met.");
@@ -1021,14 +1036,63 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         return new SelectionImpact(duties.ToList(), globals, unresolved);
     }
 
-    private void DrawCurrentScopeBanner()
+    private void DrawCurrentAreaBanner()
     {
         var context = plugin.DutyContextService.Current;
-        var duty = context.CurrentDuty?.EnglishName ?? (context.InInstancedDuty ? "(uncataloged duty)" : "GLOBAL / outside duty");
-        var activeLabel = context.InInstancedDuty
-            ? plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "(unknown)"
-            : "(none)";
-        ImGui.TextWrapped($"Current scope: duty {duty} | Terr {context.TerritoryTypeId} | CFC {context.ContentFinderConditionId} | Label {activeLabel}");
+        var fileName = context.TerritoryTypeId == 0
+            ? ObjectRuleShardStore.GlobalFileName
+            : ObjectRuleShardStore.GetTerritoryFileName(context.TerritoryTypeId);
+        var descriptor = contextDescriptors.FirstOrDefault(candidate =>
+            string.Equals(candidate.FileName, fileName, StringComparison.OrdinalIgnoreCase));
+        var area = context.CurrentDuty?.EnglishName
+                   ?? (context.TerritoryTypeId == 0
+                       ? "GLOBAL / outside duty"
+                       : descriptor?.Name ?? $"Territory {context.TerritoryTypeId}");
+        var territory = context.TerritoryTypeId == 0 ? string.Empty : $" (Terr {context.TerritoryTypeId})";
+        var source = descriptor?.BackingState switch
+        {
+            ObjectRuleContextBackingState.DefaultFile => "DEFAULT",
+            ObjectRuleContextBackingState.InheritedDefault => "INHERITED DEFAULT",
+            ObjectRuleContextBackingState.OverrideFile => "CUSTOM OVERRIDE",
+            ObjectRuleContextBackingState.EmptyOverride => "EMPTY OVERRIDE",
+            ObjectRuleContextBackingState.CustomOnlyFile => "CUSTOM-ONLY",
+            _ => "NO FILE",
+        };
+        var rows = descriptor?.EffectiveRowCount ?? 0;
+        var draftState = dirty ? "UNSAVED" : "SAVED";
+
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.20f, 0.92f, 1f, 1f));
+        ImGui.TextWrapped($"CURRENT AREA: {area}{territory} | SOURCE: {source} | EFFECTIVE ROWS: {rows} | DRAFT: {draftState}");
+        ImGui.PopStyleColor();
+        ImGui.Separator();
+    }
+
+    private void DrawClearFiltersAndSelectionsButton()
+    {
+        if (!ImGui.Button(
+                "CLEAR FILTERS AND SELECTIONS",
+                new Vector2(ImGui.GetContentRegionAvail().X, ImGui.GetFrameHeight() * 1.4f)))
+        {
+            return;
+        }
+
+        var filterModeChanged = plugin.Configuration.RuleEditorFilterMode != 0;
+        plugin.Configuration.RuleEditorFilterMode = 0;
+        ruleTextFilter = string.Empty;
+        contextSearch = string.Empty;
+        dutySearch = string.Empty;
+        dutySearchRow = -1;
+        dutyFilter = null;
+        dutyFilterIdentity = null;
+        dutyFilterTerritoryUnique = false;
+        dutyFilterNameUnique = false;
+        selectedRules.Clear();
+        pendingScrollRule = null;
+        SetSelectedContexts([]);
+        if (filterModeChanged)
+            plugin.SaveConfiguration();
+        InvalidateVisibleRuleCache();
+        editorStatus = "Cleared row, text, context, and duty filters plus checked contexts and row selections. The preset, draft, unsaved edits, checkout, and sort choice were preserved.";
     }
 
     private void DrawDutyFilterBanner()
@@ -1169,7 +1233,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
            && left.MaxDistance == right.MaxDistance
            && left.WaitAtDestinationSeconds == right.WaitAtDestinationSeconds
            && left.WaitAfterInteractSeconds == right.WaitAfterInteractSeconds
-           && string.Equals(left.Notes, right.Notes, StringComparison.Ordinal);
+           && string.Equals(left.Notes, right.Notes, StringComparison.Ordinal)
+           && string.Equals(left.DebugCommand, right.DebugCommand, StringComparison.Ordinal);
 
     private static string GetActiveRuleTarget(ObjectPriorityRule rule)
     {
@@ -1380,6 +1445,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void ApplyLoadedDraft(ObjectPriorityRuleManifest loadedDraft, string status)
     {
+        pendingRuleEditRefresh = false;
         draft = loadedDraft;
         this.loadedDraft = CloneManifest(loadedDraft);
         draftLoaded = true;
@@ -1548,6 +1614,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             Include(15, rule.WaitAtDestinationSeconds.ToString("0.0"));
             Include(16, rule.WaitAfterInteractSeconds.ToString("0.0"));
             Include(17, rule.Notes);
+            Include(21, rule.DebugCommand);
         }
 
         var changed = ruleTableNeedsAutoFit;
@@ -1576,13 +1643,16 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             | ImGuiTableFlags.SizingFixedFit;
 
         UpdateRuleTableColumnWidths();
-        if (!ImGui.BeginTable($"ADSRulesEditorTable##fit{ruleTableSizingRevision}", 21, tableFlags, new Vector2(-1f, -1f)))
+        var showDebugCommandColumn = plugin.DebugStrafeService.Enabled
+                                     && !plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName);
+        var columnCount = showDebugCommandColumn ? 22 : 21;
+        if (!ImGui.BeginTable($"ADSRulesEditorTable##fit{ruleTableSizingRevision}", columnCount, tableFlags, new Vector2(-1f, -1f)))
             return;
 
-        for (var column = 0; column < RuleTableHeaders.Length; column++)
+        for (var column = 0; column < columnCount; column++)
             ImGui.TableSetupColumn(RuleTableHeaders[column], ImGuiTableColumnFlags.WidthFixed, ruleTableColumnWidths[column]);
         ImGui.TableSetupScrollFreeze(1, 1);
-        DrawHeaderRow();
+        DrawHeaderRow(showDebugCommandColumn);
 
         var pendingDisplayIndex = FindVisibleDisplayIndex(visibleRuleIndices, pendingScrollRule);
         var clipper = ImGui.ImGuiListClipper();
@@ -1846,6 +1916,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                         }
                     }
 
+                    if (showDebugCommandColumn && ImGui.TableSetColumnIndex(21))
+                    {
+                        if (EditTextCell("##DebugCommand", rule.DebugCommand ?? string.Empty, 512, out var debugCommand))
+                        {
+                            rule.DebugCommand = debugCommand;
+                            rowChanged = true;
+                        }
+                    }
+
                     ImGui.PopID();
                     if (rowChanged)
                         MarkOrdinaryEdit();
@@ -1860,7 +1939,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.EndTable();
     }
 
-    private void DrawHeaderRow()
+    private void DrawHeaderRow(bool showDebugCommandColumn)
     {
         ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
         DrawHeaderCell(0, "On", "Enable or disable this row without deleting it.");
@@ -1884,6 +1963,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         DrawHeaderCell(18, "Copy", "Copy this row as base64-wrapped JSON to the clipboard.");
         DrawHeaderCell(19, "Paste", "Replace this row from a base64 row payload currently on the clipboard.");
         DrawHeaderCell(20, "Select", "Select this row for bulk actions. Selection persists when filters hide the row.");
+        if (showDebugCommandColumn)
+            DrawHeaderCell(21, "Debug command", "Optional one-shot chat command. It can run only for a saved custom override during safe ADS-owned duty execution while /ads debug on is active.");
     }
     private static bool IsManualDestinationRule(ObjectPriorityRule rule)
         => string.Equals(rule.Classification, "MapXzDestination", StringComparison.OrdinalIgnoreCase)
@@ -2435,7 +2516,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                || ContainsFilterText(rule.ObjectName, filter)
                || ContainsFilterText(rule.Classification, filter)
                || ContainsFilterText(GetLayerSelectorForEditor(rule), filter)
-               || ContainsFilterText(rule.Notes, filter);
+               || ContainsFilterText(rule.Notes, filter)
+               || ContainsFilterText(rule.DebugCommand ?? string.Empty, filter);
     }
 
     internal static bool IsGlobalAreaRule(ObjectPriorityRule rule)
@@ -2999,8 +3081,22 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private void MarkOrdinaryEdit()
     {
         dirty = true;
-        InvalidateUndoState();
-        InvalidateImportPreview();
+        if (!pendingRuleEditRefresh)
+        {
+            pendingRuleEditRefresh = true;
+            InvalidateUndoState();
+            InvalidateImportPreview();
+        }
+
+        TryFinalizePendingRuleEdit();
+    }
+
+    private void TryFinalizePendingRuleEdit()
+    {
+        if (!pendingRuleEditRefresh || ImGui.IsAnyItemActive())
+            return;
+
+        pendingRuleEditRefresh = false;
         RuleDraftChanged();
     }
 
@@ -3066,6 +3162,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void ClearDraftReferenceState()
     {
+        pendingRuleEditRefresh = false;
         unsavedNewRules.Clear();
         selectedRules.Clear();
         pendingScrollRule = null;
@@ -3083,6 +3180,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void RuleDraftChanged(bool structuralChange = false)
     {
+        pendingRuleEditRefresh = false;
         if (structuralChange)
             ruleTableNeedsGrowthCheck = true;
         InvalidateVisibleRuleCache();
@@ -3126,6 +3224,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             WaitAtDestinationSeconds = rule.WaitAtDestinationSeconds,
             WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
             Notes = rule.Notes,
+            DebugCommand = rule.DebugCommand,
         };
 
     private void ExportRuleAsBase64(ObjectPriorityRule rule)

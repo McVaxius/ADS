@@ -7,6 +7,7 @@ namespace ADS.Services;
 internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry> dutyCatalog)
 {
     private const string RepositoryTerritoriesPath = "ads/territories";
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public bool TryValidateCheckout(string candidatePath, out string rootPath, out string status)
     {
@@ -132,6 +133,13 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
                 if (!ObjectRuleShardStore.TryValidateShardJson(sourceJson, source.FileName, dutyCatalog, out var sourceManifest, out status))
                     return ObjectRulePromotionResult.Failed(rootPath, status);
 
+                var sourceStrippedDebugCommandCount = sourceManifest.Rules.Count(rule => !string.IsNullOrWhiteSpace(rule.DebugCommand));
+                foreach (var rule in sourceManifest.Rules)
+                    rule.DebugCommand = null;
+                var promotionJson = sourceJson.Contains("\"DebugCommand\"", StringComparison.OrdinalIgnoreCase)
+                    ? JsonSerializer.Serialize(sourceManifest, JsonOptions) + Environment.NewLine
+                    : sourceJson;
+
                 var targetPath = Path.GetFullPath(Path.Combine(territoriesPath, source.FileName));
                 if (!targetPath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
                     return ObjectRulePromotionResult.Failed(rootPath, "Promotion destination escaped the verified territories folder.");
@@ -146,15 +154,17 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
 
                 prepared.Add(new PreparedPromotion(
                     source.FileName,
-                    sourceJson,
+                    promotionJson,
                     targetPath,
-                    string.Equals(destinationJson, sourceJson, StringComparison.Ordinal),
+                    string.Equals(destinationJson, promotionJson, StringComparison.Ordinal),
                     index.Files.Contains(source.FileName, StringComparer.Ordinal),
-                    sourceManifest.Rules.Count == 0));
+                    sourceManifest.Rules.Count == 0,
+                    sourceStrippedDebugCommandCount));
             }
 
             var changedContexts = prepared.Where(item => !item.DestinationMatches || !item.IsIndexed).Select(item => item.FileName).ToList();
             var noOpContexts = prepared.Where(item => item.DestinationMatches && item.IsIndexed).Select(item => item.FileName).ToList();
+            var strippedDebugCommandCount = prepared.Sum(item => item.StrippedDebugCommandCount);
             affectedPaths.AddRange(prepared.Where(item => !item.DestinationMatches).Select(item => item.TargetPath));
             var addToIndex = prepared.Where(item => !item.IsIndexed).Select(item => item.FileName).ToList();
             if (addToIndex.Count > 0)
@@ -168,6 +178,7 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
                     [],
                     noOpContexts,
                     prepared.Where(item => item.IsEmpty).Select(item => item.FileName).ToList(),
+                    strippedDebugCommandCount,
                     $"Promotion complete. Changed: none. No-op contexts: {string.Join(", ", noOpContexts)}.");
             }
 
@@ -187,6 +198,7 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
                     changedContexts,
                     noOpContexts,
                     prepared.Where(item => item.IsEmpty).Select(item => item.FileName).ToList(),
+                    strippedDebugCommandCount,
                     $"Promotion would overwrite local changes in: {string.Join(", ", locallyChanged)}.");
             }
 
@@ -203,6 +215,7 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
                 changedContexts,
                 noOpContexts,
                 prepared.Where(item => item.IsEmpty).Select(item => item.FileName).ToList(),
+                strippedDebugCommandCount,
                 $"Promotion complete. Changed contexts: {string.Join(", ", changedContexts)}. No-op contexts: {(noOpContexts.Count == 0 ? "none" : string.Join(", ", noOpContexts))}. Git was not otherwise modified.");
         }
         catch (Exception ex)
@@ -257,7 +270,8 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
         string TargetPath,
         bool DestinationMatches,
         bool IsIndexed,
-        bool IsEmpty);
+        bool IsEmpty,
+        int StrippedDebugCommandCount);
 }
 
 internal sealed class ObjectRuleCheckoutState
@@ -378,12 +392,13 @@ internal sealed record ObjectRulePromotionResult(
     IReadOnlyList<string> ChangedContexts,
     IReadOnlyList<string> NoOpContexts,
     IReadOnlyList<string> EmptyContexts,
+    int StrippedDebugCommandCount,
     string Status)
 {
     public bool NoOp => Success && ChangedContexts.Count == 0;
 
     public static ObjectRulePromotionResult Failed(string root, string status, IReadOnlyList<string>? affectedPaths = null)
-        => new(false, false, root, affectedPaths ?? [], [], [], [], status);
+        => new(false, false, root, affectedPaths ?? [], [], [], [], 0, status);
 
     public static ObjectRulePromotionResult OverwriteRequired(
         string root,
@@ -391,8 +406,9 @@ internal sealed record ObjectRulePromotionResult(
         IReadOnlyList<string> changedContexts,
         IReadOnlyList<string> noOpContexts,
         IReadOnlyList<string> emptyContexts,
+        int strippedDebugCommandCount,
         string status)
-        => new(false, true, root, affectedPaths, changedContexts, noOpContexts, emptyContexts, status);
+        => new(false, true, root, affectedPaths, changedContexts, noOpContexts, emptyContexts, strippedDebugCommandCount, status);
 
     public static ObjectRulePromotionResult Completed(
         string root,
@@ -400,6 +416,7 @@ internal sealed record ObjectRulePromotionResult(
         IReadOnlyList<string> changedContexts,
         IReadOnlyList<string> noOpContexts,
         IReadOnlyList<string> emptyContexts,
+        int strippedDebugCommandCount,
         string status)
-        => new(true, false, root, affectedPaths, changedContexts, noOpContexts, emptyContexts, status);
+        => new(true, false, root, affectedPaths, changedContexts, noOpContexts, emptyContexts, strippedDebugCommandCount, status);
 }

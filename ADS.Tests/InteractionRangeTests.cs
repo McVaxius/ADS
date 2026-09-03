@@ -14,11 +14,11 @@ public sealed class InteractionRangeTests
     }
 
     [Fact]
-    public void UnconfirmedRetryUsesPointEightYalmsAndDisablesCloseXzFallback()
+    public void UnconfirmedRetryAllowsVnavStoppingToleranceAndDisablesCloseXzFallback()
     {
         var policy = ExecutionService.GetInteractionAttemptPolicy(closeRecoveryArmed: true);
 
-        Assert.Equal(0.8f, policy.AttemptRange);
+        Assert.Equal(1.5f, policy.AttemptRange);
         Assert.False(policy.AllowCloseXzFallback);
     }
 

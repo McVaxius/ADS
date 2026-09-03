@@ -118,6 +118,7 @@ internal static class PartialRuleImportPlanner
             WaitAtDestinationSeconds = rule.WaitAtDestinationSeconds,
             WaitAfterInteractSeconds = rule.WaitAfterInteractSeconds,
             Notes = rule.Notes,
+            DebugCommand = rule.DebugCommand,
         };
 }
 

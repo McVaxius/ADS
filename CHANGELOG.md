@@ -2,6 +2,9 @@
 
 ## 2026-09-03
 
+- Stopped every inline Object Rules editor—including names, layer/coordinates, numeric fields, waits, notes, and debug commands—from rebuilding filtered rows and context descriptors for every typed character or held adjustment. Edits still update the in-memory draft and `UNSAVED` state immediately; the expensive editor refresh is coalesced until the active edit ends, and JSON writes remain explicit through Save.
+- Fixed close-recovery interaction retries getting trapped in repeated tiny vnavmesh moves when its `0.8y` stand-off destination stopped the player just outside the matching `0.8y` attempt gate. The destination remains `0.8y`, while a bounded `1.5y` arrival gate now turns that close move into the next interaction attempt.
+- Made Object Rules lead with a Compact-visible current-area source/row/save-state banner, added one full-width reset for every filter and selection without discarding draft edits, bounded the filter/context controls, and enlarged promotion actions. Custom rules can now store a debug-only one-shot command that runs only for safe owned activations from saved custom overrides while `/ads debug on` is active; PR-ready promotion strips those commands, preserves the personal preset, and reports the stripped count in toast and chat.
 - Kept initial direct interactions at `2.0y`, but retry-capable required objects, treasure doors, expendables, and treasure-follower sacks now resume navigation to the preferred `0.8y` stand-off after a rejected or unconfirmed attempt. These close-recovery retries retain the pending target and suppress the `2.5y` close-XZ fallback while preserving existing cooldowns, attempt limits, and one-shot behavior.
 
 ## 2026-09-02

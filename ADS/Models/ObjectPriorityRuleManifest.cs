@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ADS.Models;
 
 public sealed class ObjectPriorityRuleManifest
@@ -64,6 +66,8 @@ internal sealed record ObjectRuleContextDescriptor(
 
 public sealed class ObjectPriorityRule
 {
+    private string? debugCommand;
+
     public bool Enabled { get; set; } = true;
     public uint TerritoryTypeId { get; set; }
     public uint ContentFinderConditionId { get; set; }
@@ -87,4 +91,11 @@ public sealed class ObjectPriorityRule
     public float WaitAtDestinationSeconds { get; set; }
     public float WaitAfterInteractSeconds { get; set; }
     public string Notes { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DebugCommand
+    {
+        get => debugCommand;
+        set => debugCommand = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
 }
