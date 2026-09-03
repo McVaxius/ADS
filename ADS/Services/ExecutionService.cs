@@ -18,7 +18,7 @@ public sealed class ExecutionService
 {
     private const float NavigationPhaseRange = 6f;
     private const float PreferredInteractArrivalRange = 0.8f;
-    internal const float DirectInteractAttemptRange = 3.0f;
+    internal const float DirectInteractAttemptRange = 2.0f;
     internal const float InteractableIdentityMatchRange = 2.0f;
     private const int RequiredInteractionAttemptLimit = 3;
     private const float PreferredMonsterArrivalRange = 2.0f;

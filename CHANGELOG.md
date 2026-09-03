@@ -8,7 +8,7 @@
 - Added batch revert and clean-saved batch promotion for checked custom overrides, including eligible/skipped summaries, empty/custom-only warnings, one-time index updates, local-change confirmation, permanently visible checkout configuration, and a direct Rules walkthrough. Promotion never stages or otherwise mutates Git state.
 - Repaired BotologyUpdates checkout activation: Settings and Object Rules now share one live checkout state, **Use checkout** accepts either the repository root or `ads/territories` (including pasted quoted paths), saves the canonical Git root immediately, and keeps invalid input visible without replacing the last valid checkout. Current-directory detection was removed, and open/promotion actions use the saved root.
 - Switched remote object-rule updates to complete validated indexed shard downloads, made fresh invalid/incomplete shard caches refresh immediately, included obsolete-shard removals in completion summaries, and removed current-build MATURE proposal synchronization. The two BotologyUpdates object-rule monoliths remain frozen for legacy builds.
-- Raised only the direct interaction attempt range from 2.0y to 3.0y; retry identity matching remains 2.0y.
+- Restored the direct interaction attempt range from 3.0y to 2.0y after Cutter's Cry exposed rejected out-of-range interactions; retry identity matching remains 2.0y.
 
 ## 2026-09-01
 
