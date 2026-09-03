@@ -7,6 +7,12 @@ public sealed class ObjectPriorityRuleManifest
     public List<ObjectPriorityRule> Rules { get; set; } = [];
 }
 
+public sealed class ObjectPriorityRuleShardIndex
+{
+    public int SchemaVersion { get; set; } = 1;
+    public List<string> Files { get; set; } = [];
+}
+
 public sealed class ObjectPriorityRule
 {
     public bool Enabled { get; set; } = true;

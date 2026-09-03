@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-02
+
+- Replaced the object-rule monolith with indexed Global/territory shards. Custom presets are now persisted executable sparse overlays: missing contexts inherit `DEFAULT`, complete and empty overrides replace one context, custom-only territories work, and invalid active selections fall back safely to `DEFAULT`.
+- Protected ordinary `DEFAULT` editing behind session-only `/ads debug on`, added context-aware shard conflict checks and confirmed context reversion, and added a clean-saved-context promotion wizard that writes only the canonical BotologyUpdates shard and a newly required index entry without staging or other Git mutation.
+- Switched remote object-rule updates to complete validated indexed shard downloads and removed current-build MATURE proposal synchronization. The two BotologyUpdates object-rule monoliths remain frozen for legacy builds.
+- Raised only the direct interaction attempt range from 2.0y to 3.0y; retry identity matching remains 2.0y.
+
 ## 2026-09-01
 
 - Restored Object Rules so `DEFAULT` is the sole live runtime ruleset; ordinary presets remain parked editing copies, while missing or invalid `DEFAULT` reloads retain the last valid runtime rules.

@@ -18,7 +18,8 @@ public sealed class ExecutionService
 {
     private const float NavigationPhaseRange = 6f;
     private const float PreferredInteractArrivalRange = 0.8f;
-    private const float DirectInteractAttemptRange = 2.0f;
+    internal const float DirectInteractAttemptRange = 3.0f;
+    internal const float InteractableIdentityMatchRange = 2.0f;
     private const int RequiredInteractionAttemptLimit = 3;
     private const float PreferredMonsterArrivalRange = 2.0f;
     private const float PreferredFollowArrivalRange = 3.0f;
@@ -4013,7 +4014,7 @@ public sealed class ExecutionService
                && left.DataId == right.DataId
                && left.Classification == right.Classification
                && string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
-               && GetHorizontalDistance(left.Position, right.Position) <= DirectInteractAttemptRange;
+               && GetHorizontalDistance(left.Position, right.Position) <= InteractableIdentityMatchRange;
     }
 
     private string DescribeProgressionInteractableReuse(ObservedInteractable previous, ObservedInteractable current)
@@ -4705,7 +4706,7 @@ public sealed class ExecutionService
             && x.DataId == pendingInteractable.DataId
             && x.Classification == pendingInteractable.Classification
             && string.Equals(x.Name, pendingInteractable.Name, StringComparison.OrdinalIgnoreCase)
-            && GetHorizontalDistance(x.Position, pendingInteractable.Position) <= DirectInteractAttemptRange);
+            && GetHorizontalDistance(x.Position, pendingInteractable.Position) <= InteractableIdentityMatchRange);
     }
 
     private bool IsInteractableStillAllowedInContext(DutyContextSnapshot context, ObservedInteractable interactable)

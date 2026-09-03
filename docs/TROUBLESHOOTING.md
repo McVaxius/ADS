@@ -57,7 +57,7 @@ ADS live JSON cache includes object rules, dialog rules, duty maturity, and trea
 
 Manual update bypasses the normal stale-age gate and uses cache-busted remote requests. Runtime reload can defer during unsafe transition frames or visible dialog state; inspect status before assuming update failed.
 
-`DEFAULT` is the sole live runtime data. Ordinary presets and `MATURE-PROPOSALS` are parked editing copies and do not execute.
+Object Rules executes the persisted active preset. Custom presets inherit missing Global/territory contexts from `DEFAULT`; present shards are complete replacements. If an active preset becomes missing or invalid, ADS falls back to `DEFAULT` and persists that fallback.
 
 ## Specialist Diagnostic Tools
 

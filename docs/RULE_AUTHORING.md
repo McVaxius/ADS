@@ -1,31 +1,31 @@
 # ADS Rule Authoring
 
-This guide covers live object/dialog rules, parked presets, Duty Manager, and maturity testing. Use [Troubleshooting](TROUBLESHOOTING.md) when collecting failure evidence.
+This guide covers live object/dialog rules, inherited object-rule presets, Duty Manager, and maturity testing. Use [Troubleshooting](TROUBLESHOOTING.md) when collecting failure evidence.
 
 ## Data Surfaces
 
-ADS has two distinct rule locations:
+ADS has two object-rule locations:
 
-- **Live runtime cache:** `DEFAULT` in the Dalamud profile config. ADS reads and executes this data.
-- **Maintainer working copy:** `botologyupdates/ads/*.json`. Remote updates refresh live cache from this source.
+- **Local runtime store:** `territories/index.json` plus complete `GLOBAL_rule_objects.json` and `<TerritoryTypeId>_rule_objects.json` shards in the Dalamud profile config.
+- **Maintainer checkout:** `botologyupdates/ads/territories/` uses the same indexed DEFAULT contract.
 
-During scouting, edit and prove live runtime data first. Promote maintainer data only after behavior is verified.
+Root shard files are `DEFAULT`. A custom preset is a sparse immediate child folder: a missing file inherits the matching DEFAULT shard, while a present file completely replaces that context. A present empty shard intentionally suppresses the inherited context. Custom-only territories also execute while that preset is active.
 
-Remote update overwrites live `DEFAULT` cache files. It does not overwrite or execute ordinary user presets.
+The remote updater downloads and validates the complete indexed DEFAULT set before applying it, then recomposes the active preset so inherited contexts update without replacing custom overrides. Invalid or incomplete downloads leave the last valid in-memory rules active.
 
-The remote updater downloads `duty-object-rules-mature-proposals.json` into the editable non-default preset `rule-presets/MATURE-PROPOSALS.json` through a validated clean mirror.
+`ads/duty-object-rules.json` and `ads/duty-object-rules-mature-proposals.json` are frozen compatibility files for older ADS builds. Current ADS does not fetch them and no longer exposes MATURE proposals.
 
 ## Editors And Presets
 
-Object Rules and Dialog Rules use the same parked-preset model:
+Object Rules use inherited executable presets:
 
-- `DEFAULT` is the sole live runtime data.
-- Ordinary presets are parked full-manifest editing copies; selecting, creating, saving, externally updating, or deleting one does not change runtime rules.
-- Saving or importing into `DEFAULT` changes runtime behavior. A missing or invalid `DEFAULT` update keeps the last valid runtime rules.
-- `MATURE-PROPOSALS` is editable and copyable, but its reserved name cannot be created or deleted and it never executes.
-- The editable preset file's last-write time is its refresh clock. General updates skip it while it is younger than 24 hours, and every successful Save restarts that countdown.
-- `Refresh Now` bypasses the countdown after confirmation. If an in-memory draft is dirty, the disk preset refreshes while the draft stays open; Save overwrites that disk refresh and Reload discards the draft.
-- The contribution helper is available only for a clean saved proposal draft. It validates and reveals the exact JSON or copies its path; copy the preset under another name for unrestricted editing.
+- Selecting or creating a custom preset activates it immediately and persists the selection.
+- Missing, deleted, or invalid active presets fall back to `DEFAULT` and persist that fallback.
+- The editor still presents one flattened effective table. Saving materializes every changed context as one complete custom shard; moving a row between scopes writes both contexts.
+- `Revert context to DEFAULT` deletes only the selected custom shard and restores inheritance.
+- Empty overrides require confirmation; disabling rows is normally safer because it preserves authoring intent.
+- Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving for the current session only; disabling debug restores protection.
+- Dialog Rules retain their existing separate DEFAULT/parked-preset behavior.
 
 Common editor controls:
 
@@ -34,11 +34,14 @@ Common editor controls:
 | `+ Row` | Add a draft row |
 | `Save` | Write selected preset |
 | `Reload From Disk` | Discard draft and reload selected preset |
-| `Open JSON` | Open selected JSON file |
+| `Open JSON` | Open the selected preset shard folder |
 | `Export` / `Import` | Full-manifest clipboard transfer |
 | `Disk+` | Full-manifest disk import/export |
-| `+` / `-` | Create/delete a parked preset |
+| `+` / `-` | Create and activate/delete a custom preset |
 | `@` | Load current live `DEFAULT` cache into `DEFAULT` draft |
+| `Context` | Show All, Global, or one searchable territory; this selection controls revert/promotion authority |
+| `Revert context to DEFAULT` | Delete the selected custom shard after confirmation |
+| `Promote to PR ready` | Copy one complete clean saved override into a configured BotologyUpdates checkout |
 | `Select Visible` / `Clear Selection` | Manage bulk selection without losing hidden selections |
 | `Delete Selected` | Confirm and remove selected rows with exact affected duty/global counts |
 | `Undo` | Restore the one most recent bulk delete or partial-manifest replacement |
@@ -46,7 +49,9 @@ Common editor controls:
 
 Full-manifest clipboard and disk imports open a preview instead of replacing the draft immediately. Incoming rows are associated by CFC, then unique territory, then normalized English name. **Complete duties** replaces complete selected groups, **Delta rows** appends exactly the chosen rows without deduplication, and **Current filter** replaces the exact row indices frozen when the preview opened. Globals require a separate opt-in, and changing a current-filter preview's filters invalidates it.
 
-The editor watches the selected preset file for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; overwriting the newer file, reloading, or switching away requires an explicit confirmation. The runtime watcher independently refreshes only `DEFAULT`, and invalid external JSON empties neither the current draft nor the last valid runtime rules.
+The editor watches the selected preset's shard snapshots for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; saving checks the affected DEFAULT/custom shard snapshots before overwrite. Invalid external JSON empties neither the current draft nor the last valid runtime rules.
+
+Promotion is enabled only for a non-DEFAULT preset, exactly one Global or Territory context, a clean saved draft, and an actual override file. It copies the whole saved context even when text filters hide rows. The checkout must be a Git worktree containing `ads/territories`; forks are allowed. ADS may update the destination shard and add a new canonical filename to the index, but it never stages, commits, pushes, switches branches, opens a pull request, or changes other repository files. Existing local changes in affected paths require explicit overwrite confirmation.
 
 New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlighted until saved.
 
@@ -55,10 +60,10 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 1. Open Object Explorer and select **RULE** on the live object.
 2. In Object Rules, choose the **Class** matching the goal.
 3. Fill red required fields, then amber recommended scope/identity fields.
-4. Save `DEFAULT`.
+4. Save the active custom preset. Use session debug mode only when intentionally editing `DEFAULT` directly.
 5. Retest immediately from clean enough state to prove the row.
 6. Check Ghost Inspector, Frontier Labels, Status JSON, and Analysis JSON if behavior remains wrong.
-7. Promote to maintainer data only after repeatable validation.
+7. Select exactly one context and use **Promote to PR ready** only after repeatable validation.
 
 Editor field cues:
 
@@ -283,7 +288,7 @@ Main > Duties is a compact current-duty summary. Open **Duty Manager** for the c
 
 Goal: prove a duty completes cleanly enough to justify maturity promotion and capture enough evidence for durable fixes.
 
-1. Use live runtime `DEFAULT` rules.
+1. Use a selected executable custom preset, inheriting untouched contexts from `DEFAULT`.
 2. Start/resume ownership and observe one complete attempt.
 3. Fix only proven missing/wrong rules.
 4. Capture fresh Status JSON and Analysis JSON for failures.
@@ -314,4 +319,4 @@ Catalog maturity describes validation. It does not replace live instanced-duty t
 - Use positional selectors only for truly same-name physical instances.
 - Use normal object rules before manual waypoints.
 - Keep notes human-readable.
-- Prove live runtime behavior before maintainer promotion.
+- Prove active runtime behavior before promoting the complete saved context.

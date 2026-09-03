@@ -193,16 +193,17 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextUnformatted($"Duty Object Rules: {plugin.ObjectPriorityRuleService.ActiveRuleCount} active");
-        ImGui.TextWrapped($"Live DEFAULT: {plugin.ObjectPriorityRuleService.ConfigPath}");
+        ImGui.TextWrapped($"Active preset: {plugin.ObjectPriorityRuleService.ActivePresetName}");
+        ImGui.TextWrapped($"Territory shard index: {plugin.ObjectPriorityRuleService.ConfigPath}");
         DrawActionGrid(
             "ADSObjectRuleActions",
-            ("Open live DEFAULT JSON", () => plugin.OpenPath(plugin.ObjectPriorityRuleService.ConfigPath)),
+            ("Open territory shards", () => plugin.OpenPath(plugin.ObjectPriorityRuleService.TerritoriesPath)),
             ("Open frontier labels", plugin.OpenFrontierLabelUi),
             ("Open rules table", plugin.OpenRuleEditorUi),
-            ("Reload live DEFAULT JSON", () => plugin.ObjectPriorityRuleService.Reload()));
+            ("Reload active object rules", () => plugin.ObjectPriorityRuleService.Reload()));
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextDisabled("DEFAULT is the sole live object-rule set. Ordinary presets and MATURE-PROPOSALS are parked editing copies.");
+        ImGui.TextDisabled("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require session debug mode.");
 
         ImGui.Spacing();
         ImGui.Separator();

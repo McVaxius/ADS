@@ -144,7 +144,9 @@ public sealed class AllianceRuleScopeTests
         Assert.Equal("B", editable.Rules[1].Alliance);
         Assert.NotSame(fixture.Service.Current.Rules[1], editable.Rules[1]);
 
-        var persistedJson = File.ReadAllText(fixture.Service.ConfigPath);
+        var persistedJson = File.ReadAllText(fixture.Service.GetContextShardPath(
+            ObjectPriorityRuleService.DefaultPresetName,
+            ObjectRuleShardStore.GlobalFileName));
         Assert.Contains("\"Alliance\": null", persistedJson, StringComparison.Ordinal);
         Assert.Contains("\"Alliance\": \"B\"", persistedJson, StringComparison.Ordinal);
     }

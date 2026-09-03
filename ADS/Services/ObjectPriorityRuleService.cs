@@ -14,11 +14,6 @@ public sealed class ObjectPriorityRuleService
     internal const int DefaultPriority = 1000;
     internal const float BattleNpcPlanningVerticalSanityCap = 100f;
     public const string DefaultPresetName = "DEFAULT";
-    public const string MatureProposalsPresetName = "MATURE-PROPOSALS";
-    public const string MatureProposalsMirrorFileName = "duty-object-rules-mature-proposals.json";
-    public static readonly TimeSpan MatureProposalProtectionInterval = TimeSpan.FromHours(24);
-    private const string FileName = "duty-object-rules.json";
-    private const string PresetDirectoryName = "rule-presets";
     private const string MapXzDestinationType = "MapXZ";
     private const string XyzDestinationType = "XYZ";
     private const float DefaultObjectMatchRadius = 6f;
@@ -34,68 +29,94 @@ public sealed class ObjectPriorityRuleService
 
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
-    private readonly string configPath;
-    private readonly string presetDirectoryPath;
-    private readonly string matureProposalsMirrorPath;
-    private readonly string matureProposalsPresetPath;
+    private readonly ObjectRuleShardStore shardStore;
+    private readonly Configuration? configuration;
+    private readonly System.Action? saveConfiguration;
+    private readonly System.Action<string>? showToast;
     private readonly HashSet<string> loggedInvalidObjectSpatialRules = new(StringComparer.Ordinal);
     private readonly HashSet<string> loggedOffLayerBattleNpcSuppressions = new(StringComparer.Ordinal);
-    private DateTime? lastObservedRulesWriteUtc;
+    private ObjectRulePresetFileState? lastObservedPresetState;
     private DateTime nextReloadPollUtc;
-    private bool matureProposalMirrorExists;
-    private bool matureProposalPresetExists;
-    private DateTime? matureProposalMirrorWriteUtc;
-    private DateTime? matureProposalPresetWriteUtc;
+    private string activePresetName = DefaultPresetName;
 
     public ObjectPriorityRuleService(
         IPluginLog log,
         IDataManager dataManager,
         string configDirectory)
+        : this(log, dataManager, configDirectory, [], null, null, null)
+    {
+    }
+
+    public ObjectPriorityRuleService(
+        IPluginLog log,
+        IDataManager dataManager,
+        string configDirectory,
+        IReadOnlyList<DutyCatalogEntry> dutyCatalog,
+        Configuration? configuration,
+        System.Action? saveConfiguration,
+        System.Action<string>? showToast)
     {
         this.log = log;
         this.dataManager = dataManager;
+        this.configuration = configuration;
+        this.saveConfiguration = saveConfiguration;
+        this.showToast = showToast;
         Directory.CreateDirectory(configDirectory);
-        configPath = Path.Combine(configDirectory, FileName);
-        presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
-        matureProposalsMirrorPath = Path.Combine(configDirectory, MatureProposalsMirrorFileName);
-        matureProposalsPresetPath = Path.Combine(presetDirectoryPath, $"{MatureProposalsPresetName}.json");
-        Directory.CreateDirectory(presetDirectoryPath);
-        LastSyncStatus = "DEFAULT object rules load from the plugin config cache; the remote updater refreshes this file from botologyupdates.";
-        LastMatureProposalStatus = "MATURE-PROPOSALS mirror not checked yet.";
+        shardStore = new ObjectRuleShardStore(configDirectory, dutyCatalog);
+        LastSyncStatus = "DEFAULT object rules load from indexed territory shards; the remote updater refreshes the complete validated set from botologyupdates.";
 
-        EnsureSeeded();
-        Reload();
-        TrySynchronizeMatureProposals(force: false, out _);
+        TryDeserializeManifest(GetDefaultJson(), "<built-in fallback>", out var fallback, out _);
+        var pendingLegacyPresets = configuration?.ObjectRuleShardMigrationComplete == true
+            ? configuration.PendingLegacyObjectRulePresets
+            : null;
+        if (shardStore.TryEnsureInitialLayout(fallback, pendingLegacyPresets, out var failedPresets, out var migrationStatus))
+        {
+            LastSyncStatus = migrationStatus;
+            if (configuration is not null
+                && (!configuration.ObjectRuleShardMigrationComplete
+                    || !configuration.PendingLegacyObjectRulePresets.SequenceEqual(failedPresets, StringComparer.OrdinalIgnoreCase)))
+            {
+                configuration.ObjectRuleShardMigrationComplete = true;
+                configuration.PendingLegacyObjectRulePresets = failedPresets.ToList();
+                saveConfiguration?.Invoke();
+            }
+        }
+        else
+        {
+            LastSyncStatus = $"Object-rule shard migration failed; legacy DEFAULT remains active for this run. {migrationStatus}";
+            log.Warning($"[ADS] {LastSyncStatus}");
+        }
+
+        activePresetName = string.IsNullOrWhiteSpace(configuration?.ActiveObjectRulePreset)
+            ? DefaultPresetName
+            : configuration.ActiveObjectRulePreset;
+        if (!Reload(notifyActivePreset: true)
+            && shardStore.TryLoadLegacyDefault(out var legacy, out var legacyStatus))
+        {
+            Current = legacy;
+            activePresetName = DefaultPresetName;
+            PersistActivePreset();
+            LastLoadStatus = $"Loaded legacy DEFAULT for this run because the shard store is unavailable. {legacyStatus}";
+            log.Warning($"[ADS] {LastLoadStatus}");
+            showToast?.Invoke("Object rules active preset: DEFAULT (legacy fallback for this run)");
+        }
     }
 
     public string ConfigPath
-        => configPath;
+        => shardStore.IndexPath;
 
     public string PresetDirectoryPath
-        => presetDirectoryPath;
+        => shardStore.RootPath;
 
-    public string MatureProposalsMirrorPath
-        => matureProposalsMirrorPath;
+    public string TerritoriesPath
+        => shardStore.RootPath;
 
-    public string MatureProposalsPresetPath
-        => matureProposalsPresetPath;
+    public string ActivePresetName
+        => activePresetName;
 
     public string LastLoadStatus { get; private set; } = "Rules not loaded yet.";
 
     public string LastSyncStatus { get; private set; }
-
-    public string LastMatureProposalStatus { get; private set; }
-
-    public DateTime? NextMatureProposalResetUtc { get; private set; }
-
-    public MatureProposalMirrorStatus MatureProposalStatus
-        => new(
-            matureProposalMirrorExists,
-            matureProposalPresetExists,
-            matureProposalMirrorWriteUtc,
-            matureProposalPresetWriteUtc,
-            NextMatureProposalResetUtc,
-            LastMatureProposalStatus);
 
     public ObjectPriorityRuleManifest Current { get; private set; } = new();
 
@@ -116,74 +137,58 @@ public sealed class ObjectPriorityRuleService
     public bool IsDefaultPreset(string presetName)
         => string.Equals(presetName, DefaultPresetName, StringComparison.OrdinalIgnoreCase);
 
-    public bool IsMatureProposalsPreset(string presetName)
-        => string.Equals(presetName, MatureProposalsPresetName, StringComparison.OrdinalIgnoreCase);
-
     public IReadOnlyList<string> GetPresetNames()
-    {
-        var names = new List<string> { DefaultPresetName };
-        if (File.Exists(matureProposalsMirrorPath) || File.Exists(matureProposalsPresetPath))
-            names.Add(MatureProposalsPresetName);
-
-        if (!Directory.Exists(presetDirectoryPath))
-            return names;
-
-        names.AddRange(
-            Directory.EnumerateFiles(presetDirectoryPath, "*.json", SearchOption.TopDirectoryOnly)
-                .Select(Path.GetFileNameWithoutExtension)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Where(x => !string.Equals(x, DefaultPresetName, StringComparison.OrdinalIgnoreCase))
-                .Where(x => !string.Equals(x, MatureProposalsPresetName, StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)!);
-        return names;
-    }
+        => shardStore.GetPresetNames();
 
     public string GetPresetPath(string presetName)
         => IsDefaultPreset(presetName)
-            ? configPath
-            : IsMatureProposalsPreset(presetName)
-                ? matureProposalsPresetPath
-            : Path.Combine(presetDirectoryPath, $"{SanitizePresetName(presetName)}.json");
+            ? shardStore.RootPath
+            : shardStore.GetPresetDirectoryPath(presetName);
 
     public string SanitizePresetName(string presetName)
     {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var cleaned = new string((presetName ?? string.Empty).Where(ch => !invalidCharacters.Contains(ch)).ToArray());
-        cleaned = NormalizeName(cleaned).Trim('.', ' ');
-        if (string.IsNullOrWhiteSpace(cleaned))
-            cleaned = "Preset";
-
-        if (IsDefaultPreset(cleaned))
-            cleaned = $"{DefaultPresetName}-copy";
-        else if (IsMatureProposalsPreset(cleaned))
-            cleaned = $"{MatureProposalsPresetName}-copy";
-
-        return cleaned;
+        return ObjectRuleShardStore.SanitizePresetName(presetName);
     }
 
     public bool Reload()
+        => Reload(notifyActivePreset: false);
+
+    private bool Reload(bool notifyActivePreset)
     {
         try
         {
-            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status))
+            var fallbackToastShown = false;
+            if (!shardStore.TryLoadEffectivePreset(activePresetName, out var manifest, out _, out var status))
             {
-                LastLoadStatus = status;
-                RememberCurrentRulesWriteTime();
-                log.Warning($"[ADS] {LastLoadStatus}");
-                return false;
+                if (IsDefaultPreset(activePresetName)
+                    || !shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out _, out var fallbackStatus))
+                {
+                    LastLoadStatus = status;
+                    lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
+                    log.Warning($"[ADS] {LastLoadStatus}");
+                    return false;
+                }
+
+                var missingPreset = activePresetName;
+                activePresetName = DefaultPresetName;
+                PersistActivePreset();
+                status = $"Active preset {missingPreset} was missing or invalid and fell back to DEFAULT. {fallbackStatus}";
+                showToast?.Invoke($"Object rules active preset: DEFAULT ({missingPreset} was unavailable)");
+                fallbackToastShown = true;
             }
 
             Current = manifest;
-            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
             LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
+            if (notifyActivePreset && !fallbackToastShown)
+                showToast?.Invoke($"Object rules active preset: {activePresetName}");
             return true;
         }
         catch (Exception ex)
         {
-            RememberCurrentRulesWriteTime();
-            LastLoadStatus = $"Failed to load {FileName}: {ex.Message}";
+            lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
+            LastLoadStatus = $"Failed to load object-rule territory shards: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
         }
@@ -199,20 +204,31 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            var currentWriteUtc = File.Exists(configPath)
-                ? File.GetLastWriteTimeUtc(configPath)
-                : (DateTime?)null;
-            if (currentWriteUtc == lastObservedRulesWriteUtc)
+            var currentState = shardStore.CapturePresetState(activePresetName);
+            if (lastObservedPresetState is not null && currentState.SameAs(lastObservedPresetState))
                 return false;
-
-            return Reload();
+            lastObservedPresetState = currentState;
+            return Reload(notifyActivePreset: false);
         }
         catch (Exception ex)
         {
-            RememberCurrentRulesWriteTime();
-            LastLoadStatus = $"Failed to check {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to check object-rule territory shards: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
+        }
+    }
+
+    internal void RetainCurrentAfterFailedRemoteUpdate()
+    {
+        try
+        {
+            lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
+            nextReloadPollUtc = DateTime.UtcNow + ReloadPollInterval;
+            log.Warning("[ADS] Retained the current in-memory object rules after a failed remote shard apply.");
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[ADS] Could not snapshot the failed remote shard disk state; current object rules remain unchanged for this frame.");
         }
     }
 
@@ -221,76 +237,72 @@ public sealed class ObjectPriorityRuleService
 
     public bool SaveManifest(string presetName, ObjectPriorityRuleManifest manifest)
     {
-        try
+        if (!shardStore.TryWriteFullPreset(presetName, manifest, out var status))
         {
-            manifest.Rules ??= [];
-            var path = GetPresetPath(presetName);
-            WriteManifestToPath(path, manifest);
-            if (IsMatureProposalsPreset(presetName))
-                RefreshMatureProposalSchedule(DateTime.UtcNow);
-
-            if (IsDefaultPreset(presetName))
-                return Reload();
-
-            LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} enabled rule(s) to parked preset {presetName} at {path}.";
-            log.Information($"[ADS] {LastLoadStatus}");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            LastLoadStatus = $"Failed to save preset {presetName}: {ex.Message}";
-            log.Warning(ex, $"[ADS] {LastLoadStatus}");
+            LastLoadStatus = status;
+            log.Warning($"[ADS] {LastLoadStatus}");
             return false;
         }
+        LastLoadStatus = status;
+        return ActivatePreset(presetName, notify: !IsDefaultPreset(presetName));
+    }
+
+    public bool SaveChangedContexts(
+        string presetName,
+        ObjectPriorityRuleManifest baseline,
+        ObjectPriorityRuleManifest manifest,
+        bool allowDefaultWrite,
+        out IReadOnlyList<string> changedFiles,
+        out string status)
+    {
+        changedFiles = [];
+        if (IsDefaultPreset(presetName) && !allowDefaultWrite)
+        {
+            status = "DEFAULT is protected. Create a custom preset, or enable /ads debug on for this session to save DEFAULT shards directly.";
+            LastLoadStatus = status;
+            return false;
+        }
+        if (!shardStore.TryGetChangedContextFiles(baseline, manifest, out changedFiles, out status))
+        {
+            LastLoadStatus = status;
+            return false;
+        }
+        if (!shardStore.TryWriteChangedContexts(presetName, manifest, changedFiles, out status))
+        {
+            LastLoadStatus = status;
+            return false;
+        }
+        if (string.Equals(presetName, activePresetName, StringComparison.OrdinalIgnoreCase) && !Reload())
+        {
+            status = LastLoadStatus;
+            return false;
+        }
+        LastLoadStatus = status;
+        return true;
     }
 
     public bool TryLoadManifest(string presetName, out ObjectPriorityRuleManifest manifest, out string status)
-    {
-        manifest = new ObjectPriorityRuleManifest();
-        status = "Preset was not loaded.";
-
-        try
-        {
-            string path;
-            if (IsDefaultPreset(presetName))
-            {
-                path = configPath;
-            }
-            else
-            {
-                path = IsMatureProposalsPreset(presetName)
-                    ? EnsureMatureProposalsPresetSeeded()
-                    : GetPresetPath(presetName);
-            }
-            if (!File.Exists(path))
-            {
-                status = $"Preset {presetName} does not exist at {path}.";
-                return false;
-            }
-
-            return TryLoadManifestFromPath(path, out manifest, out status);
-        }
-        catch (Exception ex)
-        {
-            status = $"Failed to load preset {presetName}: {ex.Message}";
-            return false;
-        }
-    }
+        => shardStore.TryLoadEffectivePreset(presetName, out manifest, out _, out status);
 
     public bool TryLoadDefaultCacheManifest(out ObjectPriorityRuleManifest manifest, out string status)
-    {
-        manifest = new ObjectPriorityRuleManifest();
-        status = "DEFAULT cache preset was not loaded.";
+        => shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out _, out status);
 
-        try
+    public bool ActivatePreset(string presetName, bool notify = true)
+    {
+        if (!shardStore.TryLoadEffectivePreset(presetName, out var manifest, out _, out var status))
         {
-            return TryLoadManifestFromPath(configPath, out manifest, out status);
-        }
-        catch (Exception ex)
-        {
-            status = $"Failed to load DEFAULT cache preset: {ex.Message}";
+            LastLoadStatus = status;
             return false;
         }
+        activePresetName = IsDefaultPreset(presetName) ? DefaultPresetName : SanitizePresetName(presetName);
+        Current = manifest;
+        lastObservedPresetState = shardStore.CapturePresetState(activePresetName);
+        PersistActivePreset();
+        LastLoadStatus = status;
+        log.Information($"[ADS] Active object-rule preset is {activePresetName}. {status}");
+        if (notify)
+            showToast?.Invoke($"Object rules active preset: {activePresetName}");
+        return true;
     }
 
     public bool TryDeletePreset(string presetName, out string status)
@@ -302,163 +314,63 @@ public sealed class ObjectPriorityRuleService
             return false;
         }
 
-        if (IsMatureProposalsPreset(presetName))
-        {
-            status = "MATURE-PROPOSALS is a protected preset and cannot be deleted. Copy it to another preset if you need a disposable version.";
+        if (!shardStore.TryDeletePreset(presetName, out status))
             return false;
-        }
-
-        try
+        if (string.Equals(activePresetName, presetName, StringComparison.OrdinalIgnoreCase))
         {
-            var path = GetPresetPath(presetName);
-            if (!File.Exists(path))
+            activePresetName = DefaultPresetName;
+            PersistActivePreset();
+            if (!Reload())
             {
-                status = $"Preset {presetName} did not exist on disk.";
+                status = $"{status} DEFAULT fallback failed: {LastLoadStatus}";
                 return false;
             }
-
-            File.Delete(path);
-            status = $"Deleted preset {presetName}.";
-            return true;
+            showToast?.Invoke($"Object rules active preset: DEFAULT ({presetName} was deleted)");
         }
-        catch (Exception ex)
-        {
-            status = $"Failed to delete preset {presetName}: {ex.Message}";
-            return false;
-        }
+        return true;
     }
 
-    public void RefreshMatureProposalSchedule()
-        => RefreshMatureProposalSchedule(DateTime.UtcNow);
-
-    public bool TrySynchronizeMatureProposals(bool force, out string status)
+    public bool TryRevertContextToDefault(string presetName, string fileName, out string status)
     {
-        var now = DateTime.UtcNow;
-        RefreshMatureProposalSchedule(now);
-
-        if (!matureProposalMirrorExists || !matureProposalMirrorWriteUtc.HasValue)
+        if (!shardStore.TryDeleteOverride(presetName, fileName, out status))
+            return false;
+        if (string.Equals(activePresetName, presetName, StringComparison.OrdinalIgnoreCase) && !Reload())
         {
-            status = LastMatureProposalStatus;
+            status = $"{status} Reload failed: {LastLoadStatus}";
             return false;
         }
-
-        var decision = DecideMatureProposalSync(
-            matureProposalMirrorExists,
-            matureProposalMirrorWriteUtc,
-            matureProposalPresetExists,
-            matureProposalPresetWriteUtc,
-            now,
-            MatureProposalProtectionInterval,
-            force);
-
-        if (!decision.ShouldApply)
-        {
-            NextMatureProposalResetUtc = decision.NextResetUtc;
-            status = BuildMatureProposalStatus(decision, now);
-            LastMatureProposalStatus = status;
-            return false;
-        }
-
-        if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var loadStatus))
-        {
-            NextMatureProposalResetUtc = null;
-            status = $"MATURE-PROPOSALS clean mirror was not applied. {loadStatus}";
-            LastMatureProposalStatus = status;
-            log.Warning($"[ADS] {status}");
-            return false;
-        }
-
-        try
-        {
-            WriteManifestToPath(matureProposalsPresetPath, mirrorManifest);
-            RefreshMatureProposalSchedule(now);
-            status = force
-                ? $"Reset MATURE-PROPOSALS from the clean mirror at {matureProposalsMirrorPath}."
-                : $"Applied the clean MATURE-PROPOSALS mirror to {matureProposalsPresetPath}.";
-            LastMatureProposalStatus = status;
-            log.Information($"[ADS] {status}");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            NextMatureProposalResetUtc = null;
-            status = $"Failed to apply the MATURE-PROPOSALS clean mirror: {ex.Message}";
-            LastMatureProposalStatus = status;
-            log.Warning(ex, $"[ADS] {status}");
-            return false;
-        }
+        return true;
     }
 
-    internal static MatureProposalSyncDecision DecideMatureProposalSync(
-        bool mirrorExists,
-        DateTime? mirrorWriteUtc,
-        bool presetExists,
-        DateTime? presetWriteUtc,
-        DateTime utcNow,
-        TimeSpan protectionInterval,
-        bool force)
+    public bool HasContextOverride(string presetName, string fileName)
+        => shardStore.HasOverride(presetName, fileName);
+
+    public string GetContextShardPath(string presetName, string fileName)
+        => shardStore.GetShardPath(presetName, fileName);
+
+    internal ObjectRulePresetFileState CapturePresetFileState(string presetName)
+        => shardStore.CapturePresetState(presetName);
+
+    internal ObjectRulePresetFileState CaptureContextFileState(string presetName, IEnumerable<string> fileNames)
+        => shardStore.CaptureContextState(presetName, fileNames);
+
+    internal bool TryGetChangedContextFiles(ObjectPriorityRuleManifest baseline, ObjectPriorityRuleManifest draft, out IReadOnlyList<string> changedFiles, out string status)
+        => shardStore.TryGetChangedContextFiles(baseline, draft, out changedFiles, out status);
+
+    internal IReadOnlyList<string> GetContextFileNames(ObjectPriorityRuleManifest manifest)
+        => shardStore.GetContextFileNames(manifest);
+
+    public IReadOnlyList<string> GetAvailableContextFileNames(string presetName)
+        => shardStore.TryLoadEffectivePreset(presetName, out _, out var shards, out _)
+            ? ObjectRuleShardStore.SortFileNames(shards.Keys)
+            : [];
+
+    private void PersistActivePreset()
     {
-        if (!mirrorExists || !mirrorWriteUtc.HasValue)
-            return new MatureProposalSyncDecision(false, false, null, MatureProposalSyncReason.MirrorMissing);
-
-        if (force)
-            return new MatureProposalSyncDecision(true, false, null, MatureProposalSyncReason.Forced);
-
-        if (!presetExists || !presetWriteUtc.HasValue)
-            return new MatureProposalSyncDecision(true, false, null, MatureProposalSyncReason.PresetMissing);
-
-        if (presetWriteUtc.Value >= mirrorWriteUtc.Value)
-            return new MatureProposalSyncDecision(false, false, null, MatureProposalSyncReason.EditableCurrent);
-
-        var nextResetUtc = presetWriteUtc.Value + protectionInterval;
-        return utcNow >= nextResetUtc
-            ? new MatureProposalSyncDecision(true, false, nextResetUtc, MatureProposalSyncReason.ProtectionExpired)
-            : new MatureProposalSyncDecision(false, true, nextResetUtc, MatureProposalSyncReason.ProtectionActive);
-    }
-
-    private void RefreshMatureProposalSchedule(DateTime utcNow)
-    {
-        matureProposalMirrorExists = File.Exists(matureProposalsMirrorPath);
-        matureProposalPresetExists = File.Exists(matureProposalsPresetPath);
-        matureProposalMirrorWriteUtc = matureProposalMirrorExists
-            ? File.GetLastWriteTimeUtc(matureProposalsMirrorPath)
-            : null;
-        matureProposalPresetWriteUtc = matureProposalPresetExists
-            ? File.GetLastWriteTimeUtc(matureProposalsPresetPath)
-            : null;
-
-        var decision = DecideMatureProposalSync(
-            matureProposalMirrorExists,
-            matureProposalMirrorWriteUtc,
-            matureProposalPresetExists,
-            matureProposalPresetWriteUtc,
-            utcNow,
-            MatureProposalProtectionInterval,
-            force: false);
-        NextMatureProposalResetUtc = decision.NextResetUtc;
-        LastMatureProposalStatus = BuildMatureProposalStatus(decision, utcNow);
-    }
-
-    private static string BuildMatureProposalStatus(MatureProposalSyncDecision decision, DateTime utcNow)
-        => decision.Reason switch
-        {
-            MatureProposalSyncReason.MirrorMissing => "MATURE-PROPOSALS clean mirror is missing; the remote updater must download it before reset or seeding.",
-            MatureProposalSyncReason.PresetMissing => "MATURE-PROPOSALS editable preset is missing and is ready to seed from the clean mirror.",
-            MatureProposalSyncReason.EditableCurrent => "MATURE-PROPOSALS is protected: its editable preset is as new as or newer than the clean mirror.",
-            MatureProposalSyncReason.ProtectionActive => $"A newer MATURE-PROPOSALS clean mirror is pending. Automatic reset in {FormatMatureProposalDuration(decision.NextResetUtc!.Value - utcNow)} ({decision.NextResetUtc.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}).",
-            MatureProposalSyncReason.ProtectionExpired => "MATURE-PROPOSALS protection has expired and its newer clean mirror is ready to apply.",
-            MatureProposalSyncReason.Forced => "MATURE-PROPOSALS clean mirror is ready for a forced reset.",
-            _ => "MATURE-PROPOSALS status is unavailable.",
-        };
-
-    private static string FormatMatureProposalDuration(TimeSpan duration)
-    {
-        if (duration < TimeSpan.Zero)
-            duration = TimeSpan.Zero;
-
-        return duration.TotalHours >= 1
-            ? $"{(int)duration.TotalHours}h {duration.Minutes}m"
-            : $"{duration.Minutes}m {duration.Seconds}s";
+        if (configuration is null)
+            return;
+        configuration.ActiveObjectRulePreset = activePresetName;
+        saveConfiguration?.Invoke();
     }
 
     public bool TryImportManifestText(string text, out ObjectPriorityRuleManifest manifest, out string status)
@@ -1068,56 +980,6 @@ public sealed class ObjectPriorityRuleService
     private readonly record struct ObjectRuleResolution(
         ObjectPriorityRule? MatchedRule,
         ObjectPriorityRule? EffectiveRule);
-
-    private void EnsureSeeded()
-    {
-        if (File.Exists(configPath))
-            return;
-
-        File.WriteAllText(configPath, GetDefaultJson());
-        File.SetLastWriteTimeUtc(configPath, DateTime.UtcNow - TimeSpan.FromDays(2));
-        LastSyncStatus = "Default object rules config was missing, so ADS seeded a minimal built-in fallback until the botologyupdates cache refresh succeeds.";
-        log.Warning($"[ADS] {LastSyncStatus}");
-    }
-
-    private string EnsureMatureProposalsPresetSeeded()
-    {
-        var path = matureProposalsPresetPath;
-        if (File.Exists(path))
-            return path;
-
-        if (File.Exists(matureProposalsMirrorPath))
-        {
-            if (!TryLoadManifestFromPath(matureProposalsMirrorPath, out var mirrorManifest, out var mirrorStatus))
-                throw new InvalidDataException(mirrorStatus);
-
-            WriteManifestToPath(path, mirrorManifest);
-        }
-        else
-        {
-            WriteManifestToPath(path, new ObjectPriorityRuleManifest
-            {
-                Description = "Editable MATURE-PROPOSALS preset; awaiting the clean botologyupdates mirror.",
-            });
-        }
-
-        RefreshMatureProposalSchedule(DateTime.UtcNow);
-        return path;
-    }
-
-    private void RememberCurrentRulesWriteTime()
-    {
-        try
-        {
-            lastObservedRulesWriteUtc = File.Exists(configPath)
-                ? File.GetLastWriteTimeUtc(configPath)
-                : null;
-        }
-        catch
-        {
-            // Best effort only; the caller logs the actionable load/check failure.
-        }
-    }
 
     private bool Matches(
         ObjectPriorityRule rule,
@@ -1848,8 +1710,8 @@ public sealed class ObjectPriorityRuleService
   "rules": [
     {
       "enabled": true,
-      "territoryTypeId": 0,
-      "contentFinderConditionId": 0,
+      "territoryTypeId": 1037,
+      "contentFinderConditionId": 2,
       "dutyEnglishName": "The Tam-Tara Deepcroft",
       "objectKind": "EventObj",
       "baseId": 0,
@@ -1865,8 +1727,8 @@ public sealed class ObjectPriorityRuleService
     },
     {
       "enabled": true,
-      "territoryTypeId": 0,
-      "contentFinderConditionId": 0,
+      "territoryTypeId": 1037,
+      "contentFinderConditionId": 2,
       "dutyEnglishName": "The Tam-Tara Deepcroft",
       "objectKind": "EventObj",
       "baseId": 0,
@@ -1900,28 +1762,4 @@ public sealed class ObjectPriorityRuleService
   ]
 }
 """;
-}
-
-public sealed record MatureProposalMirrorStatus(
-    bool MirrorExists,
-    bool EditablePresetExists,
-    DateTime? MirrorWriteUtc,
-    DateTime? EditablePresetWriteUtc,
-    DateTime? NextResetUtc,
-    string Status);
-
-internal sealed record MatureProposalSyncDecision(
-    bool ShouldApply,
-    bool IsPending,
-    DateTime? NextResetUtc,
-    MatureProposalSyncReason Reason);
-
-internal enum MatureProposalSyncReason
-{
-    MirrorMissing,
-    PresetMissing,
-    EditableCurrent,
-    ProtectionActive,
-    ProtectionExpired,
-    Forced,
 }

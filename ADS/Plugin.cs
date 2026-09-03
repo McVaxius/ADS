@@ -40,8 +40,6 @@ public sealed class Plugin : IDalamudPlugin
     internal enum RemoteJsonReloadStep
     {
         ObjectRules,
-        MatureProposalRules,
-        MatureProposalRulesForced,
         DialogRules,
         DutyMaturity,
         TreasureRoutes,
@@ -197,13 +195,19 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerTracker = new TreasurePortalOpenerTracker(ObjectTable, PartyList, PlayerState, TreasurePortalOpenerRelayService, Log);
         BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
         TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
-        RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory);
-        RemoteJsonUpdateService.TryStartStartupRefresh("startup");
-        nextRemoteJsonStaleCheckUtc = DateTime.UtcNow + RemoteJsonStaleCheckInterval;
-
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
-        ObjectPriorityRuleService = new ObjectPriorityRuleService(Log, DataManager, configDirectory);
+        ObjectPriorityRuleService = new ObjectPriorityRuleService(
+            Log,
+            DataManager,
+            configDirectory,
+            DutyCatalogService.Entries,
+            Configuration,
+            Configuration.Save,
+            message => ToastGui.ShowNormal(message));
+        RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory, DutyCatalogService.Entries);
+        RemoteJsonUpdateService.TryStartStartupRefresh("startup");
+        nextRemoteJsonStaleCheckUtc = DateTime.UtcNow + RemoteJsonStaleCheckInterval;
         DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
@@ -593,9 +597,6 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ForceRemoteJsonUpdate()
         => RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button");
-
-    public void ForceMatureProposalRefresh()
-        => RemoteJsonUpdateService.TryStartMatureProposalRefresh("operator Refresh Now confirmation");
 
     public void SetLootMode(LootRollMode mode)
     {
@@ -2125,12 +2126,6 @@ public sealed class Plugin : IDalamudPlugin
             RemoteJsonUpdateService.TryStartStaleUpdate("hourly stale check");
         }
 
-        if (ObjectPriorityRuleService.NextMatureProposalResetUtc is { } proposalResetUtc
-            && utcNow >= proposalResetUtc)
-        {
-            ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: false, out _);
-        }
-
         var frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled;
         if (!frameworkHitchProfilerEnabled)
             ClearFrameworkHitchState();
@@ -2469,6 +2464,13 @@ public sealed class Plugin : IDalamudPlugin
         if (!RemoteJsonUpdateService.TryConsumeCompletedUpdate(out var completion))
             return;
 
+        if (!completion.Success)
+        {
+            if (completion.ObjectRuleDiskStateMayBePartial)
+                ObjectPriorityRuleService.RetainCurrentAfterFailedRemoteUpdate();
+            return;
+        }
+
         foreach (var step in BuildRemoteJsonReloadSteps(completion))
             pendingRemoteJsonReloadSteps.Enqueue(step);
         Log.Information($"[ADS] Remote config update completed; queued reload for {string.Join(", ", completion.ChangedFiles)}.");
@@ -2479,17 +2481,15 @@ public sealed class Plugin : IDalamudPlugin
         var steps = new List<RemoteJsonReloadStep>();
         foreach (var fileName in completion.ChangedFiles)
         {
+            if (fileName.StartsWith($"{ObjectRuleShardStore.DirectoryName}/", StringComparison.Ordinal))
+            {
+                if (!steps.Contains(RemoteJsonReloadStep.ObjectRules))
+                    steps.Add(RemoteJsonReloadStep.ObjectRules);
+                continue;
+            }
+
             switch (fileName)
             {
-                case RemoteJsonUpdateService.ObjectRulesFileName:
-                    steps.Add(RemoteJsonReloadStep.ObjectRules);
-                    break;
-                case RemoteJsonUpdateService.MatureProposalRulesFileName:
-                    steps.Add(
-                        completion.ForceMatureProposalApply
-                            ? RemoteJsonReloadStep.MatureProposalRulesForced
-                            : RemoteJsonReloadStep.MatureProposalRules);
-                    break;
                 case RemoteJsonUpdateService.DialogRulesFileName:
                     steps.Add(RemoteJsonReloadStep.DialogRules);
                     break;
@@ -2525,9 +2525,12 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        ObjectPriorityRuleService.ReloadIfChanged();
-        DialogYesNoRuleService.ReloadIfChanged();
-        TreasureDungeonData.ReloadIfChanged();
+        if (!RemoteJsonUpdateService.ShouldDeferLocalReloadPolling)
+        {
+            ObjectPriorityRuleService.ReloadIfChanged();
+            DialogYesNoRuleService.ReloadIfChanged();
+            TreasureDungeonData.ReloadIfChanged();
+        }
     }
 
     private bool ShouldDeferJsonReloads(out string reason)
@@ -2561,12 +2564,6 @@ public sealed class Plugin : IDalamudPlugin
         {
             case RemoteJsonReloadStep.ObjectRules:
                 ObjectPriorityRuleService.Reload();
-                break;
-            case RemoteJsonReloadStep.MatureProposalRules:
-                ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: false, out _);
-                break;
-            case RemoteJsonReloadStep.MatureProposalRulesForced:
-                ObjectPriorityRuleService.TrySynchronizeMatureProposals(force: true, out _);
                 break;
             case RemoteJsonReloadStep.DialogRules:
                 DialogYesNoRuleService.Reload();
@@ -3596,6 +3593,23 @@ public sealed class Plugin : IDalamudPlugin
         if (configuration.Version < 23)
         {
             configuration.Version = 23;
+            changed = true;
+        }
+
+        if (configuration.Version < 24)
+        {
+            configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.DefaultPresetName;
+            configuration.BotologyUpdatesCheckoutPath = string.Empty;
+            configuration.ObjectRuleShardMigrationComplete = false;
+            configuration.PendingLegacyObjectRulePresets = [];
+            configuration.Version = 24;
+            changed = true;
+        }
+
+        configuration.PendingLegacyObjectRulePresets ??= [];
+        if (string.IsNullOrWhiteSpace(configuration.ActiveObjectRulePreset))
+        {
+            configuration.ActiveObjectRulePreset = ObjectPriorityRuleService.DefaultPresetName;
             changed = true;
         }
 
