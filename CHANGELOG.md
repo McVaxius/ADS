@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-08
+
+- Corrected the legacy map-effect hook to use the generated SetDirectorData delegate (void return and byte buffer), preserving one original call and existing event tracing.
+
 ## 2026-09-07
 
 - ADS now remembers Debug Mode set through `/ads debug on|off` across reloads and restarts, defaulting to off. Existing debug permissions and input-release behavior are preserved; held strafe input is never restored.

@@ -47,7 +47,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     private Hook<ProcessMapEffectNDelegate>? mapEffect1Hook;
     private Hook<ProcessMapEffectNDelegate>? mapEffect2Hook;
     private Hook<ProcessMapEffectNDelegate>? mapEffect3Hook;
-    private Hook<ProcessLegacyMapEffectDelegate>? legacyMapEffectHook;
+    private Hook<EventFramework.Delegates.SetDirectorData>? legacyMapEffectHook;
     private Hook<ProcessPacketOpenTreasureDelegate>? openTreasureHook;
     private Hook<ProcessSystemLogMessageDelegate>? systemLogHook;
     private ulong rowSequence;
@@ -68,7 +68,6 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
 
     private delegate void ProcessMapEffectDelegate(void* self, uint index, ushort s1, ushort s2);
     private delegate void ProcessMapEffectNDelegate(ContentDirector* director, byte* packet);
-    private delegate byte ProcessLegacyMapEffectDelegate(EventFramework* fwk, EventId eventId, byte seq, byte unk, void* data, ulong length);
     private delegate void ProcessPacketOpenTreasureDelegate(uint playerId, byte* packet);
     private delegate void* ProcessSystemLogMessageDelegate(uint entityId, uint logMessageId, int* args, byte argCount);
 
@@ -200,9 +199,9 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             () => gameInteropProvider.HookFromSignature<ProcessMapEffectDelegate>(MapEffectSignature, ProcessMapEffectDetour),
             hook => mapEffectHook = hook);
         InstallMapEffectPacketHooks();
-        InstallHook<ProcessLegacyMapEffectDelegate>(
+        InstallHook<EventFramework.Delegates.SetDirectorData>(
             "LegacyMapEffect",
-            () => gameInteropProvider.HookFromSignature<ProcessLegacyMapEffectDelegate>(LegacyMapEffectSignature, ProcessLegacyMapEffectDetour),
+            () => gameInteropProvider.HookFromSignature<EventFramework.Delegates.SetDirectorData>(LegacyMapEffectSignature, ProcessLegacyMapEffectDetour),
             hook => legacyMapEffectHook = hook);
         InstallHook<ProcessPacketOpenTreasureDelegate>(
             "OpenTreasure",
@@ -362,9 +361,9 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
         }
     }
 
-    private byte ProcessLegacyMapEffectDetour(EventFramework* fwk, EventId eventId, byte seq, byte unk, void* data, ulong length)
+    private void ProcessLegacyMapEffectDetour(EventFramework* fwk, EventId eventId, byte seq, byte unk, byte* data, ulong length)
     {
-        var result = legacyMapEffectHook?.Original(fwk, eventId, seq, unk, data, length) ?? (byte)0;
+        legacyMapEffectHook!.Original(fwk, eventId, seq, unk, data, length);
 
         try
         {
@@ -379,7 +378,6 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             log.Warning(ex, "[ADS][ServerEvents] LegacyMapEffect detour failed.");
         }
 
-        return result;
     }
 
     private void ProcessPacketOpenTreasureDetour(uint playerId, byte* packet)
