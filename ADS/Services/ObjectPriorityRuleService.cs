@@ -262,7 +262,7 @@ public sealed class ObjectPriorityRuleService
         changedFiles = [];
         if (IsDefaultPreset(presetName) && !allowDefaultWrite)
         {
-            status = "DEFAULT is protected. Create a custom preset, or enable /ads debug on for this session to save DEFAULT shards directly.";
+            status = "DEFAULT is protected. Create a custom preset, or enable /ads debug on to save DEFAULT shards directly.";
             LastLoadStatus = status;
             return false;
         }

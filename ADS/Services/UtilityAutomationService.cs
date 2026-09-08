@@ -2607,6 +2607,20 @@ public sealed unsafe class UtilityAutomationService
     private void SendMoveCommand(Vector3 destination, string label, bool initial)
     {
         lastMoveCommandUtc = DateTime.UtcNow;
+        if (!initial)
+        {
+            try
+            {
+                if (Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress").InvokeFunc()
+                    || Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())
+                    return;
+            }
+            catch
+            {
+                // Keep the existing movement retry when navigation IPC is unavailable.
+            }
+        }
+
         var command = string.Format(
             CultureInfo.InvariantCulture,
             "/vnav moveto {0:F2} {1:F2} {2:F2}",

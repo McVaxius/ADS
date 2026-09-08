@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-07
+
+- ADS now remembers Debug Mode set through `/ads debug on|off` across reloads and restarts, defaulting to off. Existing debug permissions and input-release behavior are preserved; held strafe input is never restored.
+- NPC repair now skips repeat movement commands while vnavmesh is pathfinding or following a path, checking every two seconds. Initial destinations and new inn waypoints remain immediate, and unavailable IPC retains the existing retry behavior.
+
 ## 2026-09-03
 
 - Stopped every inline Object Rules editor—including names, layer/coordinates, numeric fields, waits, notes, and debug commands—from rebuilding filtered rows and context descriptors for every typed character or held adjustment. Edits still update the in-memory draft and `UNSAVED` state immediately; the expensive editor refresh is coalesced until the active edit ends, and JSON writes remain explicit through Save.

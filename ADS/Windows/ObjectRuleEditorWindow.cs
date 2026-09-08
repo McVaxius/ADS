@@ -847,7 +847,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         var saveStatus = plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
-            ? $"Saved {savedFiles.Count} live DEFAULT context shard(s) under session debug authority."
+            ? $"Saved {savedFiles.Count} live DEFAULT context shard(s) with debug mode enabled."
             : $"Saved {savedFiles.Count} complete override context shard(s) for active preset {selectedPresetName}.";
         ApplyLoadedDraft(
             plugin.ObjectPriorityRuleService.CreateEditableCopy(),
@@ -859,7 +859,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginPopup("ADSProtectDefaultRuleSave"))
             return;
 
-        ImGui.TextWrapped("DEFAULT is protected during ordinary use. Create and activate a sparse custom preset from this draft, or cancel and run /ads debug on to permit a direct DEFAULT shard save for this session.");
+        ImGui.TextWrapped("DEFAULT is protected during ordinary use. Create and activate a sparse custom preset from this draft, or cancel and run /ads debug on to permit a direct DEFAULT shard save. Debug mode is remembered until /ads debug off.");
         ImGui.SetNextItemWidth(300f);
         ImGui.InputTextWithHint("##ProtectedDefaultPresetName", "custom preset name", ref pendingPresetName, 64);
         if (ActionButton("Create custom preset", "Save this draft as a new custom preset and activate it without changing DEFAULT."))

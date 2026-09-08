@@ -112,7 +112,7 @@ Main > Tools > Treasure And Operations also exposes **Shop Lists**, compact **De
 
 ## Debug Strafe
 
-Debug strafe controls appear in compact Controls only while enabled.
+Debug strafe controls appear in compact Controls only while debug mode is enabled. Debug mode defaults to off; `/ads debug on|off` saves the setting across plugin reloads and restarts. Held strafe input is never restored.
 
 | Command | Action |
 |---|---|

@@ -136,7 +136,7 @@ The BMRAI/VBM setting is enabled by default. When enabled, entering a regular du
 - Open/reload JSON files.
 - Open Object Rules, Dialog Rules, and Frontier Labels.
 
-Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the permanent checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless `/ads debug on` is active for the session. Dialog Rules retain their separate parked-preset model.
+Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the permanent checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless debug mode is enabled through `/ads debug on`; this setting is remembered until `/ads debug off`. Dialog Rules retain their separate parked-preset model.
 
 ### Advanced
 
@@ -164,7 +164,7 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 - Primary controls use the same inside/leave disabled rules as Main.
 - Tool shortcuts open Loot Controls, Object Rules, Object Explorer, Dialog Rules, Shop Lists, and update cache.
 - Live status shows ownership/phase, duty, objective, treasure role/opener, follow status, and execution status.
-- Debug strafe controls appear only after `/ads debug on`.
+- Debug strafe controls appear while debug mode is enabled through `/ads debug on`. ADS remembers debug mode across reloads, but never restores held input.
 - Closing Controls releases any held debug strafe input.
 
 ## Common Workflows
@@ -206,7 +206,7 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 1. Open Object Explorer and select **RULE** on the live object.
 2. In Object Rules, choose the goal-matching **Class**.
 3. Fill red required fields first, then amber recommended identity/scope fields.
-4. Save the active custom preset, or intentionally enable session debug mode before a direct `DEFAULT` save.
+4. Save the active custom preset, or intentionally enable debug mode before a direct `DEFAULT` save.
 5. Retest immediately.
 
 Field cues are class-specific: red is required, amber recommended, normal optional, and dim ignored. Class selection and cues never clear ignored stored values. Use the row `?` button for focused class help or `[GUIDE]` for the full goal/class matrix and advanced JSON field reference.

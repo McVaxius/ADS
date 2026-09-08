@@ -27,7 +27,7 @@ Object Rules use inherited executable presets:
 - Batch `Revert context(s) to DEFAULT` remains explicit-selection-only: it deletes every checked saved custom override and restores inheritance; inherited/no-file selections are listed as skipped. A reverted custom-only context disappears because no DEFAULT shard exists.
 - Promotion follows the context label literally: with checked contexts it promotes their saved overrides, while **All contexts** (no checks) promotes every saved override in the active custom preset. Inherited DEFAULT and no-file contexts are excluded because they have no custom shard to copy.
 - Empty overrides require confirmation; disabling rows is normally safer because it preserves authoring intent.
-- Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving for the current session only; disabling debug restores protection.
+- Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving and is remembered across reloads; `/ads debug off` restores protection.
 - Dialog Rules retain their existing separate DEFAULT/parked-preset behavior.
 
 Common editor controls:
@@ -68,7 +68,7 @@ New object rows from `+ Row` or Object Explorer **CREATE RULE** remain highlight
 1. Open Object Explorer and select **RULE** on the live object.
 2. In Object Rules, choose the **Class** matching the goal.
 3. Fill red required fields, then amber recommended scope/identity fields.
-4. Save the active custom preset. Use session debug mode only when intentionally editing `DEFAULT` directly.
+4. Save the active custom preset. Use debug mode only when intentionally editing `DEFAULT` directly.
 5. Retest immediately from clean enough state to prove the row.
 6. Check Ghost Inspector, Frontier Labels, Status JSON, and Analysis JSON if behavior remains wrong.
 7. Check the validated contexts and use selected promotion, or deliberately clear the checks and use **Promote All saved overrides to PR-ready checkout**, only after repeatable validation.

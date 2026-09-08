@@ -207,7 +207,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             plugin.OpenRulesWalkthroughUi();
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastSyncStatus);
         ImGui.TextWrapped(plugin.ObjectPriorityRuleService.LastLoadStatus);
-        ImGui.TextDisabled("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require session debug mode.");
+        ImGui.TextDisabled("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require debug mode.");
 
         ImGui.Spacing();
         ImGui.TextUnformatted("PR-ready Checkout");

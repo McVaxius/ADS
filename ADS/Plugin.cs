@@ -237,6 +237,8 @@ public sealed class Plugin : IDalamudPlugin
         HigherLowerVfxTraceService.AttachCardSolver(HigherLowerCardVfxSolverService);
         HigherLowerAutomationService = new HigherLowerAutomationService(TreasureHighLowDiagnosticService, HigherLowerCardVfxSolverService, ObjectTable, TargetManager, CommandManager, Configuration, GameGui, Log);
         DebugStrafeService = new DebugStrafeService(KeyState, Log);
+        if (Configuration.DebugModeEnabled)
+            DebugStrafeService.Enable();
         QstCompanionWarningService = new QstCompanionWarningService(
             () => PluginInterface.InstalledPlugins.Any(plugin =>
                 plugin.IsLoaded
@@ -3258,12 +3260,16 @@ public sealed class Plugin : IDalamudPlugin
         if (mode.Equals("on", StringComparison.OrdinalIgnoreCase))
         {
             PrintStatus(DebugStrafeService.Enable());
+            Configuration.DebugModeEnabled = true;
+            Configuration.Save();
             return;
         }
 
         if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
         {
             PrintStatus(DebugStrafeService.Disable("command"));
+            Configuration.DebugModeEnabled = false;
+            Configuration.Save();
             return;
         }
 
