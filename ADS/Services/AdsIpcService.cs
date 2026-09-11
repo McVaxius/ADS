@@ -36,7 +36,8 @@ public sealed class AdsIpcService : IDisposable
         Func<string, string> startShopListPreset,
         Func<string, string> getShopListPresetStatusJson,
         Func<string, bool> cancelShopListPreset,
-        Func<string, string> searchShopCatalogJson)
+        Func<string, string> searchShopCatalogJson,
+        Func<bool> openPlayerObjectExplorer)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -67,6 +68,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.GetShopListPresetStatusJson", getShopListPresetStatusJson);
         Register(pluginInterface, "ADS.CancelShopListPreset", cancelShopListPreset);
         Register(pluginInterface, "ADS.SearchShopCatalogJson", searchShopCatalogJson);
+        Register(pluginInterface, "ADS.OpenPlayerObjectExplorer", openPlayerObjectExplorer);
     }
 
     public void Dispose()

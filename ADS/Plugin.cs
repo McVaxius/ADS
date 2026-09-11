@@ -8,6 +8,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.DutyState;
 using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.ContextMenu;
@@ -331,7 +332,8 @@ public sealed class Plugin : IDalamudPlugin
             StartShopListPresetJson,
             ShopListService.GetShopListPresetStatusJson,
             ShopListService.CancelShopListPreset,
-            ShopListService.SearchShopCatalogJson);
+            ShopListService.SearchShopCatalogJson,
+            OpenPlayerObjectExplorer);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -494,6 +496,12 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenObjectExplorerUi()
         => objectExplorerWindow.IsOpen = true;
+
+    public bool OpenPlayerObjectExplorer()
+    {
+        objectExplorerWindow.OpenPlayers();
+        return true;
+    }
 
     public void ToggleGhostListUi()
         => ghostListWindow.IsOpen = !ghostListWindow.IsOpen;
@@ -771,6 +779,51 @@ public sealed class Plugin : IDalamudPlugin
 
     public string ObjectExplorerStatus
         => objectExplorerStatus;
+
+    public bool DhogNavWhitelistAvailable
+    {
+        get
+        {
+            try { return PluginInterface.GetIpcSubscriber<string, bool>("DhogNav.AddWhitelistedPlayer").HasFunction; }
+            catch (Exception) { return false; }
+        }
+    }
+
+    public bool TryWhitelistExplorerPlayer(ulong gameObjectId)
+    {
+        try
+        {
+            var add = PluginInterface.GetIpcSubscriber<string, bool>("DhogNav.AddWhitelistedPlayer");
+            if (!add.HasFunction)
+            {
+                objectExplorerStatus = "DhogNav whitelist is unavailable. Load a compatible DhogNav plugin.";
+                return false;
+            }
+            // Resolve the live player on click; never trust an old row's name or home world.
+            if (ObjectTable.SearchById(gameObjectId) is not IPlayerCharacter player)
+            {
+                objectExplorerStatus = "Player is no longer loaded. Refresh the explorer and try again.";
+                return false;
+            }
+            var name = player.Name.TextValue.Trim();
+            var homeServer = player.HomeWorld.Value.Name.ToString().Trim();
+            if (name.Length == 0 || homeServer.Length == 0 || name.Contains('@') || homeServer.Contains('@'))
+            {
+                objectExplorerStatus = "Player name or home server is unavailable.";
+                return false;
+            }
+            var added = add.InvokeFunc($"{name}@{homeServer}");
+            objectExplorerStatus = added
+                ? "Player saved to DhogNav's whitelist."
+                : "DhogNav could not save the player. Finish or cancel whitelist editing and check DhogNav's save status.";
+            return added;
+        }
+        catch (Exception)
+        {
+            objectExplorerStatus = "DhogNav whitelist request failed. Check that DhogNav is loaded.";
+            return false;
+        }
+    }
 
     public string ObjectExplorerMapFlagStatus
         => mapFlagMonitorPolicy.BuildCurrentStatus(ObjectTable.LocalPlayer?.Position);

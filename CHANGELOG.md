@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add `ADS.OpenPlayerObjectExplorer() -> bool` through the existing IPC service to open the object explorer with all filters cleared and Player selected.
+- Show a DhogNav whitelist action only on player rows while `DhogNav.AddWhitelistedPlayer` is available. Resolve each clicked player by object ID, pass the complete name and home server, and report unavailable-plugin or save/edit failures in the existing action status, including Compact view. DhogNav's parasite checkbox does not control availability.
+
 ## 2026-09-08
 
 - Corrected the legacy map-effect hook to use the generated SetDirectorData delegate (void return and byte buffer), preserving one original call and existing event tracing.

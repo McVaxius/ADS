@@ -26,8 +26,11 @@ Existing ADS IPC endpoints remain available.
 - `ADS.SearchShopCatalogJson(string requestJson) -> string`
 - `ADS.CancelUtility() -> bool`
 - `ADS.OpenDesynthConfigUi() -> bool`
+- `ADS.OpenPlayerObjectExplorer() -> bool`
 - `ADS.IsDutyOwned() -> bool`
 - `ADS.GetDesynthStatusJson() -> string`
+
+`ADS.OpenPlayerObjectExplorer` opens the existing object explorer, clears its search, level, targetable, and same-map filters, and selects Player. Player rows show a whitelist action only while the loaded DhogNav plugin exposes `DhogNav.AddWhitelistedPlayer(string identity) -> bool`; parasite mode may be off. The action resolves the live player by object ID and sends a complete `Name@HomeServer` identity. DhogNav rejects incomplete identities and active whitelist edits, deduplicates accepted entries, and returns false if saving fails. Save failures can leave the entry in memory; check DhogNav's save status.
 
 `ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. They best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty.
 

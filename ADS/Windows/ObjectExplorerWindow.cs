@@ -11,7 +11,8 @@ namespace ADS.Windows;
 public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 {
     private readonly Plugin plugin;
-    private readonly string[] objectKindFilters = ["All", .. Enum.GetNames<ObjectKind>().OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
+    private readonly string[] objectKindFilters = ["All", .. Enum.GetNames<ObjectKind>()
+        .Select(kind => kind == nameof(ObjectKind.Pc) ? "Player" : kind).OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
     private readonly string[] ruleClassificationOptions = ["Auto", .. Enum.GetNames<InteractableClass>()];
     private string textFilter = string.Empty;
     private int objectKindFilterIndex;
@@ -38,17 +39,35 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     {
     }
 
+    private void ClearFilters()
+    {
+        textFilter = string.Empty;
+        objectKindFilterIndex = 0;
+        levelFilterEnabled = false;
+        levelFilter = 0;
+        levelFilterMode = 0;
+        targetableOnly = false;
+        sameMapOnly = false;
+    }
+
+    public void OpenPlayers()
+    {
+        ClearFilters();
+        objectKindFilterIndex = Array.IndexOf(objectKindFilters, "Player");
+        IsOpen = true;
+    }
+
     public override void Draw()
     {
         FinalizePendingWindowPlacement();
         DrawExportControls();
+        ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
 
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         if (localPlayer is null)
         {
             if (!compact)
             {
-                ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
                 ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
                 ImGui.TextUnformatted("No local player is available.");
             }
@@ -69,7 +88,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
             ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
             ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
-            ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
             ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
         }
 
@@ -83,15 +101,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters, objectKindFilters.Length);
         ImGui.SameLine();
         if (ImGui.Button("Clear filters"))
-        {
-            textFilter = string.Empty;
-            objectKindFilterIndex = 0;
-            levelFilterEnabled = false;
-            levelFilter = 0;
-            levelFilterMode = 0;
-            targetableOnly = false;
-            sameMapOnly = false;
-        }
+            ClearFilters();
 
         if (ImGui.Checkbox("Filter by Lv.", ref levelFilterEnabled) && levelFilterEnabled && levelFilter <= 0)
             levelFilter = localPlayer.Level;
@@ -139,7 +149,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         if (!compact)
             ImGui.TextUnformatted($"Objects shown: {rows.Count}");
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        var whitelistAvailable = plugin.DhogNavWhitelistAvailable;
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", whitelistAvailable ? 14 : 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
@@ -155,6 +166,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("FLAG", ImGuiTableColumnFlags.WidthFixed, 62f);
         ImGui.TableSetupColumn("RULE", ImGuiTableColumnFlags.WidthFixed, 62f);
         ImGui.TableSetupColumn("Copy XYZ", ImGuiTableColumnFlags.WidthFixed, 88f);
+        if (whitelistAvailable)
+            ImGui.TableSetupColumn("DhogNav", ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableHeadersRow();
 
         for (var index = 0; index < rows.Count; index++)
@@ -213,6 +226,15 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(12);
             if (ImGui.SmallButton($"XYZ##ADSObjectCopy{index}"))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
+
+            if (whitelistAvailable && row.ObjectKind == nameof(ObjectKind.Pc))
+            {
+                ImGui.TableSetColumnIndex(13);
+                if (ImGui.SmallButton($"Whitelist##ADSObjectWhitelist{row.GameObjectId}"))
+                    plugin.TryWhitelistExplorerPlayer(row.GameObjectId);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Add this player and their home server to DhogNav's whitelist. DhogNav must be loaded; parasite mode may be off. Finish or cancel any whitelist edit first.");
+            }
         }
 
         ImGui.EndTable();
@@ -311,6 +333,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return false;
 
         var selectedKind = objectKindFilters[Math.Clamp(objectKindFilterIndex, 0, objectKindFilters.Length - 1)];
+        if (selectedKind == "Player") selectedKind = nameof(ObjectKind.Pc);
         if (!string.Equals(selectedKind, "All", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(row.ObjectKind, selectedKind, StringComparison.OrdinalIgnoreCase))
         {
