@@ -64,6 +64,10 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextWrapped($"Action status: {plugin.ObjectExplorerStatus}");
 
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
+        var context = plugin.DutyContextService.Current;
+        if (!compact)
+            ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
+        ImGui.TextUnformatted($"Current map ID: {(localPlayer is null ? "Unavailable" : context.CurrentMapId?.ToString() ?? "Unavailable")}");
         if (localPlayer is null)
         {
             if (!compact)
@@ -74,7 +78,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return;
         }
 
-        var context = plugin.DutyContextService.Current;
         var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown";
         var nearestFrontierLabel = plugin.DungeonFrontierService.CurrentLabelMarkers
             .OrderBy(x => Vector3.Distance(localPlayer.Position, x.WorldPosition))
@@ -84,7 +87,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         {
             ImGui.TextUnformatted("Live Loaded Objects");
             ImGui.TextWrapped("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence.");
-            ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
             ImGui.TextUnformatted($"Layer / Sub-area: {activeLayer}");
             ImGui.TextUnformatted($"Nearest frontier label: {(nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")}");
             ImGui.TextWrapped($"Frontier target: {plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"}");
@@ -150,24 +152,25 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         if (!compact)
             ImGui.TextUnformatted($"Objects shown: {rows.Count}");
         var whitelistAvailable = plugin.DhogNavWhitelistAvailable;
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", whitelistAvailable ? 14 : 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", whitelistAvailable ? 14 : 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
-        ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 110f);
-        ImGui.TableSetupColumn("Lv.", ImGuiTableColumnFlags.WidthFixed, 45f);
-        ImGui.TableSetupColumn("f.Lv", ImGuiTableColumnFlags.WidthFixed, 45f);
-        ImGui.TableSetupColumn("Element", ImGuiTableColumnFlags.WidthFixed, 72f);
-        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 60f);
-        ImGui.TableSetupColumn("Rules", ImGuiTableColumnFlags.WidthFixed, 60f);
-        ImGui.TableSetupColumn("moveto", ImGuiTableColumnFlags.WidthFixed, 78f);
-        ImGui.TableSetupColumn("flyto", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("FLAG", ImGuiTableColumnFlags.WidthFixed, 62f);
-        ImGui.TableSetupColumn("RULE", ImGuiTableColumnFlags.WidthFixed, 62f);
-        ImGui.TableSetupColumn("Copy XYZ", ImGuiTableColumnFlags.WidthFixed, 88f);
+        ImGui.TableSetupColumn("Kind");
+        ImGui.TableSetupColumn("Lv.");
+        ImGui.TableSetupColumn("f.Lv");
+        ImGui.TableSetupColumn("Element");
+        ImGui.TableSetupColumn("Dist");
+        ImGui.TableSetupColumn("Y");
+        ImGui.TableSetupColumn("Rules");
+        ImGui.TableSetupColumn("moveto");
+        ImGui.TableSetupColumn("flyto");
+        ImGui.TableSetupColumn("FLAG");
+        ImGui.TableSetupColumn("RULE");
+        ImGui.TableSetupColumn("Copy XYZ");
         if (whitelistAvailable)
-            ImGui.TableSetupColumn("DhogNav", ImGuiTableColumnFlags.WidthFixed, 90f);
+            ImGui.TableSetupColumn("DhogNav");
+        ImGui.TableSetupScrollFreeze(1, 1);
         ImGui.TableHeadersRow();
 
         for (var index = 0; index < rows.Count; index++)

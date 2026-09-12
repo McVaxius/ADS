@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `/ads obj` now fits columns to their contents, supports dragging dividers and double-clicking to refit, and scrolls horizontally with Name and the header frozen. Width adjustments last for the session without saving column settings.
+
+- `/ads obj` now shows Current map ID, including in Compact view. Loading, logout, and unavailable map state show Unavailable. Existing duty updates refresh the live map without changing automation rules.
+
 - Add `ADS.OpenPlayerObjectExplorer() -> bool` through the existing IPC service to open the object explorer with all filters cleared and Player selected.
 - Show a DhogNav whitelist action only on player rows while `DhogNav.AddWhitelistedPlayer` is available. Resolve each clicked player by object ID, pass the complete name and home server, and report unavailable-plugin or save/edit failures in the existing action status, including Compact view. DhogNav's parasite checkbox does not control availability.
 

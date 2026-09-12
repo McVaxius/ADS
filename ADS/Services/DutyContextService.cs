@@ -58,6 +58,9 @@ public sealed class DutyContextService
         uint mapId = clientStateMapId;
         uint gameMainMapId = 0;
         uint contentFinderConditionId = 0;
+        var isLoggedIn = clientState.IsLoggedIn;
+        var betweenAreas = condition[ConditionFlag.BetweenAreas];
+        var betweenAreas51 = condition[ConditionFlag.BetweenAreas51];
         var gameMain = GameMain.Instance();
         if (gameMain is not null)
         {
@@ -78,11 +81,11 @@ public sealed class DutyContextService
         Current = new DutyContextSnapshot
         {
             PluginEnabled = pluginEnabled,
-            IsLoggedIn = clientState.IsLoggedIn,
+            IsLoggedIn = isLoggedIn,
             BoundByDuty = condition[ConditionFlag.BoundByDuty],
             BoundByDuty56 = condition[ConditionFlag.BoundByDuty56],
-            BetweenAreas = condition[ConditionFlag.BetweenAreas],
-            BetweenAreas51 = condition[ConditionFlag.BetweenAreas51],
+            BetweenAreas = betweenAreas,
+            BetweenAreas51 = betweenAreas51,
             Jumping = condition[ConditionFlag.Jumping],
             Jumping61 = condition[ConditionFlag.Jumping61],
             Occupied33 = condition[ConditionFlag.Occupied33],
@@ -95,6 +98,8 @@ public sealed class DutyContextService
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,
+            CurrentMapId = isLoggedIn && !betweenAreas && !betweenAreas51 && territoryTypeId != 0 && mapId != 0
+                ? mapId : null,
             Alliance = automationExcludedTerritory ? null : TryResolveAlliance(),
             CurrentDuty = currentDuty,
         };
