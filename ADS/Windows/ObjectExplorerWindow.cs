@@ -22,6 +22,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private bool targetableOnly;
     private bool sameMapOnly;
     private bool compact;
+    private ulong? rulePopupObjectId;
 
     public ObjectExplorerWindow(Plugin plugin)
         : base("ADS Object Explorer###ADSObjectExplorer")
@@ -70,6 +71,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TextUnformatted($"Current map ID: {(localPlayer is null ? "Unavailable" : context.CurrentMapId?.ToString() ?? "Unavailable")}");
         if (localPlayer is null)
         {
+            rulePopupObjectId = null;
             if (!compact)
             {
                 ImGui.TextWrapped($"Flag status: {plugin.ObjectExplorerMapFlagStatus}");
@@ -145,14 +147,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         var rows = BuildRows(context, localPlayer)
             .Where(MatchesFilter)
-            .OrderBy(x => x.Distance)
-            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (!compact)
             ImGui.TextUnformatted($"Objects shown: {rows.Count}");
         var whitelistAvailable = plugin.DhogNavWhitelistAvailable;
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", whitelistAvailable ? 14 : 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings, new Vector2(-1f, -1f)))
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 14, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings | ImGuiTableFlags.Sortable | ImGuiTableFlags.SortMulti, new Vector2(-1f, -1f)))
             return;
 
         ImGui.TableSetupColumn("Name");
@@ -160,22 +160,21 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn("Lv.");
         ImGui.TableSetupColumn("f.Lv");
         ImGui.TableSetupColumn("Element");
-        ImGui.TableSetupColumn("Dist");
+        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortAscending);
         ImGui.TableSetupColumn("Y");
         ImGui.TableSetupColumn("Rules");
-        ImGui.TableSetupColumn("moveto");
-        ImGui.TableSetupColumn("flyto");
-        ImGui.TableSetupColumn("FLAG");
-        ImGui.TableSetupColumn("RULE");
-        ImGui.TableSetupColumn("Copy XYZ");
-        if (whitelistAvailable)
-            ImGui.TableSetupColumn("DhogNav");
+        ImGui.TableSetupColumn("moveto", ImGuiTableColumnFlags.NoSort);
+        ImGui.TableSetupColumn("flyto", ImGuiTableColumnFlags.NoSort);
+        ImGui.TableSetupColumn("FLAG", ImGuiTableColumnFlags.NoSort);
+        ImGui.TableSetupColumn("RULE", ImGuiTableColumnFlags.NoSort);
+        ImGui.TableSetupColumn("Copy XYZ", ImGuiTableColumnFlags.NoSort);
+        ImGui.TableSetupColumn("DhogNav", ImGuiTableColumnFlags.NoSort | (whitelistAvailable ? ImGuiTableColumnFlags.None : ImGuiTableColumnFlags.Disabled));
         ImGui.TableSetupScrollFreeze(1, 1);
-        ImGui.TableHeadersRow();
+        DrawHeaderRow();
+        SortTableRows(rows);
 
-        for (var index = 0; index < rows.Count; index++)
+        foreach (var row in rows)
         {
-            var row = rows[index];
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
             ImGui.TextUnformatted(row.Name);
@@ -210,24 +209,26 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             DrawRuleTooltip(row);
 
             ImGui.TableSetColumnIndex(8);
-            if (ImGui.SmallButton($"moveto##ADSObjectMove{index}"))
+            if (ImGui.SmallButton($"moveto##ADSObjectMove{row.GameObjectId}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: false);
 
             ImGui.TableSetColumnIndex(9);
-            if (ImGui.SmallButton($"flyto##ADSObjectFly{index}"))
+            if (ImGui.SmallButton($"flyto##ADSObjectFly{row.GameObjectId}"))
                 plugin.TryExplorerNavigation(row.Position, useFly: true);
 
             ImGui.TableSetColumnIndex(10);
-            if (ImGui.SmallButton($"FLAG##ADSObjectFlag{index}"))
+            if (ImGui.SmallButton($"FLAG##ADSObjectFlag{row.GameObjectId}"))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
 
             ImGui.TableSetColumnIndex(11);
-            if (ImGui.SmallButton($"RULE##ADSObjectRule{index}"))
-                ImGui.OpenPopup($"ADSObjectRulePopup##{index}");
-            DrawRulePopup(index, row);
+            if (ImGui.SmallButton($"RULE##ADSObjectRule{row.GameObjectId}"))
+            {
+                rulePopupObjectId = row.GameObjectId;
+                ImGui.OpenPopup($"ADSObjectRulePopup##{row.GameObjectId}");
+            }
 
             ImGui.TableSetColumnIndex(12);
-            if (ImGui.SmallButton($"XYZ##ADSObjectCopy{index}"))
+            if (ImGui.SmallButton($"XYZ##ADSObjectCopy{row.GameObjectId}"))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
 
             if (whitelistAvailable && row.ObjectKind == nameof(ObjectKind.Pc))
@@ -240,8 +241,124 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             }
         }
 
+        if (rulePopupObjectId is { } objectId)
+            DrawRulePopup(objectId, rows.Find(row => row.GameObjectId == objectId));
+
         ImGui.EndTable();
     }
+
+    private static void DrawHeaderRow()
+    {
+        const string sortHelp = "Click: sort; Shift+click: combine.";
+        const string actionHelp = "Use the row button.";
+        ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+        DrawHeaderCell(0, "Name", "Object name.", sortHelp);
+        DrawHeaderCell(1, "Kind", "Object kind.", sortHelp);
+        DrawHeaderCell(2, "Lv.", "Character level, when available.", sortHelp);
+        DrawHeaderCell(3, "f.Lv", "Foray level, when available.", sortHelp);
+        DrawHeaderCell(4, "Element", "Foray element, when available.", sortHelp);
+        DrawHeaderCell(5, "Dist", "3D distance from you, in yalms.", sortHelp);
+        DrawHeaderCell(6, "Y", "Absolute height difference, in yalms.", sortHelp);
+        DrawHeaderCell(7, "Rules", "Rule matches before layer filtering.", sortHelp);
+        DrawHeaderCell(8, "moveto", "Move to the object's position.", actionHelp);
+        DrawHeaderCell(9, "flyto", "Fly to the object's position.", actionHelp);
+        DrawHeaderCell(10, "FLAG", "Place a map flag at the object.", actionHelp);
+        DrawHeaderCell(11, "RULE", "Seed an object rule; choose its class.", actionHelp);
+        DrawHeaderCell(12, "Copy XYZ", "Copy the object's XYZ coordinates.", actionHelp);
+        DrawHeaderCell(13, "DhogNav", "Add the player to DhogNav's whitelist.", actionHelp);
+    }
+
+    private static void DrawHeaderCell(int column, string label, string purpose, string interaction)
+    {
+        if (!ImGui.TableSetColumnIndex(column))
+            return;
+
+        ImGui.TableHeader(label);
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
+        ImGui.TextUnformatted($"{purpose}\n{interaction}");
+        ImGui.PopTextWrapPos();
+        ImGui.EndTooltip();
+    }
+
+    private static unsafe void SortTableRows(List<ObjectExplorerRow> rows)
+    {
+        var specs = ImGui.TableGetSortSpecs();
+        var criteria = new SortCriterion[specs.SpecsCount];
+        for (var index = 0; index < criteria.Length; index++)
+        {
+            var spec = specs.Specs[index];
+            criteria[spec.SortOrder] = new SortCriterion((SortColumn)spec.ColumnIndex, spec.SortDirection == ImGuiSortDirection.Descending);
+        }
+
+        // Rows are a fresh snapshot: reapply priorities even without a header click.
+        SortRows(rows, criteria);
+        specs.SpecsDirty = false;
+    }
+
+    internal static void SortRows(List<ObjectExplorerRow> rows, IReadOnlyList<SortCriterion> criteria)
+        => rows.Sort((left, right) => CompareRows(left, right, criteria));
+
+    internal static int CompareRows(ObjectExplorerRow left, ObjectExplorerRow right, IReadOnlyList<SortCriterion> criteria)
+    {
+        for (var index = 0; index < criteria.Count; index++)
+        {
+            var criterion = criteria[index];
+            var leftMissing = IsMissingSortValue(left, criterion.Column);
+            var rightMissing = IsMissingSortValue(right, criterion.Column);
+            if (leftMissing != rightMissing)
+                return leftMissing ? 1 : -1;
+
+            var result = criterion.Column switch
+            {
+                SortColumn.Name => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.Name),
+                SortColumn.Kind => StringComparer.OrdinalIgnoreCase.Compare(left.ObjectKind, right.ObjectKind),
+                SortColumn.Level => Nullable.Compare(left.Level, right.Level),
+                SortColumn.ForayLevel => Nullable.Compare(left.ForayLevel, right.ForayLevel),
+                SortColumn.Element => StringComparer.OrdinalIgnoreCase.Compare(FormatForayElement(left.ForayElement), FormatForayElement(right.ForayElement)),
+                SortColumn.Distance => left.Distance.CompareTo(right.Distance),
+                SortColumn.VerticalDelta => left.VerticalDelta.CompareTo(right.VerticalDelta),
+                SortColumn.Rules => left.MatchingRules.Count.CompareTo(right.MatchingRules.Count),
+                _ => 0,
+            };
+            if (result != 0)
+                return criterion.Descending ? -result : result;
+        }
+
+        var distance = left.Distance.CompareTo(right.Distance);
+        if (distance != 0)
+            return distance;
+
+        var name = StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.Name);
+        return name != 0 ? name : left.GameObjectId.CompareTo(right.GameObjectId);
+    }
+
+    private static bool IsMissingSortValue(ObjectExplorerRow row, SortColumn column)
+        => column switch
+        {
+            SortColumn.Level => row.Level is null,
+            SortColumn.ForayLevel => row.ForayLevel is null,
+            SortColumn.Element => row.ForayElement is null,
+            _ => false,
+        };
+
+    // Match the eight sortable table column indexes; action columns follow them.
+    internal enum SortColumn
+    {
+        Name,
+        Kind,
+        Level,
+        ForayLevel,
+        Element,
+        Distance,
+        VerticalDelta,
+        Rules,
+    }
+
+    internal readonly record struct SortCriterion(SortColumn Column, bool Descending = false);
 
     private void DrawExportControls()
     {
@@ -386,10 +503,22 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             _ => element.Value.ToString(),
         };
 
-    private void DrawRulePopup(int index, ObjectExplorerRow row)
+    private void DrawRulePopup(ulong objectId, ObjectExplorerRow? row)
     {
-        if (!ImGui.BeginPopup($"ADSObjectRulePopup##{index}"))
+        if (!ImGui.BeginPopup($"ADSObjectRulePopup##{objectId}"))
+        {
+            rulePopupObjectId = null;
             return;
+        }
+
+        // Keep the popup tied to its object, and retire it if that row disappears.
+        if (row is null)
+        {
+            ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+            rulePopupObjectId = null;
+            return;
+        }
 
         ImGui.TextUnformatted("Seed rule with");
         ImGui.Separator();
@@ -455,7 +584,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.EndTooltip();
     }
 
-    private sealed record ObjectExplorerRow(
+    internal sealed record ObjectExplorerRow(
         string Name,
         string ObjectKind,
         byte? Level,

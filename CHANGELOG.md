@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `/ads obj` now supports native header sorting and Shift-click priorities across all eight data columns, with nearest-first distance by default, live reordering, missing values last, and compact two-line header help. Row actions and RULE popups follow object IDs, and DhogNav availability preserves table settings.
+
 - `/ads obj` now fits columns to their contents, supports dragging dividers and double-clicking to refit, and scrolls horizontally with Name and the header frozen. Width adjustments last for the session without saving column settings.
 
 - `/ads obj` now shows Current map ID, including in Compact view. Loading, logout, and unavailable map state show Unavailable. Existing duty updates refresh the live map without changing automation rules.
