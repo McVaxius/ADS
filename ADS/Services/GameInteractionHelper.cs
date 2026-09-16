@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
+using Dalamud.Game;
 using Dalamud.Memory;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
@@ -11,6 +13,7 @@ using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
+using Lumina.Text.ReadOnly;
 using GameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace ADS.Services;
@@ -100,6 +103,9 @@ public static class GameInteractionHelper
         => TrySelectYesNo(true, Plugin.GameGui, log);
 
     public static unsafe bool TryGetSelectYesNoPromptText(IGameGui gameGui, out string promptText)
+        => TryGetSelectYesNoPromptText(gameGui, out promptText, preserveVisibleSpacing: false);
+
+    private static unsafe bool TryGetSelectYesNoPromptText(IGameGui gameGui, out string promptText, bool preserveVisibleSpacing)
     {
         promptText = string.Empty;
         try
@@ -116,8 +122,10 @@ public static class GameInteractionHelper
             if (promptNode == null || !promptNode->NodeText.StringPtr.HasValue)
                 return false;
 
-            var promptSeString = MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr));
-            promptText = promptSeString.TextValue?.Trim() ?? string.Empty;
+            // The return matcher must preserve French <nbsp> spacing just like the evaluator.
+            promptText = preserveVisibleSpacing
+                ? new ReadOnlySeString(promptNode->NodeText.AsSpan().ToArray()).ToString()
+                : MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr)).TextValue?.Trim() ?? string.Empty;
             return !string.IsNullOrWhiteSpace(promptText);
         }
         catch
@@ -125,6 +133,68 @@ public static class GameInteractionHelper
             promptText = string.Empty;
             return false;
         }
+    }
+
+    internal static bool TryAcceptReturnToEntrance(IPluginLog? log)
+        => TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt, preserveVisibleSpacing: true)
+           && IsReturnToEntrancePrompt(prompt, Plugin.ClientState.ClientLanguage,
+               row => Plugin.DataManager.GetExcelSheet<Addon>(Plugin.ClientState.ClientLanguage).GetRow(row).Text.ToMacroString(),
+               Plugin.SeStringEvaluator)
+           && ClickYesIfVisible(log);
+
+    internal static bool IsReturnToEntrancePrompt(string prompt, ClientLanguage language,
+        Func<uint, string?> getMacro, ISeStringEvaluator evaluator)
+    {
+        // Same evaluated Addon rows, destination binding, and normalization as MOGTOME GamePrompt.Return.
+        foreach (var row in new uint[] { 118, 119, 194, 197 })
+        {
+            try
+            {
+                var macro = getMacro(row);
+                const string binding = "<string(gstr56)>";
+                if (macro == null || !macro.Contains(binding, StringComparison.Ordinal)
+                    || HasUnresolvedReturnPayload(macro.Replace(binding, string.Empty, StringComparison.Ordinal)))
+                    continue;
+
+                var destination = evaluator.EvaluateMacroString(binding, language: language);
+                if (HasUnresolvedReturnPayload(destination.ToMacroString()) || string.IsNullOrWhiteSpace(destination.ToString()))
+                    continue;
+
+                var evaluated = evaluator.EvaluateFromAddon(row, language: language);
+                if (HasUnresolvedReturnPayload(evaluated.ToMacroString()))
+                    continue;
+
+                var expected = NormalizeReturnPrompt(evaluated.ToString());
+                if (expected.Contains(NormalizeReturnPrompt(destination.ToString()), StringComparison.Ordinal)
+                    && expected == NormalizeReturnPrompt(prompt))
+                    return true;
+            }
+            catch (Exception)
+            {
+                // Missing game data or unresolved native parameters never authorize a Yes click.
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasUnresolvedReturnPayload(string macro)
+        => Regex.IsMatch(Regex.Replace(macro,
+            @"<(?:-|br|nbsp|shy|colortype\(\d+\)|edgecolortype\(\d+\)|color\([^)]*\)|edgecolor\([^)]*\))>", string.Empty), "<[^>]+>");
+
+    private static string NormalizeReturnPrompt(string value)
+    {
+        var result = new StringBuilder();
+        var space = false;
+        foreach (var c in value.Normalize(NormalizationForm.FormC))
+        {
+            if (c is '\u00ad' or '\u200b' or '\ufeff') continue;
+            if (char.IsWhiteSpace(c)) { space = result.Length > 0; continue; }
+            if (space) result.Append(' ');
+            result.Append(c);
+            space = false;
+        }
+        return result.ToString();
     }
 
     public static unsafe bool TrySelectYesNo(bool yes, IGameGui gameGui, IPluginLog? log = null)

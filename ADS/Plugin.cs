@@ -67,6 +67,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
@@ -400,6 +401,8 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         Framework.Update += OnFrameworkUpdate;
         ClientState.TerritoryChanged += OnTerritoryChanged;
+        ClientState.Logout += OnLogout;
+        DutyState.DutyStarted += OnDutyStarted;
         DutyState.DutyCompleted += OnDutyCompleted;
         ChatGui.ChatMessage += OnChatMessage;
 
@@ -428,6 +431,8 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService.ReleaseHeldMovementKeys("plugin dispose");
         Framework.Update -= OnFrameworkUpdate;
         ClientState.TerritoryChanged -= OnTerritoryChanged;
+        ClientState.Logout -= OnLogout;
+        DutyState.DutyStarted -= OnDutyStarted;
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
@@ -1064,6 +1069,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool LeaveDuty()
     {
+        DutyContextService.Update(Configuration.PluginEnabled);
         if (RejectAutomationActionInExcludedTerritory("Duty leave"))
             return false;
 
@@ -2261,6 +2267,7 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            ExecutionService.ObserveDutyCompletion(DutyContextService.Current);
             RelicPurchaseTestService.Update();
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "duty-context", ref slowestSection, ref slowestMs);
@@ -2788,7 +2795,18 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private void OnDutyCompleted(IDutyStateEventArgs args)
-        => OnDutyCompleted(args.TerritoryType.RowId);
+    {
+        DutyContextService.Update(Configuration.PluginEnabled);
+        ExecutionService.MarkDutyCompleted(DutyContextService.Current,
+            args.TerritoryType.RowId, args.ContentFinderCondition.RowId);
+        OnDutyCompleted(args.TerritoryType.RowId);
+    }
+
+    private void OnDutyStarted(IDutyStateEventArgs args)
+        => ExecutionService.ResetDutyCompletion();
+
+    private void OnLogout(int type, int code)
+        => ExecutionService.ResetDutyCompletion();
 
     private void OnTerritoryChanged(uint territoryType)
         => QstCompanionWarningService.HandleTerritoryChanged();
@@ -2803,6 +2821,11 @@ public sealed class Plugin : IDalamudPlugin
         TreasurePortalOpenerTracker.ClearPendingOpener("duty completion");
         TreasurePortalOpenerRelayService.Clear("duty completion");
         BossModMultiboxFollowService.Clear("duty completion");
+        if (ExecutionService.IsLeaveRequested)
+        {
+            Log.Information($"[ADS] DutyCompleted event for {dutyName}; preserving the explicit leave request.");
+            return;
+        }
         if (!ExecutionService.IsOwned)
         {
             ObservationMemoryService.Reset();

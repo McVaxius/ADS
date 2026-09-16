@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An explicit `/ads leave` now immediately accepts a recognized localized return-to-entrance prompt when the current duty is confirmed complete and the player is dead, then resumes duty exit after respawn and zoning. Completion is scoped to the current duty and cleared on new entry, exit, or logout; completion alone, unknown completion, and unrelated dialogs never authorize this confirmation.
+
 - Shop Lists now bundles ten ARR Zodiac and HW Anima step examples through Add example. Each creates an editable, inventory-only Poetics refill preset without starting purchases or replacing existing presets. Umbrite is an adjustable 20-item batch; Mysterious Map and its farming remain with Loot Goblin.
 
 - Tomestone shop validation now reads the current currency addon's displayed prices and callback indices, cross-checks item/bundle data against AgentShop, and requires a unique currency icon match in current item data. This fixes Hismena's empty AgentShop cost slots without bypassing live price validation.

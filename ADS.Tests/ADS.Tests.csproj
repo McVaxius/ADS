@@ -14,8 +14,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ADS\ADS.csproj" />
-    <Reference Include="Dalamud">
-      <HintPath>$(appdata)\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
+    <Reference Include="Dalamud;Lumina">
+      <HintPath>$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

@@ -195,6 +195,9 @@ public sealed class ExecutionService
     private bool leaveTreasureSweepClearLogged;
     private bool leaveLootDistributionWaitLogged;
     private bool leaveDutyExitArmed;
+    private bool explicitLeaveRequested;
+    private bool leaveRespawnAccepted;
+    private (uint Territory, uint Content)? completedDuty;
     private string lastLoggedLeaveTreasureKey = string.Empty;
     private string lastLoggedLeavePromptKey = string.Empty;
     private DateTime lastLoggedLeavePromptAtUtc = DateTime.MinValue;
@@ -604,6 +607,7 @@ public sealed class ExecutionService
         ClearBossFightCombatGhost("manual leave request");
         ClearTreasureFollowerPostTransitSettle("manual leave request");
         ResetLeaveState();
+        explicitLeaveRequested = true;
         if (considerTreasureCoffers)
             BeginLeaveTreasureSweep(DateTime.UtcNow, "manual leave request");
         CurrentMode = OwnershipMode.Leaving;
@@ -612,7 +616,29 @@ public sealed class ExecutionService
             considerTreasureCoffers
                 ? "Leave requested. Final treasure sweep started before duty exit."
                 : "Leave requested. Treasure-coffer scan is off; preparing duty exit.");
+        TryHandleLeaveRespawn(context);
         return true;
+    }
+
+    internal bool IsLeaveRequested => CurrentMode == OwnershipMode.Leaving && explicitLeaveRequested;
+
+    internal void ResetDutyCompletion() => completedDuty = null;
+
+    internal void ObserveDutyCompletion(DutyContextSnapshot context)
+    {
+        // BoundByDuty and duty identity can temporarily disappear during an entrance respawn.
+        if (!context.IsLoggedIn || (!context.IsUnsafeTransition
+            && (!context.InInstancedDuty || completedDuty != (context.TerritoryTypeId, context.ContentFinderConditionId))))
+            ResetDutyCompletion();
+    }
+
+    internal void MarkDutyCompleted(DutyContextSnapshot context, uint territoryId, uint contentId)
+    {
+        ObserveDutyCompletion(context);
+        if (context.IsLoggedIn && context.InInstancedDuty
+            && territoryId != 0 && contentId != 0
+            && context.TerritoryTypeId == territoryId && context.ContentFinderConditionId == contentId)
+            completedDuty = (territoryId, contentId);
     }
 
     public bool BeginDutyCompletionTreasureSweep(DutyContextSnapshot context, string dutyName)
@@ -4841,7 +4867,14 @@ public sealed class ExecutionService
     }
 
     private void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers)
+        => UpdateLeaveDuty(context, observation, considerTreasureCoffers, TrySendLeaveDutyUi);
+
+    internal void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers,
+        Action sendLeaveUi)
     {
+        if (TryHandleLeaveRespawn(context))
+            return;
+
         var now = DateTime.UtcNow;
         if (considerTreasureCoffers && !leaveTreasureSweepStarted)
             BeginLeaveTreasureSweep(now, "leave state");
@@ -4952,7 +4985,36 @@ public sealed class ExecutionService
 
         ArmLeaveDutyExit(considerTreasureCoffers ? "final treasure sweep complete" : "treasure sweep disabled");
         StopMovementAssists();
-        TrySendLeaveDutyUi();
+        sendLeaveUi();
+    }
+
+    private bool TryHandleLeaveRespawn(DutyContextSnapshot context)
+        => TryHandleLeaveRespawn(context, objectTable.LocalPlayer?.IsDead,
+            () => GameInteractionHelper.TryAcceptReturnToEntrance(log));
+
+    internal bool TryHandleLeaveRespawn(DutyContextSnapshot context, bool? isDead, Func<bool> tryAcceptReturn)
+    {
+        ObserveDutyCompletion(context);
+        if (!IsLeaveRequested || !context.IsLoggedIn || completedDuty is null)
+            return false;
+
+        if (context.IsUnsafeTransition)
+            return true;
+
+        if (!context.InInstancedDuty || isDead == false)
+            return false;
+
+        StopMovementAssists();
+        if (isDead == true && !leaveRespawnAccepted && tryAcceptReturn())
+        {
+            leaveRespawnAccepted = true;
+            log?.Information("[ADS] Confirmed return to entrance for an explicit leave after duty completion.");
+        }
+
+        SetPhase(ExecutionPhase.LeavingDuty, leaveRespawnAccepted
+            ? "Leave requested. Return to entrance confirmed; waiting for respawn before duty exit."
+            : "Leave requested. Waiting for the completed-duty return prompt and a living player before duty exit.");
+        return true;
     }
 
     private ObservedInteractable? FindNearestLeaveSweepTreasureCoffer(
@@ -5140,6 +5202,8 @@ public sealed class ExecutionService
 
     private void ResetLeaveState()
     {
+        explicitLeaveRequested = false;
+        leaveRespawnAccepted = false;
         nextLeaveUiAttemptUtc = DateTime.MinValue;
         leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
         leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
