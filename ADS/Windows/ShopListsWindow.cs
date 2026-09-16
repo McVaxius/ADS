@@ -16,6 +16,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     private string previewState = string.Empty;
     private string newPresetName = string.Empty;
     private string renamePresetName = string.Empty;
+    private int relicExampleIndex;
     private int newItemId;
     private int newTriggerBelow = 1;
     private int newRefillToAtLeast = 1;
@@ -141,6 +142,26 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         if (ImGui.SmallButton("Copy preset ID"))
             ImGui.SetClipboardText(store.ActivePresetId.ToString("D"));
         ImGui.TextDisabled(store.ActivePresetId.ToString("D"));
+
+        var examples = ShopListExamples.RelicSteps;
+        var exampleNames = examples.Select(example => example.Name).ToArray();
+        ImGui.SetNextItemWidth(460f);
+        ImGui.Combo("Relic step example", ref relicExampleIndex, exampleNames, exampleNames.Length);
+        ImGui.SameLine();
+        if (ImGui.Button("Add example"))
+        {
+            var succeeded = service.AddExamplePreset(examples[relicExampleIndex], out var error);
+            SetStatus(succeeded, error);
+            if (succeeded)
+            {
+                renamePresetName = string.Empty;
+                settingsPresetId = Guid.Empty;
+                RefreshPreview();
+                status = "Example added as an editable preset. Review targets, then Test preset before Run Shop List.";
+            }
+        }
+        ImGui.TextWrapped(examples[relicExampleIndex].Description);
+        ImGui.TextWrapped("Examples use Poetics and inventory-only refill targets. Adjust targets for your unfinished step; Add example does not start purchases. Mysterious Map and its farming belong to Loot Goblin.");
 
         ImGui.SetNextItemWidth(240f);
         ImGui.InputText("New preset", ref newPresetName, 80);

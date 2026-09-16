@@ -31,7 +31,7 @@ internal sealed record ShopUiValidationResult(ShopUiValidationState State, int R
     public static ShopUiValidationResult Mismatch(string message) => new(ShopUiValidationState.Mismatch, -1, message);
 }
 
-internal readonly record struct ShopRuntimeNpc(Vector3 Position, float Distance);
+internal readonly record struct ShopRuntimeNpc(Vector3 Position, float Distance, bool WithinInteractionReach = false);
 
 internal readonly record struct ShopRuntimeCostValue(uint ItemId, uint Amount);
 
@@ -138,6 +138,44 @@ internal static class ShopRuntimeCostMatcher
 
 internal static class ExchangeShopRuntimeValidator
 {
+    // Current ECommons ShopExchangeCurrency layout; AgentShop's cost slots stay empty
+    // for this addon. Keep its item/bundle data as an independent row check.
+    internal static ShopUiValidationResult ValidateCurrency(
+        ReadOnlySpan<long> values,
+        string runtimeShopName,
+        ReadOnlySpan<ShopRuntimeExchangeItem> receives,
+        uint currencyItemId,
+        string expectedShopName,
+        uint expectedItemId,
+        uint expectedReceiveCount,
+        IReadOnlyList<ShopCurrencyCost> expectedCosts)
+    {
+        if (values.Length <= 4 || values[4] == 0)
+            return ShopUiValidationResult.NotReady("ShopExchangeCurrency rows are not populated yet.");
+        var count = values[4];
+        if (count is < 1 or > 122 || values.Length < 1310 + count || receives.Length != count)
+            return ShopUiValidationResult.Mismatch("ShopExchangeCurrency has an unsupported or incomplete row layout.");
+        if (currencyItemId == 0 || expectedCosts.Count != 1 || expectedCosts[0].ItemId != currencyItemId)
+            return ShopUiValidationResult.Mismatch("ShopExchangeCurrency's displayed currency does not uniquely match the expected currency item.");
+
+        var costs = new ShopRuntimeCostValue[(int)count];
+        var callbacks = new HashSet<long>();
+        for (var row = 0; row < count; row++)
+        {
+            var price = values[456 + row];
+            var callback = values[1310 + row];
+            if (values[1066 + row] != receives[row].ItemId || price is <= 0 or > uint.MaxValue
+                || callback < 0 || callback >= count || !callbacks.Add(callback))
+                return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency row {row} has inconsistent item, price, or callback data.");
+            costs[row] = new(currencyItemId, (uint)price);
+        }
+        var result = Validate(runtimeShopName, receives, costs, expectedShopName,
+            expectedItemId, expectedReceiveCount, expectedCosts);
+        return result.State == ShopUiValidationState.Valid
+            ? result with { RuntimeRow = (int)values[1310 + result.RuntimeRow] }
+            : result;
+    }
+
     public static ShopUiValidationResult Validate(
         string runtimeShopName,
         ReadOnlySpan<ShopRuntimeExchangeItem> runtimeReceives,
@@ -159,6 +197,11 @@ internal static class ExchangeShopRuntimeValidator
             return ShopUiValidationResult.NotReady("AgentShop receive rows are not populated yet.");
         if (runtimeCosts.Length == 0)
             return ShopUiValidationResult.NotReady("AgentShop cost rows are not populated yet.");
+        var hasPopulatedCost = false;
+        foreach (var cost in runtimeCosts)
+            hasPopulatedCost |= cost.ItemId != 0 || cost.Amount != 0;
+        if (!hasPopulatedCost)
+            return ShopUiValidationResult.NotReady("AgentShop allocated its cost rows but their item IDs and amounts are still empty.");
         if (runtimeCosts.Length % runtimeReceives.Length != 0)
             return ShopUiValidationResult.Mismatch("AgentShop cost rows do not form a complete rectangular receive/cost layout.");
 
@@ -167,9 +210,15 @@ internal static class ExchangeShopRuntimeValidator
             return ShopUiValidationResult.Mismatch("AgentShop does not expose one to three cost slots per receive row.");
 
         var matchingRows = new List<int>();
+        var observedRows = new List<string>();
         for (var row = 0; row < runtimeReceives.Length; row++)
         {
             var receive = runtimeReceives[row];
+            if (receive.ItemId == expectedItemId && observedRows.Count < 3)
+            {
+                var rowCosts = runtimeCosts.Slice(row * costsPerReceive, costsPerReceive).ToArray();
+                observedRows.Add($"row={row}, receive={receive.ItemId}x{receive.ItemCount}, costs=[{string.Join(",", rowCosts.Select(cost => $"{cost.ItemId}x{cost.Amount}"))}]");
+            }
             if (receive.ItemId != expectedItemId || receive.ItemCount != expectedReceiveCount)
                 continue;
             if (ShopRuntimeCostMatcher.Matches(runtimeCosts.Slice(row * costsPerReceive, costsPerReceive), expectedCosts))
@@ -181,7 +230,9 @@ internal static class ExchangeShopRuntimeValidator
             1 => ShopUiValidationResult.Valid(
                 matchingRows[0],
                 $"AgentShop validated SpecialShop '{expectedShopName}', item {expectedItemId}, bundle {expectedReceiveCount}, and exact costs at row {matchingRows[0]}."),
-            0 => ShopUiValidationResult.Mismatch("The active AgentShop has no row matching the sheet item, non-HQ identity, bundle count, currency IDs, and costs."),
+            0 => ShopUiValidationResult.Mismatch(
+                $"The active AgentShop has no exact row for {expectedItemId}x{expectedReceiveCount}, costs=[{string.Join(",", expectedCosts.Select(cost => $"{cost.ItemId}x{cost.AmountPerTransaction}"))}]. "
+                + $"Live rows={runtimeReceives.Length}, costsPerRow={costsPerReceive}; matching-item rows: {string.Join("; ", observedRows.DefaultIfEmpty("none"))}."),
             _ => ShopUiValidationResult.Mismatch("The active AgentShop has multiple indistinguishable matching rows; ADS will not guess."),
         };
     }
@@ -243,6 +294,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private ShopConfirmationToken? confirmationToken;
     private string? readableOwnedSelectYesNoPrompt;
     private bool unreadableOwnedSelectYesnoWarningLogged;
+    private DateTime nextRelicUiCleanupUtc;
 
     private interface IShopUiAdapter
     {
@@ -317,6 +369,30 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         && !condition[ConditionFlag.WatchingCutscene]
         && !condition[ConditionFlag.RidingPillion];
     public uint CurrentTerritoryId => clientState.TerritoryType;
+    internal bool IsRelicPurchaseReady
+    {
+        get
+        {
+            if (!IsPlayerAvailable || condition[ConditionFlag.InCombat])
+                return false;
+            var inventory = InventoryManager.Instance();
+            if (inventory == null)
+                return false;
+            foreach (var type in RegularInventoryTypes.Append(InventoryType.Currency))
+            {
+                var container = inventory->GetInventoryContainer(type);
+                if (container == null || !container->IsLoaded)
+                    return false;
+            }
+            return true;
+        }
+    }
+
+    internal string? RelicPurchaseCleanupBlocker
+        => HasUnexpectedConfirmation || IsSelectionMenuVisible || IsAnyShopVisible
+            ? "shop, menu, or confirmation UI remains open"
+            : !TryGetNavigationRunning(out var running) ? "navigation stop could not be verified"
+            : running ? "navigation is still active" : null;
     public byte CurrentGrandCompany
     {
         get
@@ -590,7 +666,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         if (nearest == null)
             return false;
-        npc = new ShopRuntimeNpc(nearest.Position, nearestDistance);
+        var reach = ExecutionService.GetInteractionReach(nearestDistance, player.HitboxRadius, nearest.HitboxRadius);
+        npc = new ShopRuntimeNpc(nearest.Position, nearestDistance,
+            reach <= ExecutionService.GetInteractionAttemptPolicy(closeRecoveryArmed: false).AttemptRange);
         return true;
     }
 
@@ -840,14 +918,15 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     public void CloseOwnedShopUi()
     {
         foreach (var adapter in UiAdapters)
-            GameInteractionHelper.TryCloseAddon(adapter.AddonName, log);
-        GameInteractionHelper.TryCloseAddon("InclusionShop", log);
-        GameInteractionHelper.TryCloseAddon("GrandCompanyExchange", log);
-        GameInteractionHelper.TryCloseAddon("FreeCompanyCreditShop", log);
-        GameInteractionHelper.TryCloseAddon("ShopExchangeItemDialog", log);
-        GameInteractionHelper.TryCloseAddon("ShopExchangeCurrencyDialog", log);
-        GameInteractionHelper.TryCloseAddon("SelectIconString", log);
-        GameInteractionHelper.TryCloseAddon("SelectString", log);
+            CloseShopAddon(adapter.AddonName);
+        CloseShopAddon("InclusionShop");
+        CloseShopAddon("GrandCompanyExchange");
+        CloseShopAddon("FreeCompanyCreditShop");
+        CloseShopAddon("ShopExchangeItemDialog");
+        CloseShopAddon("ShopExchangeCurrencyDialog");
+        CloseShopAddon("SelectIconString");
+        CloseShopAddon("SelectString");
+        nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
         inclusionRouteKey = string.Empty;
         inclusionSelectionStage = 0;
         grandCompanyRouteKey = string.Empty;
@@ -855,6 +934,24 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         readableOwnedSelectYesNoPrompt = null;
         unreadableOwnedSelectYesnoWarningLogged = false;
         confirmationToken = null;
+    }
+
+    internal void ContinueRelicUiCleanup()
+    {
+        // Closing an exchange can return to its parent menu on a later frame.
+        // The opt-in test owns a ten-second cleanup phase, including after reload.
+        if (DateTime.UtcNow >= nextRelicUiCleanupUtc && (IsAnyShopVisible || IsSelectionMenuVisible))
+            CloseOwnedShopUi();
+    }
+
+    private void CloseShopAddon(string name)
+    {
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(name);
+        if (addon == null || !addon->IsVisible)
+            return;
+        // Send the shop's cancel response; Close(true) can leave its NPC event active.
+        addon->FireCallbackInt(-1);
+        log.Debug("[ADS][Shop] Dispatched shop cancel callback for {Addon}.", name);
     }
 
     private void WarnUnreadableOwnedSelectYesno(ShopConfirmationToken token)
@@ -872,13 +969,16 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     {
         try
         {
-            running = Plugin.PluginInterface.GetIpcSubscriber<bool>(PathIsRunningIpc).InvokeFunc();
+            // A pending /vnav moveto can install a path after Path.Stop has returned.
+            // Keep the runner in its existing stop phase until both stages are idle.
+            running = Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress").InvokeFunc()
+                || Plugin.PluginInterface.GetIpcSubscriber<bool>(PathIsRunningIpc).InvokeFunc();
             return true;
         }
         catch (Exception ex)
         {
             running = true;
-            log.Debug(ex, "[ADS][Shop] vnavmesh Path.IsRunning IPC was unavailable; navigation stop is unverified.");
+            log.Debug(ex, "[ADS][Shop] vnavmesh movement or pathfinding state was unavailable; navigation stop is unverified.");
             return false;
         }
     }
@@ -1246,11 +1346,28 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         var runtimeReceives = new ShopRuntimeExchangeItem[receives.Length];
         for (var index = 0; index < receives.Length; index++)
             runtimeReceives[index] = new ShopRuntimeExchangeItem(receives[index].ItemId, receives[index].ItemCount);
+        if (offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone)
+        {
+            if (offer.Offer.AllOutputs.Count != 1)
+                return ShopUiValidationResult.Mismatch("ShopExchangeCurrency cannot validate a multi-output exchange.");
+            var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+            if (addon == null || !addon->IsVisible || addon->AtkValues == null || addon->AtkValuesCount <= 87)
+                return ShopUiValidationResult.NotReady("ShopExchangeCurrency addon values are not ready.");
+            var icon = ReadUnsigned(addon->AtkValues[87]);
+            var currencies = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()
+                .Where(item => item.Icon == icon).Take(2).ToArray();
+            var currencyId = icon > 0 && currencies.Length == 1 ? currencies[0].RowId : 0;
+            var values = new long[Math.Min(1432, (int)addon->AtkValuesCount)];
+            for (var index = 0; index < values.Length; index++)
+                values[index] = ReadSigned(addon->AtkValues[index]);
+            return ExchangeShopRuntimeValidator.ValidateCurrency(values, agent->ShopName.ToString(), runtimeReceives,
+                currencyId, offer.Offer.ShopName, offer.Offer.ReceiveItemId, offer.Offer.ReceiveCount, offer.Offer.Currencies);
+        }
         var runtimeCosts = new ShopRuntimeCostValue[costs.Length];
         for (var index = 0; index < costs.Length; index++)
             runtimeCosts[index] = new ShopRuntimeCostValue(costs[index].ItemId, costs[index].ItemCount);
 
-        return ExchangeShopRuntimeValidator.Validate(
+        var validation = ExchangeShopRuntimeValidator.Validate(
             agent->ShopName.ToString(),
             runtimeReceives,
             runtimeCosts,
@@ -1258,6 +1375,14 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             offer.Offer.ReceiveItemId,
             offer.Offer.ReceiveCount,
             offer.Offer.Currencies);
+        if (validation.State == ShopUiValidationState.Mismatch)
+        {
+            var populatedCosts = runtimeCosts.Select((cost, index) => (cost, index))
+                .Where(entry => entry.cost.ItemId != 0 || entry.cost.Amount != 0).Take(18);
+            validation = validation with { Message = validation.Message + " Native cost slots: "
+                + string.Join(",", populatedCosts.Select(entry => $"{entry.index}:{entry.cost.ItemId}x{entry.cost.Amount}")) + "." };
+        }
+        return validation;
     }
 
     private static IShopUiAdapter GetAdapter(ShopOfferKind kind)

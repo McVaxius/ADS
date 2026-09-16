@@ -115,6 +115,16 @@ internal enum ShopAvailability
 
 public readonly record struct ShopCurrencyIdentity(ShopCurrencyKind Kind, uint ItemId);
 
+// Saved before an opt-in single-item purchase callback so an interrupted run can be
+// reconciled without assuming that a missing terminal status means no purchase occurred.
+internal sealed record ShopPurchaseCheckpoint(
+    uint ItemId,
+    int Quantity,
+    long ItemCountBefore,
+    ShopCurrencyIdentity Currency,
+    long CurrencyBefore,
+    long CurrencyCost);
+
 public sealed record ShopCurrencyCost(
     ShopCurrencyKind Kind,
     uint ItemId,

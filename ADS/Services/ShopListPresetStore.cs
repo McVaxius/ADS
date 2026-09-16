@@ -120,6 +120,34 @@ public sealed class ShopListPresetStore
         }, out error);
     }
 
+    internal bool AddExample(ShopListExample example, out string error)
+    {
+        if (manifest.Presets.Any(x => NamesEqual(x.Name, example.Name)))
+        {
+            error = $"Preset '{example.Name}' already exists; rename it before adding another example.";
+            return false;
+        }
+
+        return Commit(candidate =>
+        {
+            var preset = NewPreset(example.Name);
+            preset.Mode = ShopListMode.TargetedRefill;
+            preset.CurrencyKind = ShopCurrencyKind.Tomestone;
+            preset.CurrencyItemId = 28;
+            preset.Items = example.Items.Select(item => new ShopListItem
+            {
+                RowId = Guid.NewGuid(),
+                ItemId = item.ItemId,
+                TriggerBelow = item.Quantity,
+                RefillToAtLeast = item.Quantity,
+                Repeatable = false,
+                OwnershipScope = ShopListOwnershipScope.InventoryOnly,
+            }).ToList();
+            candidate.Presets.Add(preset);
+            candidate.ActivePresetId = preset.PresetId;
+        }, out error);
+    }
+
     public bool DeleteActive(out string error)
     {
         var active = ActivePreset;

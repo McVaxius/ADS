@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Shop Lists now bundles ten ARR Zodiac and HW Anima step examples through Add example. Each creates an editable, inventory-only Poetics refill preset without starting purchases or replacing existing presets. Umbrite is an adjustable 20-item batch; Mysterious Map and its farming remain with Loot Goblin.
+
+- Tomestone shop validation now reads the current currency addon's displayed prices and callback indices, cross-checks item/bundle data against AgentShop, and requires a unique currency icon match in current item data. This fixes Hismena's empty AgentShop cost slots without bypassing live price validation.
+- Shopping cleanup sends the shop cancel callback so the NPC event can finish. The relic test closes any returning parent shop menu within its existing bounded cleanup phase before dispatching the next item.
+- Shop cleanup now waits for pending vnavmesh pathfinding as well as active movement before reporting a stopped path. Failed exchange-row validation reports bounded live item and currency values, and navigation timeouts report the remaining vendor distance.
+- Shop vendors behind counters now use ADS's existing hitbox-adjusted interaction reach. An already reachable vendor does not start a new path, and arrival within that reach stops the owned path before interaction.
+- Relic-test reload cleanup explicitly invokes the existing shopping navigation stop, including a path left behind by an earlier finished runner.
+
+- Added the opt-in relic purchase debug test under Main > Tools (Show debug sections). It binds to the character that arms it, attempts one additional item per material using only Poetics, and saves verified progress across reloads. Stop retains the reload selection; disabling it cancels pending and active work. Interrupted purchases require exact item and currency reconciliation before retrying, and completed tests remain idle until explicitly reset.
+- The relic test covers the 13 direct-shop ARR Zodiac and Heavensward Anima materials. Mysterious Map and its farming belong to Loot Goblin and are excluded from the test. Completion checks the required item IDs, preserving the existing task selection, character binding, and all saved successes without a reset or migration. Unique-item ownership, currency, capacity, unlock, and runtime shop checks remain enforced. Existing public shopping IPC behavior is preserved.
+- Live verification completed the 13 normal-shop materials, each with an exact +1 item and matching Poetics decrease; saved progress survived reload and the finished pass left no interrupted purchase. Mysterious Map remains unpurchased.
+
 - Fixed Magitek Armor interactions using hitbox-adjusted reach for the existing `2.0y` initial and `1.5y` close-recovery attempt gates. Rule matching, navigation, diagnostics, settling, cooldowns, attempt limits, and mounted-state completion are unchanged.
 - Corrected the Praetorium Research Level `XYZForceMarch` destination in BotologyUpdates to Nero's arena centre at `-164,-103.8,0`, preserving its Y coordinate, priority, completion behavior, and separate ordinary waypoint.
 

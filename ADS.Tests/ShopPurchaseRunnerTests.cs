@@ -136,6 +136,54 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void CurrencyExchangeUsesDisplayedPricesAndCallbackIndicesWithIndependentItemChecks()
+    {
+        uint[] ids = [16934, 16933, 16064, 15840, 14899, 13582, 13584, 13586, 13588, 9540, 7885, 6267, 6268, 7777];
+        uint[] prices = [500, 100, 40, 75, 350, 150, 150, 150, 150, 200, 25, 15, 20, 250];
+        var receives = ids.Select(id => new ShopRuntimeExchangeItem(id, 1)).ToArray();
+        var values = Enumerable.Repeat(-1L, 1432).ToArray();
+        values[4] = ids.Length;
+        for (var row = 0; row < ids.Length; row++)
+        {
+            values[456 + row] = prices[row];
+            values[1066 + row] = ids[row];
+            values[1310 + row] = ids.Length - row - 1;
+        }
+        ShopUiValidationResult Validate(uint currencyId = 28) => ExchangeShopRuntimeValidator.ValidateCurrency(
+            values, "Poetics", receives, currencyId, "Poetics", 6267, 1,
+            [new(ShopCurrencyKind.Tomestone, 28, "Poetics", 15)]);
+
+        Assert.Equal(ShopUiValidationState.Valid, Validate().State);
+        Assert.Equal(2, Validate().RuntimeRow);
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate(29).State);
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate(0).State);
+        values[467] = 20;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[467] = 15;
+        values[1077] = 6268;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[1077] = 6267;
+        values[1321] = values[1322];
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[1321] = -1;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[4] = 123;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[4] = 0;
+        Assert.Equal(ShopUiValidationState.NotReady, Validate().State);
+    }
+
+    [Fact]
+    public void ExchangeAllocatedButEmptyCostsWaitWithoutAcceptingTheRow()
+    {
+        var result = ExchangeShopRuntimeValidator.Validate("Poetics", [new(6267, 1)],
+            [new(0, 0), new(0, 0), new(0, 0)], "Poetics", 6267, 1,
+            [new(ShopCurrencyKind.Tomestone, 28, "Poetics", 15)]);
+        Assert.Equal(ShopUiValidationState.NotReady, result.State);
+        Assert.Equal(-1, result.RuntimeRow);
+    }
+
+    [Fact]
     public void UiMismatchNeverSubmitsPurchase()
     {
         var clock = new FakeClock();
@@ -707,6 +755,37 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void VendorBehindCounterWithinInteractionReachDoesNotStartAnotherPath()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NpcDistances[100] = 4.5f;
+        runtime.NpcWithinInteractionReach.Add(100);
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(0, runtime.MoveCount);
+        Assert.Equal([100u], runtime.InteractedNpcIds);
+    }
+
+    [Fact]
+    public void ReachingCounterInteractionRangeStopsOwnedPathBeforeInteraction()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NpcDistances[100] = 20;
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        runner.Update();
+        Assert.Equal(1, runtime.MoveCount);
+        runtime.NpcDistances[100] = 4.5f;
+        runtime.NpcWithinInteractionReach.Add(100);
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.MoveCount);
+        Assert.True(runtime.Events.IndexOf("stop-navigation") < runtime.Events.IndexOf("interact:100"));
+    }
+
+    [Fact]
     public void FloorResolutionFailureAdvancesBeforeAnyPurchaseCallback()
     {
         var clock = new FakeClock();
@@ -1137,6 +1216,196 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void CheckpointIsSavedBeforeCallbackAndVerifiedOnlyAfterExactAdditionalPurchase()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ItemCount = 7 };
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        ShopPurchaseCheckpoint? saved = null;
+        ShopPurchaseCheckpoint? verified = null;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics,
+            checkpoint =>
+            {
+                Assert.Equal(0, runtime.SubmitCount);
+                Assert.True(runner.HasPurchaseSubmission);
+                saved = checkpoint;
+            },
+            checkpoint =>
+            {
+                Assert.Equal(1, runtime.SubmitCount);
+                Assert.Equal(8, runtime.ItemCount);
+                verified = checkpoint;
+            }));
+
+        Drive(runner);
+
+        Assert.Equal(new ShopPurchaseCheckpoint(100, 1, 7, Poetics, 10_000, 150), saved);
+        Assert.Same(saved, verified);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void CheckpointVerificationWaitsForBothExactDeltas()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var verified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => { }, _ => verified++));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        runtime.ItemCount = 1;
+        runtime.AdjustCurrency(Poetics, -149);
+        runner.Update();
+        Assert.Equal(0, verified);
+        Assert.True(runner.IsRunning);
+
+        runtime.AdjustCurrency(Poetics, -1);
+        runner.Update();
+        runner.Update();
+        Assert.Equal(1, verified);
+        Assert.True(runner.Status.Succeeded);
+    }
+
+    [Theory]
+    [InlineData(2, 150)]
+    [InlineData(1, 151)]
+    public void ContradictoryCheckpointDeltasNeverReportVerified(int itemDelta, int currencyDelta)
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var verified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => { }, _ => verified++));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        runtime.ItemCount = itemDelta;
+        runtime.AdjustCurrency(Poetics, -currencyDelta);
+        runner.Update();
+
+        Assert.False(runner.Status.Succeeded);
+        Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.Status.FailureCode);
+        Assert.Equal(0, verified);
+        Assert.True(runner.HasPurchaseSubmission);
+    }
+
+    [Fact]
+    public void CheckpointPersistenceFailurePreventsPurchaseAndRetainsSubmissionUncertainty()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var verified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics,
+            _ => throw new IOException("Fixture save failure"), _ => verified++));
+
+        Drive(runner);
+
+        Assert.False(runner.Status.Succeeded);
+        Assert.Contains("Fixture save failure", runner.Status.FailureMessage);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, verified);
+        Assert.True(runner.HasPurchaseSubmission);
+    }
+
+    [Fact]
+    public void RejectedCheckpointStartCannotInvokeAnEarlierCompletionHook()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var earlierVerified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => { }, _ => earlierVerified++));
+        Drive(runner);
+        Assert.Equal(1, earlierVerified);
+
+        runtime.HasVnavmesh = false;
+        var newSaved = 0;
+        var newVerified = 0;
+        Assert.False(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => newSaved++, _ => newVerified++));
+        runner.Update();
+
+        Assert.Equal(0, newSaved);
+        Assert.Equal(0, newVerified);
+        Assert.Equal(1, earlierVerified);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.True(runner.Status.Succeeded); // Existing public IPC status still describes the earlier run.
+    }
+
+    [Fact]
+    public void CheckpointHooksDoNotLeakIntoTheNextPublicPurchase()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var saved = 0;
+        var verified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => saved++, _ => verified++));
+        Drive(runner);
+        Assert.True(runner.HasPurchaseSubmission);
+
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Assert.False(runner.HasPurchaseSubmission);
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(2, runtime.ItemCount);
+        Assert.Equal(2, runtime.SubmitCount);
+        Assert.Equal(1, saved);
+        Assert.Equal(1, verified);
+    }
+
+    [Fact]
+    public void CheckpointCancellationAfterSubmissionRetainsPendingPurchaseWithoutVerification()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var saved = 0;
+        var verified = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics, _ => saved++, _ => verified++));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        runner.Cancel("Fixture stop");
+        runtime.ItemCount = 1;
+        runtime.AdjustCurrency(Poetics, -150);
+        runner.Update();
+
+        Assert.Equal(1, saved);
+        Assert.Equal(0, verified);
+        Assert.True(runner.HasPurchaseSubmission);
+        Assert.Equal(ShopPurchaseFailureCodes.Cancelled, runner.Status.FailureCode);
+    }
+
+    [Fact]
+    public void CheckpointEntryRejectsLargerQuantityBeforeStarting()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        var hookCalls = 0;
+
+        Assert.False(runner.Start(new ShopPurchaseRequest(100, 2), false, Poetics,
+            _ => hookCalls++, _ => hookCalls++));
+
+        Assert.False(runner.IsRunning);
+        Assert.False(runner.HasPurchaseSubmission);
+        Assert.Equal(ShopPurchaseFailureCodes.InvalidRequest, runner.LastStartFailureCode);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, hookCalls);
+    }
+
+    [Fact]
+    public void CheckpointEntryNeverFallsBackToAnotherCurrency()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        var hookCalls = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, Poetics,
+            _ => hookCalls++, _ => hookCalls++));
+
+        Drive(runner);
+
+        Assert.False(runner.Status.Succeeded);
+        Assert.False(runner.HasPurchaseSubmission);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, hookCalls);
+    }
+
+    [Fact]
     public void OverallTimeoutStopsFutureCallbacks()
     {
         var clock = new FakeClock();
@@ -1155,6 +1424,18 @@ public sealed class ShopPurchaseRunnerTests
 
     private static ShopPurchaseRunner CreateRunner(int quantity, FakeRuntime runtime, FakeClock clock)
         => new(new FakeCatalog(Resolution(quantity, [Offer(10, 100, quantity)])), runtime, clock);
+
+    private static readonly ShopCurrencyIdentity Poetics = new(ShopCurrencyKind.Tomestone, 28);
+
+    private static ShopPurchaseRunner CreatePoeticsRunner(FakeRuntime runtime, FakeClock clock)
+        => new(new FakeCatalog(Resolution(1,
+        [
+            Offer(10, 100, 1) with
+            {
+                Kind = ShopOfferKind.SpecialShopTomestone,
+                Currencies = [new ShopCurrencyCost(ShopCurrencyKind.Tomestone, 28, "Poetics", 150)],
+            },
+        ])), runtime, clock);
 
     private static ShopUiValidationResult ValidateGil(
         uint activeShopId = 262_191,
@@ -1247,6 +1528,7 @@ public sealed class ShopPurchaseRunnerTests
         {
             [new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500)] = 10_000,
             [new ShopCurrencyIdentity(ShopCurrencyKind.Gil, 1)] = 10_000,
+            [new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28)] = 10_000,
         };
 
         public bool IsLoggedIn { get; set; } = true;
@@ -1286,6 +1568,7 @@ public sealed class ShopPurchaseRunnerTests
         public List<string> Events { get; } = [];
         public List<Vector3> MoveDestinations { get; } = [];
         public Dictionary<uint, float> NpcDistances { get; } = [];
+        public HashSet<uint> NpcWithinInteractionReach { get; } = [];
         public Dictionary<uint, Vector3> NpcPositions { get; } = [];
         public HashSet<uint> MissingNpcIds { get; } = [];
         public Dictionary<uint, bool> InteractionResults { get; } = [];
@@ -1349,7 +1632,7 @@ public sealed class ShopPurchaseRunnerTests
             var position = NpcPositions.TryGetValue(npcId, out var configuredPosition)
                 ? configuredPosition
                 : Vector3.Zero;
-            npc = new ShopRuntimeNpc(position, distance);
+            npc = new ShopRuntimeNpc(position, distance, NpcWithinInteractionReach.Contains(npcId));
             return true;
         }
 

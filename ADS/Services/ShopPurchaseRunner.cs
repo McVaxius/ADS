@@ -64,6 +64,9 @@ internal sealed class ShopPurchaseRunner
     private long initialItemCount;
     private long lastVerifiedItemCount;
     private bool anyPurchaseCallbackSent;
+    private Action<ShopPurchaseCheckpoint>? beforeSubmit;
+    private Action<ShopPurchaseCheckpoint>? purchaseVerified;
+    private ShopPurchaseCheckpoint? callbackCheckpoint;
     private bool teleportCommandAccepted;
     private bool navigationOwned;
     private System.Numerics.Vector3? navigationDestination;
@@ -107,6 +110,7 @@ internal sealed class ShopPurchaseRunner
     public bool IsRunning => status.Running;
     public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
     internal string? LastStartFailureCode => lastStartFailureCode;
+    internal bool HasPurchaseSubmission => anyPurchaseCallbackSent || callbackCheckpoint != null;
 
     public ShopPurchasePreviewResult Preview(ShopPurchaseRequest purchaseRequest)
         => Preview(purchaseRequest, null);
@@ -217,10 +221,26 @@ internal sealed class ShopPurchaseRunner
         ShopCurrencyIdentity requiredCurrency)
         => StartCore(purchaseRequest, holdShopOpenOnSuccess, requiredCurrency);
 
+    internal bool Start(
+        ShopPurchaseRequest purchaseRequest,
+        bool holdShopOpenOnSuccess,
+        ShopCurrencyIdentity requiredCurrency,
+        Action<ShopPurchaseCheckpoint> beforeSubmit,
+        Action<ShopPurchaseCheckpoint> verified)
+    {
+        ArgumentNullException.ThrowIfNull(beforeSubmit);
+        ArgumentNullException.ThrowIfNull(verified);
+        if (purchaseRequest.Quantity != 1)
+            return RejectStart("Checkpointed purchases require exactly one additional item.", ShopPurchaseFailureCodes.InvalidRequest);
+        return StartCore(purchaseRequest, holdShopOpenOnSuccess, requiredCurrency, beforeSubmit, verified);
+    }
+
     private bool StartCore(
         ShopPurchaseRequest purchaseRequest,
         bool? holdShopOpenOnSuccess,
-        ShopCurrencyIdentity? requiredCurrency)
+        ShopCurrencyIdentity? requiredCurrency,
+        Action<ShopPurchaseCheckpoint>? beforeSubmit = null,
+        Action<ShopPurchaseCheckpoint>? verified = null)
     {
         if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out purchaseRequest, out var validationError))
             return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
@@ -273,6 +293,9 @@ internal sealed class ShopPurchaseRunner
         initialItemCount = runtime.GetItemCount(request.ItemId);
         lastVerifiedItemCount = initialItemCount;
         anyPurchaseCallbackSent = false;
+        this.beforeSubmit = beforeSubmit;
+        purchaseVerified = verified;
+        callbackCheckpoint = null;
         teleportCommandAccepted = false;
         navigationOwned = false;
         navigationDestination = null;
@@ -622,7 +645,7 @@ internal sealed class ShopPurchaseRunner
             : navigationDestination ?? selected.Route.NpcPosition;
         var distance = hasNpc ? npc.Distance : System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination);
         var reachedOfflineStandOff = hasNpc && HasReachedOfflineInteractionStandOff();
-        if (distance <= InteractionDistance || reachedOfflineStandOff)
+        if (distance <= InteractionDistance || (hasNpc && npc.WithinInteractionReach) || reachedOfflineStandOff)
         {
             if (reachedOfflineStandOff)
                 diagnostic("Reached the floor-resolved offline vendor stand-off; preserving it for the bounded NPC interaction.");
@@ -666,6 +689,7 @@ internal sealed class ShopPurchaseRunner
 
         if (clock.UtcNow - phaseStartedAtUtc > NavigationTimeout)
         {
+            diagnostic($"Navigation timed out: liveNpc={hasNpc}, distance={distance:F2}, player={runtime.PlayerPosition}, destination={destination}.");
             TryFallbackOrFail(ShopPurchaseFailureCodes.Timeout, "Navigation to the selected shop NPC timed out.");
             return;
         }
@@ -691,6 +715,11 @@ internal sealed class ShopPurchaseRunner
         {
             navigationDestination = npc.Position;
             navigationUsingLiveNpc = true;
+            if (npc.WithinInteractionReach)
+            {
+                diagnostic("Live vendor is within hitbox-adjusted interaction reach; no movement is needed.");
+                return;
+            }
             TryMoveNow(npc.Position);
             return;
         }
@@ -835,7 +864,7 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc) && npc.Distance > InteractionDistance)
+        if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc) && npc.Distance > InteractionDistance && !npc.WithinInteractionReach)
         {
             if (!HasReachedOfflineInteractionStandOff())
             {
@@ -1023,6 +1052,30 @@ internal sealed class ShopPurchaseRunner
         }
 
         callbackCurrenciesBefore = before;
+        if (beforeSubmit != null)
+        {
+            if (callbackTransactions != 1 || selected.Offer.ReceiveCount != 1
+                || selected.Offer.AllOutputs.Count != 1
+                || selected.Offer.AllOutputs[0].ItemId != request.ItemId
+                || selected.Offer.AllOutputs[0].Count != 1
+                || selected.Offer.Currencies.Count != 1)
+            {
+                Fail(ShopPurchaseFailureCodes.UnsupportedOffer, "Checkpointed purchases require one item and one currency.");
+                return;
+            }
+
+            var currency = selected.Offer.Currencies[0];
+            callbackCheckpoint = new ShopPurchaseCheckpoint(
+                request.ItemId,
+                1,
+                callbackItemCountBefore,
+                currency.Identity,
+                before[currency.Identity],
+                currency.AmountPerTransaction);
+            // Persistence must finish before any callback can buy or open a confirmation.
+            // An exception leaves the marker intact and Update fails without sending it.
+            beforeSubmit(callbackCheckpoint);
+        }
         if (!runtime.SubmitPurchase(selected, validation.RuntimeRow, callbackTransactions))
         {
             Fail(ShopPurchaseFailureCodes.UiMismatch, "The validated shop callback was not accepted; ADS did not retry it.");
@@ -1095,6 +1148,8 @@ internal sealed class ShopPurchaseRunner
 
         if (itemDelta == expectedItemDelta && outputsComplete && currenciesComplete)
         {
+            if (callbackCheckpoint != null)
+                purchaseVerified!(callbackCheckpoint);
             lastVerifiedItemCount = currentItemCount;
             lastVerifiedCurrencies = selected.Offer.Currencies
                 .ToDictionary(currency => currency.Identity, runtime.GetAvailableCurrency);

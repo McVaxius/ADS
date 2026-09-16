@@ -222,6 +222,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Server Events", plugin.ToggleServerEventExplorerUi),
             ("VFX Explorer", plugin.ToggleVfxExplorerUi));
 
+        if (plugin.Configuration.ShowDebugSections)
+            DrawRelicPurchaseTest();
+
         ImGui.Spacing();
         ImGui.TextUnformatted("Windows And Settings");
         DrawLauncherGrid(
@@ -252,6 +255,47 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
         ImGui.Spacing();
         ImGui.TextWrapped(PluginInfo.Summary);
+    }
+
+    private void DrawRelicPurchaseTest()
+    {
+        ImGui.Spacing();
+        if (!ImGui.CollapsingHeader("Relic purchase test"))
+            return;
+        var test = plugin.RelicPurchaseTestService;
+        var selected = test.IsSelected;
+        if (ImGui.Checkbox("Attempt remaining items after reload", ref selected))
+            test.SetSelected(selected);
+        ImGui.TextWrapped("Buys one additional item of each of the 13 direct-shop ARR Zodiac and Heavensward Anima Poetics materials. Mysterious Map and its farming belong to Loot Goblin. Existing stock and refill thresholds are ignored; currency, unique-item limits, capacity, and unlocks still apply.");
+        ImGui.TextWrapped(plugin.Configuration.RelicPurchaseTest.CharacterId == 0 ? "Character: not bound."
+            : test.IsBoundCharacter ? "Character: bound to this character." : "Character: bound to another character; purchases blocked.");
+        using (new ImGuiDisabledBlock(!test.IsSelected || !test.IsBoundCharacter || test.IsRunning))
+        {
+            if (ImGui.Button("Run remaining now"))
+                test.RunRemainingNow();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Stop##RelicPurchaseTest"))
+            test.Stop();
+        ImGui.SameLine();
+        using (new ImGuiDisabledBlock(test.IsRunning))
+        {
+            if (ImGui.Button("Reset progress"))
+                ImGui.OpenPopup("Reset relic purchase progress?");
+        }
+        if (ImGui.BeginPopup("Reset relic purchase progress?"))
+        {
+            ImGui.TextWrapped("Resetting allows another purchase of every completed item. Unresolved purchases cannot be discarded.");
+            if (ImGui.Button("Reset confirmed"))
+            {
+                test.ResetProgress();
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.EndPopup();
+        }
+        ImGui.TextWrapped($"Current action: {test.CurrentAction}");
+        foreach (var item in RelicPurchaseTestCatalog.Items)
+            ImGui.TextWrapped($"{item.Name}: {test.ItemStatus(item.ItemId)}");
     }
 
     private void DrawLauncherGrid(string id, params (string Label, Action Action)[] launchers)

@@ -209,7 +209,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly DesynthDutyLedgerStore desynthDutyLedgerStore;
     private readonly ShopCatalogService shopCatalogService;
     private readonly ShopPurchaseRunner shopPurchaseRunner;
-    private readonly IShopPurchaseRuntime shopPurchaseRuntime;
+    private readonly DalamudShopPurchaseRuntime shopPurchaseRuntime;
     private readonly Func<bool> isDutyOwned;
     private readonly Func<bool> isInnEntryRunning;
     private readonly Dictionary<uint, int?> repairIndexCache = [];
@@ -375,6 +375,11 @@ public sealed unsafe class UtilityAutomationService
     public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
     public bool IsShopPurchaseRunning => activeTask == UtilityTask.ShopPurchase && shopPurchaseRunner.IsRunning;
     public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
+    internal bool HasShopPurchaseSubmission => shopPurchaseRunner.HasPurchaseSubmission;
+    internal bool IsRelicPurchaseReady => shopPurchaseRuntime.IsRelicPurchaseReady;
+    internal ShopNavigationStopResult StopRelicPurchaseNavigation() => shopPurchaseRuntime.TryStopNavigation();
+    internal string? RelicPurchaseCleanupBlocker => IsRunning ? "ADS utility cleanup is still active"
+        : shopPurchaseRuntime.RelicPurchaseCleanupBlocker;
     public ShopListBatchStatusSnapshot ShopListBatchStatus => shopListBatchStatus;
 
     internal ShopPurchasePreviewResult PreviewShopPurchase(uint itemId, int quantity)
@@ -511,6 +516,7 @@ public sealed unsafe class UtilityAutomationService
     /// one. <see cref="Cancel"/> cannot: it early-returns unless a run is active, which a finished chain
     /// never is.</summary>
     public bool ReleaseHeldShopUi() => shopPurchaseRunner.ReleaseHeldShopUi();
+    internal void ContinueRelicPurchaseCleanup() => shopPurchaseRuntime.ContinueRelicUiCleanup();
     public bool ExtractMateriaDone => extractMateriaDone;
     public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
     public string ExtractMateriaStatusMessage => IsExtractMateriaRunning ? StatusMessage : extractMateriaStatusMessage;
@@ -724,6 +730,14 @@ public sealed unsafe class UtilityAutomationService
     }
 
     public bool StartShopPurchase(ShopPurchaseRequest request)
+        => StartShopPurchaseCore(request, null, null, null);
+
+    internal bool StartShopPurchase(ShopPurchaseRequest request, ShopCurrencyIdentity currency,
+        Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified)
+        => StartShopPurchaseCore(request, currency, beforeSubmit, verified);
+
+    private bool StartShopPurchaseCore(ShopPurchaseRequest request, ShopCurrencyIdentity? currency,
+        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified)
     {
         if (IsRunning)
         {
@@ -733,7 +747,10 @@ public sealed unsafe class UtilityAutomationService
             return false;
         }
 
-        if (!shopPurchaseRunner.Start(request))
+        var accepted = currency.HasValue
+            ? shopPurchaseRunner.Start(request, false, currency.Value, beforeSubmit!, verified!)
+            : shopPurchaseRunner.Start(request);
+        if (!accepted)
         {
             StatusMessage = shopPurchaseRunner.Status.LastStartError;
             return false;

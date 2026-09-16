@@ -112,6 +112,7 @@ public sealed class Plugin : IDalamudPlugin
     public MapFlagService MapFlagService { get; }
     public InnEntryService InnEntryService { get; }
     public UtilityAutomationService UtilityAutomationService { get; }
+    internal RelicPurchaseTestService RelicPurchaseTestService { get; }
     public DesynthPolicyService DesynthPolicyService { get; }
     public DesynthPresetStore DesynthPresetStore { get; }
     public DesynthDutyLedgerStore DesynthDutyLedgerStore { get; }
@@ -275,6 +276,12 @@ public sealed class Plugin : IDalamudPlugin
             () => ExecutionService.IsOwned,
             () => InnEntryService.IsRunning,
             Log);
+        RelicPurchaseTestService = new RelicPurchaseTestService(
+            Configuration.RelicPurchaseTest,
+            new RelicPurchaseTestRuntime(this),
+            Configuration.Save,
+            message => Log.Information("[ADS][RelicTest] {Message}", message),
+            new SystemShopPurchaseClock());
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
@@ -428,6 +435,7 @@ public sealed class Plugin : IDalamudPlugin
         ChatGui.ChatMessage -= OnChatMessage;
 
         InnEntryService.Cancel("plugin dispose");
+        RelicPurchaseTestService.Stop("Plugin unloaded; saved progress is retained.");
         UtilityAutomationService.Cancel("plugin dispose");
         DesynthContextMenuService.Dispose();
         UnregisterCommands();
@@ -1095,8 +1103,10 @@ public sealed class Plugin : IDalamudPlugin
     public void StopOwnership()
         => StopOwnership(null);
 
-    private void StopOwnership(string? idleStatus)
+    private void StopOwnership(string? idleStatus, bool stopRelicTest = true)
     {
+        if (stopRelicTest)
+            RelicPurchaseTestService.Stop();
         var stoppedInn = InnEntryService.IsRunning;
         var stoppedUtility = UtilityAutomationService.IsRunning;
         DebugStrafeService.Release("ADS stop");
@@ -1238,9 +1248,16 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool StartShopPurchase(uint itemId, int quantity)
+        => StartShopPurchaseCore(itemId, quantity, null, null, null);
+
+    internal bool StartRelicPurchase(uint itemId, Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified)
+        => StartShopPurchaseCore(itemId, 1, RelicPurchaseTestService.Currency, beforeSubmit, verified);
+
+    private bool StartShopPurchaseCore(uint itemId, int quantity, ShopCurrencyIdentity? currency,
+        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified)
     {
         if (RejectAutomationActionInExcludedTerritory("Shop purchase"))
-            return false;
+            return currency.HasValue ? RejectShopPurchaseStart(AutomationTerritoryPolicy.InactiveStatus) : false;
 
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
             return RejectShopPurchaseStart(error);
@@ -1249,7 +1266,9 @@ public sealed class Plugin : IDalamudPlugin
         if (InnEntryService.IsRunning)
             return RejectShopPurchaseStart("Cannot start shop purchasing while /ads enterinn is running.");
 
-        var result = UtilityAutomationService.StartShopPurchase(request);
+        var result = currency.HasValue
+            ? UtilityAutomationService.StartShopPurchase(request, currency.Value, beforeSubmit!, verified!)
+            : UtilityAutomationService.StartShopPurchase(request);
         PrintStatus(result
             ? UtilityAutomationService.StatusMessage
             : $"Shop purchase not started: {UtilityAutomationService.ShopPurchaseStatus.LastStartError}");
@@ -1306,6 +1325,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool CancelUtility()
     {
         var wasRunning = UtilityAutomationService.IsRunning;
+        RelicPurchaseTestService.Stop();
         UtilityAutomationService.Cancel("IPC/operator request");
         return wasRunning;
     }
@@ -2179,6 +2199,42 @@ public sealed class Plugin : IDalamudPlugin
                && ExecutionService.TreasureDungeonRoleAllowsOutsideBmraiFollow;
     }
 
+    private sealed class RelicPurchaseTestRuntime(Plugin plugin) : IRelicPurchaseTestRuntime
+    {
+        private UtilityAutomationService Utility => plugin.UtilityAutomationService;
+        public ulong CharacterId => ClientState.IsLoggedIn ? PlayerState.ContentId : 0;
+        public bool IsReady => CharacterId != 0 && Utility.IsRelicPurchaseReady;
+        public string? UnavailableReason =>
+            AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+                ? AutomationTerritoryPolicy.InactiveStatus
+                : plugin.DutyContextService.Current.InInstancedDuty ? "Leave the duty before testing relic purchases."
+                : plugin.ExecutionService.IsOwned || plugin.InnEntryService.IsRunning || Utility.IsRunning
+                    ? "Another ADS action is active." : null;
+        public ShopPurchaseStatusSnapshot PurchaseStatus => Utility.ShopPurchaseStatus;
+        public bool HasPurchaseSubmission => Utility.HasShopPurchaseSubmission;
+        public void BeginCleanup()
+        {
+            plugin.StopOwnership(null, stopRelicTest: false);
+            Utility.ReleaseHeldShopUi();
+            var stopped = Utility.StopRelicPurchaseNavigation();
+            Log.Information("[ADS][RelicTest] Reload/pass navigation cleanup: {Result}.", stopped);
+        }
+        public string? CleanupBlocker => plugin.InnEntryService.IsRunning ? "inn entry cleanup is still active"
+            : Utility.RelicPurchaseCleanupBlocker;
+        public void ContinueCleanup() => Utility.ContinueRelicPurchaseCleanup();
+        public bool Start(uint itemId, Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified)
+        {
+            var expected = RelicPurchaseTestCatalog.Items.Single(item => item.ItemId == itemId);
+            var item = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(itemId);
+            if (item == null || !string.Equals(item.Value.Name.ExtractText(), expected.Name, StringComparison.OrdinalIgnoreCase))
+                return plugin.RejectShopPurchaseStart($"Current game data does not match the expected relic item {itemId} ({expected.Name}).");
+            return plugin.StartRelicPurchase(itemId, beforeSubmit, verified);
+        }
+        public void Cancel() => Utility.Cancel("relic purchase test stopped");
+        public long ItemCount(uint itemId) => Utility.GetLiveShopItemCount(itemId);
+        public long Poetics => Utility.GetAvailableShopCurrency(RelicPurchaseTestService.Currency);
+    }
+
     private void OnFrameworkUpdate(IFramework framework)
     {
         var utcNow = DateTime.UtcNow;
@@ -2205,6 +2261,7 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            RelicPurchaseTestService.Update();
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "duty-context", ref slowestSection, ref slowestMs);
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(

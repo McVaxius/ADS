@@ -62,6 +62,14 @@ public sealed class ShopListService
     public bool RenameActivePreset(string name, out string error)
         => presetStore.RenameActive(name, out error);
 
+    internal bool AddExamplePreset(ShopListExample example, out string error)
+    {
+        var succeeded = presetStore.AddExample(example, out error);
+        if (succeeded)
+            InvalidateOwnership("Example preset selected; review its targets and test it before running.");
+        return succeeded;
+    }
+
     public bool ConfigureActivePreset(
         ShopListMode mode,
         ShopCurrencyKind currencyKind,
