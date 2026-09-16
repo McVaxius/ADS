@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed Magitek Armor interactions using hitbox-adjusted reach for the existing `2.0y` initial and `1.5y` close-recovery attempt gates. Rule matching, navigation, diagnostics, settling, cooldowns, attempt limits, and mounted-state completion are unchanged.
+- Corrected the Praetorium Research Level `XYZForceMarch` destination in BotologyUpdates to Nero's arena centre at `-164,-103.8,0`, preserving its Y coordinate, priority, completion behavior, and separate ordinary waypoint.
+
 - `/ads obj` now supports native header sorting and Shift-click priorities across all eight data columns, with nearest-first distance by default, live reordering, missing values last, and compact two-line header help. Row actions and RULE popups follow object IDs, and DhogNav availability preserves table settings.
 
 - `/ads obj` now fits columns to their contents, supports dragging dividers and double-clicking to refit, and scrolls horizontally with Name and the header frozen. Width adjustments last for the session without saving column settings.

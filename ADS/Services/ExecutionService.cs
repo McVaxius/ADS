@@ -3370,7 +3370,8 @@ public sealed class ExecutionService
             return;
         }
 
-        var playerPosition = objectTable.LocalPlayer?.Position;
+        var player = objectTable.LocalPlayer;
+        var playerPosition = player?.Position;
         var targetHorizontalDistance = playerPosition.HasValue
             ? GetHorizontalDistance(gameObject.Position, playerPosition.Value)
             : float.MaxValue;
@@ -3406,11 +3407,12 @@ public sealed class ExecutionService
         if (TrySkipStuckTreasureCoffer(observedInteractable, targetHorizontalDistance, prefix))
             return;
 
+        var interactionReach = GetInteractionReach(targetDistance, player!.HitboxRadius, gameObject.HitboxRadius);
         var interactionPolicy = GetInteractionAttemptPolicy(IsCloseInteractRecoveryArmedFor(observedInteractable));
         var usingCloseRangeInteractFallback = interactionPolicy.AllowCloseXzFallback
-            && targetDistance > interactionPolicy.AttemptRange
+            && interactionReach > interactionPolicy.AttemptRange
             && ShouldUseCloseRangeInteractFallback(observedInteractable, targetHorizontalDistance, targetVerticalDelta);
-        if (targetDistance > interactionPolicy.AttemptRange && !usingCloseRangeInteractFallback)
+        if (interactionReach > interactionPolicy.AttemptRange && !usingCloseRangeInteractFallback)
         {
             TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint);
 
@@ -3973,6 +3975,9 @@ public sealed class ExecutionService
         ClearPendingProgressionInteractResult();
         ResetInteractArrivalWait();
     }
+
+    internal static float GetInteractionReach(float centerDistance, float playerHitboxRadius, float targetHitboxRadius)
+        => MathF.Max(0f, centerDistance - playerHitboxRadius - targetHitboxRadius);
 
     internal static (float AttemptRange, bool AllowCloseXzFallback) GetInteractionAttemptPolicy(bool closeRecoveryArmed)
         => closeRecoveryArmed
