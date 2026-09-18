@@ -163,6 +163,7 @@ Open with `/ads mini` or Main > Tools > Compact Controls.
 - Full labels replace abbreviated outside/inside start labels.
 - Primary controls use the same inside/leave disabled rules as Main.
 - Tool shortcuts open Loot Controls, Object Rules, Object Explorer, Dialog Rules, Shop Lists, and update cache.
+- Enable/Disable QSTcomp and HealBot send Dalamud's plugin commands for `QSTCompanion` and `Coppelia`. Reset RSR Healing sends RSR Off and the eleven healing defaults restored by Coppelia; it works without HealBot loaded. ADS chat reports sent or failed requests.
 - Live status shows ownership/phase, duty, objective, treasure role/opener, follow status, and execution status.
 - Debug strafe controls appear while debug mode is enabled through `/ads debug on`. ADS remembers debug mode across reloads, but never restores held input.
 - Closing Controls releases any held debug strafe input.

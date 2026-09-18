@@ -68,6 +68,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private ObjectPriorityRuleManifest loadedDraft = new();
     private readonly OneStepRuleManifestUndo undoState = new();
     private ManifestImportPreview? importPreview;
+    private ObjectRulePresetTransfer? presetImportPreview;
+    private ObjectRulePresetFileState? presetImportDestinationState;
+    private bool confirmImportedEmptyOverrides;
     private bool draftLoaded;
     private bool dirty;
     private bool draftStructureChangedThisDraw;
@@ -211,6 +214,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (draftStructureChangedThisDraw)
             return;
 
+        ImGui.TextUnformatted("Draft editing");
+        ImGui.SameLine();
         var addRowBlocked = selectedContextFileNames.Count > 1;
         using (new ImGuiDisabledBlock(addRowBlocked))
         {
@@ -251,7 +256,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
         }
 
-        ImGui.SameLine();
+        SameLineIfFits("Save");
         var saveBlocked = !dirty && string.IsNullOrWhiteSpace(presetFileConflictStatus);
         using (new ImGuiDisabledBlock(saveBlocked))
         {
@@ -269,7 +274,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (draftStructureChangedThisDraw)
             return;
 
-        ImGui.SameLine();
+        SameLineIfFits("Reload From Disk");
         if (ActionButton("Reload From Disk", dirty
                 ? "Reload the active preset after confirming that unsaved draft edits may be discarded."
                 : "Reload the active preset from its saved shard files."))
@@ -283,10 +288,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (draftStructureChangedThisDraw)
             return;
 
-        ImGui.SameLine();
+        SameLineIfFits("Open JSON");
         if (ActionButton("Open JSON", "Open the active preset's object-rule shard folder."))
             plugin.OpenPath(plugin.ObjectPriorityRuleService.GetPresetPath(selectedPresetName));
-        ImGui.SameLine();
+        SameLineIfFits("Auto-fit columns");
         if (ActionButton("Auto-fit columns", "Recalculate all column widths from the current headers and draft values."))
             RequestRuleTableAutoFit();
 
@@ -713,6 +718,13 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         return clicked;
     }
 
+    private static void SameLineIfFits(string label)
+    {
+        ImGui.SameLine();
+        if (ImGui.GetContentRegionAvail().X < ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f)
+            ImGui.NewLine();
+    }
+
     private static void DrawContextActionTooltip(
         string action,
         IReadOnlyList<string> unmetPrerequisites,
@@ -924,11 +936,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 ImGui.OpenPopup("ADSConfirmDeleteSelectedRules");
         }
 
+        ImGui.TextUnformatted("Selection exports");
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(selectedRules.Count == 0))
         {
             if (SmallActionButton(
-                    "Export Duties",
+                    "Selected Duties",
                     selectedRules.Count == 0
                         ? "Select at least one row before exporting complete duty groups."
                         : "Copy every row in each selected rule's complete duty group."))
@@ -940,15 +953,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             }
             ImGui.SameLine();
             if (SmallActionButton(
-                    "Export Delta",
+                    "Selected Rows",
                     selectedRules.Count == 0
-                        ? "Select at least one row before exporting a delta."
+                        ? "Select at least one row before exporting selected rows."
                         : "Copy exactly the selected rule rows as a partial manifest."))
-                ExportPartialManifest(draft.Rules.Where(selectedRules.Contains), "selected delta rows");
+                ExportPartialManifest(draft.Rules.Where(selectedRules.Contains), "selected rows");
         }
 
         ImGui.SameLine();
-        if (SmallActionButton("Export Filter", $"Copy all {visibleRuleIndices.Count} rows in the current filtered view as a partial manifest."))
+        if (SmallActionButton("Filtered Rows", $"Copy all {visibleRuleIndices.Count} rows in the current filtered view as a partial manifest."))
             ExportPartialManifest(visibleRuleIndices.Select(index => draft.Rules[index]), "current filtered rows");
 
         using (new ImGuiDisabledBlock(!undoState.CanUndo))
@@ -1335,7 +1348,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawPresetToolbar()
     {
-        ImGui.TextUnformatted("Preset");
+        ImGui.TextUnformatted("Preset management");
         ImGui.SameLine();
         ImGui.SetNextItemWidth(220f);
         if (ImGui.BeginCombo("##RulePreset", selectedPresetName))
@@ -1364,25 +1377,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (plugin.Configuration.ObjectRuleEditorCompactMode)
             return;
 
-        ImGui.SameLine();
-        if (SmallActionButton("Export", "Copy the complete active preset manifest to the clipboard as formatted JSON."))
-            ExportManifestToClipboard();
-
-        ImGui.SameLine();
-        if (SmallActionButton("Import", "Validate a complete manifest from the clipboard and open an import preview."))
-            ImportManifestFromClipboard();
-
-        ImGui.SameLine();
-        if (SmallActionButton("Disk+", "Open complete-manifest import and export controls for a local JSON file."))
-        {
-            SyncDiskTransferPath();
-            ImGui.OpenPopup("ADSPresetDiskTransfer");
-        }
-
-        DrawDiskTransferPopup();
-
-        ImGui.SameLine();
-        if (SmallActionButton("+", "Create and activate a new custom preset from the current draft."))
+        SameLineIfFits("New Preset");
+        if (SmallActionButton("New Preset", "Create and activate a new custom preset from the current draft."))
         {
             pendingPresetName = plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
                 ? "Preset"
@@ -1392,12 +1388,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         DrawCreatePresetPopup();
 
-        ImGui.SameLine();
+        SameLineIfFits("Delete Preset");
         using (new ImGuiDisabledBlock(
                    plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
         {
             if (SmallActionButton(
-                    "-",
+                    "Delete Preset",
                     plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
                         ? "DEFAULT cannot be deleted. Choose a custom preset first."
                         : $"Delete custom preset {selectedPresetName} and switch back to DEFAULT."))
@@ -1406,12 +1402,30 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         if (plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName))
         {
-            ImGui.SameLine();
-            if (SmallActionButton("@", "Replace the DEFAULT draft with the current validated live DEFAULT cache; Save is still required."))
+            SameLineIfFits("Load DEFAULT Cache");
+            if (SmallActionButton("Load DEFAULT Cache", "Replace the DEFAULT draft with the current validated live DEFAULT cache; Save is still required."))
                 ResetDefaultDraftFromCache();
         }
 
-        if (openImportPreview && importPreview is not null)
+        ImGui.TextUnformatted("Sharing");
+        ImGui.SameLine();
+        if (SmallActionButton("Import Preset", "Preview a named preset transfer or legacy manifest from the clipboard."))
+            ImportManifestFromClipboard();
+        SameLineIfFits("Export Overrides");
+        using (new ImGuiDisabledBlock(plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
+        {
+            if (SmallActionButton("Export Overrides", "Copy this custom preset's name, saved overrides, and complete draft-changed contexts; inherited contexts are omitted. Requires a custom preset."))
+                ExportPresetOverrides(toFile: false);
+        }
+        SameLineIfFits("File Import/Export");
+        if (SmallActionButton("File Import/Export", "Import a named preset or legacy manifest from a file; export overrides or an explicitly selected full manifest."))
+        {
+            SyncDiskTransferPath();
+            ImGui.OpenPopup("ADSPresetDiskTransfer");
+        }
+        DrawDiskTransferPopup();
+
+        if (openImportPreview && (importPreview is not null || presetImportPreview is not null))
         {
             openImportPreview = false;
             ImGui.OpenPopup("ADSManifestImportPreview");
@@ -1457,6 +1471,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         pendingScrollRule = null;
         undoState.Invalidate();
         importPreview = null;
+        presetImportPreview = null;
+        presetImportDestinationState = null;
         openImportPreview = false;
         pendingPresetSwitchName = string.Empty;
         openPresetSwitchConfirmation = false;
@@ -2649,33 +2665,39 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginPopup("ADSPresetDiskTransfer"))
             return;
 
-        ImGui.TextUnformatted("Manifest disk import preview / export");
+        ImGui.TextUnformatted("File Import/Export");
         ImGui.SetNextItemWidth(540f);
         ImGui.InputTextWithHint("##PresetDiskPath", "path to .json file", ref diskTransferPath, 512);
 
-        if (ActionButton("Import file", "Validate the manifest at this path and open an in-memory import preview."))
+        if (ActionButton("Import Preset file", "Validate a named preset or legacy manifest at this path and open an import preview."))
         {
-            if (plugin.ObjectPriorityRuleService.TryImportManifestFromPath(diskTransferPath, out var manifest, out var status))
+            try
             {
-                PrepareManifestImportPreview(manifest, "disk", status);
-                ImGui.CloseCurrentPopup();
+                if (PrepareRulesImportPreview(File.ReadAllText(diskTransferPath), "disk"))
+                    ImGui.CloseCurrentPopup();
             }
-            else
+            catch (Exception ex)
             {
-                editorStatus = status;
+                editorStatus = $"Failed to import rules from {diskTransferPath}: {ex.Message}";
             }
         }
 
         ImGui.SameLine();
-        if (ActionButton("Export file", "Write the current complete draft manifest to this local JSON path."))
+        using (new ImGuiDisabledBlock(plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
         {
-            if (plugin.ObjectPriorityRuleService.TryExportManifestToPath(diskTransferPath, draft, out var status))
-                editorStatus = status;
-            else
-                editorStatus = status;
+            if (ActionButton("Export Overrides file", "Write the custom preset name and only saved or draft-changed contexts to this file. Requires a custom preset."))
+                ExportPresetOverrides(toFile: true);
         }
 
+        if (ActionButton("Export Full Manifest file", "Write every effective draft context, including inherited rules, as a legacy manifest without a preset name."))
+        {
+            plugin.ObjectPriorityRuleService.TryExportManifestToPath(diskTransferPath, draft, out var status);
+            editorStatus = status;
+        }
         ImGui.SameLine();
+        if (ActionButton("Copy Full Manifest", "Copy every effective draft rule, including inherited rules, as a legacy manifest without a preset name."))
+            ExportManifestToClipboard();
+
         if (ActionButton("Use preset path", "Reset the transfer path to object-rules-export.json inside the active preset folder."))
             SyncDiskTransferPath();
 
@@ -2726,8 +2748,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             draft = CloneManifest(cacheManifest);
             dirty = true;
             ClearDraftReferenceState();
-            importPreview = null;
-            openImportPreview = false;
+            InvalidateImportPreview();
             draftStructureChangedThisDraw = true;
             editorStatus = $"Loaded the current DEFAULT cache rules into the draft. {status} Press Save to write them live.";
             RuleDraftChanged(structuralChange: true);
@@ -2754,13 +2775,110 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void ImportManifestFromClipboard()
     {
-        if (plugin.ObjectPriorityRuleService.TryImportManifestText(ImGui.GetClipboardText() ?? string.Empty, out var manifest, out var status))
+        try
         {
-            PrepareManifestImportPreview(manifest, "clipboard", status);
-            return;
+            PrepareRulesImportPreview(ImGui.GetClipboardText() ?? string.Empty, "clipboard");
         }
+        catch (Exception ex)
+        {
+            editorStatus = $"Failed to read clipboard rules: {ex.Message}";
+        }
+    }
 
-        editorStatus = status;
+    private void ExportPresetOverrides(bool toFile)
+    {
+        try
+        {
+            if (!plugin.ObjectPriorityRuleService.TryExportPresetText(selectedPresetName, loadedDraft, draft, out var json, out var status))
+            {
+                editorStatus = status;
+                return;
+            }
+            if (toFile)
+                ObjectRuleShardStore.WriteJsonAtomic(diskTransferPath, json);
+            else
+                ImGui.SetClipboardText(json);
+            editorStatus = $"Exported overrides for {selectedPresetName} to {(toFile ? diskTransferPath : "the clipboard")}. {status}";
+        }
+        catch (Exception ex)
+        {
+            editorStatus = $"Failed to export overrides: {ex.Message}";
+        }
+    }
+
+    private bool PrepareRulesImportPreview(string text, string sourceLabel)
+    {
+        if (!plugin.ObjectPriorityRuleService.TryImportRulesText(text, out var transfer, out var manifest, out var status))
+        {
+            editorStatus = status;
+            return false;
+        }
+        if (transfer is null)
+        {
+            InvalidateImportPreview();
+            PrepareManifestImportPreview(manifest, sourceLabel, status);
+            return true;
+        }
+        if (dirty || !string.IsNullOrWhiteSpace(presetFileConflictStatus))
+        {
+            editorStatus = "Named preset import requires a clean editor draft without disk conflicts. Save or reload before importing.";
+            return false;
+        }
+        presetImportDestinationState = plugin.ObjectPriorityRuleService.CaptureContextFileState(transfer.PresetName, transfer.Contexts.Keys);
+        presetImportPreview = transfer;
+        importPreview = null;
+        confirmImportedEmptyOverrides = false;
+        openImportPreview = true;
+        editorStatus = $"Prepared {sourceLabel} import for destination preset {transfer.PresetName}. {status}";
+        return true;
+    }
+
+    private void DrawPresetImportPreview(ObjectRulePresetTransfer transfer)
+    {
+        ImGui.TextUnformatted($"Destination preset: {transfer.PresetName}");
+        ImGui.TextWrapped("Import and Save creates this custom preset or merges only the included complete contexts into it, then activates it. Unrelated destination files are preserved.");
+        ImGui.TextWrapped($"Included contexts: {transfer.Contexts.Count}");
+        if (ImGui.BeginChild("ADSPresetImportContexts", new Vector2(-1f, 360f), true))
+        {
+            foreach (var fileName in ObjectRuleShardStore.SortFileNames(transfer.Contexts.Keys))
+            {
+                var count = transfer.Contexts[fileName].Rules.Count;
+                ImGui.BulletText($"{fileName}: {count} row(s){(count == 0 ? " (empty override)" : string.Empty)}");
+            }
+        }
+        ImGui.EndChild();
+        var hasEmptyOverrides = transfer.Contexts.Values.Any(context => context.Rules.Count == 0);
+        if (hasEmptyOverrides)
+        {
+            ImGui.TextWrapped("Empty overrides suppress all inherited rules in those contexts. Disabling rows usually preserves authoring intent better.");
+            ImGui.Checkbox("Confirm intentional empty overrides", ref confirmImportedEmptyOverrides);
+        }
+        var blocked = dirty || !string.IsNullOrWhiteSpace(presetFileConflictStatus)
+                      || presetImportDestinationState is null || (hasEmptyOverrides && !confirmImportedEmptyOverrides);
+        using (new ImGuiDisabledBlock(blocked))
+        {
+            if (ActionButton("Import and Save", "Requires a clean draft, no disk conflict, and confirmation of any empty overrides. Only included contexts are written."))
+            {
+                if (plugin.ObjectPriorityRuleService.ImportAndSavePreset(transfer, presetImportDestinationState!, out var status))
+                {
+                    selectedPresetName = plugin.ObjectPriorityRuleService.ActivePresetName;
+                    ApplyLoadedDraft(plugin.ObjectPriorityRuleService.CreateEditableCopy(), status);
+                    ImGui.CloseCurrentPopup();
+                }
+                else
+                {
+                    editorStatus = status;
+                }
+            }
+        }
+        ImGui.SameLine();
+        if (ActionButton("Cancel", "Close without importing this preset."))
+        {
+            presetImportPreview = null;
+            presetImportDestinationState = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.TextWrapped(editorStatus);
     }
 
     private void PrepareManifestImportPreview(ObjectPriorityRuleManifest manifest, string sourceLabel, string sourceStatus)
@@ -2784,6 +2902,13 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SetNextWindowSize(new Vector2(820f, 720f), ImGuiCond.FirstUseEver);
         if (!ImGui.BeginPopup("ADSManifestImportPreview"))
             return;
+
+        if (presetImportPreview is not null)
+        {
+            DrawPresetImportPreview(presetImportPreview);
+            ImGui.EndPopup();
+            return;
+        }
 
         var preview = importPreview;
         if (preview is null)
@@ -3157,6 +3282,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private void InvalidateImportPreview()
     {
         importPreview = null;
+        presetImportPreview = null;
+        presetImportDestinationState = null;
         openImportPreview = false;
     }
 

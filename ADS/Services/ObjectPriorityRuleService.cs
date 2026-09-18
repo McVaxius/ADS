@@ -495,6 +495,79 @@ public sealed class ObjectPriorityRuleService
         saveConfiguration?.Invoke();
     }
 
+    internal bool TryExportPresetText(string presetName, ObjectPriorityRuleManifest baseline, ObjectPriorityRuleManifest draft,
+        out string json, out string status)
+    {
+        json = string.Empty;
+        try
+        {
+            if (!shardStore.TryCreatePresetTransfer(presetName, baseline, draft, out var transfer, out status))
+                return false;
+            json = JsonSerializer.Serialize(transfer, JsonOptions);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to export preset {presetName}: {ex.Message}";
+            return false;
+        }
+    }
+
+    internal bool TryImportRulesText(string text, out ObjectRulePresetTransfer? transfer,
+        out ObjectPriorityRuleManifest manifest, out string status)
+    {
+        transfer = null;
+        manifest = new ObjectPriorityRuleManifest();
+        try
+        {
+            var json = text.Trim();
+            if (!json.StartsWith('{'))
+            {
+                try
+                {
+                    json = Encoding.UTF8.GetString(Convert.FromBase64String(json));
+                }
+                catch (FormatException)
+                {
+                    // Legacy raw JSON may start with a comment instead of an opening brace.
+                }
+            }
+            using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            });
+            var isTransfer = document.RootElement.EnumerateObject().Any(property =>
+                property.Name.Equals("TransferVersion", StringComparison.OrdinalIgnoreCase)
+                || property.Name.Equals("PresetName", StringComparison.OrdinalIgnoreCase)
+                || property.Name.Equals("Contexts", StringComparison.OrdinalIgnoreCase));
+            if (!isTransfer)
+                return TryImportManifestText(json, out manifest, out status);
+            if (!shardStore.TryDeserializePresetTransfer(json, out var parsed, out status))
+                return false;
+            transfer = parsed;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Invalid rules import: {ex.Message}";
+            return false;
+        }
+    }
+
+    internal bool ImportAndSavePreset(ObjectRulePresetTransfer transfer, ObjectRulePresetFileState expectedState, out string status)
+    {
+        if (!shardStore.TryWritePresetTransfer(transfer, expectedState, out status))
+            return false;
+        if (!ActivatePreset(transfer.PresetName))
+        {
+            status = LastLoadStatus;
+            return false;
+        }
+        status += $" Activated {ActivePresetName}.";
+        return true;
+    }
+
     public bool TryImportManifestText(string text, out ObjectPriorityRuleManifest manifest, out string status)
     {
         manifest = new ObjectPriorityRuleManifest();

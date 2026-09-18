@@ -201,6 +201,120 @@ internal sealed partial class ObjectRuleShardStore
         }
     }
 
+    public bool TryCreatePresetTransfer(
+        string presetName,
+        ObjectPriorityRuleManifest baseline,
+        ObjectPriorityRuleManifest draft,
+        out ObjectRulePresetTransfer transfer,
+        out string status)
+    {
+        transfer = new ObjectRulePresetTransfer { PresetName = presetName };
+        if (!TryValidatePresetTransfer(transfer, out status)
+            || !TryLoadEffectivePreset(presetName, out _, out var saved, out status)
+            || !TryGetChangedContextFiles(baseline, draft, out var changedFiles, out status)
+            || !TrySplitManifest(draft, out var draftShards, out status))
+            return false;
+
+        // Untouched saved overrides come from disk; changed contexts come from the complete draft.
+        foreach (var fileName in SortFileNames(saved.Keys.Where(file => HasOverride(presetName, file)).Concat(changedFiles)))
+        {
+            transfer.Contexts[fileName] = changedFiles.Contains(fileName)
+                ? draftShards.GetValueOrDefault(fileName) ?? new ObjectPriorityRuleManifest { Description = draft.Description }
+                : saved[fileName];
+        }
+        return TryValidatePresetTransfer(transfer, out status);
+    }
+
+    public bool TryDeserializePresetTransfer(string json, out ObjectRulePresetTransfer transfer, out string status)
+    {
+        transfer = new ObjectRulePresetTransfer();
+        try
+        {
+            using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            });
+            var properties = document.RootElement.EnumerateObject().ToList();
+            if (properties.Select(property => property.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != properties.Count)
+                throw new InvalidDataException("Duplicate preset transfer fields.");
+            var contexts = properties.Single(property => property.Name.Equals("Contexts", StringComparison.OrdinalIgnoreCase)).Value;
+            var keys = contexts.EnumerateObject().Select(property => property.Name).ToList();
+            if (keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != keys.Count)
+                throw new InvalidDataException("Duplicate preset context filenames.");
+            foreach (var context in contexts.EnumerateObject())
+            {
+                var fields = context.Value.EnumerateObject().ToList();
+                if (fields.Select(field => field.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != fields.Count
+                    || !fields.Any(field => field.Name.Equals("Rules", StringComparison.OrdinalIgnoreCase) && field.Value.ValueKind == JsonValueKind.Array)
+                    || !fields.Any(field => field.Name.Equals("SchemaVersion", StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException($"Context {context.Name} must contain an explicit schema and Rules array without duplicate fields.");
+            }
+            transfer = JsonSerializer.Deserialize<ObjectRulePresetTransfer>(json, JsonOptions)
+                       ?? throw new InvalidDataException("Preset transfer was empty.");
+            return TryValidatePresetTransfer(transfer, out status);
+        }
+        catch (Exception ex)
+        {
+            status = $"Invalid preset transfer: {ex.Message}";
+            return false;
+        }
+    }
+
+    private bool TryValidatePresetTransfer(ObjectRulePresetTransfer transfer, out string status)
+    {
+        status = "Invalid preset transfer: expected version 1, a canonical custom preset name, and complete contexts.";
+        if (transfer.TransferVersion != 1
+            || string.IsNullOrWhiteSpace(transfer.PresetName)
+            || !string.Equals(transfer.PresetName, SanitizePresetName(transfer.PresetName), StringComparison.Ordinal)
+            || transfer.Contexts is null)
+            return false;
+        foreach (var pair in transfer.Contexts)
+        {
+            if (pair.Value?.Rules is null)
+            {
+                status = $"Invalid preset context {pair.Key}: a complete Rules array is required.";
+                return false;
+            }
+            if (!TryValidateShardJson(JsonSerializer.Serialize(pair.Value, JsonOptions), pair.Key, dutyCatalog, out _, out status))
+                return false;
+        }
+        status = $"Validated preset {transfer.PresetName} with {transfer.Contexts.Count} complete context(s).";
+        return true;
+    }
+
+    public bool TryWritePresetTransfer(
+        ObjectRulePresetTransfer transfer,
+        ObjectRulePresetFileState expectedState,
+        out string status)
+    {
+        // Validate every incoming context before creating a directory or writing any shard.
+        if (!TryValidatePresetTransfer(transfer, out status))
+            return false;
+        try
+        {
+            if (!expectedState.SameAs(CaptureContextState(transfer.PresetName, transfer.Contexts.Keys)))
+            {
+                status = "Import conflict: an included destination or DEFAULT context changed. Create a new preview before importing.";
+                return false;
+            }
+            var directory = GetPresetDirectoryPath(transfer.PresetName);
+            if (!TryLoadEffectivePreset(Directory.Exists(directory) ? transfer.PresetName : ObjectPriorityRuleService.DefaultPresetName,
+                    out _, out _, out status))
+                return false;
+            Directory.CreateDirectory(directory);
+            foreach (var fileName in SortFileNames(transfer.Contexts.Keys))
+                WriteManifestAtomic(Path.Combine(directory, fileName), transfer.Contexts[fileName]);
+            status = $"Imported {transfer.Contexts.Count} complete context(s) into preset {transfer.PresetName}; unrelated files were preserved.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to import preset {transfer.PresetName}: {ex.Message}";
+            return false;
+        }
+    }
+
     public bool TryWriteFullPreset(string presetName, ObjectPriorityRuleManifest manifest, out string status)
     {
         if (!TrySplitManifest(manifest, out var split, out status))

@@ -552,9 +552,73 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public void DisableQstCompanion()
-        => PrintStatus(QstCompanionWarningService.Disable()
-            ? "Questionable Companion disable command sent."
-            : "Questionable Companion disable command failed.");
+        => SetCompanionPluginEnabled(QstCompanionWarningService.InternalName, "QSTcomp", false);
+
+    public void SetCompanionPluginEnabled(string internalName, string label, bool enabled)
+    {
+        var command = $"/{(enabled ? "xlenableplugin" : "xldisableplugin")} {internalName}";
+        try
+        {
+            var installed = PluginInterface.InstalledPlugins.FirstOrDefault(candidate =>
+                string.Equals(candidate.InternalName, internalName, StringComparison.OrdinalIgnoreCase));
+            if (installed is null)
+            {
+                PrintStatus($"{label} is unavailable; {internalName} is not installed.");
+                return;
+            }
+            PrintStatus(CommandManager.ProcessCommand(command)
+                ? $"{label}: sent {command}."
+                : $"{label}: command failed: {command}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, $"[ADS] Companion command failed: {command}.");
+            PrintStatus($"{label}: command failed: {ex.Message}");
+        }
+    }
+
+    // RSR's IPC enums use byte values: StateCommandType.Off = 0, OtherCommandType.Settings = 0.
+    private enum RsrStateCommandType : byte { Off }
+    private enum RsrOtherCommandType : byte { Settings }
+
+    public void ResetRsrHealing()
+    {
+        var failures = new List<string>();
+        try
+        {
+            PluginInterface.GetIpcSubscriber<RsrStateCommandType, object>("RotationSolverReborn.ChangeOperatingMode")
+                .InvokeAction(RsrStateCommandType.Off);
+        }
+        catch (Exception ex)
+        {
+            failures.Add("Off");
+            Log.Warning(ex, "[ADS] RSR Off IPC failed.");
+        }
+
+        // Keep these eleven commands aligned with Coppelia.RestoreHealingAfterOff.
+        string[] settings =
+        [
+            "AutoHeal true", "UseGroundBeneficialAbility true", "HealWhenNothingTodo true",
+            "HealthAreaAbilityHot 0.70", "HealthAreaSpellHot 0.70", "HealthAreaAbility 0.90", "HealthAreaSpell 0.80",
+            "HealthSingleAbilityHot 0.80", "HealthSingleSpellHot 0.70", "HealthSingleAbility 0.85", "HealthSingleSpell 0.80",
+        ];
+        foreach (var setting in settings)
+        {
+            try
+            {
+                PluginInterface.GetIpcSubscriber<RsrOtherCommandType, string, object>("RotationSolverReborn.OtherCommand")
+                    .InvokeAction(RsrOtherCommandType.Settings, setting);
+            }
+            catch (Exception ex)
+            {
+                failures.Add(setting);
+                Log.Warning(ex, $"[ADS] RSR healing setting failed: {setting}.");
+            }
+        }
+        PrintStatus(failures.Count == 0
+            ? "RSR healing reset: Off and all eleven healing settings sent."
+            : $"RSR healing reset incomplete; check that RotationSolverReborn is loaded. Failed: {string.Join(", ", failures)}.");
+    }
 
     public void OpenFrontierLabelUi()
         => frontierLabelWindow.IsOpen = true;

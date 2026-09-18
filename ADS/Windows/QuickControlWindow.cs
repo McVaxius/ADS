@@ -122,19 +122,34 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             plugin.ForceRemoteJsonUpdate();
         ImGui.EndDisabled();
         ImGui.TableSetColumnIndex(2);
-        if (plugin.DebugStrafeService.Enabled)
-        {
-            if (ImGui.Button("Disable QSTcomp", new Vector2(-1f, 28f)))
-                plugin.DisableQstCompanion();
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(QstCompanionWarningService.DisableCommand);
-        }
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
         if (ImGui.Button("Shop Lists", new Vector2(-1f, 28f)))
             plugin.OpenShopListsUi();
         ImGui.EndTable();
+
+        if (!ImGui.BeginTable("ADSQuickCompanionControls", 2, ImGuiTableFlags.SizingStretchSame))
+            return;
+        DrawCompanionControls("QSTcomp", QstCompanionWarningService.InternalName);
+        DrawCompanionControls("HealBot", "Coppelia");
+        ImGui.EndTable();
+        if (ImGui.Button("Reset RSR Healing", new Vector2(-1f, 28f)))
+            plugin.ResetRsrHealing();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Set RSR to Off and restore Coppelia's eleven healing defaults. Works without HealBot loaded.");
+    }
+
+    private void DrawCompanionControls(string label, string internalName)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(0);
+        if (ImGui.Button($"Enable {label}", new Vector2(-1f, 28f)))
+            plugin.SetCompanionPluginEnabled(internalName, label, true);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"/xlenableplugin {internalName}");
+        ImGui.TableSetColumnIndex(1);
+        if (ImGui.Button($"Disable {label}", new Vector2(-1f, 28f)))
+            plugin.SetCompanionPluginEnabled(internalName, label, false);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"/xldisableplugin {internalName}");
     }
 
     private void DrawDebugStrafeControls()

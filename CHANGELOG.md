@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Compact Controls now includes normal-use Enable/Disable buttons for QSTcomp and HealBot, plus Reset RSR Healing using RSR Off and Coppelia's eleven healing defaults independently of HealBot. Unavailable plugins and failed requests use ADS chat status.
+- Object Rules now shares named custom presets as versioned sparse transfers through clipboard or files, including saved and draft-changed complete contexts, empty overrides, and custom-only contexts while omitting inherited duties. Import previews validate the full payload and show the destination; Import and Save creates or merges included contexts, preserves unrelated files, and activates the preset with clean-draft, empty-override, and conflict safeguards. Legacy imports and explicitly labeled full-manifest exports remain available.
+- Object Rules now separates preset management, sharing, and draft editing with clear action labels, including New Preset, Delete Preset, Load DEFAULT Cache, Import Preset, Export Overrides, File Import/Export, and Selected Duties/Selected Rows/Filtered Rows exports. Compact-mode behavior is preserved.
+
 - An explicit `/ads leave` now immediately accepts a recognized localized return-to-entrance prompt when the current duty is confirmed complete and the player is dead, then resumes duty exit after respawn and zoning. Completion is scoped to the current duty and cleared on new entry, exit, or logout; completion alone, unknown completion, and unrelated dialogs never authorize this confirmation.
 
 - Shop Lists now bundles ten ARR Zodiac and HW Anima step examples through Add example. Each creates an editable, inventory-only Poetics refill preset without starting purchases or replacing existing presets. Umbrite is an adjustable 20-item batch; Mysterious Map and its farming remain with Loot Goblin.

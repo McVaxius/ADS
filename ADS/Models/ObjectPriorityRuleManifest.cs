@@ -15,6 +15,16 @@ public sealed class ObjectPriorityRuleShardIndex
     public List<string> Files { get; set; } = [];
 }
 
+internal sealed class ObjectRulePresetTransfer
+{
+    [JsonRequired]
+    public int TransferVersion { get; set; } = 1;
+    [JsonRequired]
+    public string PresetName { get; set; } = string.Empty;
+    [JsonRequired]
+    public Dictionary<string, ObjectPriorityRuleManifest> Contexts { get; set; } = new(StringComparer.Ordinal);
+}
+
 internal enum ObjectRuleContextBackingState
 {
     DefaultFile,

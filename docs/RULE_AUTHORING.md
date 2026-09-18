@@ -30,7 +30,7 @@ Object Rules use inherited executable presets:
 - Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving and is remembered across reloads; `/ads debug off` restores protection.
 - Dialog Rules retain their existing separate DEFAULT/parked-preset behavior.
 
-Common editor controls:
+Object Rules groups preset management, sharing, and draft editing on labeled rows. Compact mode retains its reduced secondary-control layout. Common editor controls:
 
 | Control | Purpose |
 |---|---|
@@ -38,10 +38,10 @@ Common editor controls:
 | `Save` | Write selected preset |
 | `Reload From Disk` | Discard draft and reload selected preset |
 | `Open JSON` | Open the selected preset shard folder |
-| `Export` / `Import` | Full-manifest clipboard transfer |
-| `Disk+` | Full-manifest disk import/export |
-| `+` / `-` | Create and activate/delete a custom preset |
-| `@` | Load current live `DEFAULT` cache into `DEFAULT` draft |
+| `Export Overrides` / `Import Preset` | Share named custom-preset overrides through the clipboard; imports also accept legacy manifests |
+| `File Import/Export` | Named preset file transfers plus explicitly labeled `Export Full Manifest file` and `Copy Full Manifest` actions |
+| `New Preset` / `Delete Preset` | Create and activate/delete a custom preset |
+| `Load DEFAULT Cache` | Load current live `DEFAULT` cache into `DEFAULT` draft |
 | `Contexts` | Search and toggle Global, catalog, current, custom-only, and no-file territories; no checks means All |
 | `Revert context(s) to DEFAULT` | Delete every eligible checked custom shard after one confirmation |
 | `Promote All saved overrides to PR-ready checkout` / `Promote selected context(s) to PR-ready checkout` | With All, copy every saved custom override; with checks, copy only eligible checked overrides; update the index once for all new contexts |
@@ -53,9 +53,11 @@ Common editor controls:
 | `Select Visible` / `Clear Selection` | Manage bulk selection without losing hidden selections |
 | `Delete Selected` | Confirm and remove selected rows with exact affected duty/global counts |
 | `Undo` | Restore the one most recent bulk delete or partial-manifest replacement |
-| `Export Duties` / `Export Delta` / `Export Filter` | Export complete selected duty groups, exact selected rows, or the current filtered row set |
+| `Selected Duties` / `Selected Rows` / `Filtered Rows` | Export complete selected duty groups, exact selected rows, or the current filtered row set |
 
-Full-manifest clipboard and disk imports open a preview instead of replacing the draft immediately. Incoming rows are associated by CFC, then unique territory, then normalized English name. **Complete duties** replaces complete selected groups, **Delta rows** appends exactly the chosen rows without deduplication, and **Current filter** replaces the exact row indices frozen when the preview opened. Globals require a separate opt-in, and changing a current-filter preview's filters invalidates it.
+**Export Overrides** requires a custom preset. Its versioned transfer includes the preset name and complete contexts keyed by canonical shard filename: every saved override plus any context changed in the current draft, including intentional empty overrides and custom-only contexts. Inherited contexts are omitted, regardless of row filters or selection. **Import Preset** previews the exported destination name and included contexts. With a clean draft and no disk conflict, **Import and Save** creates that custom preset or merges only those contexts into an existing preset, then activates it. All incoming contexts are validated before writing, empty overrides require confirmation, and a changed destination requires a fresh preview. Unrelated destination files remain unchanged; `DEFAULT` cannot be a named transfer destination.
+
+Legacy full-manifest clipboard and disk imports open a preview instead of replacing the draft immediately. Full-manifest exports include inherited rows and do not preserve a preset name or empty contexts. Incoming rows are associated by CFC, then unique territory, then normalized English name. **Complete duties** replaces complete selected groups, **Delta rows** appends exactly the chosen rows without deduplication, and **Current filter** replaces the exact row indices frozen when the preview opened. Globals require a separate opt-in, and changing a current-filter preview's filters invalidates it.
 
 The editor watches the selected preset's shard snapshots for external changes. A clean draft reloads a valid disk update automatically. A dirty draft stays in memory and shows a conflict instead; saving checks the affected DEFAULT/custom shard snapshots before overwrite. Invalid external JSON empties neither the current draft nor the last valid runtime rules.
 
