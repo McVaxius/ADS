@@ -25,6 +25,7 @@ public sealed class ShopListPresetStore
 
     private readonly IPluginLog? log;
     private ShopListManifest manifest = NewManifest();
+    private bool loadFailed;
 
     public ShopListPresetStore(string configDirectory, IPluginLog? log = null)
     {
@@ -39,6 +40,26 @@ public sealed class ShopListPresetStore
     public string ActivePresetName => ActivePreset.Name;
     public IReadOnlyList<ShopListPreset> Presets => manifest.Presets;
     public ShopListPreset ActivePreset => Get(manifest.ActivePresetId);
+
+    public IReadOnlyDictionary<Guid, long> GetOrderProgress(ulong characterId, Guid presetId)
+        => new Dictionary<Guid, long>(manifest.CharacterOrders.FirstOrDefault(order =>
+            order.CharacterId == characterId && order.PresetId == presetId)?.CreditedQuantities ?? []);
+
+    public bool SaveOrderProgress(ulong characterId, Guid presetId, IReadOnlyDictionary<Guid, long> progress, out string error)
+        => Commit(candidate =>
+        {
+            if (characterId == 0)
+                throw new InvalidDataException("A logged-in character is required for an order.");
+            var preset = candidate.Presets.Single(preset => preset.PresetId == presetId);
+            candidate.CharacterOrders.RemoveAll(order => order.CharacterId == characterId && order.PresetId == presetId);
+            candidate.CharacterOrders.Add(new ShopListCharacterOrder
+            {
+                CharacterId = characterId,
+                PresetId = presetId,
+                CreditedQuantities = progress.Where(pair => preset.Items.Any(row => row.RowId == pair.Key))
+                    .ToDictionary(pair => pair.Key, pair => Math.Max(0, pair.Value)),
+            });
+        }, out error);
 
     public ShopListPreset Get(Guid presetId)
         => manifest.Presets.FirstOrDefault(x => x.PresetId == presetId)
@@ -353,6 +374,7 @@ public sealed class ShopListPresetStore
 
     public void Reload()
     {
+        ShopListManifest? loaded = null;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
@@ -361,24 +383,20 @@ public sealed class ShopListPresetStore
                   ?? throw new InvalidDataException("Shop-list preset JSON was empty.")
                 : NewManifest();
             NormalizeAndValidate(candidate);
+            loaded = Clone(candidate);
+            InitializeRelicOrders(candidate);
+            NormalizeAndValidate(candidate);
             Write(candidate);
             manifest = candidate;
+            loadFailed = false;
             LastStatus = $"Loaded {manifest.Presets.Count} shop-list preset(s).";
         }
         catch (Exception ex)
         {
-            var candidate = NewManifest();
-            try
-            {
-                Write(candidate);
-                manifest = candidate;
-            }
-            catch (Exception saveEx)
-            {
-                log?.Warning(saveEx, "[ADS][ShopLists] Could not save a replacement DEFAULT preset.");
-            }
-
-            LastStatus = $"Shop-list preset load failed; reset to DEFAULT: {ex.Message}";
+            if (loaded != null)
+                manifest = loaded;
+            loadFailed = true;
+            LastStatus = $"Shop-list preset load/initialization failed; existing lists were preserved. Reload after resolving the error: {ex.Message}";
             log?.Warning(ex, $"[ADS][ShopLists] {LastStatus}");
         }
     }
@@ -387,6 +405,8 @@ public sealed class ShopListPresetStore
     {
         try
         {
+            if (loadFailed)
+                throw new InvalidDataException("Resolve the shop-list load error and reload before saving.");
             var candidate = Clone(manifest);
             mutation(candidate);
             NormalizeAndValidate(candidate);
@@ -406,7 +426,7 @@ public sealed class ShopListPresetStore
     }
 
     private void Write(ShopListManifest candidate)
-        => File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate, JsonOptions), new UTF8Encoding(false));
+        => ObjectRuleShardStore.WriteJsonAtomic(ConfigPath, JsonSerializer.Serialize(candidate, JsonOptions));
 
     private static ShopListManifest Clone(ShopListManifest value)
         => new()
@@ -415,6 +435,13 @@ public sealed class ShopListPresetStore
             ActivePresetId = value.ActivePresetId,
             ActivePresetName = value.ActivePresetName,
             Presets = value.Presets.Select(ClonePreset).ToList(),
+            RelicOrdersInitialized = value.RelicOrdersInitialized,
+            CharacterOrders = value.CharacterOrders.Select(order => new ShopListCharacterOrder
+            {
+                CharacterId = order.CharacterId,
+                PresetId = order.PresetId,
+                CreditedQuantities = new(order.CreditedQuantities),
+            }).ToList(),
         };
 
     private static ShopListPreset ClonePreset(ShopListPreset preset)
@@ -446,6 +473,7 @@ public sealed class ShopListPresetStore
             throw new InvalidDataException($"Unsupported shop-list schema version {value.Version}.");
 
         value.Presets ??= [];
+        value.CharacterOrders ??= [];
         foreach (var preset in value.Presets)
         {
             if (preset.PresetId == Guid.Empty)
@@ -473,6 +501,11 @@ public sealed class ShopListPresetStore
                     item.Quantity = null;
                 }
                 ValidateRow(preset.Name, item);
+                if (preset.Mode == ShopListMode.FillOrderOverMultipleRuns)
+                {
+                    item.TriggerBelow = item.RefillToAtLeast;
+                    item.Repeatable = false;
+                }
             }
 
             if (preset.Items.GroupBy(x => x.RowId).Any(x => x.Count() > 1))
@@ -557,6 +590,44 @@ public sealed class ShopListPresetStore
             ActivePresetId = preset.PresetId,
             Presets = [preset],
         };
+    }
+
+    private static void InitializeRelicOrders(ShopListManifest value)
+    {
+        if (value.RelicOrdersInitialized)
+            return;
+        AddRelicOrder(value, "a8de1000-0000-4000-8000-000000000001", "ARR Zodiac — Poetics",
+            [(6267, 1), (6268, 3), (7885, 3), (9540, 4)]);
+        AddRelicOrder(value, "a8de1000-0000-4000-8000-000000000002", "HW Anima — Poetics",
+            [(13582, 10), (13584, 10), (13586, 10), (13588, 10), (14899, 5), (15840, 60), (16064, 50), (16933, 15), (16934, 1)]);
+        value.RelicOrdersInitialized = true;
+    }
+
+    private static void AddRelicOrder(ShopListManifest value, string id, string name, (uint ItemId, int Target)[] rows)
+    {
+        var presetId = Guid.Parse(id);
+        if (value.Presets.Any(preset => preset.PresetId == presetId))
+            return;
+        var displayName = name;
+        for (var suffix = 2; value.Presets.Any(preset => NamesEqual(preset.Name, displayName)); suffix++)
+            displayName = $"{name} ({suffix})";
+        value.Presets.Add(new ShopListPreset
+        {
+            PresetId = presetId,
+            Name = displayName,
+            Mode = ShopListMode.FillOrderOverMultipleRuns,
+            CurrencyKind = ShopCurrencyKind.Tomestone,
+            CurrencyItemId = 28,
+            Items = rows.Select(row => new ShopListItem
+            {
+                RowId = Guid.Parse($"a8de2000-0000-4000-8000-{row.ItemId:000000000000}"),
+                ItemId = row.ItemId,
+                TriggerBelow = row.Target,
+                RefillToAtLeast = row.Target,
+                Repeatable = false,
+                OwnershipScope = ShopListOwnershipScope.InventoryOnly,
+            }).ToList(),
+        });
     }
 
     private static ShopListPreset NewPreset(string name)

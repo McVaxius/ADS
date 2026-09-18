@@ -113,6 +113,13 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         if (!string.IsNullOrEmpty(runBlocker))
             ImGui.TextDisabled(runBlocker);
 
+        if (service.IsStandaloneOrderComplete && ImGui.Button("Start new order"))
+        {
+            SetStatus(service.StartNewOrder(out var error), error);
+            RefreshPreview();
+        }
+        ImGui.TextWrapped("Targeted refill uses current ownership thresholds. Spend until currency/capacity keeps spending under its repeat rules. Fill order over multiple runs credits initial ownership once, then verified purchases; consuming or moving items keeps that progress.");
+
         ImGui.TextWrapped(service.OwnershipStatus);
         if (service.OwnershipRefreshedAtUtc != DateTime.MinValue)
         {
@@ -127,6 +134,15 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         var service = plugin.ShopListService;
         var store = service.PresetStore;
         ImGui.TextUnformatted("Presets");
+        ImGui.TextWrapped(store.LastStatus);
+        ImGui.BeginDisabled(plugin.UtilityAutomationService.IsRunning);
+        if (ImGui.Button("Reload saved lists"))
+        {
+            store.Reload();
+            settingsPresetId = Guid.Empty;
+            RefreshPreview();
+        }
+        ImGui.EndDisabled();
 
         var presetNames = store.Presets.Select(preset => preset.Name).ToArray();
         var presetIndex = Math.Max(0, Array.FindIndex(
@@ -204,9 +220,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         ImGui.EndDisabled();
 
         EnsurePresetSettings();
-        var modes = new[] { "Targeted refill", "Spend until selected currency / capacity" };
+        var modes = new[] { "Targeted refill", "Spend until currency/capacity", "Fill order over multiple runs" };
         ImGui.SetNextItemWidth(275f);
-        ImGui.Combo("Mode", ref presetModeIndex, modes, modes.Length);
+        ImGui.Combo("Purchase type", ref presetModeIndex, modes, modes.Length);
 
         var currencyKinds = Enum.GetValues<ShopCurrencyKind>();
         var currencyNames = currencyKinds.Select(ShopOfferSelector.CurrencyKindName).ToArray();
@@ -236,7 +252,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             else
             {
                 var succeeded = service.ConfigureActivePreset(
-                    (ShopListMode)Math.Clamp(presetModeIndex, 0, 1),
+                    (ShopListMode)Math.Clamp(presetModeIndex, 0, 2),
                     currencyKinds[Math.Clamp(currencyKindIndex, 0, currencyKinds.Length - 1)],
                     (uint)currencyItemId,
                     currencyThreshold,
@@ -252,12 +268,21 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         ImGui.InputInt("Item ID", ref newItemId);
         ImGui.SameLine();
         ImGui.SetNextItemWidth(95f);
-        ImGui.InputInt("If owned <", ref newTriggerBelow);
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(95f);
-        ImGui.InputInt("Refill to >=", ref newRefillToAtLeast);
-        ImGui.SameLine();
-        ImGui.Checkbox("Repeatable", ref newRepeatable);
+        if (store.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            ImGui.InputInt("Target quantity", ref newRefillToAtLeast);
+            newTriggerBelow = newRefillToAtLeast;
+            newRepeatable = false;
+        }
+        else
+        {
+            ImGui.InputInt("If owned <", ref newTriggerBelow);
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(95f);
+            ImGui.InputInt("Refill to >=", ref newRefillToAtLeast);
+            ImGui.SameLine();
+            ImGui.Checkbox("Repeatable", ref newRepeatable);
+        }
         ImGui.SameLine();
         var scopes = new[] { "Inventory only", "Inventory + XA Database retainers" };
         ImGui.SetNextItemWidth(255f);
@@ -416,11 +441,23 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
             ImGui.TableSetColumnIndex(1);
             ImGui.SetNextItemWidth(70f);
-            ImGui.InputInt("<##Trigger", ref edit.TriggerBelow);
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(70f);
-            ImGui.InputInt(">=##Refill", ref edit.RefillToAtLeast);
-            ImGui.Checkbox("Repeatable", ref edit.Repeatable);
+            if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
+            {
+                ImGui.InputInt("Target", ref edit.RefillToAtLeast);
+                edit.TriggerBelow = edit.RefillToAtLeast;
+                edit.Repeatable = false;
+                var credited = plugin.ShopListService.PresetStore.GetOrderProgress(
+                    plugin.UtilityAutomationService.ShopCharacterId, plugin.ShopListService.PresetStore.ActivePresetId);
+                ImGui.TextDisabled($"Credited: {credited.GetValueOrDefault(row.RowId)} / {row.RefillToAtLeast}");
+            }
+            else
+            {
+                ImGui.InputInt("<##Trigger", ref edit.TriggerBelow);
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(70f);
+                ImGui.InputInt(">=##Refill", ref edit.RefillToAtLeast);
+                ImGui.Checkbox("Repeatable", ref edit.Repeatable);
+            }
             var scopeNames = new[] { "Inventory", "Inventory + retainers" };
             ImGui.SetNextItemWidth(155f);
             ImGui.Combo("##Scope", ref edit.OwnershipScopeIndex, scopeNames, scopeNames.Length);
@@ -561,6 +598,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             return "Run Test preset first so ownership and exact-currency offers are current.";
         if (!string.Equals(testedPreviewState, previewState, StringComparison.Ordinal))
             return "Run Test preset for the current saved preset before purchasing.";
+        if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns &&
+            testedDisposition is "ready" or "partial" or "fulfilled")
+            return plugin.ShopListService.IsStandaloneOrderComplete ? "Order complete. Use Start new order for another order." : string.Empty;
         if (string.Equals(testedDisposition, "not-triggered", StringComparison.Ordinal))
             return string.IsNullOrWhiteSpace(testedMessage)
                 ? "The selected currency trigger is not met."

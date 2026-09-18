@@ -177,10 +177,11 @@ public sealed class ShopListService
     public bool RefreshOwnership(out string status)
         => RefreshOwnership(presetStore.ActivePreset, out status);
 
-    private bool RefreshOwnership(ShopListPreset preset, out string status)
+    private bool RefreshOwnership(ShopListPreset preset, out string status, IReadOnlyDictionary<Guid, long>? creditedQuantities = null)
     {
         var itemIds = preset.Items
             .Where(item => item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers)
+            .Where(item => preset.Mode != ShopListMode.FillOrderOverMultipleRuns || creditedQuantities?.ContainsKey(item.RowId) != true)
             .Select(item => item.ItemId)
             .Distinct()
             .ToArray();
@@ -189,7 +190,7 @@ public sealed class ShopListService
             retainerSnapshot = ShopListRetainerSnapshot.Empty;
             ownershipPresetId = preset.PresetId;
             OwnershipAvailable = true;
-            OwnershipStatus = "This preset uses inventory-only ownership; XA Database was not queried.";
+            OwnershipStatus = "No pending ownership credit requires retainers; XA Database was not queried.";
             status = OwnershipStatus;
             return true;
         }
@@ -227,11 +228,13 @@ public sealed class ShopListService
     }
 
     public IReadOnlyList<ShopListPreviewRow> BuildPreviewRows()
-        => BuildPreviewRows(presetStore.ActivePreset, new HashSet<Guid>());
+        => BuildPreviewRows(presetStore.ActivePreset, new HashSet<Guid>(),
+            presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, presetStore.ActivePresetId));
 
     private IReadOnlyList<ShopListPreviewRow> BuildPreviewRows(
         ShopListPreset preset,
-        IReadOnlySet<Guid> associationCompletedRowIds)
+        IReadOnlySet<Guid> associationCompletedRowIds,
+        IReadOnlyDictionary<Guid, long>? creditedQuantities = null)
     {
         var rows = new List<ShopListPreviewRow>();
         var spendPurchasePlanned = false;
@@ -243,7 +246,10 @@ public sealed class ShopListService
                 ? retainerSnapshot.Quantities.GetValueOrDefault(item.ItemId)
                 : 0;
             var owned = Math.Max(0L, liveQuantity) + Math.Max(0L, retainerQuantity);
-            var associationCompleted = !item.Repeatable && associationCompletedRowIds.Contains(item.RowId);
+            var finiteOrder = preset.Mode == ShopListMode.FillOrderOverMultipleRuns;
+            var credited = creditedQuantities?.GetValueOrDefault(item.RowId, owned) ?? owned;
+            var associationCompleted = finiteOrder ? credited >= item.RefillToAtLeast
+                : !item.Repeatable && associationCompletedRowIds.Contains(item.RowId);
             ShopPurchasePreviewResult purchasePreview;
             var purchaseQuantity = 0;
             var outcome = "pending";
@@ -282,7 +288,9 @@ public sealed class ShopListService
             }
             else
             {
-                purchasePreview = preset.Mode == ShopListMode.TargetedRefill
+                purchasePreview = finiteOrder
+                    ? utilityAutomation.PreviewOrderShopPurchase(item.ItemId, checked((int)(item.RefillToAtLeast - credited)), preset.Currency)
+                    : preset.Mode == ShopListMode.TargetedRefill
                     ? utilityAutomation.PreviewShopPurchaseAtLeast(
                         item.ItemId,
                         checked((int)(item.RefillToAtLeast - owned)),
@@ -299,11 +307,11 @@ public sealed class ShopListService
                         ? $"Would buy {purchaseQuantity} to refill from {owned} to at least {item.RefillToAtLeast}; vendor bundles may exceed the target."
                         : $"First eligible stored-order row would buy up to {purchaseQuantity} whole-bundle item(s); later rows are evaluated only after its verified result.";
                 }
-                else if (preset.Mode == ShopListMode.SpendUntilCurrencyOrCapacity
+                else if (preset.Mode is ShopListMode.SpendUntilCurrencyOrCapacity or ShopListMode.FillOrderOverMultipleRuns
                          && failureCode is ShopPurchaseFailureCodes.InsufficientCurrency
                              or ShopPurchaseFailureCodes.InventoryCapacity)
                 {
-                    outcome = "skipped";
+                    outcome = finiteOrder ? "pending" : "skipped";
                     message = purchasePreview.Message;
                 }
                 else
@@ -349,8 +357,15 @@ public sealed class ShopListService
             OperationId = Guid.NewGuid().ToString("D"),
             PresetId = presetStore.ActivePresetId,
             CompletedRowIds = [],
+            SupportsFiniteOrderProgress = true,
+            CreditedQuantities = new(presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, presetStore.ActivePresetId)),
         };
-        var response = StartPreset(request);
+        var characterId = utilityAutomation.ShopCharacterId;
+        var response = StartPreset(request, progress =>
+        {
+            if (!presetStore.SaveOrderProgress(characterId, request.PresetId, progress, out var error))
+                throw new InvalidOperationException(error);
+        });
         status = response.Message;
         return response.Accepted;
     }
@@ -358,7 +373,7 @@ public sealed class ShopListService
     internal ShopListPresetPreviewResponse PreviewActivePreset()
     {
         var preset = presetStore.ActivePreset;
-        if (!RefreshOwnership(preset, out var ownershipStatus))
+        if (!RefreshOwnership(preset, out var ownershipStatus, presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, preset.PresetId)))
         {
             return new ShopListPresetPreviewResponse(
                 1,
@@ -370,7 +385,21 @@ public sealed class ShopListService
                 []);
         }
 
-        return EvaluatePreset(preset, new HashSet<Guid>());
+        return EvaluatePreset(preset, new HashSet<Guid>(), presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, preset.PresetId));
+    }
+
+    public bool IsStandaloneOrderComplete => presetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns &&
+        presetStore.ActivePreset.Items.Count > 0 && presetStore.ActivePreset.Items.All(row =>
+            presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, presetStore.ActivePresetId).GetValueOrDefault(row.RowId) >= row.RefillToAtLeast);
+
+    public bool StartNewOrder(out string error)
+    {
+        if (utilityAutomation.IsRunning || !IsStandaloneOrderComplete)
+        {
+            error = "Complete the current order and stop active utilities before starting a new order.";
+            return false;
+        }
+        return presetStore.SaveOrderProgress(utilityAutomation.ShopCharacterId, presetStore.ActivePresetId, new Dictionary<Guid, long>(), out error);
     }
 
     public string GetShopListPresetsJson()
@@ -394,10 +423,10 @@ public sealed class ShopListService
             return SerializePreviewError(request.PresetId, $"Shop-list preset '{request.PresetId:D}' was not found.");
         if (!TryValidateCompletedRows(preset, request.CompletedRowIds, out var completedRows, out error))
             return SerializePreviewError(preset.PresetId, error);
-        if (!RefreshOwnership(preset, out var ownershipStatus))
+        if (!RefreshOwnership(preset, out var ownershipStatus, request.CreditedQuantities))
             return SerializePreviewError(preset.PresetId, ownershipStatus);
 
-        var preview = EvaluatePreset(preset, completedRows);
+        var preview = EvaluatePreset(preset, completedRows, request.CreditedQuantities);
         return JsonSerializer.Serialize(preview, JsonOptions);
     }
 
@@ -489,10 +518,13 @@ public sealed class ShopListService
         }
     }
 
-    private ShopListPresetStartResponse StartPreset(ShopListPresetStartRequest request)
+    private ShopListPresetStartResponse StartPreset(ShopListPresetStartRequest request,
+        Action<IReadOnlyDictionary<Guid, long>>? saveProgress = null)
     {
         if (!TryGetPreset(request.PresetId, out var preset))
             return StartError(request, $"Shop-list preset '{request.PresetId:D}' was not found.");
+        if (preset.Mode == ShopListMode.FillOrderOverMultipleRuns && !request.SupportsFiniteOrderProgress)
+            return StartError(request, "This list fills an order over multiple runs. Update DAD/the calling plugin to support finite-order quantity progress before running it.");
         if (!TryValidateCompletedRows(preset, request.CompletedRowIds, out var completedRows, out var error))
             return StartError(request, error);
         var retained = utilityAutomation.ShopListBatchStatus;
@@ -503,13 +535,18 @@ public sealed class ShopListService
         }
         if (utilityAutomation.IsRunning)
             return StartError(request, $"Another ADS utility is active: {utilityAutomation.StatusMessage}");
-        if (!RefreshOwnership(preset, out var ownershipStatus))
+        if (!RefreshOwnership(preset, out var ownershipStatus, request.CreditedQuantities))
             return StartError(request, ownershipStatus);
 
-        var preview = EvaluatePreset(preset, completedRows);
+        var preview = EvaluatePreset(preset, completedRows, request.CreditedQuantities);
+        if (preview.Disposition != "error" && preview.CreditedQuantities != null)
+        {
+            try { saveProgress?.Invoke(preview.CreditedQuantities); }
+            catch (Exception ex) { return StartError(request, $"Order progress could not be saved: {ex.Message}"); }
+        }
         if (!string.Equals(preview.Disposition, "ready", StringComparison.Ordinal))
         {
-            if (preview.Disposition is "fulfilled" or "not-triggered")
+            if (preview.Disposition is "fulfilled" or "not-triggered" or "partial")
             {
                 if (!utilityAutomation.RetainShopListPresetNoOp(
                     request.OperationId,
@@ -517,7 +554,8 @@ public sealed class ShopListService
                     preview.Disposition,
                     preview.Message,
                     preview.Rows,
-                    preview.CompletedNonRepeatableRowIds))
+                    preview.CompletedNonRepeatableRowIds,
+                    preview.CreditedQuantities))
                 {
                     return StartError(request, "Another ADS utility became active before the no-op result could be retained.");
                 }
@@ -529,7 +567,7 @@ public sealed class ShopListService
                 preset.PresetId,
                 preview.Disposition,
                 preview.CompletedNonRepeatableRowIds,
-                preview.Message);
+                preview.Message) { CreditedQuantities = preview.CreditedQuantities };
         }
 
         var rowsById = preview.Rows.ToDictionary(row => row.RowId);
@@ -555,7 +593,7 @@ public sealed class ShopListService
                     item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
                         ? previewRow.RetainerQuantity
                         : 0);
-            }).ToArray());
+            }).ToArray()) { CreditedQuantities = preview.CreditedQuantities, SaveProgress = saveProgress };
 
         if (!utilityAutomation.StartShopListBatch(definition))
             return StartError(request, utilityAutomation.StatusMessage);
@@ -567,12 +605,13 @@ public sealed class ShopListService
             preset.PresetId,
             "started",
             preview.CompletedNonRepeatableRowIds,
-            utilityAutomation.StatusMessage);
+            utilityAutomation.StatusMessage) { CreditedQuantities = preview.CreditedQuantities };
     }
 
     private ShopListPresetPreviewResponse EvaluatePreset(
         ShopListPreset preset,
-        IReadOnlySet<Guid> completedRows)
+        IReadOnlySet<Guid> completedRows,
+        IReadOnlyDictionary<Guid, long>? creditedQuantities = null)
     {
         if (preset.Items.Count == 0)
         {
@@ -586,7 +625,10 @@ public sealed class ShopListService
                 []);
         }
 
-        var rows = BuildPreviewRows(preset, completedRows);
+        var rows = BuildPreviewRows(preset, completedRows, creditedQuantities);
+        var progress = preset.Mode == ShopListMode.FillOrderOverMultipleRuns
+            ? rows.ToDictionary(row => row.RowId, row => creditedQuantities?.GetValueOrDefault(row.RowId, row.OwnedQuantity) ?? row.OwnedQuantity)
+            : null;
         var completedNonRepeatableRowIds = rows
             .Where(row => !row.Repeatable
                           && row.Outcome is "association-completed" or "already-satisfied")
@@ -610,7 +652,7 @@ public sealed class ShopListService
                 available,
                 completedNonRepeatableRowIds,
                 $"Selected currency balance {available} has not reached trigger {preset.CurrencyThreshold}.",
-                rows);
+                rows) { CreditedQuantities = progress };
         }
 
         var failed = rows.FirstOrDefault(row => row.Outcome == "failed");
@@ -630,13 +672,15 @@ public sealed class ShopListService
         return new ShopListPresetPreviewResponse(
             1,
             preset.PresetId,
-            ready ? "ready" : "fulfilled",
+            ready ? "ready" : progress != null && rows.Any(row => progress[row.RowId] < row.RefillToAtLeast) ? "partial" : "fulfilled",
             available,
             completedNonRepeatableRowIds,
             ready
                 ? "Preset test passed against current truth. Start re-evaluates rows in stored order after each verified purchase. No purchase was made."
-                : "Preset is fulfilled or already at its requested currency/capacity limit; no purchase is needed.",
-            rows);
+                : progress != null && rows.Any(row => progress[row.RowId] < row.RefillToAtLeast)
+                    ? "Order remains pending; earn currency or free inventory capacity before the next pass."
+                    : "Preset is fulfilled or already at its requested currency/capacity limit; no purchase is needed.",
+            rows) { CreditedQuantities = progress };
     }
 
     private bool TryGetPreset(Guid presetId, out ShopListPreset preset)
@@ -681,6 +725,9 @@ public sealed class ShopListService
                 throw new InvalidDataException("Preset request version must be 1.");
             if (request.PresetId == Guid.Empty)
                 throw new InvalidDataException("presetId must be a nonempty GUID.");
+            if (request.CreditedQuantities is { } quantities && (quantities.Count > ShopListPresetStore.MaximumRowsPerPreset ||
+                quantities.Any(pair => pair.Key == Guid.Empty || pair.Value < 0 || pair.Value > int.MaxValue)))
+                throw new InvalidDataException("Credited quantities must contain valid row IDs and nonnegative totals.");
             request.OperationId = request.OperationId?.Trim() ?? string.Empty;
             if (requireOperationId && (request.OperationId.Length is < 1 or > 128))
                 throw new InvalidDataException("operationId must contain 1 through 128 characters.");
@@ -705,7 +752,8 @@ public sealed class ShopListService
         => new(1, false, request.OperationId, request.PresetId, "error", [], message);
 
     internal static string ModeName(ShopListMode mode)
-        => mode == ShopListMode.SpendUntilCurrencyOrCapacity
+        => mode == ShopListMode.FillOrderOverMultipleRuns ? "fill-order-over-multiple-runs"
+            : mode == ShopListMode.SpendUntilCurrencyOrCapacity
             ? "spend-until-currency-or-capacity"
             : "targeted-refill";
 
@@ -746,6 +794,8 @@ public sealed class ShopListService
         public string OperationId { get; set; } = string.Empty;
         public Guid PresetId { get; set; }
         public List<Guid>? CompletedRowIds { get; set; }
+        public bool SupportsFiniteOrderProgress { get; set; }
+        public Dictionary<Guid, long>? CreditedQuantities { get; set; }
     }
 
     private sealed class ShopCatalogSearchRequest

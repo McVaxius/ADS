@@ -7,6 +7,229 @@ namespace ADS.Tests;
 public sealed class ShopPurchaseRunnerTests
 {
     [Fact]
+    public void FiniteOrderCreditsOnlyVerifiedPurchasesAcrossCurrencyLimitedPassesAndReload()
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.True(store.Create("Order test", out _));
+        Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out _));
+        Assert.True(store.SetItem(100, 60, 60, false, ShopListOwnershipScope.InventoryOnly, out _));
+        var preset = store.ActivePreset;
+        var row = preset.Items.Single();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ItemCount = 2 };
+        var clock = new FakeClock();
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, clock, log);
+        var service = new ShopListService(store, null!, utility, _ => throw new InvalidOperationException("Inventory-only order queried retainers"), log);
+        Dictionary<Guid, long>? progress = null;
+        for (var pass = 0; pass < 4; pass++)
+        {
+            runtime.SetCurrency(Poetics, 2_000);
+            var response = System.Text.Json.JsonDocument.Parse(service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                version = 1, operationId = $"pass-{pass}", presetId = preset.PresetId,
+                supportsFiniteOrderProgress = true, creditedQuantities = progress,
+            })));
+            Assert.True(response.RootElement.GetProperty("accepted").GetBoolean());
+            for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+            Assert.False(utility.IsRunning);
+            var status = utility.ShopListBatchStatus;
+            Assert.True(status.Succeeded, status.FailureMessage);
+            progress = new(status.CreditedQuantities!);
+            Assert.Equal(Math.Min(60, 2 + (pass + 1) * 20), progress[row.RowId]);
+            Assert.Equal(pass == 2 ? "fulfilled" : pass < 2 ? "partial" : "fulfilled", status.Disposition);
+            Assert.False(runtime.ExpectedShopVisible);
+            Assert.True(store.SaveOrderProgress(1, preset.PresetId, progress, out _));
+            store.Reload();
+            Assert.Equal(progress[row.RowId], store.GetOrderProgress(1, preset.PresetId)[row.RowId]);
+            Assert.Empty(store.GetOrderProgress(2, preset.PresetId));
+            runtime.ItemCount = 0; // Consume or move everything. Credited progress must remain.
+            if (pass == 2) break;
+        }
+        var callbacks = runtime.SubmitCount;
+        var completed = System.Text.Json.JsonDocument.Parse(service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            version = 1, operationId = "completed-after-reload", presetId = preset.PresetId,
+            supportsFiniteOrderProgress = true, creditedQuantities = progress,
+        })));
+        Assert.Equal("fulfilled", completed.RootElement.GetProperty("disposition").GetString());
+        Assert.Equal(callbacks, runtime.SubmitCount);
+        Assert.True(store.SaveOrderProgress(1, preset.PresetId, new Dictionary<Guid, long>(), out _));
+        Assert.Empty(store.GetOrderProgress(1, preset.PresetId));
+        var oldCaller = service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+        { version = 1, operationId = "old-caller", presetId = preset.PresetId }));
+        Assert.Contains("Update DAD", oldCaller);
+    }
+
+    [Theory]
+    [InlineData(ShopListMode.TargetedRefill, false, 5)]
+    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity, true, 20)]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, false, 5)]
+    public void PurchaseTypesRetainTheirSeparateQuotas(ShopListMode mode, bool repeatable, int expected)
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.SetCurrency(Poetics, 2_000);
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        var row = Guid.NewGuid();
+        var definition = new ShopListBatchDefinition("types", Guid.NewGuid(), mode, Poetics, 0, [], [],
+            [new(row, 100, "Fixture", 5, 5, repeatable, ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = mode == ShopListMode.FillOrderOverMultipleRuns ? new Dictionary<Guid, long> { [row] = 0 } : null };
+        Assert.True(utility.StartShopListBatch(definition));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.True(utility.ShopListBatchStatus.Succeeded, utility.ShopListBatchStatus.FailureMessage);
+        Assert.Equal(expected, runtime.ItemCount);
+        Assert.Equal(mode == ShopListMode.FillOrderOverMultipleRuns, utility.ShopListBatchStatus.CreditedQuantities != null);
+    }
+
+    [Fact]
+    public void FiniteOrderCancellationPreservesVerifiedBundlesButDoesNotCreditUnverifiedDeltas()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.SetCurrency(Poetics, 100_000);
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, clock, log);
+        var row = Guid.NewGuid();
+        Dictionary<Guid, long> saved = [];
+        Assert.True(utility.StartShopListBatch(new("cancel-order", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 120, 120, false, ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = new Dictionary<Guid, long> { [row] = 0 }, SaveProgress = totals => saved = new(totals) }));
+        for (var tick = 0; tick < 200 && saved.GetValueOrDefault(row) == 0; tick++) utility.Update();
+        Assert.Equal(99, saved[row]);
+        runtime.ApplyCurrencyDelta = false;
+        for (var tick = 0; tick < 100 && runtime.SubmitCount < 2; tick++) utility.Update();
+        utility.Cancel("synthetic cancellation");
+        Assert.Equal(99, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        Assert.Equal(99, saved[row]);
+        Assert.Equal("cancelled", utility.ShopListBatchStatus.Disposition);
+        Assert.Empty(utility.ShopListBatchStatus.CompletedNonRepeatableRowIds);
+    }
+
+    [Theory]
+    [InlineData(1u, 0, 1000, "partial", 0)]
+    [InlineData(1u, 2000, 0, "partial", 0)]
+    [InlineData(3u, 100, 1000, "partial", 3)]
+    [InlineData(3u, 2000, 1000, "fulfilled", 6)]
+    public void FiniteOrdersHonorCapacityAffordableBundlesAndRounding(uint bundle, long balance, long capacity, string disposition, long purchased)
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, Capacity = capacity };
+        runtime.SetCurrency(Poetics, balance);
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets(bundle)), runtime, new FakeClock(), log);
+        var row = Guid.NewGuid();
+        Assert.True(utility.StartShopListBatch(new("bundles", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 5, 5, false, ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = new Dictionary<Guid, long> { [row] = 0 } }));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.Equal(disposition, utility.ShopListBatchStatus.Disposition);
+        Assert.Equal(purchased, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        Assert.Equal(purchased, runtime.ItemCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FiniteOrderGenuineFailuresRemainFailures(bool failedWrite)
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.SetCurrency(Poetics, 100_000);
+        if (!failedWrite) runtime.Validation = ShopUiValidationResult.Mismatch("Wrong vendor");
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        var row = Guid.NewGuid();
+        Assert.True(utility.StartShopListBatch(new("fail", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 120, 120, false, ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = new Dictionary<Guid, long> { [row] = 0 }, SaveProgress = _ => throw new IOException("Cannot save") }));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.False(utility.ShopListBatchStatus.Succeeded);
+        Assert.Equal(failedWrite ? 99 : 0, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        Assert.Equal(failedWrite ? 1 : 0, runtime.SubmitCount);
+        Assert.Empty(utility.ShopListBatchStatus.CompletedNonRepeatableRowIds);
+    }
+
+    [Fact]
+    public void StandaloneOrderPersistsOnlyOnRunAndRequiresExplicitResetWhileIpcRemainsSeparate()
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.True(store.Create("Standalone", out _));
+        Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out _));
+        Assert.True(store.SetItem(100, 5, 5, false, ShopListOwnershipScope.InventoryOnly, out _));
+        var presetId = store.ActivePresetId;
+        var rowId = store.ActivePreset.Items[0].RowId;
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        var service = new ShopListService(store, null!, utility, _ => throw new InvalidOperationException(), log);
+        runtime.SetCurrency(Poetics, 200);
+        var before = File.ReadAllText(store.ConfigPath);
+        Assert.Equal("ready", service.PreviewActivePreset().Disposition);
+        Assert.Equal(before, File.ReadAllText(store.ConfigPath));
+        Assert.False(service.StartNewOrder(out _));
+        Assert.True(service.TryStartBatch(out _));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.Equal(2, store.GetOrderProgress(1, presetId)[rowId]);
+        runtime.ItemCount = 0;
+        store.Reload();
+        runtime.SetCurrency(Poetics, 300);
+        Assert.True(service.TryStartBatch(out _));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.True(service.IsStandaloneOrderComplete);
+        runtime.ItemCount = 0;
+        store.Reload();
+        var callbacks = runtime.SubmitCount;
+        Assert.Equal("fulfilled", service.PreviewActivePreset().Disposition);
+        Assert.False(service.TryStartBatch(out _));
+        Assert.Equal(callbacks, runtime.SubmitCount);
+        runtime.CharacterId = 2;
+        Assert.False(service.IsStandaloneOrderComplete);
+        Assert.Empty(store.GetOrderProgress(2, presetId));
+        runtime.CharacterId = 1;
+        runtime.SetCurrency(Poetics, 200);
+        var separate = System.Text.Json.JsonDocument.Parse(service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+        { version = 1, operationId = "separate-association", presetId, supportsFiniteOrderProgress = true })));
+        Assert.True(separate.RootElement.GetProperty("accepted").GetBoolean());
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.Equal(2, utility.ShopListBatchStatus.CreditedQuantities![rowId]);
+        Assert.Equal(5, store.GetOrderProgress(1, presetId)[rowId]);
+        Assert.True(service.StartNewOrder(out _));
+        Assert.Empty(store.GetOrderProgress(1, presetId));
+    }
+
+    [Fact]
+    public void FiniteOrderDoesNotPublishTerminalSuccessUntilCleanupIsProven()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CleanupBlocked = true };
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        var row = Guid.NewGuid();
+        Assert.True(utility.StartShopListBatch(new("cleanup", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = new Dictionary<Guid, long> { [row] = 0 } }));
+        for (var tick = 0; tick < 80; tick++) utility.Update();
+        Assert.True(utility.IsRunning);
+        Assert.False(utility.ShopListBatchStatus.Done);
+        Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        runtime.CleanupBlocked = false;
+        utility.Update();
+        Assert.True(utility.ShopListBatchStatus.Succeeded);
+        runtime.SetCurrency(Poetics, -1);
+        Assert.False(utility.StartShopListBatch(new("unknown-balance", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])));
+        Assert.Contains("unavailable", utility.StatusMessage);
+    }
+
+    private sealed class BatchSheets(uint bundle = 1) : IShopSheetSource
+    {
+        public ShopCatalogSnapshot BuildSnapshot() => new(
+            new Dictionary<uint, ShopItemSheetRow> { [100] = new(100, "Fixture", 999, 0, false), [28] = new(28, "Poetics", 2000, 0, false) },
+            [], [new(10, "Fixture shop", 0, [(100u, bundle, false)], [new(1, 100, 0, 1)], 2, [], false)],
+            [new(ShopSheetKind.Special, 10, 100, "Fixture vendor", [], ShopNpcLinkKind.DirectShop, [], false)],
+            [new(100, 1, "Fixture territory", Vector3.Zero, 1)], [], [new(1, 28, "Poetics")]);
+    }
+
+    [Fact]
     public void RegularGilValidationReturnsTheUniqueVisibleCallbackRow()
     {
         ShopRuntimeGilItem[] items =
@@ -1532,6 +1755,9 @@ public sealed class ShopPurchaseRunnerTests
         };
 
         public bool IsLoggedIn { get; set; } = true;
+        public ulong CharacterId { get; set; } = 1;
+        public bool CleanupBlocked { get; set; }
+        public string? ShopListCleanupBlocker => CleanupBlocked || IsAnyShopVisible ? "Synthetic shop cleanup is pending" : null;
         public bool IsBetweenAreas { get; set; }
         public bool IsPlayerAvailable { get; set; } = true;
         public uint CurrentTerritoryId { get; set; } = 1;
@@ -1551,6 +1777,8 @@ public sealed class ShopPurchaseRunnerTests
         public int UnreadableOwnedConfirmationChecks { get; set; }
         public int AcceptedConfirmationCount { get; private set; }
         public long ItemCount { get; set; }
+        public long Capacity { get; set; } = 100_000;
+        public void SetCurrency(ShopCurrencyIdentity currency, long amount) => currencies[currency] = amount;
         private readonly Dictionary<uint, long> additionalItemCounts = [];
         public int SubmitCount { get; private set; }
         public int TeleportCount { get; private set; }
@@ -1587,7 +1815,7 @@ public sealed class ShopPurchaseRunnerTests
             => itemId == 100 ? ItemCount : additionalItemCounts.GetValueOrDefault(itemId);
         public long GetAvailableCurrency(ShopCurrencyCost currency)
             => currencies.TryGetValue(currency.Identity, out var value) ? value : 0;
-        public long GetInventoryCapacity(uint itemId, uint stackSize) => 100_000;
+        public long GetInventoryCapacity(uint itemId, uint stackSize) => Capacity;
         public bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition)
         {
             FloorResolveCount++;

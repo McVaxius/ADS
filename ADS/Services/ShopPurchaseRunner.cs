@@ -108,6 +108,7 @@ internal sealed class ShopPurchaseRunner
     }
 
     public bool IsRunning => status.Running;
+    internal int VerifiedAcquiredQuantity { get; private set; }
     public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
     internal string? LastStartFailureCode => lastStartFailureCode;
     internal bool HasPurchaseSubmission => anyPurchaseCallbackSent || callbackCheckpoint != null;
@@ -295,6 +296,7 @@ internal sealed class ShopPurchaseRunner
         anyPurchaseCallbackSent = false;
         this.beforeSubmit = beforeSubmit;
         purchaseVerified = verified;
+        VerifiedAcquiredQuantity = 0;
         callbackCheckpoint = null;
         teleportCommandAccepted = false;
         navigationOwned = false;
@@ -1148,6 +1150,7 @@ internal sealed class ShopPurchaseRunner
 
         if (itemDelta == expectedItemDelta && outputsComplete && currenciesComplete)
         {
+            VerifiedAcquiredQuantity = checked(VerifiedAcquiredQuantity + (int)expectedItemDelta);
             if (callbackCheckpoint != null)
                 purchaseVerified!(callbackCheckpoint);
             lastVerifiedItemCount = currentItemCount;

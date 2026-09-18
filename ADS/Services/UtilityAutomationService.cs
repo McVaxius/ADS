@@ -210,6 +210,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly ShopCatalogService shopCatalogService;
     private readonly ShopPurchaseRunner shopPurchaseRunner;
     private readonly DalamudShopPurchaseRuntime shopPurchaseRuntime;
+    private readonly IShopPurchaseRuntime shopRuntime;
     private readonly Func<bool> isDutyOwned;
     private readonly Func<bool> isInnEntryRunning;
     private readonly Dictionary<uint, int?> repairIndexCache = [];
@@ -286,6 +287,8 @@ public sealed unsafe class UtilityAutomationService
     private string shopListBatchTerminalFailureMessage = string.Empty;
     private ShopOfferIdentity? shopListHeldShop;
     private ShopListBatchStatusSnapshot shopListBatchStatus = EmptyShopListBatchStatus();
+    private (bool Succeeded, string Message, string? FailureCode)? shopListCleanup;
+    private DateTime shopListCleanupStartedAtUtc;
 
     public UtilityAutomationService(
         IDataManager dataManager,
@@ -318,6 +321,7 @@ public sealed unsafe class UtilityAutomationService
         Action<string> shopDiagnostic = message => log.Information("[ADS][Shop] {Diagnostic}", message);
         shopCatalogService = new ShopCatalogService(new LuminaShopSheetSource(dataManager, log), shopDiagnostic);
         shopPurchaseRuntime = new DalamudShopPurchaseRuntime(objectTable, targetManager, commandManager, clientState, condition, log);
+        shopRuntime = shopPurchaseRuntime;
         shopPurchaseRunner = new ShopPurchaseRunner(
             shopCatalogService,
             shopPurchaseRuntime,
@@ -329,6 +333,14 @@ public sealed unsafe class UtilityAutomationService
 
     public bool IsRunning
         => activeTask != UtilityTask.None;
+
+    internal UtilityAutomationService(ShopCatalogService catalog, IShopPurchaseRuntime runtime, IShopPurchaseClock clock, IPluginLog log)
+        : this(null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, () => false, () => false, log)
+    {
+        shopCatalogService = catalog;
+        shopRuntime = runtime;
+        shopPurchaseRunner = new(catalog, runtime, clock);
+    }
 
     public bool SuppressesGenericYesNo
         => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair or UtilityTask.ShopPurchase or UtilityTask.ShopListBatch;
@@ -434,16 +446,23 @@ public sealed unsafe class UtilityAutomationService
         return best ?? PreviewShopPurchase(itemId, Math.Clamp(minimumQuantity, 1, ShopPurchaseRequest.MaximumQuantity), requiredCurrency);
     }
 
+    internal ShopPurchasePreviewResult PreviewOrderShopPurchase(uint itemId, int remaining, ShopCurrencyIdentity currency)
+    {
+        var complete = PreviewShopPurchaseAtLeast(itemId, remaining, currency);
+        return complete.CanPurchase ? complete : PreviewMaximumShopPurchase(itemId, currency, remaining);
+    }
+
     internal ShopPurchasePreviewResult PreviewMaximumShopPurchase(
         uint itemId,
-        ShopCurrencyIdentity requiredCurrency)
+        ShopCurrencyIdentity requiredCurrency,
+        int targetRemaining = ShopPurchaseRequest.MaximumQuantity)
     {
         ShopPurchasePreviewResult? best = null;
         ShopPurchasePreviewResult? lastFailure = null;
         foreach (var bundle in shopCatalogService.GetReceiveBundleCounts(itemId))
         {
             var low = 1;
-            var high = ShopPurchaseRequest.MaximumQuantity / bundle;
+            var high = Math.Min(ShopPurchaseRequest.MaximumQuantity / bundle, (targetRemaining + bundle - 1) / bundle);
             while (low <= high)
             {
                 var transactions = low + ((high - low) / 2);
@@ -497,13 +516,15 @@ public sealed unsafe class UtilityAutomationService
     }
 
     internal long GetAvailableShopCurrency(ShopCurrencyIdentity currency)
-        => shopPurchaseRuntime.GetAvailableCurrency(new ShopCurrencyCost(currency.Kind, currency.ItemId, string.Empty, 1));
+        => shopRuntime.GetAvailableCurrency(new ShopCurrencyCost(currency.Kind, currency.ItemId, string.Empty, 1));
 
     internal ShopCatalogSearchResponse SearchShopCatalog(string? query, ShopCurrencyIdentity? currency, int limit)
         => shopCatalogService.Search(query, currency, limit);
 
     internal long GetLiveShopItemCount(uint itemId)
-        => shopPurchaseRuntime.GetItemCount(itemId);
+        => shopRuntime.GetItemCount(itemId);
+
+    internal ulong ShopCharacterId => shopRuntime.CharacterId;
 
     /// <summary>Opt in to reusing one open shop across consecutive purchases. See ShopPurchaseRunner.KeepShopOpen.</summary>
     public bool ShopKeepOpen
@@ -793,7 +814,7 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage = "Cannot start shop-list purchasing while /ads enterinn is running.";
             return false;
         }
-        if (!clientState.IsLoggedIn || objectTable.LocalPlayer == null || condition[ConditionFlag.BetweenAreas])
+        if (!shopRuntime.IsLoggedIn || !shopRuntime.IsPlayerAvailable || shopRuntime.IsBetweenAreas)
         {
             StatusMessage = "Shop Lists requires a logged-in, available character who is not zoning.";
             return false;
@@ -870,11 +891,13 @@ public sealed unsafe class UtilityAutomationService
         var associationCompleted = definition.AssociationCompletedRowIds.ToHashSet();
         foreach (var item in shopListBatchItems)
         {
-            var inventory = Math.Max(0L, shopPurchaseRuntime.GetItemCount(item.ItemId));
+            var inventory = Math.Max(0L, shopRuntime.GetItemCount(item.ItemId));
             var owned = inventory + (item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
                 ? item.RetainerQuantity
                 : 0);
-            var skipped = !item.Repeatable && associationCompleted.Contains(item.RowId);
+            var skipped = definition.Mode == ShopListMode.FillOrderOverMultipleRuns
+                ? definition.CreditedQuantities?.GetValueOrDefault(item.RowId) >= item.RefillToAtLeast
+                : !item.Repeatable && associationCompleted.Contains(item.RowId);
             if (skipped)
             {
                 shopListBatchSkippedRowIds.Add(item.RowId);
@@ -915,7 +938,7 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage,
             string.Empty,
             shopListBatchRows.ToArray(),
-            null);
+            null) { CreditedQuantities = definition.CreditedQuantities };
         log.Information(
             "[ADS][ShopLists] Accepted preset={PresetId} operation={OperationId} with {Count} row(s).",
             definition.PresetId,
@@ -930,7 +953,8 @@ public sealed unsafe class UtilityAutomationService
         string disposition,
         string message,
         IReadOnlyList<ShopListPreviewRow> previewRows,
-        IReadOnlyList<Guid> completedNonRepeatableRowIds)
+        IReadOnlyList<Guid> completedNonRepeatableRowIds,
+        IReadOnlyDictionary<Guid, long>? creditedQuantities = null)
     {
         if (IsRunning)
             return false;
@@ -970,7 +994,7 @@ public sealed unsafe class UtilityAutomationService
             message,
             string.Empty,
             rows,
-            completedAt);
+            completedAt) { CreditedQuantities = creditedQuantities };
         LastSuccessMessage = message;
         LastFailureMessage = string.Empty;
         LastCompletionUtc = completedAt;
@@ -2687,11 +2711,18 @@ public sealed unsafe class UtilityAutomationService
     {
         if (activeTask != UtilityTask.ShopListBatch || shopListBatchDefinition == null)
             return;
+        if (shopListCleanup != null)
+        {
+            ContinueShopListCleanup();
+            return;
+        }
 
         if (shopPurchaseRunner.IsRunning)
         {
             shopPurchaseRunner.Update();
             var running = shopPurchaseRunner.Status;
+            if (shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns)
+                running = running with { AcquiredQuantity = shopPurchaseRunner.VerifiedAcquiredQuantity };
             StatusMessage = running.StatusMessage;
             shopListBatchStatus = shopListBatchStatus with
             {
@@ -2717,6 +2748,8 @@ public sealed unsafe class UtilityAutomationService
         if (shopListBatchChildAccepted)
         {
             var child = shopPurchaseRunner.Status;
+            if (shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns)
+                child = child with { AcquiredQuantity = shopPurchaseRunner.VerifiedAcquiredQuantity };
             shopListBatchChildAccepted = false;
             if (!string.IsNullOrEmpty(shopListBatchTerminalFailureMessage))
             {
@@ -2744,6 +2777,14 @@ public sealed unsafe class UtilityAutomationService
             }
             if (child.Succeeded != true)
             {
+                if (shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns &&
+                    child.FailureCode is ShopPurchaseFailureCodes.InsufficientCurrency or ShopPurchaseFailureCodes.InventoryCapacity)
+                {
+                    MarkCurrentBatchRow("pending", child.FailureMessage, child.AcquiredQuantity);
+                    shopListBatchIndex++;
+                    UpdateShopListBatch();
+                    return;
+                }
                 MarkCurrentBatchRow("failed", child.FailureMessage, child.AcquiredQuantity);
                 FinishShopListBatch(
                     false,
@@ -2789,6 +2830,24 @@ public sealed unsafe class UtilityAutomationService
             }
 
             var owned = GetShopListOwnedQuantity(item);
+            if (shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns)
+            {
+                if (GetAvailableShopCurrency(shopListBatchDefinition.Currency) < 0)
+                {
+                    FinishShopListBatch(false, "The exact selected currency balance became unavailable.", ShopPurchaseFailureCodes.InvalidRequest);
+                    return;
+                }
+                var credited = shopListBatchStatus.CreditedQuantities?.GetValueOrDefault(item.RowId) ?? 0;
+                if (credited >= item.RefillToAtLeast)
+                {
+                    shopListBatchCompletedNonRepeatableRowIds.Add(item.RowId);
+                    shopListBatchRows[shopListBatchIndex] = row with { Outcome = "already-satisfied", Message = "Order target credited." };
+                    shopListBatchCompletedRows++;
+                    shopListBatchIndex++;
+                    SyncShopListBatchStatus();
+                    continue;
+                }
+            }
             if (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill && owned >= item.TriggerBelow)
             {
                 shopListBatchRows[shopListBatchIndex] = row with
@@ -2820,19 +2879,25 @@ public sealed unsafe class UtilityAutomationService
             }
             else
             {
-                purchasePreview = PreviewMaximumShopPurchase(item.ItemId, shopListBatchDefinition.Currency);
+                var remaining = shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns
+                    ? checked((int)(item.RefillToAtLeast - (shopListBatchStatus.CreditedQuantities?.GetValueOrDefault(item.RowId) ?? 0)))
+                    : ShopPurchaseRequest.MaximumQuantity;
+                purchasePreview = shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns
+                    ? PreviewOrderShopPurchase(item.ItemId, remaining, shopListBatchDefinition.Currency)
+                    : PreviewMaximumShopPurchase(item.ItemId, shopListBatchDefinition.Currency);
             }
 
             if (!purchasePreview.CanPurchase || purchasePreview.SelectedOffer == null)
             {
-                if (shopListBatchDefinition.Mode == ShopListMode.SpendUntilCurrencyOrCapacity
+                if (shopListBatchDefinition.Mode is ShopListMode.SpendUntilCurrencyOrCapacity or ShopListMode.FillOrderOverMultipleRuns
                     && purchasePreview.FailureCode is ShopPurchaseFailureCodes.InsufficientCurrency
                         or ShopPurchaseFailureCodes.InventoryCapacity)
                 {
                     shopListBatchRows[shopListBatchIndex] = row with
                     {
                         OwnedQuantity = owned,
-                        Outcome = row.PurchasedQuantity > 0 ? "purchased" : "skipped",
+                        Outcome = shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns
+                            ? "pending" : row.PurchasedQuantity > 0 ? "purchased" : "skipped",
                         Message = row.PurchasedQuantity > 0
                             ? $"{purchasePreview.Message} Preserved {row.PurchasedQuantity} previously verified purchased item(s)."
                             : purchasePreview.Message,
@@ -2904,15 +2969,59 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        FinishShopListBatch(true, $"Targeted refill preset completed {shopListBatchCompletedRows} row(s) without overbuying.");
+        FinishShopListBatch(true, shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns
+            ? $"Order pass completed; {shopListBatchCompletedRows}/{shopListBatchItems.Count} targets credited. Outstanding quantities remain pending."
+            : $"Targeted refill preset completed {shopListBatchCompletedRows} row(s) without overbuying.");
     }
 
     private void FinishShopListBatch(bool succeeded, string message, string? failureCode = null)
     {
+        if (shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            shopPurchaseRunner.ReleaseHeldShopUi();
+            shopListCleanup = (succeeded, message, failureCode);
+            shopListCleanupStartedAtUtc = DateTime.UtcNow;
+            ContinueShopListCleanup();
+            return;
+        }
+        CompleteShopListBatch(succeeded, message, failureCode);
+    }
+
+    private void ContinueShopListCleanup()
+    {
+        if (shopListCleanup is not { } terminal)
+            return;
+        try
+        {
+            shopRuntime.ContinueShopListCleanup();
+            var blocker = shopRuntime.ShopListCleanupBlocker;
+            if (blocker != null)
+            {
+                if (DateTime.UtcNow - shopListCleanupStartedAtUtc < ShopPurchaseTiming.ConfirmationAndVerificationTimeout)
+                {
+                    SyncShopListBatchStatus(message: $"Finishing order cleanup: {blocker}.");
+                    return;
+                }
+                terminal = (false, $"Order cleanup failed: {blocker}.", ShopPurchaseFailureCodes.UiMismatch);
+            }
+            else if (shopListBatchCancelRequested)
+                terminal = (false, "Order cancelled; verified progress was retained.", ShopPurchaseFailureCodes.Cancelled);
+        }
+        catch (Exception ex)
+        {
+            terminal = (false, $"Order cleanup failed: {ex.Message}", ShopPurchaseFailureCodes.UiMismatch);
+        }
+        shopListCleanup = null;
+        CompleteShopListBatch(terminal.Succeeded, terminal.Message, terminal.FailureCode);
+    }
+
+    private void CompleteShopListBatch(bool succeeded, string message, string? failureCode)
+    {
         shopPurchaseRunner.ReleaseHeldShopUi();
         shopListHeldShop = null;
         var completedAt = DateTime.UtcNow;
-        if (succeeded)
+        var finiteOrder = shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns;
+        if (succeeded && !finiteOrder)
             shopListBatchCompletedRows = shopListBatchRows.Count;
         shopListBatchStatus = shopListBatchStatus with
         {
@@ -2920,7 +3029,7 @@ public sealed unsafe class UtilityAutomationService
             Done = true,
             Succeeded = succeeded,
             Disposition = succeeded
-                ? "succeeded"
+                ? finiteOrder && shopListBatchCompletedRows < shopListBatchItems.Count ? "partial" : finiteOrder ? "fulfilled" : "succeeded"
                 : failureCode == ShopPurchaseFailureCodes.Cancelled
                     ? "cancelled"
                     : "failed",
@@ -2947,7 +3056,7 @@ public sealed unsafe class UtilityAutomationService
 
     private long GetShopListOwnedQuantity(ShopListBatchItem item)
     {
-        var inventory = Math.Max(0L, shopPurchaseRuntime.GetItemCount(item.ItemId));
+        var inventory = Math.Max(0L, shopRuntime.GetItemCount(item.ItemId));
         return inventory + (item.OwnershipScope == ShopListOwnershipScope.InventoryAndRetainers
             ? item.RetainerQuantity
             : 0);
@@ -2971,14 +3080,19 @@ public sealed unsafe class UtilityAutomationService
             Outcome = "purchased",
             Message = $"Verified purchase acquired {child.AcquiredQuantity} item(s).",
         };
-        if (!completedItem.Repeatable)
+        var finiteOrder = shopListBatchDefinition.Mode == ShopListMode.FillOrderOverMultipleRuns;
+        var fulfilled = !finiteOrder ||
+            (shopListBatchDefinition.CreditedQuantities?.GetValueOrDefault(completedItem.RowId) ?? 0)
+                + shopListBatchChildPurchasedBaseline + child.AcquiredQuantity >= completedItem.RefillToAtLeast;
+        if (!completedItem.Repeatable && fulfilled)
             shopListBatchCompletedNonRepeatableRowIds.Add(completedItem.RowId);
-        if (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill || !completedItem.Repeatable)
+        if (fulfilled && (shopListBatchDefinition.Mode == ShopListMode.TargetedRefill || !completedItem.Repeatable))
             shopListBatchCompletedRows++;
         shopListBatchVerifiedPurchaseRows++;
         shopListSpendCyclePurchased = true;
         shopListHeldShop = ShopOfferIdentity.From(child.SelectedOffer);
-        shopListBatchIndex++;
+        if (!finiteOrder || fulfilled)
+            shopListBatchIndex++;
         SyncShopListBatchStatus();
     }
 
@@ -3002,7 +3116,22 @@ public sealed unsafe class UtilityAutomationService
         uint? currentItemId = null,
         string? currentItemName = null,
         string? message = null)
-        => shopListBatchStatus = shopListBatchStatus with
+    {
+        if (shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            var totals = shopListBatchRows.ToDictionary(row => row.RowId, row => checked(
+                (shopListBatchDefinition.CreditedQuantities?.GetValueOrDefault(row.RowId) ?? 0) + row.PurchasedQuantity));
+            var changed = shopListBatchStatus.CreditedQuantities == null || totals.Any(pair =>
+                shopListBatchStatus.CreditedQuantities.GetValueOrDefault(pair.Key, -1) != pair.Value);
+            shopListBatchStatus = shopListBatchStatus with { CreditedQuantities = totals };
+            shopListBatchCompletedNonRepeatableRowIds.Clear();
+            foreach (var row in shopListBatchRows.Where(row => totals[row.RowId] >= row.RefillToAtLeast))
+                shopListBatchCompletedNonRepeatableRowIds.Add(row.RowId);
+            shopListBatchCompletedRows = shopListBatchCompletedNonRepeatableRowIds.Count;
+            if (changed)
+                shopListBatchDefinition.SaveProgress?.Invoke(totals);
+        }
+        shopListBatchStatus = shopListBatchStatus with
         {
             CompletedRows = shopListBatchCompletedRows,
             CurrentItemId = currentItemId ?? shopListBatchStatus.CurrentItemId,
@@ -3012,6 +3141,7 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage = message ?? shopListBatchStatus.StatusMessage,
             Rows = shopListBatchRows.ToArray(),
         };
+    }
 
     private IReadOnlyList<Guid> CurrentCompletedNonRepeatableRowIds()
         => shopListBatchItems.Where(item => shopListBatchCompletedNonRepeatableRowIds.Contains(item.RowId))
@@ -3103,6 +3233,7 @@ public sealed unsafe class UtilityAutomationService
         desynthGearsetItemIds = null;
         shopListBatchItems = [];
         shopListBatchDefinition = null;
+        shopListCleanup = null;
         shopListBatchRows = [];
         shopListBatchIndex = 0;
         shopListBatchChildPurchasedBaseline = 0;

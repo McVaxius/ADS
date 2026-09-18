@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-18 — Relic orders (local-only, unpublished)
+
+- Added editable ARR Zodiac and HW Anima Poetics orders with stable preset/row IDs, one-time initialization and atomic shop-list saves that preserve existing lists on failure.
+- Added Fill order over multiple runs: initial ownership is credited once, verified purchases survive consumption, movement, cancellation and reload, and affordable partial passes remain pending. Standalone orders are isolated by character/preset and offer Start new order after completion; DAD orders carry absolute progress on their own association.
+- Kept refill/spending behavior and step examples. Finite-order callers must support progress; partial results wait for cleanup. Versions and client files are unchanged.
+
 ## Unreleased
 
 - Compact Controls now includes normal-use Enable/Disable buttons for QSTcomp and HealBot, plus Reset RSR Healing using RSR Off and Coppelia's eleven healing defaults independently of HealBot. Unavailable plugins and failed requests use ADS chat status.

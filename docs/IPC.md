@@ -124,6 +124,12 @@ The stable failure-code vocabulary is `invalid-request`, `busy`, `unsupported-of
 
 All Shop List JSON uses camelCase schema version `1`. `ADS.GetShopListPresetsJson()` returns rename-safe preset identities:
 
+Purchase modes are `targeted-refill`, `spend-until-currency-or-capacity`, and `fill-order-over-multiple-runs`. Fresh and existing stores initialize ARR Zodiac and HW Anima Poetics orders once, with shared stable IDs, preserving subsequent edits and deletions.
+
+Finite-order Start requests must include `supportsFiniteOrderProgress:true` and may supply `creditedQuantities`, an object mapping row GUIDs to absolute credited quantities. Missing rows receive initial ownership credit once on Start. Preview never persists credit or starts an order. Start and status responses return the full `creditedQuantities` map; store absolute totals on the exact association, never add responses together. Removed/rotated row IDs are omitted; other rows retain progress. Only exact verified item/currency purchases increase credit. Refill and spending lists have no quantity quota.
+
+Finite orders can finish a pass with terminal `partial` (`done:true`, `succeeded:true`) after cleanup while quantities remain outstanding. A resource-limited no-op Start may return `accepted:false`, `disposition:partial` with a retained terminal status. Continue normal duties and retry at a later shopping boundary with the saved totals. Run optional fulfillment actions only after all finite targets are complete. Cancellation/failure can carry verified partial credit without authorizing a replay of uncertain purchases. Standalone ADS progress lives separately per character/preset and only its explicit Start new order action resets a completed order.
+
 ```json
 {"version":1,"activePresetId":"00000000-0000-0000-0000-000000000001","presets":[{"presetId":"00000000-0000-0000-0000-000000000001","name":"Poetics","mode":"targeted-refill","currencyKind":"tomestone","currencyItemId":28,"currencyThreshold":1500,"rowCount":2}]}
 ```
@@ -134,7 +140,7 @@ All Shop List JSON uses camelCase schema version `1`. `ADS.GetShopListPresetsJso
 {"version":1,"presetId":"00000000-0000-0000-0000-000000000001","completedRowIds":[]}
 ```
 
-The response contains `version`, `presetId`, `disposition`, `currencyAvailable`, `completedNonRepeatableRowIds`, `message`, and stored-order `rows`. Dispositions are `ready`, `not-triggered`, `fulfilled`, or `error`. Each preview row contains `rowId`, `itemId`, `itemName`, `triggerBelow`, `refillToAtLeast`, `repeatable`, `ownershipScope`, `liveInventoryQuantity`, `retainerQuantity`, `ownedQuantity`, `purchaseQuantity`, `outcome`, retainer evidence, `selectedOffer`, `failureCode`, and `statusMessage`. Spend preview assigns live currency/capacity only to the first eligible stored-order row and reports later rows as `deferred`.
+The response contains `version`, `presetId`, `disposition`, `currencyAvailable`, `completedNonRepeatableRowIds`, optional `creditedQuantities`, `message`, and stored-order `rows`. Dispositions are `ready`, `not-triggered`, `fulfilled`, `partial`, or `error`. Each preview row contains `rowId`, `itemId`, `itemName`, `triggerBelow`, `refillToAtLeast`, `repeatable`, `ownershipScope`, `liveInventoryQuantity`, `retainerQuantity`, `ownedQuantity`, `purchaseQuantity`, `outcome`, retainer evidence, `selectedOffer`, `failureCode`, and `statusMessage`. Spend preview assigns live currency/capacity only to the first eligible stored-order row and reports later rows as `deferred`.
 
 Start is an atomic re-evaluate-and-start operation:
 
@@ -148,7 +154,7 @@ It returns:
 {"version":1,"accepted":true,"operationId":"dad-plan-42-run-7","presetId":"00000000-0000-0000-0000-000000000001","disposition":"started","completedNonRepeatableRowIds":[],"message":"Starting shop-list batch with 2 row(s)."}
 ```
 
-`accepted:false` with `not-triggered` or `fulfilled` is a successful purchase-free disposition, not an execution failure. ADS retains a correlation-bound terminal status for both, with `done:true`, `succeeded:true`, and the exact subset of non-repeatable rows already proven complete. `not-triggered` can leave rows pending, and a spend-limit result can leave capacity/currency-skipped non-repeatable rows incomplete. Consumers must merge only `completedNonRepeatableRowIds`, never infer row completion from generic success or `completedRows`. Stale removed/rotated completion IDs are ignored; repeatable IDs are never skipped. An `error` disposition does not start or retain an operation.
+`accepted:false` with `not-triggered`, `fulfilled`, or `partial` is a successful purchase-free disposition. ADS retains a correlation-bound terminal status for each, with `done:true`, `succeeded:true`, and the exact subset of non-repeatable rows already proven complete. `not-triggered` and `partial` can leave rows pending, and a spend-limit result can leave capacity/currency-skipped non-repeatable rows incomplete. Consumers must use `completedNonRepeatableRowIds` for row completion and persist finite-order `creditedQuantities` as absolute totals; never infer row completion from generic success or `completedRows`. Stale removed/rotated completion IDs are ignored; repeatable IDs are never skipped. An `error` disposition does not start or retain an operation.
 
 Poll only the exact operation:
 
@@ -156,7 +162,7 @@ Poll only the exact operation:
 ADS.GetShopListPresetStatusJson("dad-plan-42-run-7")
 ```
 
-The response contains `version`, `operationId`, `presetId`, `running`, `done`, `succeeded`, `disposition`, row counts/current item, `completedNonRepeatableRowIds`, association-supplied `skippedRowIds`, `failureCode`, messages, `completedAtUtc`, and stored-order rows. Operation dispositions are `running`, `not-triggered`, `fulfilled`, `succeeded`, `failed`, or `cancelled` (`operation-not-found` is returned for a mismatched correlation ID):
+The response contains `version`, `operationId`, `presetId`, `running`, `done`, `succeeded`, `disposition`, row counts/current item, `completedNonRepeatableRowIds`, optional `creditedQuantities`, association-supplied `skippedRowIds`, `failureCode`, messages, `completedAtUtc`, and stored-order rows. Operation dispositions are `running`, `not-triggered`, `fulfilled`, `partial`, `succeeded`, `failed`, or `cancelled` (`operation-not-found` is returned for a mismatched correlation ID):
 
 ```json
 {"rowId":"00000000-0000-0000-0000-000000000002","itemId":123,"itemName":"Example","repeatable":false,"ownershipScope":"inventory-and-retainers","triggerBelow":10,"refillToAtLeast":20,"ownedQuantity":4,"requestedQuantity":16,"purchasedQuantity":16,"outcome":"purchased","message":"Verified purchase acquired 16 item(s)."}

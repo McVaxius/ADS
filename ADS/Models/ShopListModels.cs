@@ -6,6 +6,7 @@ public enum ShopListMode
 {
     TargetedRefill,
     SpendUntilCurrencyOrCapacity,
+    FillOrderOverMultipleRuns,
 }
 
 public enum ShopListOwnershipScope
@@ -23,6 +24,15 @@ public sealed class ShopListManifest
     public string? ActivePresetName { get; set; }
 
     public List<ShopListPreset> Presets { get; set; } = [];
+    public bool RelicOrdersInitialized { get; set; }
+    public List<ShopListCharacterOrder> CharacterOrders { get; set; } = [];
+}
+
+public sealed class ShopListCharacterOrder
+{
+    public ulong CharacterId { get; set; }
+    public Guid PresetId { get; set; }
+    public Dictionary<Guid, long> CreditedQuantities { get; set; } = [];
 }
 
 public sealed class ShopListPreset
@@ -159,7 +169,11 @@ internal sealed record ShopListBatchDefinition(
     long CurrencyThreshold,
     IReadOnlyList<Guid> AssociationCompletedRowIds,
     IReadOnlyList<Guid> InitiallyCompletedNonRepeatableRowIds,
-    IReadOnlyList<ShopListBatchItem> Items);
+    IReadOnlyList<ShopListBatchItem> Items)
+{
+    public IReadOnlyDictionary<Guid, long>? CreditedQuantities { get; init; }
+    internal Action<IReadOnlyDictionary<Guid, long>>? SaveProgress { get; init; }
+}
 
 public sealed record ShopListBatchRowStatus(
     Guid RowId,
@@ -193,7 +207,10 @@ public sealed record ShopListBatchStatusSnapshot(
     string StatusMessage,
     string FailureMessage,
     IReadOnlyList<ShopListBatchRowStatus> Rows,
-    DateTime? CompletedAtUtc);
+    DateTime? CompletedAtUtc)
+{
+    public IReadOnlyDictionary<Guid, long>? CreditedQuantities { get; init; }
+}
 
 public sealed record ShopListPresetSummary(
     Guid PresetId,
@@ -216,7 +233,10 @@ public sealed record ShopListPresetPreviewResponse(
     long CurrencyAvailable,
     IReadOnlyList<Guid> CompletedNonRepeatableRowIds,
     string Message,
-    IReadOnlyList<ShopListPreviewRow> Rows);
+    IReadOnlyList<ShopListPreviewRow> Rows)
+{
+    public IReadOnlyDictionary<Guid, long>? CreditedQuantities { get; init; }
+}
 
 public sealed record ShopListPresetStartResponse(
     int Version,
@@ -225,7 +245,10 @@ public sealed record ShopListPresetStartResponse(
     Guid PresetId,
     string Disposition,
     IReadOnlyList<Guid> CompletedNonRepeatableRowIds,
-    string Message);
+    string Message)
+{
+    public IReadOnlyDictionary<Guid, long>? CreditedQuantities { get; init; }
+}
 
 public sealed record ShopCatalogSearchRow(
     uint ItemId,

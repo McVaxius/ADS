@@ -241,6 +241,7 @@ internal static class ExchangeShopRuntimeValidator
 internal interface IShopPurchaseRuntime
 {
     bool IsLoggedIn { get; }
+    ulong CharacterId => 0;
     bool IsBetweenAreas { get; }
     bool IsPlayerAvailable { get; }
     uint CurrentTerritoryId { get; }
@@ -252,6 +253,8 @@ internal interface IShopPurchaseRuntime
     bool HasUnexpectedConfirmation { get; }
     bool IsSelectionMenuVisible { get; }
     bool IsAnyShopVisible { get; }
+    string? ShopListCleanupBlocker => IsAnyShopVisible || IsSelectionMenuVisible || HasUnexpectedConfirmation ? "shop UI remains open" : null;
+    void ContinueShopListCleanup() { }
 
     bool IsAetheryteUnlocked(uint aetheryteId);
     bool IsQuestComplete(uint questId);
@@ -361,6 +364,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     ];
 
     public bool IsLoggedIn => clientState.IsLoggedIn;
+    public ulong CharacterId => IsLoggedIn ? Plugin.PlayerState.ContentId : 0;
     public bool IsBetweenAreas => condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51];
     public bool IsPlayerAvailable => IsLoggedIn
         && objectTable.LocalPlayer != null
@@ -393,6 +397,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             ? "shop, menu, or confirmation UI remains open"
             : !TryGetNavigationRunning(out var running) ? "navigation stop could not be verified"
             : running ? "navigation is still active" : null;
+    string? IShopPurchaseRuntime.ShopListCleanupBlocker => RelicPurchaseCleanupBlocker;
+    void IShopPurchaseRuntime.ContinueShopListCleanup() => ContinueRelicUiCleanup();
     public byte CurrentGrandCompany
     {
         get
