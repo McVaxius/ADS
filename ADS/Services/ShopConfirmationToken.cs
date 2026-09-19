@@ -10,11 +10,13 @@ internal static class ShopPurchaseTiming
 internal sealed class ShopConfirmationToken
 {
     private readonly IReadOnlyDictionary<ShopCurrencyIdentity, long> expectedCosts;
+    private readonly bool isTomestoneExchange;
     private bool consumed;
 
     public ShopConfirmationToken(EvaluatedShopOffer offer, int transactions, DateTime createdAtUtc)
     {
         ItemId = offer.Offer.ReceiveItemId;
+        isTomestoneExchange = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone;
         ItemName = offer.Offer.ReceiveItemName;
         Quantity = checked((int)((long)offer.Offer.ReceiveCount * transactions));
         CreatedAtUtc = createdAtUtc;
@@ -67,6 +69,33 @@ internal sealed class ShopConfirmationToken
             if (!ContainsExactDisplayNumber(normalized, amount))
                 return false;
         }
+        consumed = true;
+        return true;
+    }
+
+    public bool TryConsumeTomestonePrompt(uint displayedItemId, string? prompt, DateTime observedAtUtc)
+    {
+        if (!CanConsume(observedAtUtc)
+            || !isTomestoneExchange
+            || displayedItemId != ItemId
+            || Quantity <= 0
+            || expectedCosts.Count != 1
+            || expectedCosts.Single().Key.Kind != ShopCurrencyKind.Tomestone
+            || string.IsNullOrWhiteSpace(prompt))
+            return false;
+
+        // This prompt displays only the total cost; the item is in the separate preview.
+        // The validated unit cost and submitted batch already fix the token's quantity.
+        var total = expectedCosts.Single().Value;
+        var numbers = System.Text.RegularExpressions.Regex.Matches(prompt, @"[0-9](?:[0-9,.\u00A0\u202F]*[0-9])?");
+        if (total <= 0 || numbers.Count != 1)
+            return false;
+        var displayed = numbers[0].Value;
+        if (displayed != total.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            && displayed != total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)
+            && displayed != total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
+            return false;
+
         consumed = true;
         return true;
     }

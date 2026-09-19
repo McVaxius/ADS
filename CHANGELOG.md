@@ -8,6 +8,8 @@
 
 ## Unreleased
 
+- Shopping now approaches Auriana in Mor Dhona at the specified stand-off point within one yalm before interaction, even when her live position is available. Tomestone confirmations match the separate item preview and exact submitted total cost, including four Unidentifiable Bones for 600 Poetics, while retaining single-use confirmation and exact inventory/currency verification.
+
 - Compact Controls now includes normal-use Enable/Disable buttons for QSTcomp and HealBot, plus Reset RSR Healing using RSR Off and Coppelia's eleven healing defaults independently of HealBot. Unavailable plugins and failed requests use ADS chat status.
 - Object Rules now shares named custom presets as versioned sparse transfers through clipboard or files, including saved and draft-changed complete contexts, empty overrides, and custom-only contexts while omitting inherited duties. Import previews validate the full payload and show the destination; Import and Save creates or merges included contexts, preserves unrelated files, and activates the preset with clean-draft, empty-override, and conflict safeguards. Legacy imports and explicitly labeled full-manifest exports remain available.
 - Object Rules now separates preset management, sharing, and draft editing with clear action labels, including New Preset, Delete Preset, Load DEFAULT Cache, Import Preset, Export Overrides, File Import/Export, and Selected Duties/Selected Rows/Filtered Rows exports. Compact-mode behavior is preserved.

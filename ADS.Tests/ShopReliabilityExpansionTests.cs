@@ -355,6 +355,46 @@ public sealed class ShopReliabilityExpansionTests
             .TryConsumePrompt("Purchase 2 plump worms for 16 gil?", created.AddSeconds(1)));
     }
 
+    [Fact]
+    public void TomestonePreviewMatchesFourBonesFor600PoeticsAndKeepsSingleUseTimeout()
+    {
+        var offer = new EvaluatedShopOffer(
+            Offer(false, ShopCurrencyKind.Tomestone, 28) with
+            {
+                Kind = ShopOfferKind.SpecialShopTomestone,
+                ReceiveItemId = 13582,
+                ReceiveItemName = "Unidentifiable Bone",
+                TransactionsRequired = 4,
+                Currencies = [new ShopCurrencyCost(ShopCurrencyKind.Tomestone, 28, "Allagan Tomestone of Poetics", 150)],
+            },
+            null, [], true, true, true, null);
+        var created = new DateTime(2026, 9, 19, 12, 0, 0, DateTimeKind.Utc);
+        const string prompt = "Exchange 600 Allagan tomestones of poetics for the following item?";
+        var token = new ShopConfirmationToken(offer, 4, created);
+
+        Assert.Equal(4, token.Quantity);
+        Assert.False(token.TryConsumePrompt(prompt, created));
+        Assert.False(token.TryConsumeTomestonePrompt(0, prompt, created));
+        Assert.False(token.TryConsumeTomestonePrompt(13583, prompt, created));
+        Assert.False(token.TryConsumeTomestonePrompt(13582, null, created));
+        foreach (var wrongCost in new[] { "150", "599", "601", "1600", "1,600", "600.0", "600 and 4" })
+            Assert.False(token.TryConsumeTomestonePrompt(13582, prompt.Replace("600", wrongCost), created));
+        Assert.False(token.IsConsumed);
+        Assert.True(token.TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10)));
+        Assert.False(token.TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10)));
+        Assert.False(token.TryConsumeStructured(13582, 4,
+            new Dictionary<ShopCurrencyIdentity, long> { [new(ShopCurrencyKind.Tomestone, 28)] = 600 }, created));
+
+        Assert.False(new ShopConfirmationToken(offer, 4, created)
+            .TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10).AddTicks(1)));
+        Assert.False(new ShopConfirmationToken(offer, 1, created)
+            .TryConsumeTomestonePrompt(13582, prompt, created));
+        Assert.True(new ShopConfirmationToken(offer, 99, created)
+            .TryConsumeTomestonePrompt(13582, prompt.Replace("600", "14,850"), created));
+        Assert.False(new ShopConfirmationToken(offer with { Offer = offer.Offer with { Kind = ShopOfferKind.GilShop } }, 4, created)
+            .TryConsumeTomestonePrompt(13582, prompt, created));
+    }
+
     private static ShopOffer Offer(bool hasUnknownGate, ShopCurrencyKind currencyKind, uint currencyItemId)
         => new(
             ShopOfferKind.GilShop,

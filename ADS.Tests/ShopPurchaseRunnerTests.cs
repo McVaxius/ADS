@@ -1033,6 +1033,76 @@ public sealed class ShopPurchaseRunnerTests
         Assert.DoesNotContain(100u, runtime.InteractedNpcIds);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AurianaRequiresApproachPointBeforeStoppingAndInteracting(bool npcInitiallyVisible)
+    {
+        const uint auriana = 1008119;
+        var approach = new Vector3(63.283752f, 31.124842f, -735.31555f);
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime
+        {
+            CurrentTerritoryId = 156,
+            PlayerPosition = approach + new Vector3(1.01f, 0, 0),
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+        };
+        runtime.NpcPositions[auriana] = approach + new Vector3(8, 0, 0);
+        runtime.NpcDistances[auriana] = 0;
+        runtime.NpcWithinInteractionReach.Add(auriana);
+        if (!npcInitiallyVisible)
+            runtime.MissingNpcIds.Add(auriana);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.StillRunning);
+        runtime.NavigationStopResults.Enqueue(ShopNavigationStopResult.Stopped);
+        var offer = Offer(10, auriana, 1, territoryId: 156) with { RequiresFloorResolution = true };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        Assert.Equal([approach], runtime.MoveDestinations);
+        Assert.Equal(0, runtime.FloorResolveCount);
+        runtime.MissingNpcIds.Remove(auriana);
+        runner.Update();
+        Assert.Equal("navigating", runner.Status.Phase);
+        Assert.Equal([approach], runtime.MoveDestinations);
+        Assert.Equal(0, runtime.StopNavigationCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+
+        runtime.PlayerPosition = approach + new Vector3(0.99f, 0, 0);
+        runner.Update();
+        Assert.Equal("stopping-navigation", runner.Status.Phase);
+        Assert.Empty(runtime.InteractedNpcIds);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal([approach], runtime.MoveDestinations);
+        Assert.Equal([auriana], runtime.InteractedNpcIds);
+        Assert.True(runtime.Events.IndexOf("stop-navigation") < runtime.Events.IndexOf($"interact:{auriana}"));
+    }
+
+    [Theory]
+    [InlineData(1008119u, 1u)]
+    [InlineData(100u, 156u)]
+    public void OtherVendorRoutesStillUseLiveNpcPosition(uint npcId, uint territoryId)
+    {
+        var position = new Vector3(10, 3, 20);
+        var runtime = new FakeRuntime { CurrentTerritoryId = territoryId };
+        runtime.NpcPositions[npcId] = position;
+        runtime.NpcDistances[npcId] = 20;
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, npcId, 1, territoryId)])), runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        runner.Update();
+        runner.Update();
+
+        Assert.Equal([position], runtime.MoveDestinations);
+        Assert.Equal("navigating", runner.Status.Phase);
+        Assert.Empty(runtime.InteractedNpcIds);
+    }
+
     [Fact]
     public void LiveNpcPositionRetargetsAcceptedApproximateNavigationOnce()
     {

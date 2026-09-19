@@ -41,6 +41,12 @@ internal sealed class ShopPurchaseRunner
     private const int MaximumTransactionsPerCallback = 99;
     private const float InteractionDistance = 3.5f;
     private const float LiveNpcRetargetDistance = 1f;
+    private const float RequiredApproachDistance = 1f;
+
+    private System.Numerics.Vector3? RequiredNpcApproach
+        => selected?.Offer.NpcId == 1008119 && selected.Route?.TerritoryId == 156
+            ? new System.Numerics.Vector3(63.283752f, 31.124842f, -735.31555f)
+            : null;
 
     private readonly IShopCatalog catalog;
     private readonly IShopPurchaseRuntime runtime;
@@ -620,8 +626,9 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
+        var requiredApproach = RequiredNpcApproach;
         var hasNpc = runtime.TryGetNpc(selected.Offer.NpcId, out var npc);
-        if (hasNpc && navigationDestination == null)
+        if (requiredApproach == null && hasNpc && navigationDestination == null)
         {
             navigationDestination = npc.Position;
             navigationUsingLiveNpc = true;
@@ -642,12 +649,17 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        var destination = hasNpc
+        var destination = requiredApproach ?? (hasNpc
             ? npc.Position
-            : navigationDestination ?? selected.Route.NpcPosition;
-        var distance = hasNpc ? npc.Distance : System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination);
-        var reachedOfflineStandOff = hasNpc && HasReachedOfflineInteractionStandOff();
-        if (distance <= InteractionDistance || (hasNpc && npc.WithinInteractionReach) || reachedOfflineStandOff)
+            : navigationDestination ?? selected.Route.NpcPosition);
+        var distance = requiredApproach == null && hasNpc
+            ? npc.Distance
+            : System.Numerics.Vector3.Distance(runtime.PlayerPosition, destination);
+        var reachedOfflineStandOff = requiredApproach == null && hasNpc && HasReachedOfflineInteractionStandOff();
+        var arrived = requiredApproach != null
+            ? distance <= RequiredApproachDistance
+            : distance <= InteractionDistance || (hasNpc && npc.WithinInteractionReach) || reachedOfflineStandOff;
+        if (arrived)
         {
             if (reachedOfflineStandOff)
                 diagnostic("Reached the floor-resolved offline vendor stand-off; preserving it for the bounded NPC interaction.");
@@ -661,7 +673,7 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (hasNpc && !navigationUsingLiveNpc)
+        if (requiredApproach == null && hasNpc && !navigationUsingLiveNpc)
         {
             var horizontalDifference = System.Numerics.Vector2.Distance(
                 new System.Numerics.Vector2(destination.X, destination.Z),
@@ -713,6 +725,13 @@ internal sealed class ShopPurchaseRunner
     {
         if (selected?.Route == null)
             return;
+        if (RequiredNpcApproach is { } approach)
+        {
+            navigationDestination = approach;
+            if (System.Numerics.Vector3.Distance(runtime.PlayerPosition, approach) > RequiredApproachDistance)
+                TryMoveNow(approach);
+            return;
+        }
         if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc))
         {
             navigationDestination = npc.Position;
@@ -866,7 +885,15 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc) && npc.Distance > InteractionDistance && !npc.WithinInteractionReach)
+        if (RequiredNpcApproach is { } approach)
+        {
+            if (System.Numerics.Vector3.Distance(runtime.PlayerPosition, approach) > RequiredApproachDistance)
+            {
+                BeginNavigation();
+                return;
+            }
+        }
+        else if (runtime.TryGetNpc(selected.Offer.NpcId, out var npc) && npc.Distance > InteractionDistance && !npc.WithinInteractionReach)
         {
             if (!HasReachedOfflineInteractionStandOff())
             {

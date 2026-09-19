@@ -847,7 +847,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             return false;
 
         if (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)
-            || string.IsNullOrWhiteSpace(prompt))
+            || string.IsNullOrWhiteSpace(prompt)
+            || (offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone && !TryGetSelectYesNoExchangeItemId(out _)))
         {
             WarnUnreadableOwnedSelectYesno(token);
             return true;
@@ -874,11 +875,22 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 WarnUnreadableOwnedSelectYesno(token);
                 return false;
             }
-            if (!token.TryConsumePrompt(prompt, now))
+            uint displayedItemId = 0;
+            var tomestoneExchange = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone;
+            if (tomestoneExchange && !TryGetSelectYesNoExchangeItemId(out displayedItemId))
+            {
+                WarnUnreadableOwnedSelectYesno(token);
+                return false;
+            }
+            var matches = tomestoneExchange
+                ? token.TryConsumeTomestonePrompt(displayedItemId, prompt, now)
+                : token.TryConsumePrompt(prompt, now);
+            if (!matches)
             {
                 log.Warning(
-                    "[ADS][Shop] SelectYesno prompt did not match the owned confirmation token; expected={Token} displayedPrompt='{Prompt}'. ADS will not dispatch Yes.",
+                    "[ADS][Shop] SelectYesno did not match the owned confirmation token; expected={Token} displayedItemId={ItemId} displayedPrompt='{Prompt}'. ADS will not dispatch Yes.",
                     token.DiagnosticDetails,
+                    displayedItemId,
                     prompt);
                 return false;
             }
@@ -960,6 +972,22 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         log.Debug("[ADS][Shop] Dispatched shop cancel callback for {Addon}.", name);
     }
 
+    private static bool TryGetSelectYesNoExchangeItemId(out uint itemId)
+    {
+        itemId = 0;
+        var addon = (AddonSelectYesno*)RaptureAtkUnitManager.Instance()->GetAddonByName("SelectYesno");
+        // Standard prompts have only 12 values. The preview extends this to 16,
+        // with an Int availability flag at index 12 and a typed item payload.
+        if (addon == null || !addon->IsVisible || addon->AtkValues == null || addon->AtkValuesCount < 16
+            || addon->AtkValues[12].Type != AtkValueType.Int || !addon->CollectibleAtkValuesAvailable)
+            return false;
+        var payload = addon->CollectibleTypedAtkValues;
+        if (payload->ItemId.Type != AtkValueType.UInt || payload->ItemId.UInt == 0)
+            return false;
+        itemId = payload->ItemId.UInt;
+        return true;
+    }
+
     private void WarnUnreadableOwnedSelectYesno(ShopConfirmationToken token)
     {
         if (unreadableOwnedSelectYesnoWarningLogged)
@@ -967,7 +995,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         unreadableOwnedSelectYesnoWarningLogged = true;
         log.Warning(
-            "[ADS][Shop] SelectYesno is visible but its prompt could not be read for the owned confirmation token; waiting within the existing timeout. Expected={Token}",
+            "[ADS][Shop] SelectYesno is visible but its prompt or required item preview could not be read for the owned confirmation token; waiting within the existing timeout. Expected={Token}",
             token.DiagnosticDetails);
     }
 
