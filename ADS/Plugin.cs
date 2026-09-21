@@ -2542,7 +2542,7 @@ public sealed class Plugin : IDalamudPlugin
                 RecordFrameworkSection(sectionStartedAt, "higher-lower-auto", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
-            LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode, Configuration.PluginEnabled);
+            LootAutomationService.Update(DutyContextService.Current, ExecutionService.CurrentMode);
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "loot", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)

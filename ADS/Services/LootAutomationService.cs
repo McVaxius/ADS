@@ -75,19 +75,12 @@ public sealed class LootAutomationService
     public bool IsActive
         => configuration.LootMode != LootRollMode.Off;
 
-    public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode, bool pluginEnabled)
+    public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode)
     {
         if (configuration.LootMode == LootRollMode.Off)
         {
             ResetOwnershipLatch();
             Status = "Loot off.";
-            return;
-        }
-
-        if (!pluginEnabled)
-        {
-            ResetOwnershipLatch();
-            Status = "Loot waiting for ADS enabled.";
             return;
         }
 

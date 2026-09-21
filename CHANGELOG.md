@@ -8,6 +8,8 @@
 
 ## Unreleased
 
+- `/ads loot` now processes eligible loot in Need, Greed, and Pass modes independently of ADS's main automation switch. Off still stops loot actions; saved loot modes, login/zoning/cutscene safeguards, and existing roll-selection rules are preserved.
+
 - Shopping now approaches Auriana in Mor Dhona at the specified stand-off point within one yalm before interaction, even when her live position is available. Tomestone confirmations match the separate item preview and exact submitted total cost, including four Unidentifiable Bones for 600 Poetics, while retaining single-use confirmation and exact inventory/currency verification.
 
 - Compact Controls now includes normal-use Enable/Disable buttons for QSTcomp and HealBot, plus Reset RSR Healing using RSR Off and Coppelia's eleven healing defaults independently of HealBot. Unavailable plugins and failed requests use ADS chat status.
