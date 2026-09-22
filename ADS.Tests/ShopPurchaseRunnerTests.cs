@@ -197,27 +197,50 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Empty(store.GetOrderProgress(1, presetId));
     }
 
-    [Fact]
-    public void FiniteOrderDoesNotPublishTerminalSuccessUntilCleanupIsProven()
+    [Theory]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns)]
+    [InlineData(ShopListMode.TargetedRefill)]
+    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity)]
+    public void ShopListBatchDoesNotPublishTerminalSuccessUntilCleanupIsProven(ShopListMode mode)
     {
         var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CleanupBlocked = true };
+        runtime.SetCurrency(Poetics, 100);
         var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
         var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
         var row = Guid.NewGuid();
-        Assert.True(utility.StartShopListBatch(new("cleanup", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
-            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])
-        { CreditedQuantities = new Dictionary<Guid, long> { [row] = 0 } }));
+        Assert.True(utility.StartShopListBatch(new("cleanup", Guid.NewGuid(), mode,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, mode == ShopListMode.SpendUntilCurrencyOrCapacity,
+                ShopListOwnershipScope.InventoryOnly, 0)])
+        { CreditedQuantities = mode == ShopListMode.FillOrderOverMultipleRuns ? new Dictionary<Guid, long> { [row] = 0 } : null }));
         for (var tick = 0; tick < 80; tick++) utility.Update();
         Assert.True(utility.IsRunning);
         Assert.False(utility.ShopListBatchStatus.Done);
-        Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        Assert.Null(utility.ShopListBatchStatus.Succeeded);
+        Assert.Null(utility.ShopListBatchStatus.CompletedAtUtc);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(1, runtime.ItemCount);
+        Assert.Equal(1, Assert.Single(utility.ShopListBatchStatus.Rows).PurchasedQuantity);
+        Assert.True(runtime.CloseUiCount > 0);
+        if (mode == ShopListMode.FillOrderOverMultipleRuns)
+            Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
         runtime.CleanupBlocked = false;
         utility.Update();
+        Assert.False(utility.IsRunning);
+        Assert.True(utility.ShopListBatchStatus.Done);
         Assert.True(utility.ShopListBatchStatus.Succeeded);
-        runtime.SetCurrency(Poetics, -1);
-        Assert.False(utility.StartShopListBatch(new("unknown-balance", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
-            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])));
-        Assert.Contains("unavailable", utility.StatusMessage);
+        Assert.NotNull(utility.ShopListBatchStatus.CompletedAtUtc);
+        Assert.False(runtime.IsAnyShopVisible);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(1, runtime.ItemCount);
+        Assert.Equal(1, Assert.Single(utility.ShopListBatchStatus.Rows).PurchasedQuantity);
+        if (mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
+            runtime.SetCurrency(Poetics, -1);
+            Assert.False(utility.StartShopListBatch(new("unknown-balance", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
+                Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])));
+            Assert.Contains("unavailable", utility.StatusMessage);
+        }
     }
 
     private sealed class BatchSheets(uint bundle = 1) : IShopSheetSource

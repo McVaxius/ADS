@@ -2976,7 +2976,7 @@ public sealed unsafe class UtilityAutomationService
 
     private void FinishShopListBatch(bool succeeded, string message, string? failureCode = null)
     {
-        if (shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns)
+        if (shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns || shopListHeldShop.HasValue)
         {
             shopPurchaseRunner.ReleaseHeldShopUi();
             shopListCleanup = (succeeded, message, failureCode);

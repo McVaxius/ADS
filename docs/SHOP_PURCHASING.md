@@ -17,6 +17,8 @@ Each preset selects one exact currency identity and an inclusive `available >= t
 - **Targeted refill** evaluates a row only when owned quantity is below its `triggerBelow` value, then buys enough whole vendor receive bundles to reach at least `refillToAtLeast`.
 - **Spend until selected currency / capacity** processes eligible rows in stored order and buys whole transactions until the selected currency or inventory capacity stops further verified work. Reaching that requested limit is success, including a no-purchase limit already in effect.
 
+For targeted refill, set both **If owned <** and **Refill to >=** to **130** to target 130 owned items. Owning 10 means buying 120 with single-item vendor bundles; larger bundles round up to reach at least the target. In contrast, `/ads shop <itemID> 130` requests 130 additional items.
+
 Every row independently selects inventory-only or inventory plus current-character XA Database retainers and whether it is repeatable. Retainer-scoped Test/Start fails closed if XA Database ownership truth is unavailable; ADS never silently falls back to inventory-only. A completed non-repeatable row ID is exposed to Dad for the exact Plan/Schedule association. ADS does not globally complete the row and never deletes a Dad object.
 
 The three clipboard import buttons replace the active preset only after producing at least one valid consolidated vendor item:

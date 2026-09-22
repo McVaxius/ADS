@@ -8,6 +8,8 @@
 
 ## Unreleased
 
+- Shop Lists now waits for the existing bounded cleanup to close returning NPC menus after refill and spending batches that held a shop, preserving finite-order cleanup. Preview quantity fields now read "If owned <" and "Refill to >=" on separate lines; inline and guide examples explain that setting both to 130 targets 130 owned items (10 owned means buying 120 with single-item bundles), while `/ads shop <itemID> 130` requests 130 additional items.
+
 - `/ads loot` now processes eligible loot in Need, Greed, and Pass modes independently of ADS's main automation switch. Off still stops loot actions; saved loot modes, login/zoning/cutscene safeguards, and existing roll-selection rules are preserved.
 
 - Shopping now approaches Auriana in Mor Dhona at the specified stand-off point within one yalm before interaction, even when her live position is available. Tomestone confirmations match the separate item preview and exact submitted total cost, including four Unidentifiable Bones for 600 Poetics, while retaining single-use confirmation and exact inventory/currency verification.

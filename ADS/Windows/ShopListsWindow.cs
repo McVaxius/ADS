@@ -407,6 +407,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             return;
         }
 
+        if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.TargetedRefill)
+            ImGui.TextWrapped("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items.");
+
         if (!ImGui.BeginTable(
                 "ADSShopListPreview",
                 8,
@@ -452,10 +455,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
             else
             {
-                ImGui.InputInt("<##Trigger", ref edit.TriggerBelow);
-                ImGui.SameLine();
+                ImGui.InputInt("If owned <##Trigger", ref edit.TriggerBelow);
                 ImGui.SetNextItemWidth(70f);
-                ImGui.InputInt(">=##Refill", ref edit.RefillToAtLeast);
+                ImGui.InputInt("Refill to >=##Refill", ref edit.RefillToAtLeast);
                 ImGui.Checkbox("Repeatable", ref edit.Repeatable);
             }
             var scopeNames = new[] { "Inventory", "Inventory + retainers" };
