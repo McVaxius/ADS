@@ -27,20 +27,6 @@ public static class GameInteractionHelper
         LegacyCallback,
     }
 
-    private static readonly HashSet<string> KnownInnTerritoryNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "The Mizzenmast",
-        "Mizzenmast Inn",
-        "The Roost",
-        "The Hourglass",
-        "The Forgotten Knight",
-        "Cloud Nine",
-        "Bokairo Inn",
-        "The Pendants",
-        "The Andron",
-        "The Baldesion Annex",
-        "The For'ard Cabins",
-    };
     private static readonly object SheetLookupLock = new();
     private static readonly Dictionary<uint, string> TerritoryNameCache = new();
 
@@ -455,11 +441,8 @@ public static class GameInteractionHelper
 
     public static bool IsInnTerritory(IDataManager dataManager, ushort territoryId)
     {
-        var territoryName = GetTerritoryName(dataManager, territoryId);
-        if (territoryName.StartsWith("Territory ", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return territoryName.Contains("Inn", StringComparison.OrdinalIgnoreCase)
-            || KnownInnTerritoryNames.Contains(territoryName);
+        var sheet = dataManager.GetExcelSheet<TerritoryType>();
+        return sheet != null && sheet.TryGetRow(territoryId, out var territory)
+            && territory.TerritoryIntendedUse.RowId == 2;
     }
 }

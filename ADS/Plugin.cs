@@ -276,7 +276,8 @@ public sealed class Plugin : IDalamudPlugin
             DesynthDutyLedgerStore,
             () => ExecutionService.IsOwned,
             () => InnEntryService.IsRunning,
-            Log);
+            Log,
+            InnEntryService);
         RelicPurchaseTestService = new RelicPurchaseTestService(
             Configuration.RelicPurchaseTest,
             new RelicPurchaseTestRuntime(this),
@@ -1231,6 +1232,16 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
+    public bool StartNpcRepairYesInn()
+    {
+        if (!CanStartManualUtility("NPC repair and inn room return"))
+            return false;
+
+        var result = UtilityAutomationService.StartNpcRepairYesInn();
+        PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
+        return result;
+    }
+
     public bool StartNpcRepairNoTeleportNoInn()
     {
         if (!CanStartManualUtility("NPC repair without inn fallback or teleport"))
@@ -1246,7 +1257,7 @@ public sealed class Plugin : IDalamudPlugin
         var normalized = NormalizeRepairMode(mode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            PrintStatus("Repair mode must be self, npc, npc-no-inn, or npc-no-teleport-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-yes-inn, npc-no-inn, or npc-no-teleport-no-inn.");
             return false;
         }
 
@@ -1254,6 +1265,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             "self" => StartSelfRepair(),
             "npc" => StartNpcRepair(),
+            "npc-yes-inn" => StartNpcRepairYesInn(),
             "npc-no-inn" => StartNpcRepairNoInn(),
             "npc-no-teleport-no-inn" => StartNpcRepairNoTeleportNoInn(),
             _ => false,
@@ -1967,6 +1979,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             "self" or "selfrepair" or "self-repair" => "self",
             "npc" or "npcrepair" or "npc-repair" => "npc",
+            "npc-yes-inn" or "npcyesinn" or "yesinn" or "yes-inn" => "npc-yes-inn",
             "npc-no-inn" or "npcnoinn" or "noinn" or "no-inn" => "npc-no-inn",
             "npc-no-teleport-no-inn" or "npc-no-tp-no-inn" or "npc-no-inn-no-tp" or "npcrepair-no-teleport-no-inn" => "npc-no-teleport-no-inn",
             _ => string.Empty,
@@ -2952,9 +2965,10 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads enterinn - move to a nearby innkeeper and enter the inn\n" +
                 "/ads shopper - open Shop Lists\n" +
                 "/ads shop <itemID> <quantity> - buy an exact additional quantity from a supported sheet-resolved shop\n" +
-                "/ads repair self|npc|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
+                "/ads repair self|npc|npc-yes-inn|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
+                "/ads npcrepair yesinn - repair near an inn, then enter its room\n" +
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads npcrepair-no-teleport-no-inn - NPC repair only if a mender is within 120y\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
@@ -3201,7 +3215,7 @@ public sealed class Plugin : IDalamudPlugin
 
         if (trimmed.Equals("repair", StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus("Repair mode must be self, npc, npc-no-inn, or npc-no-teleport-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-yes-inn, npc-no-inn, or npc-no-teleport-no-inn.");
             return;
         }
 
@@ -3221,6 +3235,13 @@ public sealed class Plugin : IDalamudPlugin
             || trimmed.Equals("npcrepair no-inn", StringComparison.OrdinalIgnoreCase))
         {
             StartNpcRepairNoInn();
+            return;
+        }
+
+        if (trimmed.Equals("npcrepair yesinn", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("npcrepair yes-inn", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepairYesInn();
             return;
         }
 

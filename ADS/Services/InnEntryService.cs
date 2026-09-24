@@ -26,17 +26,8 @@ public sealed class InnEntryService
     private static readonly TimeSpan ZoneWaitTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(90);
 
-    private static readonly HashSet<string> KnownInnNpcNames = new(StringComparer.Ordinal)
-    {
-        "Antoinaut",
-        "Otopa Pottopa",
-        "Mytesyn",
-        "Bamponcet",
-        "Ushitora",
-        "Manager of Suites",
-        "Ojika Tsunjika",
-        "Peshekwa",
-    };
+    private static readonly HashSet<uint> KnownInnNpcIds =
+        [1000102, 1000974, 1001976, 1011193, 1018981, 1027231, 1037293, 1048375];
 
     private readonly IDataManager dataManager;
     private readonly IObjectTable objectTable;
@@ -328,7 +319,7 @@ public sealed class InnEntryService
         StopMovement();
         log.Warning($"[ADS][Inn] {message}");
         state = InnEntryState.Idle;
-        StatusMessage = "Idle";
+        StatusMessage = message;
         targetNpcName = string.Empty;
     }
 
@@ -367,8 +358,7 @@ public sealed class InnEntryService
             if (obj == null || obj.ObjectKind != ObjectKind.EventNpc)
                 continue;
 
-            var name = obj.Name.TextValue;
-            if (!KnownInnNpcNames.Contains(name))
+            if (!KnownInnNpcIds.Contains(obj.BaseId))
                 continue;
 
             var distance = DistanceToLocalPlayer(obj);

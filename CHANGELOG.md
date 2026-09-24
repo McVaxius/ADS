@@ -8,6 +8,8 @@
 
 ## Unreleased
 
+- Added `/ads npcrepair yesinn` and `ADS.StartRepair("npc-yes-inn")`: exit an inn through its door, repair nearby, then return to the same room; outside starts use the current city or cheapest unlocked inn route. Fully repaired gear skips repair interaction, and utility status remains active until room entry. Missing doors, menders, and failed entry report failure without an exit-to-teleport fallback. Inn and innkeeper detection now uses game IDs across client languages.
+
 - Shop Lists now waits for the existing bounded cleanup to close returning NPC menus after refill and spending batches that held a shop, preserving finite-order cleanup. Preview quantity fields now read "If owned <" and "Refill to >=" on separate lines; inline and guide examples explain that setting both to 130 targets 130 owned items (10 owned means buying 120 with single-item bundles), while `/ads shop <itemID> 130` requests 130 additional items.
 
 - `/ads loot` now processes eligible loot in Need, Greed, and Pass modes independently of ADS's main automation switch. Off still stops loot actions; saved loot modes, login/zoning/cutscene safeguards, and existing roll-selection rules are preserved.
