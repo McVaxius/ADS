@@ -84,6 +84,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             plugin.Configuration.PluginEnabled = pluginEnabled;
             changed = true;
         }
+        ImGui.TextDisabled("ADS stays enabled. Start/Resume and Stop control duty ownership.");
 
         var openMainWindowOnLoad = plugin.Configuration.OpenMainWindowOnLoad;
         if (ImGui.Checkbox("Open main window on load", ref openMainWindowOnLoad))

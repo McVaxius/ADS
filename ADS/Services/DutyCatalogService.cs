@@ -62,6 +62,7 @@ public sealed class DutyCatalogService
                 + row.ContentMemberType.Value.HealersPerParty
                 + row.ContentMemberType.Value.MeleesPerParty
                 + row.ContentMemberType.Value.RangedPerParty;
+            partySize = ResolvePartySize(row.ContentType.RowId, partySize);
             var localizedName = isQuestBattle
                 ? GetQuestName(questSheet, linkedQuestId)
                 : NormalizeName(row.Name.ToString());
@@ -403,13 +404,19 @@ public sealed class DutyCatalogService
             ? NormalizeName(quest.Name.ToString())
             : string.Empty;
 
-    private static DutyCategory ClassifyDutyCategory(
+    internal static int ResolvePartySize(uint contentTypeRowId, int partySize)
+        => contentTypeRowId == 30 ? 4 : partySize;
+
+    internal static DutyCategory ClassifyDutyCategory(
         uint territoryTypeId,
         uint contentTypeRowId,
         uint contentMemberTypeRowId,
         int partySize,
         string contentTypeName)
     {
+        if (contentTypeRowId == 30)
+            return DutyCategory.FourMan;
+
         if (TreasureDungeonData.IsSupportedDutyTerritory(territoryTypeId))
             return DutyCategory.TreasureDungeon;
 

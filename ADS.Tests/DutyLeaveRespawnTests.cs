@@ -13,6 +13,63 @@ namespace ADS.Tests;
 
 public sealed class DutyLeaveRespawnTests
 {
+    [Fact]
+    public void VariantCriterionCompletionRetainsOwnershipThroughLootThenReleasesWithoutLeaving()
+    {
+        using var tempDirectory = new TempDirectory();
+        var log = DispatchProxy.Create<IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var keys = DispatchProxy.Create<IKeyState, ForceMarchLockTests.NoOpProxy>();
+        var objects = DispatchProxy.Create<IObjectTable, ForceMarchLockTests.ObjectTableProxy>();
+        ((ForceMarchLockTests.ObjectTableProxy)(object)objects).LocalPlayer =
+            DispatchProxy.Create<IPlayerCharacter, ForceMarchLockTests.GameObjectProxy>();
+        var commands = DispatchProxy.Create<ICommandManager, ForceMarchLockTests.CommandManagerProxy>();
+        var rules = new ObjectPriorityRuleService(log, null!, tempDirectory.Path);
+        var frontier = new DungeonFrontierService(null!, objects, log, rules, null!);
+        var execution = new ExecutionService(null!, objects, null!, commands, null!, frontier, null!, rules,
+            new HyperFocusLeaseService(_ => "{}", _ => "{}", _ => "{}", () => "{}"),
+            new TreasureDoorStrafeInputService(keys, log), new CardinalHoldInputService(keys, log),
+            new Configuration(), log);
+        var context = Context(territory: 1069, content: 900, duty: new DutyCatalogEntry
+        {
+            ContentFinderConditionId = 900, TerritoryTypeId = 1069, Name = "V&C", EnglishName = "V&C",
+            ContentTypeName = "V&C Dungeon", ExpansionName = "EW", SupportNote = "Existing maturity",
+            LevelRequired = 90, SortKey = 1, ExVersion = 4, ContentTypeRowId = 30, ContentMemberTypeRowId = 3,
+            PartySize = 4, Category = DutyCategory.FourMan, SupportLevel = DutySupportLevel.PassiveOnly,
+            ClearanceStatus = DutyClearanceStatus.NotCleared, IsPlannedTest = true, IsMainScenario = false,
+        });
+        Assert.True(Plugin.ShouldRunDutyCompletionTreasureSweep(context, true));
+        Assert.False(Plugin.ShouldRunDutyCompletionTreasureSweep(context, false));
+        Assert.False(Plugin.ShouldRunDutyCompletionTreasureSweep(Context(), true));
+        Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "V&C"));
+        Assert.True(execution.IsOwned);
+        Assert.False(execution.IsLeaveRequested);
+        var now = DateTime.UtcNow;
+        var exitRequests = 0;
+        void Tick(DateTime time) => execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true,
+            () => ++exitRequests, time);
+        Tick(now); // Spawn grace keeps ownership even before the final coffer appears.
+        Assert.True(execution.IsOwned);
+        // Exercise the existing post-interaction loot wait without invoking a native game callback.
+        typeof(ExecutionService).GetField("leaveTreasureInteractionSent", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(execution, true);
+        Tick(now.AddMinutes(1)); // First clear observation starts settling.
+        Assert.True(execution.IsOwned);
+        Tick(now.AddMinutes(1).AddSeconds(3)); // Settled; start loot-distribution wait.
+        Assert.True(execution.IsOwned);
+        Tick(now.AddMinutes(1).AddSeconds(4));
+        Assert.True(execution.IsOwned);
+        Tick(now.AddMinutes(2));
+        Assert.False(execution.IsOwned);
+        Assert.Equal(OwnershipMode.Observing, execution.CurrentMode);
+        Assert.Equal(0, exitRequests);
+        Assert.Equal(DutySupportLevel.PassiveOnly, context.CurrentDuty!.SupportLevel);
+        Assert.True(context.CurrentDuty.IsPlannedTest);
+
+        Assert.True(execution.LeaveDuty(context, false)); // A later explicit Leave still works.
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => ++exitRequests);
+        Assert.Equal(1, exitRequests);
+    }
+
     [Theory]
     [InlineData(ClientLanguage.English, "Return to the starting point for<br><string(gstr56)>?")]
     [InlineData(ClientLanguage.French, "Retourner au point de départ de la mission <string(gstr56)><nbsp>?")]
@@ -129,13 +186,13 @@ public sealed class DutyLeaveRespawnTests
     }
 
     private static DutyContextSnapshot Context(bool inDuty = true, bool loggedIn = true, bool transition = false,
-        uint territory = 1044, uint content = 831) => new()
+        uint territory = 1044, uint content = 831, DutyCatalogEntry? duty = null) => new()
     {
         PluginEnabled = true, IsLoggedIn = loggedIn, BoundByDuty = inDuty, BoundByDuty56 = false,
         BetweenAreas = transition, BetweenAreas51 = false, Jumping = false, Jumping61 = false,
         Occupied33 = false, OccupiedInQuestEvent = false, OccupiedInEvent = false,
         OccupiedInCutSceneEvent = false, WatchingCutscene = false, InCombat = false, Mounted = false,
-        TerritoryTypeId = territory, MapId = 1, ContentFinderConditionId = content, CurrentDuty = null,
+        TerritoryTypeId = territory, MapId = 1, ContentFinderConditionId = content, CurrentDuty = duty,
     };
 
     private sealed class ReturnEvaluator(ClientLanguage client, string macro) : ISeStringEvaluator

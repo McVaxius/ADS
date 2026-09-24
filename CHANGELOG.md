@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-24 — Activity ownership and V&C loot
+
+- Keep ADS effectively enabled, recover saved disabled settings on load, and retain the compatibility checkbox/IPC field. Log enable-field requests on both configuration IPC routes, including ignored disables and their caller stacks.
+- Exclude every Palace of the Dead, Heaven-on-High, Eureka Orthos and Pilgrim's Traverse floor/rest territory through the activity gate. Release ownership there while keeping outdoor entrances, purchases, UI and IPC available.
+- Classify content-type-30 V&C duties as FourMan with capacity four, preserving support/maturity settings. Keep ownership through their completion treasure/Personal Spoils sweep, then release without automatically leaving.
+
 ## 2026-09-18 — Relic orders (local-only, unpublished)
 
 - Added editable ARR Zodiac and HW Anima Poetics orders with stable preset/row IDs, one-time initialization and atomic shop-list saves that preserve existing lists on failure.

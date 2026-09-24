@@ -29,8 +29,25 @@ public sealed class AutomationTerritoryPolicyTests
 
     [Theory]
     [InlineData(1044u)] // The Praetorium
-    [InlineData(1099u)] // Eureka Orthos
-    [InlineData(1100u)] // Eureka Orthos
-    public void KeepsRegularDutiesAndEurekaOrthosEnabled(uint territoryTypeId)
+    [InlineData(153u)] // South Shroud: entrance/vendor
+    [InlineData(613u)] // Ruby Sea: entrance/vendor
+    [InlineData(156u)] // Mor Dhona: entrance/vendor
+    [InlineData(816u)] // Il Mheg: entrance/vendor
+    [InlineData(1069u)] // Sil'dihn Subterrane
+    [InlineData(1075u)] // Another Sil'dihn Subterrane
+    [InlineData(1076u)] // Savage
+    public void KeepsRegularDutiesEntrancesAndVariantCriterionEnabled(uint territoryTypeId)
         => Assert.False(AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId));
+
+    public static IEnumerable<object[]> DeepDungeonTerritories()
+        => Enumerable.Range(561, 5).Concat(Enumerable.Range(593, 15)).Append(570)
+            .Concat(Enumerable.Range(770, 6)).Concat(Enumerable.Range(782, 4)).Append(780)
+            .Concat(Enumerable.Range(1099, 10)).Append(1124)
+            .Concat(Enumerable.Range(1281, 10)).Append(1280)
+            .Select(id => new object[] { (uint)id });
+
+    [Theory]
+    [MemberData(nameof(DeepDungeonTerritories))]
+    public void ExcludesEveryDeepDungeonFloorAndRestArea(uint territoryTypeId)
+        => Assert.True(AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId));
 }

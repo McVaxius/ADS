@@ -4,6 +4,25 @@ namespace ADS.Tests;
 
 public sealed class WizardCatalogTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SavedDisabledStateRecoversAndSerializesEnabledWithoutChangingFollow(bool follow)
+    {
+        var configuration = System.Text.Json.JsonSerializer.Deserialize<Configuration>(
+            """{"Version":24,"PluginEnabled":false}""")!;
+        configuration.EnableBmraiVbmInRegularDuties = follow;
+
+        Assert.True(configuration.PluginEnabled);
+        Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
+        Assert.False(Plugin.ApplyConfigurationMigrations(configuration));
+        configuration.PluginEnabled = false; // The retained compatibility setter cannot disable ADS.
+        Assert.True(configuration.PluginEnabled);
+        Assert.Equal(follow, configuration.EnableBmraiVbmInRegularDuties);
+        using var saved = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(configuration));
+        Assert.True(saved.RootElement.GetProperty("PluginEnabled").GetBoolean());
+    }
+
     [Fact]
     public void CatalogHasStableIdsOrderAndThreeRequiredPages()
     {

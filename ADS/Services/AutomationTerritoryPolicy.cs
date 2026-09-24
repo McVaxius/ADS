@@ -11,5 +11,10 @@ internal static class AutomationTerritoryPolicy
     ];
 
     public static bool IsAutomationExcludedTerritory(uint territoryTypeId)
-        => ExcludedTerritoryIds.Contains(territoryTypeId);
+        => ExcludedTerritoryIds.Contains(territoryTypeId)
+           // DDuck DeepDungeonCatalog floor sets and dedicated rest areas.
+           || territoryTypeId is >= 561 and <= 565 or >= 593 and <= 607 or 570
+               or >= 770 and <= 775 or >= 782 and <= 785 or 780
+               or >= 1099 and <= 1108 or 1124
+               or >= 1281 and <= 1290 or 1280;
 }

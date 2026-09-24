@@ -9,7 +9,16 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconDisabled = "\uE04C";
 
     public int Version { get; set; } = 24;
-    public bool PluginEnabled { get; set; } = true;
+    private bool requestedPluginEnabled = true;
+    // Keep the serialized field and setter for older configs/callers. Ownership controls execution.
+    public bool PluginEnabled { get => true; set => requestedPluginEnabled = value; }
+
+    internal bool NormalizePluginEnabled()
+    {
+        var changed = !requestedPluginEnabled;
+        requestedPluginEnabled = true;
+        return changed;
+    }
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
     public bool DtrBarEnabled { get; set; } = true;

@@ -1,4 +1,6 @@
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
+using System.Text.Json;
 
 namespace ADS.Services;
 
@@ -37,7 +39,8 @@ public sealed class AdsIpcService : IDisposable
         Func<string, string> getShopListPresetStatusJson,
         Func<string, bool> cancelShopListPreset,
         Func<string, string> searchShopCatalogJson,
-        Func<bool> openPlayerObjectExplorer)
+        Func<bool> openPlayerObjectExplorer,
+        IPluginLog log)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -56,9 +59,18 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.GetStatusJson", getStatusJson);
         Register(pluginInterface, "ADS.GetCurrentAnalysisJson", getCurrentAnalysisJson);
         Register(pluginInterface, "ADS.GetCapabilitiesJson", getCapabilitiesJson);
-        Register(pluginInterface, "ADS.Invoke", invoke);
+        Register(pluginInterface, "ADS.Invoke", (string action, string payload) =>
+        {
+            if (string.Equals(action?.Trim(), "configuration.patch", StringComparison.OrdinalIgnoreCase))
+                LogEnableRequest("ADS.Invoke(configuration.patch)", payload, log);
+            return invoke(action!, payload);
+        });
         Register(pluginInterface, "ADS.GetConfigurationJson", getConfigurationJson);
-        Register(pluginInterface, "ADS.PatchConfigurationJson", patchConfigurationJson);
+        Register(pluginInterface, "ADS.PatchConfigurationJson", (string payload) =>
+        {
+            LogEnableRequest("ADS.PatchConfigurationJson", payload, log);
+            return patchConfigurationJson(payload);
+        });
         Register(pluginInterface, "ADS.GetDesynthStatusJson", getDesynthStatusJson);
         Register(pluginInterface, "ADS.GetExtractMateriaStatusJson", getExtractMateriaStatusJson);
         Register(pluginInterface, "ADS.GetShopPurchaseStatusJson", getShopPurchaseStatusJson);
@@ -75,6 +87,31 @@ public sealed class AdsIpcService : IDisposable
     {
         foreach (var action in disposeActions)
             action();
+    }
+
+    private static void LogEnableRequest(string endpoint, string payload, IPluginLog log)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return;
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!property.Name.Equals("pluginEnabled", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var disable = property.Value.ValueKind == JsonValueKind.False;
+                log.Information($"[ADS][IPC] {endpoint}: pluginEnabled request={property.Value.GetRawText()}; "
+                    + (disable ? "disable ignored; effective enabled=true. Caller stack at IPC entry:\n" + Environment.StackTrace
+                        : "effective enabled=true; enable field cannot disable ADS."));
+            }
+        }
+        catch (JsonException)
+        {
+            // The configuration endpoint owns payload validation and its error response.
+        }
     }
 
     private void Register<TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<TReturn> func)

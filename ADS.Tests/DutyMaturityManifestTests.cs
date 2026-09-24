@@ -5,6 +5,18 @@ namespace ADS.Tests;
 
 public sealed class DutyMaturityManifestTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void AllVariantCriterionRowsUseFourManCapacityDespiteSheetPartyComposition(int sheetPartySize)
+    {
+        Assert.Equal(4, DutyCatalogService.ResolvePartySize(30, sheetPartySize));
+        Assert.Equal(DutyCategory.FourMan,
+            DutyCatalogService.ClassifyDutyCategory(1069, 30, 3, sheetPartySize, "V&C Dungeon"));
+        Assert.Equal(sheetPartySize, DutyCatalogService.ResolvePartySize(2, sheetPartySize));
+    }
+
     [Fact]
     public void ChangedDropdownsAndNoteRoundTripThroughManifest()
     {

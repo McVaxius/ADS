@@ -343,7 +343,8 @@ public sealed class Plugin : IDalamudPlugin
             ShopListService.GetShopListPresetStatusJson,
             ShopListService.CancelShopListPreset,
             ShopListService.SearchShopCatalogJson,
-            OpenPlayerObjectExplorer);
+            OpenPlayerObjectExplorer,
+            Log);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
 
         mainWindow = new MainWindow(this);
@@ -2924,7 +2925,7 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (ShouldRunDutyCompletionTreasureSweep(context)
+        if (ShouldRunDutyCompletionTreasureSweep(context, Configuration.ConsiderTreasureCoffers)
             && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
         {
             PrintStatus(ExecutionService.LastStatus);
@@ -2941,10 +2942,11 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] DutyCompleted event for {dutyName}; ownership released and observation memory cleared.");
     }
 
-    private bool ShouldRunDutyCompletionTreasureSweep(DutyContextSnapshot context)
-        => Configuration.ConsiderTreasureCoffers
+    internal static bool ShouldRunDutyCompletionTreasureSweep(DutyContextSnapshot context, bool considerTreasureCoffers)
+        => considerTreasureCoffers
            && context.InInstancedDuty
            && (context.CurrentDuty?.Category == DutyCategory.TreasureDungeon
+               || context.CurrentDuty?.ContentTypeRowId == 30
                || TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
 
     private void RegisterCommands()
@@ -3656,7 +3658,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal static bool ApplyConfigurationMigrations(Configuration configuration)
     {
-        var changed = false;
+        var changed = configuration.NormalizePluginEnabled();
         if (configuration.Version < 1)
         {
             configuration.Version = 1;

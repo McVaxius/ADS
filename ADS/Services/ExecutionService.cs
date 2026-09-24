@@ -196,6 +196,7 @@ public sealed class ExecutionService
     private bool leaveLootDistributionWaitLogged;
     private bool leaveDutyExitArmed;
     private bool explicitLeaveRequested;
+    private bool releaseAfterCompletionSweep;
     private bool leaveRespawnAccepted;
     private (uint Territory, uint Content)? completedDuty;
     private string lastLoggedLeaveTreasureKey = string.Empty;
@@ -658,10 +659,12 @@ public sealed class ExecutionService
         ResetRecoveryHold();
         ResetLeaveState();
         BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
+        releaseAfterCompletionSweep = context.CurrentDuty?.ContentTypeRowId == 30;
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(
             ExecutionPhase.LeavingDuty,
-            $"Duty completed: {dutyName}. Final treasure sweep started; ADS will arm duty exit after coffers and loot settle.");
+            $"Duty completed: {dutyName}. Final treasure sweep started; ADS will "
+            + (releaseAfterCompletionSweep ? "release ownership after coffers and loot settle." : "arm duty exit after coffers and loot settle."));
         return true;
     }
 
@@ -4870,12 +4873,14 @@ public sealed class ExecutionService
         => UpdateLeaveDuty(context, observation, considerTreasureCoffers, TrySendLeaveDutyUi);
 
     internal void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers,
-        Action sendLeaveUi)
+        Action sendLeaveUi, DateTime? nowUtc = null)
     {
         if (TryHandleLeaveRespawn(context))
             return;
 
-        var now = DateTime.UtcNow;
+        var now = nowUtc ?? DateTime.UtcNow;
+        var request = releaseAfterCompletionSweep ? "Duty completed." : "Leave requested.";
+        var completionAction = releaseAfterCompletionSweep ? "releasing ownership" : "duty exit";
         if (considerTreasureCoffers && !leaveTreasureSweepStarted)
             BeginLeaveTreasureSweep(now, "leave state");
 
@@ -4889,7 +4894,7 @@ public sealed class ExecutionService
         {
             StopMovementAssists();
             leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
-            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Waiting for combat to clear before duty exit.");
+            SetPhase(ExecutionPhase.LeavingDuty, $"{request} Waiting for combat to clear before {completionAction}.");
             return;
         }
 
@@ -4900,14 +4905,14 @@ public sealed class ExecutionService
             StopMovementAssists();
             SetPhase(
                 ExecutionPhase.LeavingDuty,
-                BuildSelectYesnoHoldStatus("Leave requested. SelectYesno is visible before duty exit is armed; ADS is waiting for dialog automation before continuing the treasure sweep."));
+                BuildSelectYesnoHoldStatus($"{request} SelectYesno is visible; ADS is waiting for dialog automation before continuing the treasure sweep."));
             return;
         }
 
         if (considerTreasureCoffers && leaveTreasureInteractionSent && now < nextInteractAttemptUtc)
         {
             StopMovementAssists();
-            SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Final treasure sweep is waiting for the treasure interaction result.");
+            SetPhase(ExecutionPhase.LeavingDuty, $"{request} Final treasure sweep is waiting for the treasure interaction result.");
             return;
         }
 
@@ -4927,13 +4932,13 @@ public sealed class ExecutionService
                 TryAdvanceInteractableObjective(
                     context,
                     nearbyTreasure,
-                    "Leave requested. Final treasure sweep is clearing nearby treasure before duty exit.");
+                    $"{request} Final treasure sweep is clearing nearby treasure before {completionAction}.");
                 if (lastInteractGameObjectId == nearbyTreasure.GameObjectId
                     && (previousInteractGameObjectId != lastInteractGameObjectId
                         || nextInteractAttemptUtc > previousInteractAttemptUtc))
                 {
                     leaveTreasureInteractionSent = true;
-                    log?.Information($"[ADS] Final treasure sweep interacted with {nearbyTreasure.Name}; waiting for dialog automation and loot distribution before duty exit.");
+                    log?.Information($"[ADS] Final treasure sweep interacted with {nearbyTreasure.Name}; waiting for dialog automation and loot distribution before {completionAction}.");
                 }
                 return;
             }
@@ -4947,7 +4952,7 @@ public sealed class ExecutionService
                 LogLeaveTreasureGraceActive(now);
                 SetPhase(
                     ExecutionPhase.LeavingDuty,
-                    $"Leave requested. Final coffer grace active for {(leaveTreasureSweepGraceUntilUtc - now).TotalSeconds:0.0}s before sweep-clear.");
+                    $"{request} Final coffer grace active for {(leaveTreasureSweepGraceUntilUtc - now).TotalSeconds:0.0}s before sweep-clear.");
                 return;
             }
 
@@ -4960,7 +4965,7 @@ public sealed class ExecutionService
             if (now - leaveTreasureSweepClearSinceUtc < LeaveTreasureSweepSettleDelay)
             {
                 StopMovementAssists();
-                SetPhase(ExecutionPhase.LeavingDuty, "Leave requested. Final treasure sweep is clear; waiting for the nearby treasure list to settle before duty exit.");
+                SetPhase(ExecutionPhase.LeavingDuty, $"{request} Final treasure sweep is clear; waiting for the nearby treasure list to settle before {completionAction}.");
                 return;
             }
 
@@ -4977,10 +4982,16 @@ public sealed class ExecutionService
                     StopMovementAssists();
                     SetPhase(
                         ExecutionPhase.LeavingDuty,
-                        $"Leave requested. Final treasure sweep is clear, waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before duty exit.");
+                        $"{request} Final treasure sweep is clear, waiting {(leaveLootDistributionWaitUntilUtc - now).TotalSeconds:0.0}s for loot distribution before {completionAction}.");
                     return;
                 }
             }
+        }
+
+        if (releaseAfterCompletionSweep)
+        {
+            CompleteDuty(context.CurrentDuty?.EnglishName ?? $"territory {context.TerritoryTypeId}");
+            return;
         }
 
         ArmLeaveDutyExit(considerTreasureCoffers ? "final treasure sweep complete" : "treasure sweep disabled");
@@ -5101,7 +5112,7 @@ public sealed class ExecutionService
             return;
 
         lastLoggedLeaveTreasureKey = treasure.Key;
-        log?.Information($"[ADS] Final treasure sweep found {treasure.Name} at {FormatVector(treasure.Position)}; clearing it before duty exit.");
+        log?.Information($"[ADS] Final treasure sweep found {treasure.Name} at {FormatVector(treasure.Position)}; clearing it before completing the sweep.");
     }
 
     private void LogLeaveTreasureSweepClear()
@@ -5110,7 +5121,7 @@ public sealed class ExecutionService
             return;
 
         leaveTreasureSweepClearLogged = true;
-        log?.Information($"[ADS] Final treasure sweep clear; settling for {LeaveTreasureSweepSettleDelay.TotalSeconds:0.0}s before duty exit.");
+        log?.Information($"[ADS] Final treasure sweep clear; settling for {LeaveTreasureSweepSettleDelay.TotalSeconds:0.0}s before completing the sweep.");
     }
 
     private void LogLeaveLootDistributionWait()
@@ -5119,7 +5130,7 @@ public sealed class ExecutionService
             return;
 
         leaveLootDistributionWaitLogged = true;
-        log?.Information($"[ADS] Final treasure sweep loot wait started for {LeaveLootDistributionDelay.TotalSeconds:0.0}s before duty exit.");
+        log?.Information($"[ADS] Final treasure sweep loot wait started for {LeaveLootDistributionDelay.TotalSeconds:0.0}s before completing the sweep.");
     }
 
     private void ArmLeaveDutyExit(string reason)
@@ -5203,6 +5214,7 @@ public sealed class ExecutionService
     private void ResetLeaveState()
     {
         explicitLeaveRequested = false;
+        releaseAfterCompletionSweep = false;
         leaveRespawnAccepted = false;
         nextLeaveUiAttemptUtc = DateTime.MinValue;
         leaveLootDistributionWaitUntilUtc = DateTime.MinValue;

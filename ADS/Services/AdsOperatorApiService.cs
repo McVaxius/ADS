@@ -116,6 +116,7 @@ public sealed class AdsOperatorApiService
                 return Result(action, false, "Configuration patch must be a JSON object.");
 
             var changes = new List<Action>();
+            var disableIgnored = false;
             var nextScope = DesynthPolicyService.NormalizeScope(plugin.Configuration.DesynthInventoryScope);
             var explicitScopeSeen = false;
             var legacyCategoriesSeen = false;
@@ -131,7 +132,7 @@ public sealed class AdsOperatorApiService
                 {
                     case "pluginenabled":
                         var pluginEnabled = property.Value.GetBoolean();
-                        changes.Add(() => plugin.Configuration.PluginEnabled = pluginEnabled);
+                        disableIgnored |= !pluginEnabled;
                         break;
                     case "lootglamourneedingenabled":
                         var lootGlamourNeeding = property.Value.GetBoolean();
@@ -258,7 +259,9 @@ public sealed class AdsOperatorApiService
             foreach (var change in changes)
                 change();
             plugin.SaveConfiguration();
-            return Result(action, true, "Configuration patched.", plugin.GetConfigurationJson());
+            return Result(action, true, disableIgnored
+                ? "Configuration patched. pluginEnabled=false ignored; ADS stays enabled. Duty ownership controls execution."
+                : "Configuration patched.", plugin.GetConfigurationJson());
         }
         catch (Exception ex)
         {
