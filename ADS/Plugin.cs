@@ -284,6 +284,7 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.Save,
             message => Log.Information("[ADS][RelicTest] {Message}", message),
             new SystemShopPurchaseClock());
+        Log.Information("[ADS][InnRepair] startup; build=I403-manual-inn-destinations-03; pid={Pid}; utc={Utc}", Environment.ProcessId, DateTime.UtcNow);
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
@@ -1232,12 +1233,17 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
-    public bool StartNpcRepairYesInn()
+    public bool StartNpcRepairYesInn(string? destination = null)
     {
+        if (destination != null && !UtilityAutomationService.TryGetInnDestination(destination, out _, out _))
+        {
+            PrintStatus("Unknown inn destination. Use uldah, gridania, limsa, ishgard, crystarium, sharlayan, or tuliyollal.");
+            return false;
+        }
         if (!CanStartManualUtility("NPC repair and inn room return"))
             return false;
 
-        var result = UtilityAutomationService.StartNpcRepairYesInn();
+        var result = UtilityAutomationService.StartNpcRepairYesInn(destination);
         PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
         return result;
     }
@@ -1257,7 +1263,7 @@ public sealed class Plugin : IDalamudPlugin
         var normalized = NormalizeRepairMode(mode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            PrintStatus("Repair mode must be self, npc, npc-yes-inn, npc-no-inn, or npc-no-teleport-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-yes-inn[-destination], npc-no-inn, or npc-no-teleport-no-inn.");
             return false;
         }
 
@@ -1268,7 +1274,7 @@ public sealed class Plugin : IDalamudPlugin
             "npc-yes-inn" => StartNpcRepairYesInn(),
             "npc-no-inn" => StartNpcRepairNoInn(),
             "npc-no-teleport-no-inn" => StartNpcRepairNoTeleportNoInn(),
-            _ => false,
+            _ => StartNpcRepairYesInn(normalized["npc-yes-inn-".Length..]),
         };
     }
 
@@ -1972,9 +1978,12 @@ public sealed class Plugin : IDalamudPlugin
     public void PrintStatus(string message)
         => ChatGui.Print($"[ADS] {message}");
 
-    private static string NormalizeRepairMode(string? mode)
+    internal static string NormalizeRepairMode(string? mode)
     {
         var normalized = (mode ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.StartsWith("npc-yes-inn-", StringComparison.Ordinal)
+            && UtilityAutomationService.TryGetInnDestination(normalized["npc-yes-inn-".Length..], out _, out _))
+            return normalized;
         return normalized switch
         {
             "self" or "selfrepair" or "self-repair" => "self",
@@ -2883,7 +2892,11 @@ public sealed class Plugin : IDalamudPlugin
         => ExecutionService.ResetDutyCompletion();
 
     private void OnLogout(int type, int code)
-        => ExecutionService.ResetDutyCompletion();
+    {
+        UtilityAutomationService.Cancel("logout");
+        InnEntryService.Cancel("logout");
+        ExecutionService.ResetDutyCompletion();
+    }
 
     private void OnTerritoryChanged(uint territoryType)
         => QstCompanionWarningService.HandleTerritoryChanged();
@@ -2968,7 +2981,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads repair self|npc|npc-yes-inn|npc-no-inn|npc-no-teleport-no-inn - start reusable repair automation\n" +
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
-                "/ads npcrepair yesinn - repair near an inn, then enter its room\n" +
+                "/ads npcrepair yesinn [uldah|gridania|limsa|ishgard|crystarium|sharlayan|tuliyollal] - repair near an inn, then enter its room\n" +
                 "/ads npcrepair noinn - NPC repair without inn fallback\n" +
                 "/ads npcrepair-no-teleport-no-inn - NPC repair only if a mender is within 120y\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
@@ -3242,6 +3255,13 @@ public sealed class Plugin : IDalamudPlugin
             || trimmed.Equals("npcrepair yes-inn", StringComparison.OrdinalIgnoreCase))
         {
             StartNpcRepairYesInn();
+            return;
+        }
+
+        if (trimmed.StartsWith("npcrepair yesinn ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("npcrepair yes-inn ", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepairYesInn(trimmed[(trimmed.IndexOf(' ', "npcrepair ".Length) + 1)..].Trim());
             return;
         }
 

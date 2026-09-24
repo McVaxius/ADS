@@ -228,6 +228,8 @@ public sealed unsafe class UtilityAutomationService
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime lastActionUtc = DateTime.MinValue;
     private DateTime lastMoveCommandUtc = DateTime.MinValue;
+    private DateTime lastMovementProgressUtc = DateTime.MinValue;
+    private Vector3 lastMovementProgressPosition;
     private DateTime lastInteractUtc = DateTime.MinValue;
     private DateTime lastMenuSelectionUtc = DateTime.MinValue;
     private DateTime repairWindowSeenUtc = DateTime.MinValue;
@@ -239,6 +241,7 @@ public sealed unsafe class UtilityAutomationService
     private NpcRepairTravelStage npcRepairTravelStage = NpcRepairTravelStage.None;
     private DateTime npcRepairTravelStageStartedUtc = DateTime.MinValue;
     private DateTime npcRepairTravelCommandUtc = DateTime.MinValue;
+    private DateTime npcRepairInnArrivalReadyUtc = DateTime.MinValue;
     private ResolvedInnRepairRoute? activeNpcRepairInnRoute;
     private ResolvedFieldRepairRoute? activeNpcRepairFieldRoute;
     private readonly HashSet<uint> failedNpcRepairFieldAetheryteIds = [];
@@ -250,6 +253,10 @@ public sealed unsafe class UtilityAutomationService
     private DateTime lastNpcRepairFieldRouteWaitLogUtc = DateTime.MinValue;
     private int npcRepairInnPathIndex;
     private uint npcRepairStartingInnTerritory;
+    private uint npcRepairRequiredInnTerritory;
+    private uint npcRepairDestinationAethernet;
+    private bool npcRepairMenderReached;
+    private bool npcRepairOwnsInnTravel;
     private bool npcRepairInnEntryStarted;
     private bool npcRepairDoorInteracted;
     private bool repairSubmissionSent;
@@ -399,6 +406,29 @@ public sealed unsafe class UtilityAutomationService
     public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
     internal bool HasShopPurchaseSubmission => shopPurchaseRunner.HasPurchaseSubmission;
     internal bool IsRelicPurchaseReady => shopPurchaseRuntime.IsRelicPurchaseReady;
+    internal static bool TryGetInnDestination(string destination, out uint aethernetId, out uint room)
+    {
+        aethernetId = destination.Trim().ToLowerInvariant() switch
+        {
+            "uldah" => 33,
+            "gridania" => 94,
+            "limsa" => 41,
+            "ishgard" => 80,
+            "crystarium" => 152,
+            "sharlayan" => 185,
+            "tuliyollal" => 220,
+            _ => 0,
+        };
+        room = GetInnRoom(aethernetId);
+        return aethernetId != 0;
+    }
+
+    private static uint GetInnRoom(uint aethernetId) => aethernetId switch
+    {
+        33 => 178, 94 => 179, 41 => 177, 80 => 429,
+        116 => 629, 152 => 843, 185 => 990, 220 => 1205,
+        _ => 0,
+    };
     internal ShopNavigationStopResult StopRelicPurchaseNavigation() => shopPurchaseRuntime.TryStopNavigation();
     internal string? RelicPurchaseCleanupBlocker => IsRunning ? "ADS utility cleanup is still active"
         : shopPurchaseRuntime.RelicPurchaseCleanupBlocker;
@@ -576,10 +606,18 @@ public sealed unsafe class UtilityAutomationService
     public bool StartNpcRepairNoTeleportNoInn()
         => StartNpcRepair(NpcRepairMode.NoTeleportNoInn);
 
-    public bool StartNpcRepairYesInn()
-        => StartNpcRepair(NpcRepairMode.YesInn);
+    public bool StartNpcRepairYesInn(string? destination = null)
+    {
+        uint aethernet = 0, room = 0;
+        if (destination != null && !TryGetInnDestination(destination, out aethernet, out room))
+        {
+            StatusMessage = $"Unknown inn destination: {destination}.";
+            return false;
+        }
+        return StartNpcRepair(NpcRepairMode.YesInn, aethernet, room);
+    }
 
-    private bool StartNpcRepair(NpcRepairMode mode)
+    private bool StartNpcRepair(NpcRepairMode mode, uint destinationAethernet = 0, uint requiredRoom = 0)
     {
         if (IsRepairBlockedByMountedState(UtilityTask.NpcRepair))
             return false;
@@ -609,11 +647,20 @@ public sealed unsafe class UtilityAutomationService
         failedNpcRepairFieldAetheryteIds.Clear();
         if (mode == NpcRepairMode.YesInn)
         {
+            npcRepairDestinationAethernet = destinationAethernet;
+            npcRepairRequiredInnTerritory = requiredRoom;
+            log.Information("[ADS][InnRepair] dispatch; destination={Destination}; requiredRoom={Room}; startingTerritory={Territory}",
+                destinationAethernet, requiredRoom, clientState.TerritoryType);
             if (GameInteractionHelper.IsInnTerritory(dataManager, (ushort)clientState.TerritoryType))
             {
                 npcRepairStartingInnTerritory = clientState.TerritoryType;
-                SetNpcRepairTravelStage(NpcRepairTravelStage.ExitingInn, "Leaving the inn room through its door for NPC repair.");
-                return true;
+                if (npcRepairRequiredInnTerritory == 0)
+                    npcRepairRequiredInnTerritory = npcRepairStartingInnTerritory;
+                if (npcRepairRequiredInnTerritory == npcRepairStartingInnTerritory)
+                {
+                    SetNpcRepairTravelStage(NpcRepairTravelStage.ExitingInn, "Leaving the inn room through its door for NPC repair.");
+                    return true;
+                }
             }
 
             if (TryBeginNpcRepairInnTravel(out var innFailure))
@@ -629,7 +676,7 @@ public sealed unsafe class UtilityAutomationService
         if (TryFindNearbyRepairNpc(out var targetNpc, repairNpcSearchRadius))
         {
             BeginNpcRepairWithCandidate(targetNpc, "Starting NPC repair with");
-            return true;
+            return IsRunning;
         }
 
         if (mode == NpcRepairMode.NoTeleportNoInn)
@@ -1297,6 +1344,15 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepair()
     {
+        if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51] || objectTable.LocalPlayer == null)
+        {
+            npcRepairInnArrivalReadyUtc = DateTime.MinValue;
+            if (lastMoveCommandUtc != DateTime.MinValue)
+                StopMovementIfNpcRepair();
+            StatusMessage = "Waiting for zoning to finish before NPC repair.";
+            return;
+        }
+
         if (activeNpcRepairMode == NpcRepairMode.YesInn)
         {
             // Travel and inn dialogs own the flow until the repair stop is reached.
@@ -1355,16 +1411,17 @@ public sealed unsafe class UtilityAutomationService
         var distance = DistanceToLocalPlayer(targetNpc);
         if (distance > RepairNpcInteractRadius)
         {
-            if (now - lastMoveCommandUtc >= MoveRetryCooldown)
-            {
-                StatusMessage = $"Moving to repair NPC {targetNpcName}.";
-                SendMoveCommand(targetNpc.Position, targetNpcName, initial: false);
-            }
+            StatusMessage = $"Moving to repair NPC {targetNpcName}.";
+            SendMoveCommand(targetNpc.Position, targetNpcName, initial: false);
 
             return;
         }
 
         StopMovementIfNpcRepair();
+        npcRepairMenderReached = true;
+        if (activeNpcRepairMode == NpcRepairMode.YesInn
+            && TryCompleteRepairIfFinished("Equipped gear is already fully repaired; reached the mender."))
+            return;
         if (now - lastInteractUtc >= InteractRetryCooldown)
         {
             StatusMessage = $"Interacting with repair NPC {targetNpcName}.";
@@ -1825,6 +1882,8 @@ public sealed unsafe class UtilityAutomationService
 
     private bool TryCompleteRepairIfFinished(string message)
     {
+        if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn && !npcRepairMenderReached)
+            return false;
         if (!TryGetEquippedGearNeedsRepair(out var needsRepair) || needsRepair)
             return false;
 
@@ -1958,6 +2017,11 @@ public sealed unsafe class UtilityAutomationService
         var distance = targetNpc.Distance;
         if (distance <= RepairNpcInteractRadius)
         {
+            npcRepairMenderReached = true;
+            StopMovementIfNpcRepair();
+            if (activeNpcRepairMode == NpcRepairMode.YesInn
+                && TryCompleteRepairIfFinished("Equipped gear is already fully repaired; reached the mender."))
+                return;
             StatusMessage = $"Interacting with repair NPC {targetNpcName}.";
             TryInteractWithRepairNpc(targetNpc.GameObject);
         }
@@ -1981,11 +2045,15 @@ public sealed unsafe class UtilityAutomationService
 
         if (!TryResolveInnRepairRoute(out var route))
         {
-            failureMessage = $"No repair NPC found within {RepairNpcSearchRadius:0}y, and no unlocked inn repair route was available.";
+            failureMessage = npcRepairDestinationAethernet != 0
+                ? $"The requested inn repair route (aethernet {npcRepairDestinationAethernet}) has no available unlocked city aetheryte or route data."
+                : $"No repair NPC found within {RepairNpcSearchRadius:0}y, and no unlocked inn repair route was available.";
             return false;
         }
 
         activeNpcRepairInnRoute = route;
+        if (activeNpcRepairMode == NpcRepairMode.YesInn && npcRepairRequiredInnTerritory == 0)
+            npcRepairRequiredInnTerritory = GetInnRoom(route.AethernetId);
         npcRepairInnPathIndex = 0;
         npcRepairTravelCommandUtc = DateTime.MinValue;
         ResetRepairSubmission();
@@ -2066,6 +2134,8 @@ public sealed unsafe class UtilityAutomationService
         ResolvedInnRepairRoute? bestUnlockedRoute = null;
         foreach (var seed in InnRepairRouteSeeds)
         {
+            if (npcRepairDestinationAethernet != 0 && seed.AethernetId != npcRepairDestinationAethernet)
+                continue;
             if (!aetheryteSheet.TryGetRow(seed.AethernetId, out var aetheryte))
                 continue;
 
@@ -2087,7 +2157,7 @@ public sealed unsafe class UtilityAutomationService
                 continue;
             }
 
-            if (!TryGetUnlockedInnTerritoryGilCost(territoryTypeId, out var gilCost))
+            if (!TryGetUnlockedInnRouteGilCost(aetheryte, out var gilCost))
                 continue;
 
             var candidate = new ResolvedInnRepairRoute(
@@ -2221,7 +2291,7 @@ public sealed unsafe class UtilityAutomationService
         return !FieldRepairDeniedNameTerms.Any(combined.Contains);
     }
 
-    private bool TryGetUnlockedInnTerritoryGilCost(uint territoryTypeId, out int gilCost)
+    private bool TryGetUnlockedInnRouteGilCost(Aetheryte destination, out int gilCost)
     {
         gilCost = int.MaxValue;
         var aetheryteSheet = GetAetheryteSheet();
@@ -2231,7 +2301,12 @@ public sealed unsafe class UtilityAutomationService
         uint aetheryteId = 0;
         foreach (var aetheryte in aetheryteSheet)
         {
-            if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryTypeId)
+            // City aethernet shards can be in another territory from their main aetheryte
+            // (for example, Limsa's inn is in Upper Decks and its main crystal is in Lower Decks).
+            if (!aetheryte.IsAetheryte
+                || (destination.AethernetGroup != 0
+                    ? aetheryte.AethernetGroup != destination.AethernetGroup
+                    : aetheryte.Territory.RowId != destination.Territory.RowId))
                 continue;
 
             aetheryteId = aetheryte.RowId;
@@ -2266,11 +2341,26 @@ public sealed unsafe class UtilityAutomationService
 
     private bool TrySendNpcRepairInnTeleport(ResolvedInnRepairRoute route)
     {
+        if (activeNpcRepairMode == NpcRepairMode.YesInn)
+        {
+            try
+            {
+                if (Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc())
+                    return false;
+            }
+            catch (Exception ex)
+            {
+                log.Warning(ex, "[ADS][InnRepair] Cannot verify Lifestream readiness.");
+                return false;
+            }
+        }
         var command = $"/li {route.AethernetName}";
         npcRepairTravelCommandUtc = DateTime.UtcNow;
+        npcRepairInnArrivalReadyUtc = DateTime.MinValue;
         if (!GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
             return false;
 
+        npcRepairOwnsInnTravel = activeNpcRepairMode == NpcRepairMode.YesInn;
         log.Information($"[ADS][Utility] No local repair NPC was found; sending {command} to reach {route.TerritoryName} for NPC repair.");
         return true;
     }
@@ -2291,26 +2381,44 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepairInnTeleport(DateTime now, ResolvedInnRepairRoute route)
     {
+        if (npcRepairOwnsInnTravel && Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc())
+        {
+            npcRepairInnArrivalReadyUtc = DateTime.MinValue;
+            return;
+        }
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
         {
+            npcRepairInnArrivalReadyUtc = DateTime.MinValue;
             StatusMessage = $"Waiting for the inn teleport to {route.TerritoryName} to finish.";
             return;
         }
 
         if (clientState.TerritoryType != route.TerritoryTypeId)
         {
+            npcRepairInnArrivalReadyUtc = DateTime.MinValue;
             StatusMessage = now - npcRepairTravelCommandUtc < LifestreamTeleportSettleCooldown
                 ? $"Waiting for Lifestream to route to {route.AethernetName}."
                 : $"Waiting to arrive at {route.TerritoryName} for NPC repair.";
             return;
         }
 
-        if (objectTable.LocalPlayer == null || now - npcRepairTravelCommandUtc < UiSettleCooldown)
+        if (objectTable.LocalPlayer == null)
+        {
+            npcRepairInnArrivalReadyUtc = DateTime.MinValue;
+            return;
+        }
+
+        // Lifestream can finish its task queue before the final aethernet loading starts.
+        // Measure stable arrival here, not from when the travel command was sent.
+        if (npcRepairInnArrivalReadyUtc == DateTime.MinValue)
+            npcRepairInnArrivalReadyUtc = now;
+        if (now - npcRepairInnArrivalReadyUtc < UiSettleCooldown)
         {
             StatusMessage = $"Waiting for {route.TerritoryName} to settle after the Lifestream hop.";
             return;
         }
 
+        npcRepairOwnsInnTravel = false;
         SetNpcRepairTravelStage(
             route.Path.Length > 0
                 ? NpcRepairTravelStage.WalkingInnPath
@@ -2393,20 +2501,13 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (now - lastMoveCommandUtc >= MoveRetryCooldown)
-        {
-            var waypointLabel = $"{route.TerritoryName} inn waypoint {npcRepairInnPathIndex + 1}/{route.Path.Length}";
-            StatusMessage = $"Moving to {waypointLabel}.";
-            SendMoveCommand(waypoint, waypointLabel, initial: lastMoveCommandUtc == DateTime.MinValue);
-        }
+        var waypointLabel = $"{route.TerritoryName} inn waypoint {npcRepairInnPathIndex + 1}/{route.Path.Length}";
+        StatusMessage = $"Moving to {waypointLabel}.";
+        SendMoveCommand(waypoint, waypointLabel, initial: lastMoveCommandUtc == DateTime.MinValue);
     }
 
     private void UpdateNpcRepairInnNpcSearch(DateTime now, ResolvedInnRepairRoute route)
     {
-        if (activeNpcRepairMode == NpcRepairMode.YesInn
-            && TryCompleteRepairIfFinished("Equipped gear is already fully repaired."))
-            return;
-
         if (TryFindNearbyRepairNpc(out var targetNpc))
         {
             BeginNpcRepairWithCandidate(targetNpc, $"Reached the {route.TerritoryName} inn fallback and found");
@@ -2440,7 +2541,16 @@ public sealed unsafe class UtilityAutomationService
                 Fail("Inn exit reached an unexpected inn room.");
                 return;
             }
-            // Never turn a failed exit or a missing local mender into a teleport.
+            log.Information("[ADS][InnRepair] door exit; startingRoom={Room}; outsideTerritory={Territory}",
+                npcRepairStartingInnTerritory, clientState.TerritoryType);
+            StopMovementIfNpcRepair();
+            if (npcRepairDestinationAethernet != 0 && npcRepairRequiredInnTerritory != npcRepairStartingInnTerritory)
+            {
+                if (!TryBeginNpcRepairInnTravel(out var failure))
+                    Fail(failure);
+                return;
+            }
+            // Same-room and automatic trips must find the mender outside this inn.
             if (!TryResolveInnRepairRoute(out var route) || route.TerritoryTypeId != clientState.TerritoryType)
             {
                 Fail("Inn exit did not reach a supported inn repair city.");
@@ -2471,8 +2581,7 @@ public sealed unsafe class UtilityAutomationService
         }
         if (DistanceToLocalPlayer(door) > RepairNpcInteractRadius)
         {
-            if (now - lastMoveCommandUtc >= MoveRetryCooldown)
-                SendMoveCommand(door.Position, "inn-room exit", initial: lastMoveCommandUtc == DateTime.MinValue);
+            SendMoveCommand(door.Position, "inn-room exit", initial: lastMoveCommandUtc == DateTime.MinValue);
             return;
         }
         StopMovementIfNpcRepair();
@@ -2490,10 +2599,10 @@ public sealed unsafe class UtilityAutomationService
 
         if (GameInteractionHelper.IsInnTerritory(dataManager, (ushort)clientState.TerritoryType))
         {
-            if (npcRepairStartingInnTerritory != 0 && clientState.TerritoryType != npcRepairStartingInnTerritory)
-                Fail("NPC repair returned to an unexpected inn room.");
+            if (npcRepairRequiredInnTerritory == 0 || clientState.TerritoryType != npcRepairRequiredInnTerritory)
+                Fail($"NPC repair entered room {clientState.TerritoryType}, expected {npcRepairRequiredInnTerritory}.");
             else
-                Complete("NPC repair trip finished; entered the inn room.");
+                Complete($"NPC repair trip finished; confirmed entry into inn room {npcRepairRequiredInnTerritory}.");
             return;
         }
         if (innEntryService == null)
@@ -2650,6 +2759,7 @@ public sealed unsafe class UtilityAutomationService
         npcRepairTravelStage = NpcRepairTravelStage.None;
         npcRepairTravelStageStartedUtc = DateTime.MinValue;
         npcRepairTravelCommandUtc = DateTime.MinValue;
+        npcRepairInnArrivalReadyUtc = DateTime.MinValue;
         activeNpcRepairInnRoute = null;
         activeNpcRepairFieldRoute = null;
         failedNpcRepairFieldAetheryteIds.Clear();
@@ -2800,9 +2910,31 @@ public sealed unsafe class UtilityAutomationService
 
     private void SendMoveCommand(Vector3 destination, string label, bool initial)
     {
-        lastMoveCommandUtc = DateTime.UtcNow;
+        if (objectTable.LocalPlayer is not { } player)
+            return;
+        var now = DateTime.UtcNow;
+        try
+        {
+            if (!Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady").InvokeFunc())
+            {
+                lastMovementProgressUtc = DateTime.MinValue;
+                StatusMessage = $"Waiting for the navigation mesh before moving toward {label}.";
+                return;
+            }
+        }
+        catch { /* Preserve command-based movement when readiness IPC is unavailable. */ }
+
         if (!initial)
         {
+            if (InnEntryService.IsMovementStalled(player.Position, now, ref lastMovementProgressPosition, ref lastMovementProgressUtc))
+            {
+                StopMovementIfNpcRepair();
+                log.Warning($"[ADS][Utility] No movement for 3 seconds toward {label}; cancelled navigation and will retry from the current position.");
+                return;
+            }
+            if (now - lastMoveCommandUtc < MoveRetryCooldown)
+                return;
+            lastMoveCommandUtc = now;
             try
             {
                 if (Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress").InvokeFunc()
@@ -2815,13 +2947,20 @@ public sealed unsafe class UtilityAutomationService
             }
         }
 
+        lastMoveCommandUtc = now;
+        lastMovementProgressUtc = now;
+        lastMovementProgressPosition = player.Position;
         var command = string.Format(
             CultureInfo.InvariantCulture,
             "/vnav moveto {0:F2} {1:F2} {2:F2}",
             destination.X,
             destination.Y,
             destination.Z);
-        GameInteractionHelper.TrySendChatCommand(commandManager, command, log);
+        if (!GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
+        {
+            Fail($"Movement toward {label} was rejected.");
+            return;
+        }
         log.Information($"[ADS][Utility] {(initial ? "Starting" : "Refreshing")} movement toward {label}.");
     }
 
@@ -2830,7 +2969,9 @@ public sealed unsafe class UtilityAutomationService
         if (activeTask != UtilityTask.NpcRepair)
             return;
 
-        GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
+        InnEntryService.StopNavigation(commandManager, log);
+        lastMoveCommandUtc = DateTime.MinValue;
+        lastMovementProgressUtc = DateTime.MinValue;
     }
 
     private float DistanceToLocalPlayer(IGameObject obj)
@@ -3367,16 +3508,33 @@ public sealed unsafe class UtilityAutomationService
 
     private void ResetState()
     {
+        if (npcRepairOwnsInnTravel)
+        {
+            npcRepairOwnsInnTravel = false;
+            try { Plugin.PluginInterface.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction(); }
+            catch (Exception ex) { log.Warning(ex, "[ADS][InnRepair] Could not cancel inn travel."); }
+        }
+        if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn)
+        {
+            CloseRepairAddons();
+            GameInteractionHelper.TryCloseAddon("SelectString", log);
+            GameInteractionHelper.TryCloseAddon("SelectIconString", log);
+        }
         if (npcRepairInnEntryStarted)
             innEntryService?.Cancel("NPC repair ended");
         npcRepairInnEntryStarted = false;
         npcRepairStartingInnTerritory = 0;
+        npcRepairRequiredInnTerritory = 0;
+        npcRepairDestinationAethernet = 0;
+        npcRepairMenderReached = false;
         npcRepairDoorInteracted = false;
         activeTask = UtilityTask.None;
         activeNpcRepairMode = NpcRepairMode.InnFallback;
         startedAtUtc = DateTime.MinValue;
         lastActionUtc = DateTime.MinValue;
         lastMoveCommandUtc = DateTime.MinValue;
+        lastMovementProgressUtc = DateTime.MinValue;
+        lastMovementProgressPosition = default;
         lastInteractUtc = DateTime.MinValue;
         lastMenuSelectionUtc = DateTime.MinValue;
         repairWindowSeenUtc = DateTime.MinValue;

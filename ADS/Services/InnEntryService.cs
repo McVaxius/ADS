@@ -42,6 +42,8 @@ public sealed class InnEntryService
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime stateStartedAtUtc = DateTime.MinValue;
     private DateTime lastMoveCommandUtc = DateTime.MinValue;
+    private DateTime lastMovementProgressUtc = DateTime.MinValue;
+    private Vector3 lastMovementProgressPosition;
     private DateTime lastInteractUtc = DateTime.MinValue;
     private DateTime lastMenuClickUtc = DateTime.MinValue;
 
@@ -101,8 +103,9 @@ public sealed class InnEntryService
         lastMenuClickUtc = DateTime.MinValue;
 
         var distance = DistanceToLocalPlayer(npc);
-        if (distance <= InteractRadiusYalms)
+        if (HasReachedInteractionPoint(npc))
         {
+            StopMovement();
             state = InnEntryState.WaitingForMenu;
             StatusMessage = $"Interacting with innkeeper {targetNpcName}";
             TryInteract(npc);
@@ -114,7 +117,7 @@ public sealed class InnEntryService
         StatusMessage = $"Moving to innkeeper {targetNpcName}";
         SendMoveCommand(npc, initial: true);
         log.Information($"[ADS][Inn] /ads enterinn found {targetNpcName} at {distance:F1}y; moving into interaction range.");
-        return true;
+        return IsRunning;
     }
 
     public void Update()
@@ -124,6 +127,13 @@ public sealed class InnEntryService
 
         try
         {
+            if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51] || objectTable.LocalPlayer == null)
+            {
+                if (lastMoveCommandUtc != DateTime.MinValue)
+                    StopMovement();
+                return;
+            }
+
             if (GameInteractionHelper.IsInnTerritory(dataManager, (ushort)clientState.TerritoryType))
             {
                 Complete("Entered inn territory successfully.");
@@ -182,8 +192,7 @@ public sealed class InnEntryService
             return;
         }
 
-        var distance = DistanceToLocalPlayer(npc);
-        if (distance <= InteractRadiusYalms)
+        if (HasReachedInteractionPoint(npc))
         {
             StopMovement();
             TransitionTo(InnEntryState.WaitingForMenu, $"Interacting with {targetNpcName}");
@@ -191,8 +200,7 @@ public sealed class InnEntryService
             return;
         }
 
-        if (DateTime.UtcNow - lastMoveCommandUtc >= MoveRetryCooldown)
-            SendMoveCommand(npc, initial: false);
+        SendMoveCommand(npc, initial: false);
     }
 
     private void UpdateWaitingForMenu()
@@ -217,7 +225,7 @@ public sealed class InnEntryService
             return;
         }
 
-        if (distance > InteractRadiusYalms)
+        if (!HasReachedInteractionPoint(npc))
         {
             TransitionTo(InnEntryState.MovingToNpc, $"Repositioning near {targetNpcName}");
             SendMoveCommand(npc, initial: true);
@@ -291,19 +299,104 @@ public sealed class InnEntryService
 
     private void SendMoveCommand(IGameObject npc, bool initial)
     {
-        lastMoveCommandUtc = DateTime.UtcNow;
+        if (objectTable.LocalPlayer is not { } player)
+            return;
+        var now = DateTime.UtcNow;
+        try
+        {
+            if (!Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady").InvokeFunc())
+            {
+                lastMovementProgressUtc = DateTime.MinValue;
+                StatusMessage = $"Waiting for the navigation mesh before moving toward {targetNpcName}.";
+                return;
+            }
+        }
+        catch { /* Preserve command-based movement when readiness IPC is unavailable. */ }
+
+        if (!initial)
+        {
+            if (IsMovementStalled(player.Position, now, ref lastMovementProgressPosition, ref lastMovementProgressUtc))
+            {
+                StopMovement();
+                log.Warning($"[ADS][Inn] No movement for 3 seconds toward {targetNpcName}; cancelled navigation and will retry from the current position.");
+                return;
+            }
+            if (now - lastMoveCommandUtc < MoveRetryCooldown)
+                return;
+            lastMoveCommandUtc = now;
+            try
+            {
+                if (!ShouldSubmitMovement(
+                        () => Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress").InvokeFunc(),
+                        () => Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc()))
+                    return;
+            }
+            catch
+            {
+                // Match the repair helper's retry behavior when navigation IPC is unavailable.
+            }
+        }
+
+        lastMoveCommandUtc = now;
+        lastMovementProgressUtc = now;
+        lastMovementProgressPosition = player.Position;
+        var destination = InteractionPoint(clientState.TerritoryType, npc.BaseId, npc.Position);
         var command = string.Format(
             CultureInfo.InvariantCulture,
             "/vnav moveto {0:F2} {1:F2} {2:F2}",
-            npc.Position.X,
-            npc.Position.Y,
-            npc.Position.Z);
-        GameInteractionHelper.TrySendChatCommand(commandManager, command, log);
+            destination.X,
+            destination.Y,
+            destination.Z);
+        if (!GameInteractionHelper.TrySendChatCommand(commandManager, command, log))
+        {
+            Fail($"Movement toward innkeeper {targetNpcName} was rejected.");
+            return;
+        }
         log.Information($"[ADS][Inn] {(initial ? "Starting" : "Refreshing")} movement toward {targetNpcName} at {DistanceToLocalPlayer(npc):F1}y.");
     }
 
     private void StopMovement()
-        => GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
+    {
+        StopNavigation(commandManager, log);
+        lastMoveCommandUtc = DateTime.MinValue;
+        lastMovementProgressUtc = DateTime.MinValue;
+    }
+
+    internal static bool IsMovementStalled(Vector3 position, DateTime now, ref Vector3 lastPosition, ref DateTime lastProgressUtc)
+    {
+        if (lastProgressUtc == DateTime.MinValue || Vector3.DistanceSquared(position, lastPosition) >= 0.01f)
+        {
+            lastPosition = position;
+            lastProgressUtc = now;
+        }
+        return now - lastProgressUtc >= TimeSpan.FromSeconds(3);
+    }
+
+    internal static void StopNavigation(ICommandManager commandManager, IPluginLog log)
+    {
+        try
+        {
+            // A pending SimpleMove query can install a path after Path.Stop.
+            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress").InvokeFunc())
+                Plugin.PluginInterface.GetIpcSubscriber<object>("vnavmesh.Nav.PathfindCancelAll").InvokeAction();
+        }
+        catch (Exception ex) { log.Debug(ex, "[ADS][Inn] Pending navigation cancellation unavailable."); }
+        GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
+    }
+
+    internal static Vector3 InteractionPoint(uint territory, uint npcId, Vector3 npcPosition)
+        => territory == 130 && npcId == 1001976 ? new Vector3(31.5f, 7.0f, -82.0f) : npcPosition;
+
+    internal static bool HasReachedInteractionPoint(uint territory, uint npcId, Vector3 npcPosition, Vector3 playerPosition)
+        => Vector3.Distance(playerPosition, InteractionPoint(territory, npcId, npcPosition))
+            <= (territory == 130 && npcId == 1001976 ? 1.0f : InteractRadiusYalms);
+
+    private bool HasReachedInteractionPoint(IGameObject npc)
+        => objectTable.LocalPlayer is { } player
+            && HasReachedInteractionPoint(clientState.TerritoryType, npc.BaseId, npc.Position, player.Position);
+
+    internal static bool ShouldSubmitMovement(Func<bool> pathfinding, Func<bool> followingPath)
+        => !pathfinding() && !followingPath();
 
     private void Complete(string message)
     {
