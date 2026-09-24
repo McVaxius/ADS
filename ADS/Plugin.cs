@@ -46,6 +46,35 @@ public sealed class Plugin : IDalamudPlugin
         TreasureRoutes,
     }
 
+    internal sealed class RemoteJsonReloadBatch(RemoteJsonUpdateCompletion completion)
+    {
+        private readonly Queue<RemoteJsonReloadStep> steps = new(BuildRemoteJsonReloadSteps(completion));
+        private bool reloadFailed;
+
+        internal int RemainingSteps => steps.Count;
+        internal bool ManualUpdate => completion.ManualUpdate;
+
+        internal void RunNext(Func<RemoteJsonReloadStep, bool> reload)
+        {
+            if (!steps.TryDequeue(out var step))
+                return;
+
+            var success = false;
+            try
+            {
+                success = reload(step);
+            }
+            finally
+            {
+                reloadFailed |= !success;
+            }
+        }
+
+        internal bool TryRestart(DutyContextSnapshot context, OwnershipMode mode, Action stop, Func<bool> startInside)
+            => completion.Success && completion.ManualUpdate && steps.Count == 0 && !reloadFailed
+               && completion.OwnedDutyRestart?.TryRestart(context, mode, stop, startInside) == true;
+    }
+
     private sealed record FrameworkSlowUpdateContext(
         uint territoryTypeId,
         uint mapId,
@@ -170,7 +199,8 @@ public sealed class Plugin : IDalamudPlugin
     private uint lastOwnedTreasureRoleInferenceDutyKey;
     private OwnershipMode lastOwnedTreasureRoleInferenceMode = OwnershipMode.Idle;
     private bool treasureDutyRecoveryAttemptedThisLoad;
-    private readonly Queue<RemoteJsonReloadStep> pendingRemoteJsonReloadSteps = new();
+    private readonly Queue<RemoteJsonReloadBatch> pendingRemoteJsonReloads = new();
+    private RemoteJsonOwnedDutyRestart? pendingRemoteJsonOwnedDutyRestart;
     private DateTime nextRemoteJsonStaleCheckUtc;
     private DateTime nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
     private DateTime nextFrameworkSlowLogUtc = DateTime.MinValue;
@@ -693,7 +723,16 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public void ForceRemoteJsonUpdate()
-        => RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button");
+    {
+        DutyContextService.Update(Configuration.PluginEnabled);
+        var context = DutyContextService.Current;
+        pendingRemoteJsonOwnedDutyRestart?.Observe(context, ExecutionService.CurrentMode);
+        if (pendingRemoteJsonOwnedDutyRestart is not { IsPending: true })
+            pendingRemoteJsonOwnedDutyRestart = RemoteJsonOwnedDutyRestart.Capture(context, ExecutionService.CurrentMode);
+
+        RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button", manualUpdate: true,
+            pendingRemoteJsonOwnedDutyRestart);
+    }
 
     public void SetLootMode(LootRollMode mode)
     {
@@ -1042,6 +1081,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromOutside()
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         if (RejectAutomationActionInExcludedTerritory("Duty start"))
             return false;
 
@@ -1061,6 +1101,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool StartDutyFromInside()
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         if (RejectAutomationActionInExcludedTerritory("Duty start"))
             return false;
 
@@ -1116,6 +1157,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool ResumeDutyFromInside()
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         if (RejectAutomationActionInExcludedTerritory("Duty resume"))
             return false;
 
@@ -1136,6 +1178,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool LeaveDuty()
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         DutyContextService.Update(Configuration.PluginEnabled);
         if (RejectAutomationActionInExcludedTerritory("Duty leave"))
             return false;
@@ -1178,6 +1221,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void StopOwnership(string? idleStatus, bool stopRelicTest = true)
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         if (stopRelicTest)
             RelicPurchaseTestService.Stop();
         var stoppedInn = InnEntryService.IsRunning;
@@ -2354,6 +2398,7 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            pendingRemoteJsonOwnedDutyRestart?.Observe(DutyContextService.Current, ExecutionService.CurrentMode);
             ExecutionService.ObserveDutyCompletion(DutyContextService.Current);
             RelicPurchaseTestService.Update();
             if (frameworkHitchProfilerEnabled)
@@ -2686,13 +2731,22 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        foreach (var step in BuildRemoteJsonReloadSteps(completion))
-            pendingRemoteJsonReloadSteps.Enqueue(step);
-        Log.Information($"[ADS] Remote config update completed; queued reload for {string.Join(", ", completion.ChangedFiles)}.");
+        var batch = new RemoteJsonReloadBatch(completion);
+        if (batch.RemainingSteps > 0)
+            pendingRemoteJsonReloads.Enqueue(batch);
+        Log.Information(completion.ManualUpdate
+            ? "[ADS] Manual remote config update completed; queued all four data reloads."
+            : $"[ADS] Remote config update completed; queued reload for {string.Join(", ", completion.ChangedFiles)}.");
     }
 
     internal static IReadOnlyList<RemoteJsonReloadStep> BuildRemoteJsonReloadSteps(RemoteJsonUpdateCompletion completion)
     {
+        if (!completion.Success)
+            return [];
+        if (completion.ManualUpdate)
+            return [RemoteJsonReloadStep.ObjectRules, RemoteJsonReloadStep.DialogRules,
+                RemoteJsonReloadStep.DutyMaturity, RemoteJsonReloadStep.TreasureRoutes];
+
         var steps = new List<RemoteJsonReloadStep>();
         foreach (var fileName in completion.ChangedFiles)
         {
@@ -2724,19 +2778,28 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (ShouldDeferJsonReloads(out var reason))
         {
-            if (pendingRemoteJsonReloadSteps.Count > 0 && DateTime.UtcNow >= nextRemoteJsonReloadDeferredLogUtc)
+            if (pendingRemoteJsonReloads.Count > 0 && DateTime.UtcNow >= nextRemoteJsonReloadDeferredLogUtc)
             {
                 nextRemoteJsonReloadDeferredLogUtc = DateTime.UtcNow.AddSeconds(5);
-                Log.Debug($"[ADS] Deferring {pendingRemoteJsonReloadSteps.Count} remote config reload step(s): {reason}.");
+                Log.Debug($"[ADS] Deferring {pendingRemoteJsonReloads.Sum(batch => batch.RemainingSteps)} remote config reload step(s): {reason}.");
             }
 
             return;
         }
 
         nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
-        if (pendingRemoteJsonReloadSteps.TryDequeue(out var step))
+        if (RemoteJsonUpdateService.IsUpdateRunning)
+            return;
+
+        if (pendingRemoteJsonReloads.TryPeek(out var batch))
         {
-            RunRemoteJsonReloadStep(step);
+            batch.RunNext(step => RunRemoteJsonReloadStep(step, batch.ManualUpdate));
+            if (batch.RemainingSteps == 0)
+            {
+                pendingRemoteJsonReloads.Dequeue();
+                if (batch.TryRestart(DutyContextService.Current, ExecutionService.CurrentMode, StopOwnership, StartDutyFromInside))
+                    Log.Information("[ADS] Manual Update reloaded all data and restarted the owned duty with Stop -> Start Inside.");
+            }
             return;
         }
 
@@ -2749,8 +2812,10 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private bool ShouldDeferJsonReloads(out string reason)
+        => ShouldDeferJsonReloads(DutyContextService.Current, DialogAutomationService.DialogVisible, out reason);
+
+    internal static bool ShouldDeferJsonReloads(DutyContextSnapshot context, bool dialogVisible, out string reason)
     {
-        var context = DutyContextService.Current;
         if (context.BetweenAreas)
         {
             reason = "BetweenAreas active";
@@ -2763,7 +2828,7 @@ public sealed class Plugin : IDalamudPlugin
             return true;
         }
 
-        if (DialogAutomationService.DialogVisible)
+        if (dialogVisible)
         {
             reason = "SelectYesno visible";
             return true;
@@ -2773,26 +2838,17 @@ public sealed class Plugin : IDalamudPlugin
         return false;
     }
 
-    private void RunRemoteJsonReloadStep(RemoteJsonReloadStep step)
-    {
-        switch (step)
+    private bool RunRemoteJsonReloadStep(RemoteJsonReloadStep step, bool manualUpdate)
+        => step switch
         {
-            case RemoteJsonReloadStep.ObjectRules:
-                ObjectPriorityRuleService.Reload();
-                break;
-            case RemoteJsonReloadStep.DialogRules:
-                DialogYesNoRuleService.Reload();
-                break;
-            case RemoteJsonReloadStep.DutyMaturity:
-                DutyCatalogService.ReloadMaturity();
-                break;
-            case RemoteJsonReloadStep.TreasureRoutes:
-                TreasureDungeonData.Reload();
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown remote JSON reload step.");
-        }
-    }
+            RemoteJsonReloadStep.ObjectRules => manualUpdate
+                ? ObjectPriorityRuleService.ReloadAfterManualUpdate()
+                : ObjectPriorityRuleService.Reload(),
+            RemoteJsonReloadStep.DialogRules => DialogYesNoRuleService.Reload(),
+            RemoteJsonReloadStep.DutyMaturity => DutyCatalogService.ReloadMaturity(),
+            RemoteJsonReloadStep.TreasureRoutes => TreasureDungeonData.Reload(),
+            _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown remote JSON reload step."),
+        };
 
     private void ReportFrameworkSlowUpdate(double elapsedMs, string slowestSection, double slowestMs)
     {
@@ -2890,17 +2946,24 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private void OnDutyStarted(IDutyStateEventArgs args)
-        => ExecutionService.ResetDutyCompletion();
+    {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
+        ExecutionService.ResetDutyCompletion();
+    }
 
     private void OnLogout(int type, int code)
     {
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
         UtilityAutomationService.Cancel("logout");
         InnEntryService.Cancel("logout");
         ExecutionService.ResetDutyCompletion();
     }
 
     private void OnTerritoryChanged(uint territoryType)
-        => QstCompanionWarningService.HandleTerritoryChanged();
+    {
+        pendingRemoteJsonOwnedDutyRestart?.ObserveTerritory(territoryType);
+        QstCompanionWarningService.HandleTerritoryChanged();
+    }
 
     private void OnDutyCompleted(uint territoryId)
     {

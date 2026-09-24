@@ -156,14 +156,17 @@ public sealed class ObjectPriorityRuleService
     public bool Reload()
         => Reload(notifyActivePreset: false);
 
-    private bool Reload(bool notifyActivePreset)
+    internal bool ReloadAfterManualUpdate()
+        => Reload(notifyActivePreset: false, allowDefaultFallback: false);
+
+    private bool Reload(bool notifyActivePreset, bool allowDefaultFallback = true)
     {
         try
         {
             var fallbackToastShown = false;
             if (!shardStore.TryLoadEffectivePreset(activePresetName, out var manifest, out var effectiveShards, out var status))
             {
-                if (IsDefaultPreset(activePresetName)
+                if (!allowDefaultFallback || IsDefaultPreset(activePresetName)
                     || !shardStore.TryLoadEffectivePreset(DefaultPresetName, out manifest, out effectiveShards, out var fallbackStatus))
                 {
                     LastLoadStatus = status;

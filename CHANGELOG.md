@@ -14,6 +14,8 @@
 
 ## Unreleased
 
+- Manual Update (including `/ads mini`) now reloads all four data categories even when downloads are unchanged, then runs Stop followed by Start Inside once if ADS still owns the same duty run. Zoning and Yes/No dialogs defer the reloads; failed downloads/reloads, Stop, Leave, logout, duty changes, or a new ownership run prevent the pending restart. The selected custom object-rule preset and its overrides are preserved; automatic updates keep their existing reload behavior.
+
 - Fixed Otopa Pottopa inn entry in Ul'dah to stop at the existing accessible counter approach point within one yalm, including while waiting for the menu. Inn entry no longer replaces an active vnavmesh path or pending pathfinding request on its movement retry.
 - Added manual inn destinations to /ads npcrepair yesinn and ADS.StartRepair: uldah, gridania, limsa, ishgard, crystarium, sharlayan, and tuliyollal. Removed the automatic starting-city test circuit and its saved checkbox. Trips retain a separate starting room and required destination room, reach the mender even with fully repaired gear, and finish only after confirmed destination entry. Stop, logout, unload, failure, and timeout cancel the trip and pending navigation. Startup logs identify I403-manual-inn-destinations-03.
 - Fixed inn repair starting its walking route before the final aethernet hop settled. Repair and inn-entry movement now wait for the navigation mesh, cancel pending paths during loading, and retry the current destination after three seconds without movement, even when vnavmesh still reports an active path. Existing attempt timeouts still apply.

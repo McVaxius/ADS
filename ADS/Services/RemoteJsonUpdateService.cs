@@ -127,6 +127,9 @@ public sealed class RemoteJsonUpdateService : IDisposable
     }
 
     public bool TryStartUpdate(bool force, string reason)
+        => TryStartUpdate(force, reason, manualUpdate: false, ownedDutyRestart: null);
+
+    internal bool TryStartUpdate(bool force, string reason, bool manualUpdate, RemoteJsonOwnedDutyRestart? ownedDutyRestart)
     {
         if (!force && !NeedsStaleRefresh(out var status))
         {
@@ -135,13 +138,13 @@ public sealed class RemoteJsonUpdateService : IDisposable
         }
         lock (updateGate)
         {
-            if (activeUpdateTask is { IsCompleted: false })
+            if (activeUpdateTask is { IsCompleted: false } || completedUpdateSerial != consumedUpdateSerial)
             {
                 LastUpdateStatus = $"Remote config update already running; ignored {reason}.";
                 return false;
             }
             LastUpdateStatus = $"Remote config update queued: {reason}.";
-            activeUpdateTask = Task.Run(() => RunUpdateAsync(reason));
+            activeUpdateTask = Task.Run(() => RunUpdateAsync(reason, manualUpdate, ownedDutyRestart));
             return true;
         }
     }
@@ -285,7 +288,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
         return true;
     }
 
-    private async Task RunUpdateAsync(string reason)
+    private async Task RunUpdateAsync(string reason, bool manualUpdate, RemoteJsonOwnedDutyRestart? ownedDutyRestart)
     {
         var tempPaths = new List<string>();
         var objectRuleApplyStarted = false;
@@ -367,13 +370,19 @@ public sealed class RemoteJsonUpdateService : IDisposable
             LastUpdateStatus = changedFiles.Count == 0
                 ? $"Remote config update complete: validated {index.Files.Count} object-rule shard(s); downloaded data matched the local cache."
                 : $"Remote config update complete: validated {index.Files.Count} object-rule shard(s), changed {changedShardCount} shard/index file(s) and {changedFlatCount} other config file(s).";
-            PublishCompletion(new RemoteJsonUpdateCompletion(true, false, changedFiles));
+            PublishCompletion(new RemoteJsonUpdateCompletion(true, false, changedFiles, manualUpdate)
+            {
+                OwnedDutyRestart = ownedDutyRestart,
+            });
             log.Information($"[ADS] {LastUpdateStatus}");
         }
         catch (Exception ex)
         {
             LastUpdateStatus = $"Remote config update failed; the last valid in-memory rules remain active: {ex.Message}";
-            PublishCompletion(new RemoteJsonUpdateCompletion(false, objectRuleApplyStarted, []));
+            PublishCompletion(new RemoteJsonUpdateCompletion(false, objectRuleApplyStarted, [], manualUpdate)
+            {
+                OwnedDutyRestart = ownedDutyRestart,
+            });
             log.Warning(ex, $"[ADS] {LastUpdateStatus}");
         }
         finally
@@ -507,4 +516,51 @@ internal sealed record RemoteJsonRefreshDecision(
 public sealed record RemoteJsonUpdateCompletion(
     bool Success,
     bool ObjectRuleDiskStateMayBePartial,
-    IReadOnlyList<string> ChangedFiles);
+    IReadOnlyList<string> ChangedFiles,
+    bool ManualUpdate = false)
+{
+    internal RemoteJsonOwnedDutyRestart? OwnedDutyRestart { get; init; }
+}
+
+// Shared by pending manual updates for one ownership run; never persisted.
+internal sealed class RemoteJsonOwnedDutyRestart(uint territoryId, uint contentId)
+{
+    internal bool IsPending { get; private set; } = true;
+
+    internal static RemoteJsonOwnedDutyRestart? Capture(DutyContextSnapshot context, OwnershipMode mode)
+        => context.IsLoggedIn && context.InInstancedDuty && context.TerritoryTypeId != 0 && IsActiveOwnership(mode)
+            ? new(context.TerritoryTypeId, context.ContentFinderConditionId)
+            : null;
+
+    internal void Cancel() => IsPending = false;
+
+    internal void ObserveTerritory(uint territory)
+    {
+        if (territory != territoryId)
+            Cancel();
+    }
+
+    internal void Observe(DutyContextSnapshot context, OwnershipMode mode)
+    {
+        // Duty truth can disappear during zoning within the same duty.
+        if (!context.IsLoggedIn || !IsActiveOwnership(mode)
+            || (!context.IsUnsafeTransition
+                && (!context.InInstancedDuty || context.TerritoryTypeId != territoryId
+                    || context.ContentFinderConditionId != contentId)))
+            Cancel();
+    }
+
+    internal bool TryRestart(DutyContextSnapshot context, OwnershipMode mode, Action stop, Func<bool> startInside)
+    {
+        Observe(context, mode);
+        if (!IsPending || context.IsUnsafeTransition)
+            return false;
+
+        Cancel(); // Consume before Stop/Start can reenter the update path.
+        stop();
+        return startInside();
+    }
+
+    private static bool IsActiveOwnership(OwnershipMode mode)
+        => mode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside;
+}
