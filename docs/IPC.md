@@ -16,6 +16,13 @@ Existing ADS IPC endpoints remain available.
 - `ADS.GetExtractMateriaStatusJson() -> string`
 - `ADS.StartDesynth(string mode) -> bool`
 - `ADS.StartShopPurchase(uint itemId, int quantity) -> bool`
+- `ADS.StartGilShopPurchase(string operationId, uint itemId, int quantity) -> bool`
+- `ADS.StartCompanyActionPurchase(string operationId, uint actionId, int quantity) -> bool`
+- `ADS.StartNpcSale(string operationId, bool localOnly) -> bool`
+- `ADS.GetNpcSaleStatusJson() -> string`
+- `ADS.CancelNpcSale(string operationId) -> bool`
+- `ADS.StartGuardedShopPurchase(string requestJson, Func<string, bool> authorize) -> bool`
+- `ADS.CancelShopPurchase(string operationId) -> bool`
 - `ADS.SetShopKeepOpen(bool enabled) -> bool`
 - `ADS.GetShopPurchaseStatusJson() -> string`
 - `ADS.GetShopListPresetsJson() -> string`
@@ -41,6 +48,18 @@ Existing ADS IPC endpoints remain available.
 `ADS.StartExtractMateria` starts existing no-configuration materia extraction and returns whether the start was accepted. `/ads extractmateria` remains unchanged.
 
 `ADS.StartShopPurchase` accepts a positive decimal `uint` item ID and a quantity from `1` through `9999`. `true` means ADS accepted the run; it does not mean the purchase completed. Quantity is the exact number of additional item units. `ADS.CancelUtility` cancels an active purchase and preserves verified partial acquisition truth.
+
+`ADS.StartGilShopPurchase` requests the same additional quantity using only gil offers, with a nonempty caller operation ID (at most 128 characters). It closes its owned shop after completion. Read that ID in purchase status and use `ADS.CancelShopPurchase` to cancel only the owned purchase. A rejected start does not replace the previously accepted operation.
+
+`ADS.StartCompanyActionPurchase` requests 1–16 additional purchasable `CompanyAction` entries with company credits. The caller must first expose readable FC action inventory. ADS owns the quartermaster route, exchange, confirmation, inventory refresh and cleanup. Each callback buys one action and requires matching action-count and credit deltas before another callback. Status sets `companyAction: true`; its `itemId` is the CompanyAction row ID, not an inventory item ID. The same operation-specific cancellation applies. Character or FC changes cancel the request. Capability: `companyActionPurchases: 1`. Native FC purchase validation remains pending.
+
+`ADS.GetCapabilitiesJson()` reports `guardedShopPurchases:1` when the guarded API is available. It reuses the single-item checkpointed runner; all vendor discovery, travel, interaction, validation, confirmation and cleanup remain in ADS. Requests contain a nonempty `operationId` (at most 128 characters), `itemId`, `currencyKind` (the `ShopCurrencyKind` name) and `currencyItemId`. Quantity is exactly one additional item. For gil use `Gil`/`1`; for MGP use `Mgp`/`29`. Status adds `operationId`; ordinary purchases return null there. A rejected start preserves the previous accepted operation.
+
+The synchronous `Func<string,bool>` receives camelCase JSON containing `operationId`, `itemId`, `quantity`, `itemCountBefore`, `currencyKind`, `currencyItemId`, `currencyBefore`, and `currencyCost`. ADS calls it after validating the exact live quote and before any purchase callback, then again before an owned confirmation. The caller must save its receipt reservation before returning true, and recheck its ownership, pause, caps and reserve on every call. False or an exception prevents that action; no purchase callback is retried. The callback must not start replacement work. ADS releases caller delegates on terminal completion. Callers reconcile saved receipts against exact inventory/currency changes after cancellation or reload; acceptance and missing status never prove acquisition.
+
+`ADS.CancelShopPurchase(operationId)` cancels only the matching active purchase, preserving unrelated utility work. It returns false for an empty, mismatched or terminal operation. The existing general Cancel Utility behavior is unchanged.
+
+NPC selling uses ADS's existing mender travel flow, restricted to NPCs that also expose a gil shop. `localOnly` prevents teleport and inn travel for onboard use. ADS requires AutoRetainer to be idle before dispatching its existing `/ays itemsell`; the configured AutoRetainer sell list remains authoritative. Completion requires observing AutoRetainer become busy and finish, not a repaired gear state or an idle observation alone. Sale status contains `operationId`, `running`, `done`, `succeeded`, and `statusMessage`; cancellation requires the matching ADS operation. AutoRetainer exposes a global reset without a sale correlation ID: ADS sends it only on the same character after observing the dispatched work busy and confirming it remains busy. ADS closes sale dialogs only while the tracked vendor remains selected and its shop is visible. Native selling validation remains pending. Capability: `npcSelling: 1`.
 
 `ADS.SetShopKeepOpen` toggles shop reuse across consecutive purchases and returns the value now in effect. While on, a SUCCESSFUL purchase leaves its shop open so the next purchase from the same shop skips navigate/interact/open; a failed run still tears the UI down. Calling it with `false` ends the chain AND closes whatever was left standing ? that is the supported way to finish, because `ADS.CancelUtility` cannot close a held shop: every cancel path early-returns unless a purchase is still running, and a held shop only exists once the purchase is terminal.
 

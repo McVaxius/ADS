@@ -37,6 +37,8 @@ The first unreadable, ambiguous, unsupported, or runtime failure stops the batch
 
 ## Supported Offers
 
+Company actions use the separate `ADS.StartCompanyActionPurchase` IPC through this same runner. They are not inventory items and are not accepted by `/ads shop`. ADS reads the current FC affiliation, rank and action capacity, validates the native exchange row and buys one action at a time with exact action-count and credit evidence. The native FC route is still awaiting live validation.
+
 ADS supports deterministic acquisition offers from:
 
 - regular `GilShop` offers priced by the requested item's vendor price;
@@ -54,6 +56,7 @@ High-quality target rows, collectability costs, overbuying, unresolved currency 
 ADS builds a lazy local catalog from installed Lumina sheets and game files. It recursively resolves every supported terminal path with cycle detection:
 
 - direct `ENpcBase` to `GilShop` or `SpecialShop`;
+- `BNpcBase.ArrayEventHandler` links to supported shops, including battle-NPC vendors such as Junkmonger Nonoroon;
 - `TopicSelect` to a supported shop;
 - direct `PreHandler` to a supported shop;
 - `TopicSelect` to `PreHandler` to a supported shop;
@@ -69,6 +72,8 @@ Teleport routes join each real `Aetheryte` to its exact `Map` and the map's exac
 Those mapped aetheryte territories drive live NPC placement discovery. ADS derives each territory's `bg/.../level/planevent.lgb` path from `TerritoryType.Bg`, reads every `EventNPC` base ID and full X/Y/Z world position through Lumina `LgbFile`, then merges `Level` placements. If neither source contains a linked NPC, ADS uses the embedded `shop-npc-placements.json` fallback generated from the offline Garland NPC browse database. Explicitly marked correction rows may replace known-invalid LGB/`Level` placements; ordinary offline rows never displace live game data. The correction input preserves the established missing-location rows from [ItemVendorLocation](https://github.com/electr0sheep/ItemVendorLocation/blob/main/ItemVendorLocation/ItemLookup.Fix.cs).
 
 Placements for the same NPC and territory within one world unit are deduplicated with LGB preferred; genuinely distinct positions remain separate candidates. Filtering to supported-shop NPCs happens only after all sources are collected. Every matching shop row, NPC link, and distinct placement becomes a candidate even when candidates share a shop ID.
+
+Battle vendors use catalog-linked `BattleNPC` placements from `planevent.lgb` and `planlive.lgb`, with their names from `BNpcName`. Runtime lookup accepts either NPC object kind with the exact selected base ID and targetability. Their absence, including temporary FATE absence, remains a bounded failed route rather than permission to interact with a different NPC.
 
 ADS logs mapped/rejected/missing aetherytes; every LGB territory and file outcome; LGB, `Level`, offline-fallback, and replacement counts; deduplication; all same-item candidates; rejection reasons; selected route; and fallback progression. Production does not call Garland, XIVAPI, or another vendor-data network service.
 
@@ -120,6 +125,8 @@ Each callback is capped at `99` transactions. ADS then uses one shared ten-secon
 An immediate confirmation created by ADS's validated callback receives a single-use owned token containing the expected item, quantity, and every currency amount. A readable structured dialog or localized prompt that matches exactly is accepted once through ten seconds. An expired, duplicate, or readable mismatched confirmation remains `ui-mismatch`; an unreadable owned prompt times out without resending the purchase callback or advancing to a fallback.
 
 Travel is bounded to 90 seconds, offline floor resolution to 20 seconds, navigation to 120 seconds, shop opening to 20 seconds, relevant command retries to three, and the whole run to five minutes.
+
+For vendor legs longer than 80 yalms in a territory whose flight flag is already complete, ADS requests native mount/takeoff readiness before sending a flight path. It also preserves an existing flight state. Preparation consumes the existing navigation timeout; it does not start character progression or require window focus. Short and non-flight legs retain ground movement.
 
 ## Live Acceptance
 

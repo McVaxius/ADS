@@ -57,6 +57,13 @@ internal sealed class ShopPurchaseRunner
 
     private RunnerPhase phase;
     private ShopPurchaseRequest request;
+    private ulong companyActionOwner;
+    private ulong companyActionFreeCompany;
+
+    private long ReadOutputCount(uint itemId) => request.CompanyAction
+        ? runtime.GetCompanyActionCount(itemId) : runtime.GetItemCount(itemId);
+    private long ReadOutputCapacity(uint itemId, uint stackSize) => request.CompanyAction
+        ? runtime.GetCompanyActionCapacity() : runtime.GetInventoryCapacity(itemId, stackSize);
     private ShopCatalogResolution? resolution;
     private ShopOfferSelectionResult? selection;
     private EvaluatedShopOffer? selected;
@@ -70,8 +77,10 @@ internal sealed class ShopPurchaseRunner
     private long initialItemCount;
     private long lastVerifiedItemCount;
     private bool anyPurchaseCallbackSent;
+    private bool waitingForNpcAvailability;
     private Action<ShopPurchaseCheckpoint>? beforeSubmit;
     private Action<ShopPurchaseCheckpoint>? purchaseVerified;
+    private Func<ShopPurchaseCheckpoint, bool>? confirmationGuard;
     private ShopPurchaseCheckpoint? callbackCheckpoint;
     private bool teleportCommandAccepted;
     private bool navigationOwned;
@@ -115,7 +124,7 @@ internal sealed class ShopPurchaseRunner
 
     public bool IsRunning => status.Running;
     internal int VerifiedAcquiredQuantity { get; private set; }
-    public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError };
+    public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction };
     internal string? LastStartFailureCode => lastStartFailureCode;
     internal bool HasPurchaseSubmission => anyPurchaseCallbackSent || callbackCheckpoint != null;
 
@@ -129,7 +138,7 @@ internal sealed class ShopPurchaseRunner
         if (!ShopPurchaseRequest.TryCreate(
                 purchaseRequest.ItemId,
                 purchaseRequest.Quantity,
-                out purchaseRequest,
+                out _,
                 out var validationError))
         {
             return new ShopPurchasePreviewResult(
@@ -170,6 +179,7 @@ internal sealed class ShopPurchaseRunner
         }
         catch (Exception ex)
         {
+            diagnostic($"Shop catalog preview failed: {ex}");
             return new ShopPurchasePreviewResult(
                 purchaseRequest,
                 string.Empty,
@@ -233,13 +243,14 @@ internal sealed class ShopPurchaseRunner
         bool holdShopOpenOnSuccess,
         ShopCurrencyIdentity requiredCurrency,
         Action<ShopPurchaseCheckpoint> beforeSubmit,
-        Action<ShopPurchaseCheckpoint> verified)
+        Action<ShopPurchaseCheckpoint> verified,
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null)
     {
         ArgumentNullException.ThrowIfNull(beforeSubmit);
         ArgumentNullException.ThrowIfNull(verified);
         if (purchaseRequest.Quantity != 1)
             return RejectStart("Checkpointed purchases require exactly one additional item.", ShopPurchaseFailureCodes.InvalidRequest);
-        return StartCore(purchaseRequest, holdShopOpenOnSuccess, requiredCurrency, beforeSubmit, verified);
+        return StartCore(purchaseRequest, holdShopOpenOnSuccess, requiredCurrency, beforeSubmit, verified, confirmationGuard);
     }
 
     private bool StartCore(
@@ -247,9 +258,10 @@ internal sealed class ShopPurchaseRunner
         bool? holdShopOpenOnSuccess,
         ShopCurrencyIdentity? requiredCurrency,
         Action<ShopPurchaseCheckpoint>? beforeSubmit = null,
-        Action<ShopPurchaseCheckpoint>? verified = null)
+        Action<ShopPurchaseCheckpoint>? verified = null,
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null)
     {
-        if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out purchaseRequest, out var validationError))
+        if (!ShopPurchaseRequest.TryCreate(purchaseRequest.ItemId, purchaseRequest.Quantity, out _, out var validationError))
             return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
         if (IsRunning)
             return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
@@ -259,6 +271,9 @@ internal sealed class ShopPurchaseRunner
             return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.", ShopPurchaseFailureCodes.Busy);
         if (!runtime.HasVnavmesh)
             return RejectStart("Shop purchasing requires the vnavmesh plugin.", ShopPurchaseFailureCodes.MissingDependency);
+        if (purchaseRequest.CompanyAction && (purchaseRequest.Quantity > 16 || runtime.FreeCompanyId == 0 ||
+            runtime.GetCompanyActionCount(purchaseRequest.ItemId) < 0))
+            return RejectStart("Company action purchases require readable FC action inventory and at most 16 actions.", ShopPurchaseFailureCodes.InvalidRequest);
         var reusableOwnedShopVisible = shopUiOwned && runtime.IsAnyShopVisible;
         if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible
             || (!reusableOwnedShopVisible && runtime.IsAnyShopVisible))
@@ -272,6 +287,7 @@ internal sealed class ShopPurchaseRunner
         }
         catch (Exception ex)
         {
+            diagnostic($"Shop catalog resolution failed: {ex}");
             return RejectStart($"Shop catalog resolution failed: {ex.Message}", ShopPurchaseFailureCodes.UnsupportedOffer);
         }
 
@@ -292,16 +308,20 @@ internal sealed class ShopPurchaseRunner
         }
 
         request = purchaseRequest;
+        companyActionOwner = runtime.CharacterId;
+        companyActionFreeCompany = runtime.FreeCompanyId;
         resolution = nextResolution;
         selection = nextSelection;
         selected = nextSelection.Selected;
         fallbacks = nextSelection.IdenticalCostFallbacks;
         fallbackIndex = 0;
-        initialItemCount = runtime.GetItemCount(request.ItemId);
+        initialItemCount = ReadOutputCount(request.ItemId);
         lastVerifiedItemCount = initialItemCount;
         anyPurchaseCallbackSent = false;
+        waitingForNpcAvailability = false;
         this.beforeSubmit = beforeSubmit;
         purchaseVerified = verified;
+        this.confirmationGuard = confirmationGuard;
         VerifiedAcquiredQuantity = 0;
         callbackCheckpoint = null;
         teleportCommandAccepted = false;
@@ -318,7 +338,7 @@ internal sealed class ShopPurchaseRunner
             .ToDictionary(currency => currency.Identity, runtime.GetAvailableCurrency)
             ?? new Dictionary<ShopCurrencyIdentity, long>();
         lastVerifiedOutputs = selected?.Offer.AllOutputs
-            .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId))
+            .ToDictionary(output => output.ItemId, output => ReadOutputCount(output.ItemId))
             ?? new Dictionary<uint, long>();
         candidateFailures.Clear();
         sawUiCandidateFailure = false;
@@ -384,6 +404,13 @@ internal sealed class ShopPurchaseRunner
                 return;
             }
 
+            if (request.CompanyAction && (runtime.CharacterId != companyActionOwner ||
+                runtime.FreeCompanyId == 0 || runtime.FreeCompanyId != companyActionFreeCompany))
+            {
+                Cancel("Character or Free Company changed during company action purchasing.");
+                return;
+            }
+
             if (isDutyOwned() || isInnEntryRunning())
             {
                 Cancel("ADS ownership changed during the shop purchase.");
@@ -392,6 +419,8 @@ internal sealed class ShopPurchaseRunner
 
             if (clock.UtcNow - startedAtUtc > CompleteTimeout)
             {
+                if (waitingForNpcAvailability && selected != null)
+                    diagnostic($"Vendor unavailable at run limit: {runtime.DescribeNpcAvailability(selected.Offer.NpcId)}");
                 Fail(ShopPurchaseFailureCodes.Timeout, "Shop purchase exceeded the five-minute run limit.");
                 return;
             }
@@ -413,6 +442,16 @@ internal sealed class ShopPurchaseRunner
 
             if (runtime.HasUnexpectedConfirmation)
             {
+                if (phase == RunnerPhase.VerifyingInventory && callbackCheckpoint != null && confirmationGuard != null)
+                {
+                    var authorized = confirmationGuard(callbackCheckpoint);
+                    if (!IsRunning || cancelRequested) return;
+                    if (!authorized)
+                    {
+                        Fail(ShopPurchaseFailureCodes.Cancelled, "The purchase owner withdrew authorization before confirmation.");
+                        return;
+                    }
+                }
                 var ownedConfirmationPending = phase == RunnerPhase.VerifyingInventory
                     && selected != null
                     && callbackTransactions > 0
@@ -439,7 +478,16 @@ internal sealed class ShopPurchaseRunner
                 return;
             }
 
-            if (phase != RunnerPhase.VerifyingInventory
+            if (request.CompanyAction && phase is RunnerPhase.ValidatingUi or RunnerPhase.Purchasing or RunnerPhase.VerifyingInventory
+                && !runtime.PrepareCompanyActionInventory())
+            {
+                if (clock.UtcNow - phaseStartedAtUtc > ShopOpeningTimeout)
+                    Fail(ShopPurchaseFailureCodes.Timeout, "Company action inventory could not be refreshed; no callback repeated.");
+                return;
+            }
+
+            if ((!request.CompanyAction || phase is RunnerPhase.ValidatingUi or RunnerPhase.Purchasing)
+                && phase != RunnerPhase.VerifyingInventory
                 && phase != RunnerPhase.Teleporting
                 && TryGetExternalBalanceChange(out var balanceChange))
             {
@@ -782,8 +830,10 @@ internal sealed class ShopPurchaseRunner
             return;
         var target = destination ?? navigationDestination ?? selected.Route.NpcPosition;
         navigationDestination = target;
-        phaseAttempts++;
         lastActionAtUtc = clock.UtcNow;
+        if (!runtime.PrepareNavigation(target))
+        { SetStatus("Preparing vendor travel; waiting for native mount/takeoff readiness."); return; }
+        phaseAttempts++;
         var accepted = runtime.TryMove(target, selected.Offer.NpcName);
         if (accepted)
         {
@@ -902,17 +952,37 @@ internal sealed class ShopPurchaseRunner
             }
         }
 
+        if (!runtime.TryGetNpc(selected.Offer.NpcId, out _))
+        {
+            waitingForNpcAvailability = true;
+            if (clock.UtcNow - lastActionAtUtc >= ActionRetryDelay)
+            {
+                lastActionAtUtc = clock.UtcNow;
+                runtime.PrepareInteraction();
+            }
+            SetStatus("Waiting for the selected vendor to return within the five-minute purchase limit.");
+            return;
+        }
+        if (waitingForNpcAvailability)
+        {
+            waitingForNpcAvailability = false;
+            phaseStartedAtUtc = clock.UtcNow;
+        }
+
         if (clock.UtcNow - phaseStartedAtUtc > ShopOpeningTimeout
             || (phaseAttempts >= MaximumAttempts && clock.UtcNow - lastActionAtUtc >= ActionRetryDelay))
         {
+            diagnostic($"Vendor interaction stopped: {runtime.DescribeNpcAvailability(selected.Offer.NpcId)}");
             TryFallbackOrFail(ShopPurchaseFailureCodes.NoRoute, "The selected shop NPC did not open a supported shop menu.");
             return;
         }
 
         if (clock.UtcNow - lastActionAtUtc < ActionRetryDelay)
             return;
-        phaseAttempts++;
         lastActionAtUtc = clock.UtcNow;
+        if (!runtime.PrepareInteraction())
+        { SetStatus("Waiting for native landing/dismount before vendor interaction."); return; }
+        phaseAttempts++;
         if (runtime.TryInteractNpc(selected.Offer.NpcId))
         {
             interactionSent = true;
@@ -1016,7 +1086,7 @@ internal sealed class ShopPurchaseRunner
         }
 
         RefreshAcquiredTruth();
-        if (runtime.GetItemCount(request.ItemId) != lastVerifiedItemCount)
+        if (ReadOutputCount(request.ItemId) != lastVerifiedItemCount)
         {
             Fail(ShopPurchaseFailureCodes.UiMismatch, "Requested-item inventory changed outside a verified purchase callback.");
             return;
@@ -1036,7 +1106,7 @@ internal sealed class ShopPurchaseRunner
 
         var remainingTransactions = status.RemainingQuantity / (int)selected.Offer.ReceiveCount;
         if (selected.Offer.AllOutputs.Any(output =>
-                runtime.GetInventoryCapacity(output.ItemId, Math.Max(1, output.StackSize))
+                ReadOutputCapacity(output.ItemId, Math.Max(1, output.StackSize))
                     < checked((long)output.Count * remainingTransactions)))
         {
             Fail(ShopPurchaseFailureCodes.InventoryCapacity, "Inventory no longer has capacity for every output in the remaining exchange.");
@@ -1055,7 +1125,7 @@ internal sealed class ShopPurchaseRunner
         }
 
         callbackTransactions = Math.Min(
-            MaximumTransactionsPerCallback,
+            request.CompanyAction ? 1 : MaximumTransactionsPerCallback,
             status.RemainingQuantity / (int)selected.Offer.ReceiveCount);
         if (callbackTransactions <= 0)
         {
@@ -1065,7 +1135,7 @@ internal sealed class ShopPurchaseRunner
 
         callbackItemCountBefore = lastVerifiedItemCount;
         callbackOutputsBefore = selected.Offer.AllOutputs
-            .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId));
+            .ToDictionary(output => output.ItemId, output => ReadOutputCount(output.ItemId));
         var before = new Dictionary<ShopCurrencyIdentity, long>();
         foreach (var currency in selected.Offer.Currencies)
         {
@@ -1104,6 +1174,7 @@ internal sealed class ShopPurchaseRunner
             // Persistence must finish before any callback can buy or open a confirmation.
             // An exception leaves the marker intact and Update fails without sending it.
             beforeSubmit(callbackCheckpoint);
+            if (!IsRunning || cancelRequested) return;
         }
         if (!runtime.SubmitPurchase(selected, validation.RuntimeRow, callbackTransactions))
         {
@@ -1125,7 +1196,7 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        var currentItemCount = runtime.GetItemCount(request.ItemId);
+        var currentItemCount = ReadOutputCount(request.ItemId);
         var expectedItemDelta = checked((long)selected.Offer.ReceiveCount * callbackTransactions);
         var itemDelta = currentItemCount - callbackItemCountBefore;
         RefreshAcquiredTruth(currentItemCount);
@@ -1143,7 +1214,7 @@ internal sealed class ShopPurchaseRunner
                 Fail(ShopPurchaseFailureCodes.UiMismatch, "Output verification state was incomplete.");
                 return;
             }
-            var current = runtime.GetItemCount(output.ItemId);
+            var current = ReadOutputCount(output.ItemId);
             var expectedDelta = checked((long)output.Count * callbackTransactions);
             var actualDelta = current - outputBefore;
             if (actualDelta < 0 || actualDelta > expectedDelta)
@@ -1184,7 +1255,7 @@ internal sealed class ShopPurchaseRunner
             lastVerifiedCurrencies = selected.Offer.Currencies
                 .ToDictionary(currency => currency.Identity, runtime.GetAvailableCurrency);
             lastVerifiedOutputs = selected.Offer.AllOutputs
-                .ToDictionary(output => output.ItemId, output => runtime.GetItemCount(output.ItemId));
+                .ToDictionary(output => output.ItemId, output => ReadOutputCount(output.ItemId));
             RefreshAcquiredTruth(currentItemCount);
             callbackTransactions = 0;
             callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
@@ -1270,24 +1341,26 @@ internal sealed class ShopPurchaseRunner
         }
     }
 
-    private ShopSelectionContext BuildSelectionContext()
+    private ShopSelectionContext BuildSelectionContext(bool companyAction)
         => new(
             runtime.CurrentTerritoryId,
             runtime.PlayerPosition,
             runtime.IsAetheryteUnlocked,
             runtime.IsQuestComplete,
             runtime.GetAvailableCurrency,
-            runtime.GetItemCount,
-            runtime.GetInventoryCapacity,
-            () => runtime.CurrentGrandCompany,
-            () => runtime.CurrentGrandCompanyRank);
+            companyAction ? runtime.GetCompanyActionCount : runtime.GetItemCount,
+            companyAction ? (_, _) => runtime.GetCompanyActionCapacity() : runtime.GetInventoryCapacity,
+            () => companyAction ? runtime.FreeCompanyGrandCompany : runtime.CurrentGrandCompany,
+            () => companyAction ? runtime.FreeCompanyRank : runtime.CurrentGrandCompanyRank);
 
     private (ShopCatalogResolution Resolution, ShopOfferSelectionResult Selection) ResolvePlan(
         ShopPurchaseRequest purchaseRequest,
         ShopCurrencyIdentity? requiredCurrency = null)
     {
-        var nextResolution = catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
-        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(), requiredCurrency));
+        var nextResolution = purchaseRequest.CompanyAction
+            ? catalog.ResolveCompanyAction(purchaseRequest.ItemId, purchaseRequest.Quantity, runtime.FreeCompanyGrandCompany)
+            : catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
+        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(purchaseRequest.CompanyAction), requiredCurrency));
     }
 
     private void Complete()
@@ -1313,6 +1386,9 @@ internal sealed class ShopPurchaseRunner
         if (!((keepShopOpenOnSuccessOverride ?? KeepShopOpen) && succeeded))
             CloseOwnedShopUi();
         navigationStoppedContinuation = null;
+        beforeSubmit = null;
+        purchaseVerified = null;
+        confirmationGuard = null;
         var previous = phase;
         phase = terminalPhase;
         diagnostic($"Phase {PhaseName(previous)} -> {PhaseName(terminalPhase)}: {message}");
@@ -1336,7 +1412,7 @@ internal sealed class ShopPurchaseRunner
     {
         if (request.ItemId == 0)
             return;
-        var current = currentItemCount ?? runtime.GetItemCount(request.ItemId);
+        var current = currentItemCount ?? ReadOutputCount(request.ItemId);
         var delta = Math.Max(0, current - initialItemCount);
         var acquired = delta > int.MaxValue ? int.MaxValue : (int)delta;
         status = status with
@@ -1405,7 +1481,7 @@ internal sealed class ShopPurchaseRunner
         if (selected == null || request.ItemId == 0)
             return false;
 
-        var currentItemCount = runtime.GetItemCount(request.ItemId);
+        var currentItemCount = ReadOutputCount(request.ItemId);
         if (currentItemCount != lastVerifiedItemCount)
         {
             message = "Requested-item inventory changed outside ADS's verified purchase callback window.";
@@ -1419,7 +1495,7 @@ internal sealed class ShopPurchaseRunner
                 message = $"Tracked {output.Name} state was incomplete before purchase.";
                 return true;
             }
-            if (runtime.GetItemCount(output.ItemId) == expected)
+            if (ReadOutputCount(output.ItemId) == expected)
                 continue;
             message = $"{output.Name} changed outside ADS's verified purchase callback window.";
             return true;

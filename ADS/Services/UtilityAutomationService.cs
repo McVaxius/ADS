@@ -224,6 +224,14 @@ public sealed unsafe class UtilityAutomationService
     private DateTime lifestreamCacheExpiresUtc = DateTime.MinValue;
 
     private UtilityTask activeTask = UtilityTask.None;
+    private bool npcSaleRequest;
+    private bool npcSaleCommandSent;
+    private bool npcSaleBusyObserved;
+    private ulong npcSaleCharacter;
+    private NpcSaleStatusSnapshot npcSaleStatus = new(null, false, false, null, "Idle");
+    public NpcSaleStatusSnapshot NpcSaleStatus => npcSaleStatus.Running
+        ? npcSaleStatus with { StatusMessage = npcSaleCommandSent ? "Waiting for the owned AutoRetainer sale task." : "ADS is approaching a vendor for selling." }
+        : npcSaleStatus;
     private NpcRepairMode activeNpcRepairMode = NpcRepairMode.InnFallback;
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime lastActionUtc = DateTime.MinValue;
@@ -364,12 +372,13 @@ public sealed unsafe class UtilityAutomationService
     public string StatusMessage { get; private set; } = "Idle";
 
     public string ActiveTaskName
-        => activeTask == UtilityTask.None ? string.Empty : GetTaskLabel(activeTask);
+        => npcSaleRequest ? "NPC selling" : activeTask == UtilityTask.None ? string.Empty : GetTaskLabel(activeTask);
 
     public string ActiveModeName
         => activeTask switch
         {
             UtilityTask.SelfRepair => "self",
+            UtilityTask.NpcRepair when npcSaleRequest => "npc-sell",
             UtilityTask.NpcRepair => activeNpcRepairMode switch
             {
                 NpcRepairMode.NoInn => "npc-no-inn",
@@ -404,6 +413,7 @@ public sealed unsafe class UtilityAutomationService
     public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
     public bool IsShopPurchaseRunning => activeTask == UtilityTask.ShopPurchase && shopPurchaseRunner.IsRunning;
     public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
+    internal string DescribeShopNpcAvailability(uint npcId) => shopRuntime.DescribeNpcAvailability(npcId);
     internal bool HasShopPurchaseSubmission => shopPurchaseRunner.HasPurchaseSubmission;
     internal bool IsRelicPurchaseReady => shopPurchaseRuntime.IsRelicPurchaseReady;
     internal static bool TryGetInnDestination(string destination, out uint aethernetId, out uint room)
@@ -617,7 +627,30 @@ public sealed unsafe class UtilityAutomationService
         return StartNpcRepair(NpcRepairMode.YesInn, aethernet, room);
     }
 
-    private bool StartNpcRepair(NpcRepairMode mode, uint destinationAethernet = 0, uint requiredRoom = 0)
+    public bool StartNpcSale(string operationId, bool localOnly)
+    {
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 || IsRunning) return false;
+        if (shopRuntime.IsAnyShopVisible || shopRuntime.IsSelectionMenuVisible || shopRuntime.HasUnexpectedConfirmation)
+        { StatusMessage = "Close existing shop or confirmation UI before requesting an NPC sale."; return false; }
+        try
+        {
+            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc())
+            { StatusMessage = "AutoRetainer already owns work; NPC selling was not started."; return false; }
+        }
+        catch (Exception ex) { StatusMessage = $"AutoRetainer selling is unavailable: {ex.Message}"; return false; }
+        return StartNpcRepair(localOnly ? NpcRepairMode.NoTeleportNoInn : NpcRepairMode.NoInn,
+            saleOperationId: operationId);
+    }
+
+    public bool CancelNpcSale(string operationId)
+    {
+        if (!npcSaleRequest || !npcSaleStatus.Running || npcSaleStatus.OperationId != operationId) return false;
+        Cancel("matching NPC sale cancelled");
+        return true;
+    }
+
+    private bool StartNpcRepair(NpcRepairMode mode, uint destinationAethernet = 0, uint requiredRoom = 0,
+        string? saleOperationId = null)
     {
         if (IsRepairBlockedByMountedState(UtilityTask.NpcRepair))
             return false;
@@ -644,6 +677,12 @@ public sealed unsafe class UtilityAutomationService
             return false;
 
         activeNpcRepairMode = mode;
+        if (saleOperationId != null)
+        {
+            npcSaleRequest = true;
+            npcSaleCharacter = Plugin.PlayerState.ContentId;
+            npcSaleStatus = new(saleOperationId, true, false, null, "Approaching an NPC vendor through ADS.");
+        }
         failedNpcRepairFieldAetheryteIds.Clear();
         if (mode == NpcRepairMode.YesInn)
         {
@@ -830,12 +869,17 @@ public sealed unsafe class UtilityAutomationService
     public bool StartShopPurchase(ShopPurchaseRequest request)
         => StartShopPurchaseCore(request, null, null, null);
 
+    internal bool StartShopPurchase(ShopPurchaseRequest request, ShopCurrencyIdentity currency)
+        => StartShopPurchaseCore(request, currency, null, null);
+
     internal bool StartShopPurchase(ShopPurchaseRequest request, ShopCurrencyIdentity currency,
-        Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified)
-        => StartShopPurchaseCore(request, currency, beforeSubmit, verified);
+        Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified,
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null)
+        => StartShopPurchaseCore(request, currency, beforeSubmit, verified, confirmationGuard);
 
     private bool StartShopPurchaseCore(ShopPurchaseRequest request, ShopCurrencyIdentity? currency,
-        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified)
+        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified,
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null)
     {
         if (IsRunning)
         {
@@ -846,7 +890,9 @@ public sealed unsafe class UtilityAutomationService
         }
 
         var accepted = currency.HasValue
-            ? shopPurchaseRunner.Start(request, false, currency.Value, beforeSubmit!, verified!)
+            ? beforeSubmit != null
+                ? shopPurchaseRunner.Start(request, false, currency.Value, beforeSubmit, verified!, confirmationGuard)
+                : shopPurchaseRunner.Start(request, false, currency.Value)
             : shopPurchaseRunner.Start(request);
         if (!accepted)
         {
@@ -1212,6 +1258,7 @@ public sealed unsafe class UtilityAutomationService
 
         var cancelledTask = activeTask;
         var message = $"Cancelled {GetTaskLabel(activeTask)}: {reason}";
+        FinishNpcSale(false, message);
         LastFailureMessage = message;
         if (cancelledTask == UtilityTask.ExtractMateria)
             RecordExtractMateriaCompletion(false, message);
@@ -1344,6 +1391,19 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepair()
     {
+        if (npcSaleRequest && (npcSaleCharacter == 0 || npcSaleCharacter != Plugin.PlayerState.ContentId))
+        { Fail("The NPC sale character changed."); return; }
+        if (npcSaleRequest && npcSaleCommandSent)
+        {
+            try
+            {
+                var busy = Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc();
+                if (busy) npcSaleBusyObserved = true;
+                else if (npcSaleBusyObserved) Complete("The owned AutoRetainer NPC sale task finished.");
+            }
+            catch (Exception ex) { Fail($"NPC sale completion is unverified: {ex.Message}"); }
+            return;
+        }
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51] || objectTable.LocalPlayer == null)
         {
             npcRepairInnArrivalReadyUtc = DateTime.MinValue;
@@ -1381,6 +1441,10 @@ public sealed unsafe class UtilityAutomationService
             return;
 
         var now = DateTime.UtcNow;
+        if (npcSaleRequest && (GameInteractionHelper.IsAddonVisible("SelectYesno") ||
+            GameInteractionHelper.IsAddonVisible("SelectString") || GameInteractionHelper.IsAddonVisible("SelectIconString") ||
+            GameInteractionHelper.IsAddonVisible("Repair")))
+        { Fail("Unowned NPC UI appeared before the sale command; ADS did not interact with it."); return; }
         if (GameInteractionHelper.IsAddonVisible("SelectIconString")
             || GameInteractionHelper.IsAddonVisible("SelectString"))
         {
@@ -1419,6 +1483,16 @@ public sealed unsafe class UtilityAutomationService
 
         StopMovementIfNpcRepair();
         npcRepairMenderReached = true;
+        if (npcSaleRequest)
+        {
+            if (!HasGilShop(targetNpc.BaseId))
+            { Fail("The selected NPC does not expose a gil shop; no sale command sent."); return; }
+            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc())
+            { Fail("AutoRetainer became busy before ADS could dispatch its sale."); return; }
+            npcSaleCommandSent = GameInteractionHelper.TrySendChatCommand(commandManager, "/ays itemsell", log);
+            if (!npcSaleCommandSent) Fail("The AutoRetainer NPC sale command was not accepted.");
+            return;
+        }
         if (activeNpcRepairMode == NpcRepairMode.YesInn
             && TryCompleteRepairIfFinished("Equipped gear is already fully repaired; reached the mender."))
             return;
@@ -1882,6 +1956,7 @@ public sealed unsafe class UtilityAutomationService
 
     private bool TryCompleteRepairIfFinished(string message)
     {
+        if (npcSaleRequest) return false;
         if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn && !npcRepairMenderReached)
             return false;
         if (!TryGetEquippedGearNeedsRepair(out var needsRepair) || needsRepair)
@@ -2822,7 +2897,7 @@ public sealed unsafe class UtilityAutomationService
             if (distance > searchRadius)
                 continue;
 
-            if (!TryGetRepairIndex(obj.BaseId, out var repairIndex))
+            if (!TryGetRepairIndex(obj.BaseId, out var repairIndex) || (npcSaleRequest && !HasGilShop(obj.BaseId)))
                 continue;
 
             var nextCandidate = new RepairNpcCandidate(obj, repairIndex, distance);
@@ -2899,6 +2974,39 @@ public sealed unsafe class UtilityAutomationService
 
         repairIndexCache[baseId] = null;
         return false;
+    }
+
+    private bool HasGilShop(uint baseId)
+    {
+        var sheet = GetENpcBaseSheet();
+        return sheet != null && sheet.TryGetRow(baseId, out var npc) &&
+            npc.ENpcData.Any(entry => entry.RowId >> 16 == 4);
+    }
+
+    private void FinishNpcSale(bool succeeded, string message)
+    {
+        if (!npcSaleRequest || !npcSaleStatus.Running) return;
+        var sameCharacter = npcSaleCharacter != 0 && npcSaleCharacter == Plugin.PlayerState.ContentId;
+        if (!succeeded && npcSaleCommandSent && npcSaleBusyObserved && sameCharacter)
+        {
+            try
+            {
+                // AutoRetainer exposes a global reset, not an operation-specific cancel.
+                // Never send it after the observed sale has already become idle.
+                if (Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc())
+                    GameInteractionHelper.TrySendChatCommand(commandManager, "/ays reset", log);
+            }
+            catch (Exception ex) { log.Warning(ex, "[ADS][NpcSale] Owned AutoRetainer sale cancellation could not be verified."); }
+        }
+        if (npcSaleCommandSent && sameCharacter &&
+            targetManager.Target?.GameObjectId == targetNpcGameObjectId && GameInteractionHelper.IsAddonVisible("Shop"))
+        {
+            GameInteractionHelper.TryCloseAddon("SelectYesno", log);
+            GameInteractionHelper.TryCloseAddon("Shop", log);
+            GameInteractionHelper.TryCloseAddon("SelectString", log);
+            GameInteractionHelper.TryCloseAddon("SelectIconString", log);
+        }
+        npcSaleStatus = npcSaleStatus with { Running = false, Done = true, Succeeded = succeeded, StatusMessage = message };
     }
 
     private void TryInteractWithRepairNpc(IGameObject npc)
@@ -3454,6 +3562,7 @@ public sealed unsafe class UtilityAutomationService
 
     private void Complete(string message)
     {
+        FinishNpcSale(true, message);
         if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn
             && npcRepairTravelStage != NpcRepairTravelStage.ReturningToInn)
         {
@@ -3483,6 +3592,7 @@ public sealed unsafe class UtilityAutomationService
 
     private void Fail(string message)
     {
+        FinishNpcSale(false, message);
         var failedTask = activeTask;
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] {message}");
@@ -3508,6 +3618,9 @@ public sealed unsafe class UtilityAutomationService
 
     private void ResetState()
     {
+        npcSaleRequest = false;
+        npcSaleCommandSent = false;
+        npcSaleBusyObserved = false;
         if (npcRepairOwnsInnTravel)
         {
             npcRepairOwnsInnTravel = false;

@@ -15,6 +15,9 @@ public sealed class AdsOperatorApiService
         => JsonSerializer.Serialize(new
         {
             schemaVersion = 1,
+            guardedShopPurchases = 1,
+            companyActionPurchases = 1,
+            npcSelling = 1,
             settings = AdsIpcValidation.KnownConfigurationSettings.OrderBy(x => x).ToArray(),
             preferredSettings = new[] { "desynthInventoryScope" },
             deprecatedSettings = new[] { "desynthCategories", "desynthProtectGearsets" },

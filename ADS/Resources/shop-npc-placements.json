@@ -8,6 +8,16 @@
   },
   "placements": [
     {
+      "npcId": 1307,
+      "territoryId": 139,
+      "territoryName": "Upper La Noscea",
+      "mapId": 19,
+      "x": -484.527,
+      "z": 159.844,
+      "source": "https://ffxiv.consolegameswiki.com/wiki/Junkmonger_Nonoroon (11.8, 24.7); BNpcBase 1307",
+      "replaceExisting": false
+    },
+    {
       "npcId": 1000165,
       "territoryId": 132,
       "territoryName": "New Gridania",

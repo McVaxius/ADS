@@ -10,6 +10,8 @@ namespace ADS.Services;
 internal interface IShopCatalog
 {
     ShopCatalogResolution Resolve(uint itemId, int quantity);
+    ShopCatalogResolution ResolveCompanyAction(uint actionId, int quantity, byte grandCompany)
+        => new(actionId, $"Company action {actionId}", 1, false, quantity, [], 1, 0, 0);
 }
 
 internal interface IShopSheetSource
@@ -23,6 +25,34 @@ internal sealed class ShopCatalogService(
 {
     private readonly object sync = new();
     private ShopCatalogSnapshot? snapshot;
+
+    public ShopCatalogResolution ResolveCompanyAction(uint actionId, int quantity, byte grandCompany)
+    {
+        var current = GetSnapshot();
+        var row = current.CompanyActionRows?.SingleOrDefault(entry => entry.ActionId == actionId);
+        var territory = grandCompany switch { 1 => 128u, 2 => 132u, 3 => 130u, _ => 0u };
+        var offers = new List<ShopOffer>();
+        if (row != null && territory != 0)
+        {
+            foreach (var placement in current.NpcPlacements.Where(p => p.TerritoryId == territory &&
+                         p.NpcId is 1000165 or 1002389 or 1003925))
+            {
+                var routes = current.Aetherytes.Where(a => a.TerritoryId == territory)
+                    .Select(a => new ShopRouteCandidate(a.AetheryteId, a.Name, a.Position,
+                        Vector3.Distance(a.Position, placement.Position))).ToArray();
+                offers.Add(new ShopOffer(ShopOfferKind.CompanyActionShop, 1, "Company actions", 0,
+                    placement.NpcId, "OIC quartermaster", territory, placement.TerritoryName, placement.Position,
+                    [new(ShopMenuPathStepKind.CompanyActionPurchase, 0, 0)], ShopNpcLinkKind.CustomTalk,
+                    placement.Source, placement.MapId, placement.LevelId, placement.SourcePath,
+                    actionId, row.Name, 1, quantity,
+                    [new(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", row.Cost)],
+                    [], false, routes, placement.RequiresFloorResolution,
+                    [new(actionId, row.Name, 1, 1, false)], grandCompany, row.Rank));
+            }
+        }
+        return new(actionId, row?.Name ?? $"Company action {actionId}", 1, false, quantity,
+            offers, row == null || territory == 0 ? 1 : 0, 0, row != null && offers.Count == 0 ? 1 : 0);
+    }
 
     public ShopCatalogResolution Resolve(uint itemId, int quantity)
     {
@@ -1321,6 +1351,7 @@ internal static class ShopOfferSelector
             ShopOfferKind.InclusionShop => "inclusion-shop",
             ShopOfferKind.GrandCompanyShop => "grand-company-shop",
             ShopOfferKind.FreeCompanyShop => "free-company-shop",
+            ShopOfferKind.CompanyActionShop => "company-action-shop",
             _ => "unsupported",
         };
 
@@ -1482,6 +1513,10 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
         }
 
         var links = BuildNpcLinks(gilRows, specialRows, grandCompanyRows, freeCompanyRows);
+        foreach (var npcId in new uint[] { 1000165, 1002389, 1003925 })
+            if (links.All(link => link.NpcId != npcId))
+                links.Add(new(ShopSheetKind.FreeCompany, 0, npcId, "OIC quartermaster",
+                    [], ShopNpcLinkKind.CustomTalk, [], false));
         var aetherytes = BuildAetherytes();
         var placements = BuildNpcPlacements(links, aetherytes.Routes);
 
@@ -1510,7 +1545,10 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
             aetherytes.Routes,
             tomestones,
             grandCompanyRows,
-            freeCompanyRows);
+            freeCompanyRows,
+            dataManager.GetExcelSheet<CompanyAction>().Where(row => row.Purchasable && row.Cost > 0)
+                .Select(row => new CompanyActionShopSheetRow(row.RowId, row.Name.ToString(), row.Cost,
+                    checked((byte)row.FCRank.RowId))).ToArray());
     }
 
     private List<ShopNpcSheetLink> BuildNpcLinks(
@@ -1524,6 +1562,7 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
         var validGrandCompanyIds = grandCompanyRows.Select(row => row.ShopId).ToHashSet();
         var validFreeCompanyIds = freeCompanyRows.Select(row => row.ShopId).ToHashSet();
         var residentSheet = dataManager.GetExcelSheet<ENpcResident>();
+        var battleHandlers = dataManager.GetExcelSheet<ArrayEventHandler>();
         var npcs = dataManager.GetExcelSheet<ENpcBase>()
             .Select(npc =>
             {
@@ -1535,6 +1574,10 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
                     npcName,
                     npc.ENpcData.Select(ToEventReference).ToArray());
             })
+            .Concat(dataManager.GetExcelSheet<BNpcBase>()
+                .Where(npc => npc.ArrayEventHandler.RowId != 0 && battleHandlers.HasRow(npc.ArrayEventHandler.RowId))
+                .Select(npc => new ShopNpcEventSheetRow(npc.RowId, $"Battle NPC {npc.RowId}",
+                    battleHandlers.GetRow(npc.ArrayEventHandler.RowId).Data.Select(ToEventReference).ToArray())))
             .ToArray();
         var topics = dataManager.GetExcelSheet<TopicSelect>()
             .Select(topic => new ShopTopicSelectSheetRow(
@@ -1641,7 +1684,7 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
     }
 
     private ShopNpcPlacementBuildResult BuildNpcPlacements(
-        IReadOnlyCollection<ShopNpcSheetLink> links,
+        List<ShopNpcSheetLink> links,
         IReadOnlyCollection<ShopAetheryteSheetRow> aetherytes)
     {
         var linkedNpcIds = links.Select(link => link.NpcId).ToHashSet();
@@ -1676,6 +1719,29 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
             derivedFiles++;
             try
             {
+                // Battle vendors carry their shops through BNpcBase.ArrayEventHandler.
+                // Their placements may be in either layer file; only catalog-linked NPCs qualify.
+                foreach (var battlePath in new[] { lgbPath, lgbPath.Replace("planevent.lgb", "planlive.lgb", StringComparison.Ordinal) })
+                {
+                    var battleFile = dataManager.GetFile<LgbFile>(battlePath);
+                    if (battleFile == null) continue;
+                    foreach (var instance in battleFile.Layers.SelectMany(layer => layer.InstanceObjects))
+                    {
+                        // Lumina's BNPCInstanceObject is private; its public ParentData/NameId
+                        // fields expose the same parsed NPC record without reading raw offsets.
+                        if (instance.AssetType != LayerEntryType.BattleNPC || instance.Object == null ||
+                            instance.Object.GetType().GetField("ParentData")?.GetValue(instance.Object) is not LayerCommon.NPCInstanceObject npc ||
+                            !linkedNpcIds.Contains(npc.ParentData.BaseId)) continue;
+                        var npcId = npc.ParentData.BaseId;
+                        lgbPlacements.Add(new ShopNpcPlacementSheetRow(npcId, territory.TerritoryId, territory.TerritoryName,
+                            new Vector3(instance.Transform.Translation.X, instance.Transform.Translation.Y, instance.Transform.Translation.Z),
+                            0, ShopNpcPlacementSource.Lgb, territory.MapId, battlePath));
+                        if (instance.Object.GetType().GetField("NameId")?.GetValue(instance.Object) is uint nameId &&
+                            dataManager.GetExcelSheet<BNpcName>().TryGetRow(nameId, out var name))
+                            for (var i = 0; i < links.Count; i++)
+                                if (links[i].NpcId == npcId) links[i] = links[i] with { NpcName = name.Singular.ToString() };
+                    }
+                }
                 var lgb = dataManager.GetFile<LgbFile>(lgbPath);
                 if (lgb == null)
                 {

@@ -354,6 +354,13 @@ public sealed class Plugin : IDalamudPlugin
             StartExtractMateria,
             StartDesynth,
             StartShopPurchase,
+            StartGilShopPurchase,
+            StartCompanyActionPurchase,
+            StartNpcSale,
+            () => JsonSerializer.Serialize(UtilityAutomationService.NpcSaleStatus, ShopStatusJsonOptions),
+            UtilityAutomationService.CancelNpcSale,
+            StartGuardedShopPurchase,
+            CancelShopPurchase,
             SetShopKeepOpen,
             CancelUtility,
             OpenDesynthConfigUiIpc,
@@ -444,6 +451,15 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
+        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260927-11; guarded sale cleanup");
+#if DEBUG
+        Framework.RunOnFrameworkThread(() =>
+        {
+            if (ClientState.IsLoggedIn && ClientState.TerritoryType == 139)
+                Log.Information("[ADS][Shop] Baby Bat availability: {Availability}",
+                    UtilityAutomationService.DescribeShopNpcAvailability(1307));
+        });
+#endif
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -1383,24 +1399,85 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartShopPurchase(uint itemId, int quantity)
         => StartShopPurchaseCore(itemId, quantity, null, null, null);
 
+    public bool StartGilShopPurchase(string operationId, uint itemId, int quantity)
+    {
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128)
+            return RejectShopPurchaseStart("A correlated purchase requires a nonempty operation ID of at most 128 characters.");
+        return StartShopPurchaseCore(itemId, quantity, new ShopCurrencyIdentity(ShopCurrencyKind.Gil, 1), null, null, operationId: operationId);
+    }
+
+    public bool StartGuardedShopPurchase(string requestJson, Func<string, bool> authorize)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(authorize);
+            using var document = JsonDocument.Parse(requestJson);
+            var root = document.RootElement;
+            var operationId = root.GetProperty("operationId").GetString();
+            if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 ||
+                !root.GetProperty("itemId").TryGetUInt32(out var itemId) || itemId == 0 ||
+                !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString(), true, out var kind) ||
+                !Enum.IsDefined(kind) || !root.GetProperty("currencyItemId").TryGetUInt32(out var currencyItemId) || currencyItemId == 0)
+                return RejectShopPurchaseStart("Guarded purchase requires an operation ID, item and exact currency identity.");
+            bool Guard(ShopPurchaseCheckpoint checkpoint) => authorize(JsonSerializer.Serialize(new
+            {
+                operationId, checkpoint.ItemId, checkpoint.Quantity, checkpoint.ItemCountBefore,
+                currencyKind = checkpoint.Currency.Kind.ToString(), currencyItemId = checkpoint.Currency.ItemId,
+                checkpoint.CurrencyBefore, checkpoint.CurrencyCost,
+            }, ShopStatusJsonOptions));
+            return StartShopPurchaseCore(itemId, 1, new ShopCurrencyIdentity(kind, currencyItemId),
+                checkpoint =>
+                {
+                    if (!Guard(checkpoint)) throw new InvalidOperationException("The purchase owner did not authorize the verified quote.");
+                }, _ => { }, Guard, operationId);
+        }
+        catch (Exception ex)
+        {
+            return RejectShopPurchaseStart($"Invalid guarded purchase: {ex.Message}");
+        }
+    }
+
+    public bool StartCompanyActionPurchase(string operationId, uint actionId, int quantity)
+    {
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 || quantity is < 1 or > 16)
+            return RejectShopPurchaseStart("Company action purchasing requires an operation ID and a quantity between 1 and 16.");
+        return StartShopPurchaseCore(actionId, quantity,
+            new ShopCurrencyIdentity(ShopCurrencyKind.FreeCompanyCredit, 0), null, null,
+            operationId: operationId, companyAction: true);
+    }
+
+    public bool StartNpcSale(string operationId, bool localOnly)
+        => CanStartManualUtility("NPC selling") && UtilityAutomationService.StartNpcSale(operationId, localOnly);
+
+    public bool CancelShopPurchase(string operationId)
+    {
+        var status = UtilityAutomationService.ShopPurchaseStatus;
+        return !string.IsNullOrWhiteSpace(operationId) && status.Running &&
+            status.OperationId == operationId && CancelUtility();
+    }
+
     internal bool StartRelicPurchase(uint itemId, Action<ShopPurchaseCheckpoint> beforeSubmit, Action<ShopPurchaseCheckpoint> verified)
         => StartShopPurchaseCore(itemId, 1, RelicPurchaseTestService.Currency, beforeSubmit, verified);
 
     private bool StartShopPurchaseCore(uint itemId, int quantity, ShopCurrencyIdentity? currency,
-        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified)
+        Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified,
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null, string? operationId = null, bool companyAction = false)
     {
         if (RejectAutomationActionInExcludedTerritory("Shop purchase"))
             return currency.HasValue ? RejectShopPurchaseStart(AutomationTerritoryPolicy.InactiveStatus) : false;
 
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
             return RejectShopPurchaseStart(error);
+        request = request with { OperationId = operationId, CompanyAction = companyAction };
         if (ExecutionService.IsOwned)
             return RejectShopPurchaseStart("Cannot start shop purchasing while ADS owns active duty execution.");
         if (InnEntryService.IsRunning)
             return RejectShopPurchaseStart("Cannot start shop purchasing while /ads enterinn is running.");
 
         var result = currency.HasValue
-            ? UtilityAutomationService.StartShopPurchase(request, currency.Value, beforeSubmit!, verified!)
+            ? beforeSubmit != null
+                ? UtilityAutomationService.StartShopPurchase(request, currency.Value, beforeSubmit, verified!, confirmationGuard)
+                : UtilityAutomationService.StartShopPurchase(request, currency.Value)
             : UtilityAutomationService.StartShopPurchase(request);
         PrintStatus(result
             ? UtilityAutomationService.StatusMessage

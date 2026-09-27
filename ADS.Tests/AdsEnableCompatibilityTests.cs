@@ -11,6 +11,49 @@ namespace ADS.Tests;
 public sealed class AdsEnableCompatibilityTests
 {
     [Fact]
+    public void NpcSaleCharacterChangeRecordsFailureWithoutTouchingTheNewCharactersUiOrAutomation()
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var utility = (UtilityAutomationService)RuntimeHelpers.GetUninitializedObject(typeof(UtilityAutomationService));
+        foreach (var name in new[] { "npcSaleRequest", "npcSaleCommandSent", "npcSaleBusyObserved" })
+            typeof(UtilityAutomationService).GetField(name, flags)!.SetValue(utility, true);
+        typeof(UtilityAutomationService).GetField("npcSaleCharacter", flags)!.SetValue(utility, 8UL);
+        typeof(UtilityAutomationService).GetField("npcSaleStatus", flags)!.SetValue(utility,
+            new ADS.Models.NpcSaleStatusSnapshot("previous-character-sale", true, false, null, "Running"));
+        var playerStateProperty = typeof(Plugin).GetProperty("PlayerState", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousPlayerState = playerStateProperty.GetValue(null);
+        playerStateProperty.SetValue(null, DispatchProxy.Create<IPlayerState, IpcProxy>());
+        try
+        {
+            // UI, command and IPC collaborators are deliberately absent: a character change
+            // must finish the old receipt without using any of the new character's controls.
+            typeof(UtilityAutomationService).GetMethod("FinishNpcSale", flags)!
+                .Invoke(utility, [false, "The NPC sale character changed."]);
+            Assert.False(utility.NpcSaleStatus.Running);
+            Assert.True(utility.NpcSaleStatus.Done);
+            Assert.False(utility.NpcSaleStatus.Succeeded);
+            Assert.Equal("previous-character-sale", utility.NpcSaleStatus.OperationId);
+        }
+        finally { playerStateProperty.SetValue(null, previousPlayerState); }
+    }
+
+    [Fact]
+    public void NpcSaleCannotCompleteFromRepairReadinessOrCancelAnotherOperation()
+    {
+        var utility = (UtilityAutomationService)RuntimeHelpers.GetUninitializedObject(typeof(UtilityAutomationService));
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(UtilityAutomationService).GetField("npcSaleRequest", flags)!.SetValue(utility, true);
+        typeof(UtilityAutomationService).GetField("npcSaleStatus", flags)!.SetValue(utility,
+            new ADS.Models.NpcSaleStatusSnapshot("owned-sale", true, false, null, "Running"));
+        var completed = (bool)typeof(UtilityAutomationService).GetMethod("TryCompleteRepairIfFinished", flags)!
+            .Invoke(utility, ["Gear is repaired"])!;
+        Assert.False(completed);
+        Assert.False(utility.CancelNpcSale("another-sale"));
+        Assert.True(utility.NpcSaleStatus.Running);
+        Assert.Null(utility.NpcSaleStatus.Succeeded);
+    }
+
+    [Fact]
     public void BothRegisteredConfigurationEndpointsIgnoreDisableAndLogCallerBeforeApplyingPatch()
     {
         var pi = DispatchProxy.Create<IDalamudPluginInterface, IpcProxy>();
@@ -41,7 +84,8 @@ public sealed class AdsEnableCompatibilityTests
             }
             using var ipc = new AdsIpcService(pi,
                 () => false, () => false, () => false, () => false, () => false, () => false,
-                _ => false, () => false, _ => false, (_, _) => false, _ => false, () => false,
+                _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, (_, _, _) => false,
+                (_, _) => false, () => "{}", _ => false, (_, _) => false, _ => false, _ => false, () => false,
                 () => false, () => false, () => "{}", () => "{}", () => "{}", Invoke,
                 plugin.GetConfigurationJson, Patch, () => "{}", () => "{}", () => "{}", () => "{}",
                 _ => "{}", _ => "{}", _ => "{}", _ => false, _ => "{}", () => false, log);
@@ -90,6 +134,8 @@ public sealed class AdsEnableCompatibilityTests
         {
             switch (method!.Name)
             {
+                case "get_ContentId":
+                    return 9UL;
                 case "GetIpcProvider":
                     var provider = DispatchProxy.Create(method.ReturnType, typeof(IpcProxy));
                     Providers[(string)args![0]!] = (IpcProxy)provider;

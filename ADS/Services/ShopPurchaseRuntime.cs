@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
 using ADS.Models;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
+using Lumina.Excel.Sheets;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -247,6 +249,12 @@ internal interface IShopPurchaseRuntime
     uint CurrentTerritoryId { get; }
     byte CurrentGrandCompany => 0;
     byte CurrentGrandCompanyRank => 0;
+    ulong FreeCompanyId => 0;
+    byte FreeCompanyGrandCompany => 0;
+    byte FreeCompanyRank => 0;
+    long GetCompanyActionCount(uint actionId) => -1;
+    long GetCompanyActionCapacity() => 0;
+    bool PrepareCompanyActionInventory() => false;
     Vector3 PlayerPosition { get; }
     bool HasVnavmesh { get; }
     bool HasLifestream { get; }
@@ -263,10 +271,13 @@ internal interface IShopPurchaseRuntime
     long GetInventoryCapacity(uint itemId, uint stackSize);
     bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition);
     bool TryTeleport(ResolvedShopRoute route);
+    bool PrepareNavigation(Vector3 destination) => true;
     bool TryMove(Vector3 destination, string label);
     ShopNavigationStopResult TryStopNavigation();
     bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc);
     bool TryInteractNpc(uint npcId);
+    bool PrepareInteraction() => true;
+    string DescribeNpcAvailability(uint npcId) => $"NPC {npcId} availability not exposed by this runtime.";
     bool IsExpectedShopVisible(ShopOfferKind kind);
     bool TrySelectMenu(int index);
     bool TrySelectMenu(ShopMenuPathStep step, uint npcId) => TrySelectMenu(step.Index);
@@ -298,6 +309,71 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private string? readableOwnedSelectYesNoPrompt;
     private bool unreadableOwnedSelectYesnoWarningLogged;
     private DateTime nextRelicUiCleanupUtc;
+    private DateTime nextCompanyActionInventoryUtc;
+    private bool companyActionUiOwned;
+
+    public ulong FreeCompanyId => InfoProxyFreeCompany.Instance() == null ? 0 : InfoProxyFreeCompany.Instance()->Id;
+    public byte FreeCompanyGrandCompany => InfoProxyFreeCompany.Instance() == null ? (byte)0 : (byte)InfoProxyFreeCompany.Instance()->GrandCompany;
+    public byte FreeCompanyRank => InfoProxyFreeCompany.Instance() == null ? (byte)0 : InfoProxyFreeCompany.Instance()->Rank;
+
+    private static AtkComponentList* CompanyActionList()
+    {
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("FreeCompanyAction");
+        if (addon == null || !addon->IsVisible) return null;
+        var root = addon->GetNodeById(1);
+        if (root == null || root->ChildNode == null) return null;
+        var node = root->ChildNode->ChildNode;
+        for (var limit = 0; node != null && limit < 50; limit++, node = node->PrevSiblingNode)
+            if ((int)node->Type >= 1000) return node->GetAsAtkComponentList();
+        return null;
+    }
+
+    public long GetCompanyActionCount(uint actionId)
+    {
+        var name = Plugin.DataManager.GetExcelSheet<CompanyAction>().GetRowOrDefault(actionId)?.Name.ToString();
+        var list = CompanyActionList();
+        if (string.IsNullOrWhiteSpace(name) || list == null || list->GetItemCount() is < 0 or > 16) return -1;
+        var count = 0;
+        for (var index = 0; index < list->GetItemCount(); index++)
+        {
+            var renderer = list->GetItemRenderer(index);
+            var text = renderer == null ? null : renderer->GetTextNodeById(3);
+            if (text == null || string.IsNullOrWhiteSpace(text->NodeText.ToString())) return -1;
+            if (text->NodeText.ToString() == name) count++;
+        }
+        return count;
+    }
+
+    public long GetCompanyActionCapacity()
+    {
+        var list = CompanyActionList();
+        var rank = Plugin.DataManager.GetExcelSheet<FCRank>().GetRowOrDefault(FreeCompanyRank);
+        return list == null || !rank.HasValue || list->GetItemCount() is < 0 or > 16
+            ? 0 : Math.Max(0, rank.Value.FCActionStockNum - list->GetItemCount());
+    }
+
+    public bool PrepareCompanyActionInventory()
+    {
+        if (CompanyActionList() != null && TryGetCompanyActionCredits(out _)) return true;
+        if (DateTime.UtcNow < nextCompanyActionInventoryUtc) return false;
+        nextCompanyActionInventoryUtc = DateTime.UtcNow.AddSeconds(1);
+        companyActionUiOwned = true;
+        if (GameInteractionHelper.IsAddonVisible("FreeCompany"))
+            GameInteractionHelper.TryFireAddonCallback("FreeCompany", true, 0, 4);
+        else
+            GameInteractionHelper.TrySendChatCommand(commandManager, "/freecompanycmd", log);
+        return false;
+    }
+
+    private static bool TryGetCompanyActionCredits(out long credits)
+    {
+        credits = -1;
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("FreeCompany");
+        if (addon == null || !addon->IsVisible) return false;
+        var node = addon->GetTextNodeById(17);
+        return node != null && long.TryParse(node->NodeText.ToString(), NumberStyles.Number,
+            CultureInfo.CurrentCulture, out credits) && credits >= 0;
+    }
 
     private interface IShopUiAdapter
     {
@@ -427,6 +503,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         || GameInteractionHelper.IsAddonVisible("InclusionShop")
         || GameInteractionHelper.IsAddonVisible("GrandCompanyExchange")
         || GameInteractionHelper.IsAddonVisible("FreeCompanyCreditShop")
+        || GameInteractionHelper.IsAddonVisible("FreeCompanyExchange")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeItemDialog")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeCurrencyDialog");
 
@@ -514,7 +591,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         credits = 0;
         var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("FreeCompanyCreditShop");
         if (addon == null || !addon->IsVisible || addon->AtkValues == null || addon->AtkValuesCount <= 9)
-            return false;
+            return TryGetCompanyActionCredits(out credits);
         credits = ReadUnsigned(addon->AtkValues[3]);
         return credits >= 0;
     }
@@ -604,11 +681,25 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return GameInteractionHelper.TrySendChatCommand(commandManager, $"/li {route.AetheryteName}", log);
     }
 
+    public bool PrepareNavigation(Vector3 destination)
+    {
+        if (condition[ConditionFlag.InFlight] || Vector3.Distance(PlayerPosition, destination) <= 80) return true;
+        var player = PlayerState.Instance();
+        var territory = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(CurrentTerritoryId);
+        var flightSet = territory?.AetherCurrentCompFlgSet.RowId ?? 0;
+        if (player == null || flightSet == 0 || !player->IsAetherCurrentZoneComplete(flightSet)) return true;
+        var action = condition[ConditionFlag.Mounted] ? 2u : 9u;
+        var manager = ActionManager.Instance();
+        if (manager != null && manager->GetActionStatus(ActionType.GeneralAction, action) == 0)
+            manager->UseAction(ActionType.GeneralAction, action);
+        return false; // The runner's existing navigation timeout covers mounting/takeoff.
+    }
+
     public bool TryMove(Vector3 destination, string label)
     {
         var command = string.Format(
             CultureInfo.InvariantCulture,
-            "/vnav moveto {0:F2} {1:F2} {2:F2}",
+            condition[ConditionFlag.InFlight] ? "/vnav flyto {0:F2} {1:F2} {2:F2}" : "/vnav moveto {0:F2} {1:F2} {2:F2}",
             destination.X,
             destination.Y,
             destination.Z);
@@ -656,7 +747,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         foreach (var gameObject in objectTable)
         {
             if (gameObject == null
-                || gameObject.ObjectKind != ObjectKind.EventNpc
+                || gameObject.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.BattleNpc)
                 || gameObject.BaseId != npcId
                 || !gameObject.IsTargetable)
             {
@@ -678,7 +769,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return true;
     }
 
-    public bool TryInteractNpc(uint npcId)
+    public bool PrepareInteraction()
     {
         if (condition[ConditionFlag.Mounted])
         {
@@ -686,12 +777,31 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             return false;
         }
 
+        return true;
+    }
+
+    public string DescribeNpcAvailability(uint npcId)
+    {
+        var player = objectTable.LocalPlayer;
+        if (player == null) return "No local player.";
+        var targetAvailable = TryGetNpc(npcId, out var target);
+        var nearby = objectTable.Where(obj => obj.ObjectKind is ObjectKind.EventNpc or ObjectKind.BattleNpc)
+            .Where(obj => obj.BaseId == npcId || Vector3.Distance(player.Position, obj.Position) < 60)
+            .OrderBy(obj => Vector3.Distance(player.Position, obj.Position)).Take(24)
+            .Select(obj => $"{obj.Name.TextValue}:kind={obj.ObjectKind},base={obj.BaseId},targetable={obj.IsTargetable},position={obj.Position}");
+        return $"territory={CurrentTerritoryId}; target={npcId}; targetAvailable={targetAvailable}; targetPosition={target.Position}; player={player.Position}; mounted={condition[ConditionFlag.Mounted]}; flight={condition[ConditionFlag.InFlight]}; NPCs=[{string.Join("; ", nearby)}]";
+    }
+
+    public bool TryInteractNpc(uint npcId)
+    {
+        if (!PrepareInteraction()) return false;
+
         IGameObject? nearest = null;
         var nearestDistance = float.MaxValue;
         foreach (var gameObject in objectTable)
         {
             if (gameObject == null
-                || gameObject.ObjectKind != ObjectKind.EventNpc
+                || gameObject.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.BattleNpc)
                 || gameObject.BaseId != npcId
                 || !gameObject.IsTargetable)
             {
@@ -718,6 +828,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             ShopOfferKind.InclusionShop => GameInteractionHelper.IsAddonVisible("InclusionShop"),
             ShopOfferKind.GrandCompanyShop => GameInteractionHelper.IsAddonVisible("GrandCompanyExchange"),
             ShopOfferKind.FreeCompanyShop => GameInteractionHelper.IsAddonVisible("FreeCompanyCreditShop"),
+            ShopOfferKind.CompanyActionShop => GameInteractionHelper.IsAddonVisible("FreeCompanyExchange"),
             _ => GameInteractionHelper.IsAddonVisible(GetAdapter(kind).AddonName),
         };
 
@@ -733,6 +844,12 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public bool TrySelectMenu(ShopMenuPathStep step, uint npcId)
     {
+        if (step.Kind == ShopMenuPathStepKind.CompanyActionPurchase)
+        {
+            // The exchange row is validated independently before any purchase callback.
+            return targetManager.Target?.BaseId == npcId && npcId is 1000165 or 1002389 or 1003925
+                && TrySelectMenu(0);
+        }
         if (step.Kind is ShopMenuPathStepKind.InclusionPage or ShopMenuPathStepKind.InclusionSubpage)
             return false;
 
@@ -784,6 +901,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             return ValidateGrandCompanyShop(offer);
         if (offer.Offer.Kind == ShopOfferKind.FreeCompanyShop)
             return ValidateFreeCompanyShop(offer);
+        if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
+            return ValidateCompanyActionShop(offer);
         if (offer.Offer.Kind == ShopOfferKind.SpecialShopMixed)
         {
             if (!GameInteractionHelper.IsAddonVisible("ShopExchangeItem")
@@ -816,6 +935,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             ShopOfferKind.InclusionShop => SubmitInclusionPurchase(offer, runtimeRow, transactionCount),
             ShopOfferKind.GrandCompanyShop => SubmitGrandCompanyPurchase(offer, runtimeRow, transactionCount),
             ShopOfferKind.FreeCompanyShop => SubmitFreeCompanyPurchase(offer, runtimeRow, transactionCount),
+            ShopOfferKind.CompanyActionShop => transactionCount == 1
+                && ValidateCompanyActionShop(offer) is { State: ShopUiValidationState.Valid, RuntimeRow: var row }
+                && row == runtimeRow
+                && GameInteractionHelper.TryFireAddonCallback("FreeCompanyExchange", true, 2, runtimeRow),
             ShopOfferKind.SpecialShopMixed when GameInteractionHelper.IsAddonVisible("ShopExchangeCurrency")
                 => GameInteractionHelper.TryFireAddonCallback(
                     "ShopExchangeCurrency", true, 0, runtimeRow, transactionCount, 0),
@@ -825,6 +948,12 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         };
         if (accepted)
         {
+            if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
+            {
+                companyActionUiOwned = true;
+                CloseShopAddon("FreeCompanyAction");
+                CloseShopAddon("FreeCompany");
+            }
             readableOwnedSelectYesNoPrompt = null;
             confirmationToken = new ShopConfirmationToken(offer, transactionCount, DateTime.UtcNow);
             unreadableOwnedSelectYesnoWarningLogged = false;
@@ -940,6 +1069,13 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         CloseShopAddon("InclusionShop");
         CloseShopAddon("GrandCompanyExchange");
         CloseShopAddon("FreeCompanyCreditShop");
+        CloseShopAddon("FreeCompanyExchange");
+        if (companyActionUiOwned)
+        {
+            CloseShopAddon("FreeCompanyAction");
+            CloseShopAddon("FreeCompany");
+            companyActionUiOwned = false;
+        }
         CloseShopAddon("ShopExchangeItemDialog");
         CloseShopAddon("ShopExchangeCurrencyDialog");
         CloseShopAddon("SelectIconString");
@@ -1176,6 +1312,33 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             0 => ShopUiValidationResult.Mismatch("FreeCompanyCreditShop has no affordable exact item, price, rank, and quantity row match."),
             _ => ShopUiValidationResult.Mismatch("FreeCompanyCreditShop has duplicate indistinguishable rows; ADS will not guess."),
         };
+    }
+
+    private ShopUiValidationResult ValidateCompanyActionShop(EvaluatedShopOffer offer)
+    {
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("FreeCompanyExchange");
+        if (addon == null || !addon->IsVisible)
+            return ShopUiValidationResult.NotReady("Waiting for the company action exchange.");
+        // ECommons' FreeCompanyExchange reader: number array 61, four integers per row
+        // (CompanyAction ID, unknown, required rank, credit price). The installed ECommons
+        // version predates that wrapper; use the same public array with bounds checks.
+        var module = RaptureAtkModule.Instance();
+        var array = module == null ? null : module->AtkArrayDataHolder.GetNumberArrayData(61);
+        if (array == null || array->IntArray == null || array->SubscribedAddonsCount == 0 || array->Size < 2)
+            return ShopUiValidationResult.NotReady("Company action exchange rows are unavailable.");
+        var count = array->IntArray[1];
+        if (count is < 1 or > 128 || array->Size < 2 + count * 4)
+            return ShopUiValidationResult.NotReady("Company action exchange row bounds are invalid.");
+        var matches = new List<int>();
+        for (var index = 0; index < count; index++)
+            if (array->IntArray[2 + index * 4] == offer.Offer.ReceiveItemId &&
+                array->IntArray[4 + index * 4] == offer.Offer.RequiredGrandCompanyRank &&
+                array->IntArray[5 + index * 4] == offer.Offer.Currencies.Single().AmountPerTransaction)
+                matches.Add(index);
+        if (matches.Count != 1 || FreeCompanyGrandCompany != offer.Offer.RequiredGrandCompany ||
+            FreeCompanyRank < offer.Offer.RequiredGrandCompanyRank)
+            return ShopUiValidationResult.Mismatch("Company action, rank or credit price does not match the selected offer.");
+        return ShopUiValidationResult.Valid(matches[0], "Company action and credit price verified against the live exchange row.");
     }
 
     private static bool SubmitGrandCompanyPurchase(EvaluatedShopOffer offer, int runtimeRow, int transactionCount)

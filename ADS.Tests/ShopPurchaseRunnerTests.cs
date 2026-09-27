@@ -6,6 +6,161 @@ namespace ADS.Tests;
 
 public sealed class ShopPurchaseRunnerTests
 {
+    [Theory]
+    [InlineData("success")]
+    [InlineData("missing-credit-delta")]
+    [InlineData("changed-company")]
+    [InlineData("cancelled")]
+    [InlineData("unreadable-inventory")]
+    public void CompanyActionsUseSeparateInventoryAndRequireVerifiedCreditDeltas(string scenario)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = scenario != "missing-credit-delta", ItemCount = 999 };
+        var currency = new ShopCurrencyIdentity(ShopCurrencyKind.FreeCompanyCredit, 0);
+        runtime.SetCurrency(currency, 100_000);
+        var offer = Offer(10, 100, 2) with
+        {
+            Kind = ShopOfferKind.CompanyActionShop,
+            ReceiveItemName = "Seal Sweetener II",
+            Currencies = [new(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", 7000)],
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(2, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 2) { CompanyAction = true, OperationId = "fc-owned" }, false, currency));
+        DriveUntil(runner, () => runner.Status.Phase == "validating-ui");
+        if (scenario == "changed-company") runtime.FreeCompanyId++;
+        if (scenario == "cancelled") runner.Cancel("test full stop");
+        if (scenario == "unreadable-inventory") runtime.CompanyInventoryReady = false;
+        DriveWithTime(runner, clock);
+        Assert.Equal("fc-owned", runner.Status.OperationId);
+        Assert.True(runner.Status.CompanyAction);
+        Assert.Equal(999, runtime.ItemCount);
+        Assert.All(runtime.SubmittedBatches, batch => Assert.Equal(1, batch));
+        if (scenario == "success")
+        {
+            Assert.True(runner.Status.Succeeded, runner.Status.FailureMessage);
+            Assert.Equal(2, runtime.CompanyActionCount);
+            Assert.Equal(86_000, runtime.GetAvailableCurrency(offer.Currencies[0]));
+        }
+        else
+        {
+            Assert.False(runner.Status.Succeeded);
+            Assert.Equal(scenario == "missing-credit-delta" ? 1 : 0, runtime.SubmitCount);
+        }
+    }
+
+    [Theory]
+    [InlineData("Purchase Seal Sweetener II for 7000 company credits?", true)]
+    [InlineData("Purchase Seal Sweetener II for 700 company credits?", false)]
+    [InlineData("Purchase Seal Sweetener for 7000 company credits?", false)]
+    public void CompanyActionPromptRequiresExactActionAndPrice(string prompt, bool expected)
+    {
+        var offer = Offer(10, 100, 1) with
+        {
+            Kind = ShopOfferKind.CompanyActionShop, ReceiveItemName = "Seal Sweetener II",
+            Currencies = [new(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", 7000)],
+        };
+        var now = new FakeClock().UtcNow;
+        var evaluated = new EvaluatedShopOffer(offer, null, [], true, true, true, null);
+        var token = new ShopConfirmationToken(evaluated, 1, now);
+        Assert.Equal(expected, token.TryConsumePrompt(prompt, now));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MissingVendorWaitsWithinExistingRunLimitWithoutSendingCommands(bool vendorReturns)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runner.Status.Phase == "interacting");
+        runtime.MissingNpcIds.Add(100);
+        clock.Advance(TimeSpan.FromSeconds(45));
+        runner.Update();
+        Assert.True(runner.IsRunning);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.SubmitCount);
+        if (vendorReturns)
+        {
+            runtime.MissingNpcIds.Remove(100);
+            clock.Advance(TimeSpan.FromSeconds(2));
+            Drive(runner);
+            Assert.True(runner.Status.Succeeded, runner.Status.FailureMessage);
+            Assert.Equal(1, runtime.SubmitCount);
+        }
+        else
+        {
+            clock.Advance(TimeSpan.FromMinutes(5));
+            runner.Update();
+            Assert.False(runner.Status.Succeeded);
+            Assert.False(runner.IsRunning);
+            Assert.Equal(ShopPurchaseFailureCodes.Timeout, runner.Status.FailureCode);
+            Assert.Empty(runtime.InteractedNpcIds);
+            Assert.Equal(0, runtime.SubmitCount);
+        }
+    }
+
+    [Fact]
+    public void LandingDoesNotConsumeVendorInteractionAttempts()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ReadyToInteract = false };
+        var runner = CreateRunner(1, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runner.Status.Phase == "interacting");
+        for (var check = 0; check < 4; check++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(2));
+            runner.Update();
+        }
+        Assert.True(runner.IsRunning);
+        Assert.Empty(runtime.InteractedNpcIds);
+        runtime.ReadyToInteract = true;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded, runner.Status.FailureMessage);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void GuardedPurchaseRetainsIdentityAndChecksAuthorizationBeforeSubmitAndConfirmation(bool allowSubmit, bool allowConfirmation)
+    {
+        var runtime = new FakeRuntime { ShowConfirmationAfterSubmit = true, AcceptOwnedConfirmation = true };
+        var runner = CreatePoeticsRunner(runtime, new FakeClock());
+        ShopPurchaseCheckpoint? receipt = null;
+        var confirmed = 0;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "owner-test" }, false, Poetics,
+            quote =>
+            {
+                Assert.Equal(0, runtime.SubmitCount);
+                if (!allowSubmit) throw new InvalidOperationException("Budget save refused.");
+                receipt = quote;
+            }, _ => confirmed++, quote => allowConfirmation && quote == receipt));
+        DriveUntil(runner, () => !runner.IsRunning || runtime.AcceptedConfirmationCount == 1);
+        Assert.Equal("owner-test", runner.Status.OperationId);
+        Assert.Equal(allowSubmit ? 1 : 0, runtime.SubmitCount);
+        Assert.Equal(allowSubmit && allowConfirmation ? 1 : 0, runtime.AcceptedConfirmationCount);
+        Assert.Equal(0, confirmed);
+        if (allowSubmit && allowConfirmation)
+        {
+            runtime.ItemCount = 1;
+            runtime.AdjustCurrency(Poetics, -150);
+            runner.Update();
+            Assert.True(runner.Status.Succeeded);
+            Assert.Equal(1, confirmed);
+        }
+        else Assert.False(runner.Status.Succeeded);
+        Assert.Equal(allowSubmit ? 1 : 0, runtime.SubmitCount);
+        runtime.HasUnexpectedConfirmation = false; // Owned UI cleanup has settled.
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Assert.Null(runner.Status.OperationId);
+        runner.Cancel("End test");
+    }
+
     [Fact]
     public void FiniteOrderCreditsOnlyVerifiedPurchasesAcrossCurrencyLimitedPassesAndReload()
     {
@@ -1518,15 +1673,16 @@ public sealed class ShopPurchaseRunnerTests
         var clock = new FakeClock();
         var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
         var runner = CreateRunner(1, runtime, clock);
-        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "stock-owner" }));
         Drive(runner);
         Assert.True(runner.Status.Succeeded);
 
         runtime.HasVnavmesh = false;
-        Assert.False(runner.Start(new ShopPurchaseRequest(200, 1)));
+        Assert.False(runner.Start(new ShopPurchaseRequest(200, 1) { OperationId = "rejected-owner" }));
 
         Assert.True(runner.Status.Succeeded);
         Assert.Equal((uint)100, runner.Status.ItemId);
+        Assert.Equal("stock-owner", runner.Status.OperationId);
         Assert.Equal(1, runner.Status.AcquiredQuantity);
         Assert.Contains("vnavmesh", runner.Status.LastStartError, StringComparison.OrdinalIgnoreCase);
     }
@@ -1830,6 +1986,7 @@ public sealed class ShopPurchaseRunnerTests
     private sealed class FakeCatalog(ShopCatalogResolution resolution) : IShopCatalog
     {
         public ShopCatalogResolution Resolve(uint itemId, int quantity) => resolution;
+        public ShopCatalogResolution ResolveCompanyAction(uint actionId, int quantity, byte grandCompany) => resolution;
     }
 
     private sealed class FakeClock : IShopPurchaseClock
@@ -1849,6 +2006,14 @@ public sealed class ShopPurchaseRunnerTests
 
         public bool IsLoggedIn { get; set; } = true;
         public ulong CharacterId { get; set; } = 1;
+        public ulong FreeCompanyId { get; set; } = 1;
+        public byte FreeCompanyGrandCompany => 2;
+        public byte FreeCompanyRank => 8;
+        public long CompanyActionCount { get; private set; }
+        public bool CompanyInventoryReady { get; set; } = true;
+        public long GetCompanyActionCount(uint actionId) => CompanyInventoryReady ? CompanyActionCount : -1;
+        public long GetCompanyActionCapacity() => 10 - CompanyActionCount;
+        public bool PrepareCompanyActionInventory() => CompanyInventoryReady;
         public bool CleanupBlocked { get; set; }
         public string? ShopListCleanupBlocker => CleanupBlocked || IsAnyShopVisible ? "Synthetic shop cleanup is pending" : null;
         public bool IsBetweenAreas { get; set; }
@@ -1942,6 +2107,9 @@ public sealed class ShopPurchaseRunnerTests
                 : NavigationStopResults.Dequeue();
         }
 
+        public bool ReadyToInteract { get; set; } = true;
+        public bool PrepareInteraction() => ReadyToInteract;
+
         public bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc)
         {
             if (MissingNpcIds.Contains(npcId))
@@ -2000,7 +2168,9 @@ public sealed class ShopPurchaseRunnerTests
                 foreach (var output in offer.Offer.AllOutputs)
                 {
                     var delta = (long)output.Count * transactionCount;
-                    if (output.ItemId == 100)
+                    if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
+                        CompanyActionCount += delta;
+                    else if (output.ItemId == 100)
                         ItemCount += delta;
                     else
                         additionalItemCounts[output.ItemId] = additionalItemCounts.GetValueOrDefault(output.ItemId) + delta;

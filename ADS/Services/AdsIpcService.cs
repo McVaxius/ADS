@@ -20,6 +20,13 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> startExtractMateria,
         Func<string, bool> startDesynth,
         Func<uint, int, bool> startShopPurchase,
+        Func<string, uint, int, bool> startGilShopPurchase,
+        Func<string, uint, int, bool> startCompanyActionPurchase,
+        Func<string, bool, bool> startNpcSale,
+        Func<string> getNpcSaleStatus,
+        Func<string, bool> cancelNpcSale,
+        Func<string, Func<string, bool>, bool> startGuardedShopPurchase,
+        Func<string, bool> cancelShopPurchase,
         Func<bool, bool> setShopKeepOpen,
         Func<bool> cancelUtility,
         Func<bool> openDesynthConfigUi,
@@ -52,6 +59,13 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartExtractMateria", startExtractMateria);
         Register(pluginInterface, "ADS.StartDesynth", startDesynth);
         Register(pluginInterface, "ADS.StartShopPurchase", startShopPurchase);
+        Register(pluginInterface, "ADS.StartGilShopPurchase", startGilShopPurchase);
+        Register(pluginInterface, "ADS.StartCompanyActionPurchase", startCompanyActionPurchase);
+        Register(pluginInterface, "ADS.StartNpcSale", startNpcSale);
+        Register(pluginInterface, "ADS.GetNpcSaleStatusJson", getNpcSaleStatus);
+        Register(pluginInterface, "ADS.CancelNpcSale", cancelNpcSale);
+        Register(pluginInterface, "ADS.StartGuardedShopPurchase", startGuardedShopPurchase);
+        Register(pluginInterface, "ADS.CancelShopPurchase", cancelShopPurchase);
         Register(pluginInterface, "ADS.SetShopKeepOpen", setShopKeepOpen);
         Register(pluginInterface, "ADS.CancelUtility", cancelUtility);
         Register(pluginInterface, "ADS.OpenDesynthConfigUi", openDesynthConfigUi);
@@ -131,6 +145,13 @@ public sealed class AdsIpcService : IDisposable
     private void Register<T1, T2, TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<T1, T2, TReturn> func)
     {
         var provider = pluginInterface.GetIpcProvider<T1, T2, TReturn>(name);
+        provider.RegisterFunc(func);
+        disposeActions.Add(provider.UnregisterFunc);
+    }
+
+    private void Register<T1, T2, T3, TReturn>(IDalamudPluginInterface pluginInterface, string name, Func<T1, T2, T3, TReturn> func)
+    {
+        var provider = pluginInterface.GetIpcProvider<T1, T2, T3, TReturn>(name);
         provider.RegisterFunc(func);
         disposeActions.Add(provider.UnregisterFunc);
     }

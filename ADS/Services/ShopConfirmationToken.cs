@@ -11,12 +11,14 @@ internal sealed class ShopConfirmationToken
 {
     private readonly IReadOnlyDictionary<ShopCurrencyIdentity, long> expectedCosts;
     private readonly bool isTomestoneExchange;
+    private readonly bool isCompanyAction;
     private bool consumed;
 
     public ShopConfirmationToken(EvaluatedShopOffer offer, int transactions, DateTime createdAtUtc)
     {
         ItemId = offer.Offer.ReceiveItemId;
         isTomestoneExchange = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone;
+        isCompanyAction = offer.Offer.Kind == ShopOfferKind.CompanyActionShop;
         ItemName = offer.Offer.ReceiveItemName;
         Quantity = checked((int)((long)offer.Offer.ReceiveCount * transactions));
         CreatedAtUtc = createdAtUtc;
@@ -62,7 +64,7 @@ internal sealed class ShopConfirmationToken
             return false;
         var normalized = prompt.Trim();
         if (!ContainsItemName(normalized, ItemName)
-            || !ContainsExactDisplayNumber(normalized, Quantity))
+            || (!(isCompanyAction && Quantity == 1) && !ContainsExactDisplayNumber(normalized, Quantity)))
             return false;
         foreach (var amount in expectedCosts.Values)
         {

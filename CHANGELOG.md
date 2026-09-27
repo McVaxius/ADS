@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Guarded purchase handoff
+
+- Guard NPC sale cleanup against character changes, changed vendor targets and AutoRetainer work already becoming idle. ADS dismisses the sale confirmation with its tracked shop; the underlying AutoRetainer reset remains global.
+- Route caller-owned NPC selling through ADS's existing mender travel flow and AutoRetainer's configured sell task. Support local-only onboard operation, observe busy-to-idle completion, and cancel only a matching request. Do not infer sale completion from gear repair status. Live validation remains pending.
+- Add correlated company-action purchases to the existing shop runner. ADS owns quartermaster travel, exact action/rank/price validation, single-action confirmations, action-count and credit reconciliation, cancellation and shop cleanup. FC action inventory is distinct from item inventory; changed character/company, missing evidence and unknown results stop the request. Native validation remains pending.
+- Wait for temporarily absent vendors within the existing five-minute run bound; begin the normal menu-opening timeout only after the NPC returns.
+- Keep landing, dismounting and temporary NPC absence within the existing shop-opening timeout, without using up interaction attempts before an NPC command can be sent. Capture one bounded NPC availability diagnostic on failure.
+- Accept correlated gil stock purchases through the existing runner, so callers can match their result and cancel only their own operation. Restrict these requests to gil offers and close their shop after completion.
+- Expose the existing single-item checkpointed shop runner to callers that must save and approve an exact quote before submission and confirmation. Return the caller's operation ID and cancel only a matching active purchase; existing shop callers retain their behavior. Validation is in progress.
+- Discover battle-NPC vendors through their sheet event-handler links and layer placements, including Nonoroon's Baby Bat shop. Use native flight for long vendor trips with existing flight unlocks; keep all navigation and shop verification in ADS. Live verification is pending.
+
 ## 2026-09-24 — Activity ownership and V&C loot
 
 - Keep ADS effectively enabled, recover saved disabled settings on load, and retain the compatibility checkbox/IPC field. Log enable-field requests on both configuration IPC routes, including ignored disables and their caller stacks.

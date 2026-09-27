@@ -3,6 +3,8 @@ using System.Text.Json;
 
 namespace ADS.Models;
 
+public sealed record NpcSaleStatusSnapshot(string? OperationId, bool Running, bool Done, bool? Succeeded, string StatusMessage);
+
 public static class ShopPurchaseFailureCodes
 {
     public const string InvalidRequest = "invalid-request";
@@ -20,6 +22,8 @@ public static class ShopPurchaseFailureCodes
 
 public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
 {
+    public string? OperationId { get; init; }
+    public bool CompanyAction { get; init; }
     public const int MaximumQuantity = 9_999;
 
     public static bool TryCreate(uint itemId, int quantity, out ShopPurchaseRequest request, out string error)
@@ -91,6 +95,7 @@ public enum ShopOfferKind
     InclusionShop,
     GrandCompanyShop,
     FreeCompanyShop,
+    CompanyActionShop,
 }
 
 public enum ShopCurrencyKind
@@ -174,6 +179,7 @@ internal enum ShopNpcLinkKind
 
 internal enum ShopMenuPathStepKind
 {
+    CompanyActionPurchase,
     ENpcData,
     TopicSelectShop,
     CustomTalkSpecialLink,
@@ -382,7 +388,10 @@ internal sealed record ShopCatalogSnapshot(
     IReadOnlyList<ShopAetheryteSheetRow> Aetherytes,
     IReadOnlyList<ShopTomestoneSheetRow> Tomestones,
     IReadOnlyList<GrandCompanyShopSheetRow>? GrandCompanyShopRows = null,
-    IReadOnlyList<FreeCompanyShopSheetRow>? FreeCompanyShopRows = null);
+    IReadOnlyList<FreeCompanyShopSheetRow>? FreeCompanyShopRows = null,
+    IReadOnlyList<CompanyActionShopSheetRow>? CompanyActionRows = null);
+
+internal sealed record CompanyActionShopSheetRow(uint ActionId, string Name, uint Cost, byte Rank);
 
 internal sealed record ShopRouteCandidate(
     uint AetheryteId,
@@ -526,4 +535,8 @@ public sealed record ShopPurchaseStatusSnapshot(
     string SuccessMessage,
     string FailureMessage,
     string LastStartError,
-    DateTime? CompletedAtUtc);
+    DateTime? CompletedAtUtc)
+{
+    public string? OperationId { get; init; }
+    public bool CompanyAction { get; init; }
+}
