@@ -4,6 +4,7 @@
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
@@ -14,7 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ADS\ADS.csproj" />
-    <Reference Include="Dalamud;Lumina;Lumina.Excel">
+    <Reference Include="Dalamud;Lumina;Lumina.Excel;FFXIVClientStructs">
       <HintPath>$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
       <Private>true</Private>
     </Reference>

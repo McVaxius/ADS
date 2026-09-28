@@ -1,11 +1,57 @@
 using System.Numerics;
+using System.Runtime.InteropServices;
 using ADS.Models;
 using ADS.Services;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ADS.Tests;
 
 public sealed class ShopReliabilityExpansionTests
 {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ClickReceiver
+    {
+        public AtkEventListener Listener;
+        public int Calls;
+        public int Parameter;
+        public bool ValidEventData;
+    }
+
+    [UnmanagedCallersOnly]
+    private static unsafe void ReceiveClick(AtkEventListener* listener, AtkEventType type, int parameter,
+        AtkEvent* click, AtkEventData* data)
+    {
+        var receiver = (ClickReceiver*)listener;
+        receiver->Calls++;
+        receiver->Parameter = parameter;
+        receiver->ValidEventData = data != null && click != null && click->Listener == listener &&
+            type == AtkEventType.ButtonClick;
+        if (click != null) click->Param = 999;
+    }
+
+    [Fact]
+    public unsafe void ShopButtonDispatchUsesRegisteredReceiverAndOwnedEventData()
+    {
+        var vtable = new AtkEventListener.AtkEventListenerVirtualTable { ReceiveEvent = &ReceiveClick };
+        var receiver = new ClickReceiver { Listener = new AtkEventListener { VirtualTable = &vtable } };
+        var click = new AtkEvent { Listener = &receiver.Listener, Param = 3 };
+        click.State.EventType = AtkEventType.ButtonClick;
+
+        Assert.True(GameInteractionHelper.TryDispatchRegisteredClick(&click));
+        Assert.Equal(1, receiver.Calls);
+        Assert.Equal(3, receiver.Parameter);
+        Assert.True(receiver.ValidEventData);
+        Assert.Equal(3u, click.Param); // The native receiver cannot alter the registered event.
+
+        click.State.StateFlags = AtkEventStateFlags.IsGlobalEvent;
+        Assert.False(GameInteractionHelper.TryDispatchRegisteredClick(&click));
+        click.State.StateFlags = 0;
+        click.Listener = null;
+        Assert.False(GameInteractionHelper.TryDispatchRegisteredClick(&click));
+        Assert.False(GameInteractionHelper.TryDispatchRegisteredClick(null));
+        Assert.Equal(1, receiver.Calls);
+    }
+
     [Fact]
     public void LiveMenuResolverUsesGlobalCallbackIndexAcrossNestedPath()
     {
@@ -374,25 +420,25 @@ public sealed class ShopReliabilityExpansionTests
 
         Assert.Equal(4, token.Quantity);
         Assert.False(token.TryConsumePrompt(prompt, created));
-        Assert.False(token.TryConsumeTomestonePrompt(0, prompt, created));
-        Assert.False(token.TryConsumeTomestonePrompt(13583, prompt, created));
-        Assert.False(token.TryConsumeTomestonePrompt(13582, null, created));
+        Assert.False(token.TryConsumeCurrencyPrompt(0, prompt, created));
+        Assert.False(token.TryConsumeCurrencyPrompt(13583, prompt, created));
+        Assert.False(token.TryConsumeCurrencyPrompt(13582, null, created));
         foreach (var wrongCost in new[] { "150", "599", "601", "1600", "1,600", "600.0", "600 and 4" })
-            Assert.False(token.TryConsumeTomestonePrompt(13582, prompt.Replace("600", wrongCost), created));
+            Assert.False(token.TryConsumeCurrencyPrompt(13582, prompt.Replace("600", wrongCost), created));
         Assert.False(token.IsConsumed);
-        Assert.True(token.TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10)));
-        Assert.False(token.TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10)));
+        Assert.True(token.TryConsumeCurrencyPrompt(13582, prompt, created.AddSeconds(10)));
+        Assert.False(token.TryConsumeCurrencyPrompt(13582, prompt, created.AddSeconds(10)));
         Assert.False(token.TryConsumeStructured(13582, 4,
             new Dictionary<ShopCurrencyIdentity, long> { [new(ShopCurrencyKind.Tomestone, 28)] = 600 }, created));
 
         Assert.False(new ShopConfirmationToken(offer, 4, created)
-            .TryConsumeTomestonePrompt(13582, prompt, created.AddSeconds(10).AddTicks(1)));
+            .TryConsumeCurrencyPrompt(13582, prompt, created.AddSeconds(10).AddTicks(1)));
         Assert.False(new ShopConfirmationToken(offer, 1, created)
-            .TryConsumeTomestonePrompt(13582, prompt, created));
+            .TryConsumeCurrencyPrompt(13582, prompt, created));
         Assert.True(new ShopConfirmationToken(offer, 99, created)
-            .TryConsumeTomestonePrompt(13582, prompt.Replace("600", "14,850"), created));
+            .TryConsumeCurrencyPrompt(13582, prompt.Replace("600", "14,850"), created));
         Assert.False(new ShopConfirmationToken(offer with { Offer = offer.Offer with { Kind = ShopOfferKind.GilShop } }, 4, created)
-            .TryConsumeTomestonePrompt(13582, prompt, created));
+            .TryConsumeCurrencyPrompt(13582, prompt, created));
     }
 
     private static ShopOffer Offer(bool hasUnknownGate, ShopCurrencyKind currencyKind, uint currencyItemId)

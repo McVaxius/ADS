@@ -7,6 +7,42 @@ namespace ADS.Tests;
 
 public sealed class ShopCatalogTests
 {
+    [Theory]
+    [InlineData(29u, ShopCurrencyKind.Mgp)]
+    [InlineData(21172u, ShopCurrencyKind.CurrencyManager)]
+    [InlineData(500u, ShopCurrencyKind.Item)]
+    public void LiteralSpecialShopCostsPreserveTheActualBalanceSource(uint currencyItem, ShopCurrencyKind expected)
+    {
+        var snapshot = SpecialSnapshot(7565, "Zu Hatchling", 1769626, "Minions", 1011595, "Minion Trader", 388, 10000) with
+        {
+            Items = new Dictionary<uint, ShopItemSheetRow>
+            {
+                [7565] = new(7565, "Zu Hatchling", 1, 0, false),
+                [currencyItem] = new(currencyItem, "Currency", 999, 0, false),
+            },
+            SpecialShopRows = [new SpecialShopSheetRow(1769626, "Minions", 1,
+                [(7565u, 1u, false)], [new(currencyItem, 10000, 0, 0)], 0, [], false)],
+        };
+        var resolution = ShopCatalogBuilder.Resolve(snapshot, 7565, 1);
+        var offer = Assert.Single(resolution.Offers);
+        var cost = Assert.Single(offer.Currencies);
+        Assert.Equal(expected == ShopCurrencyKind.Mgp ? ShopOfferKind.SpecialShopMgp :
+            expected == ShopCurrencyKind.CurrencyManager ? ShopOfferKind.SpecialShopCurrency : ShopOfferKind.SpecialShopItem, offer.Kind);
+        Assert.Equal(expected, cost.Kind);
+        Assert.Equal(currencyItem, cost.ItemId);
+        Assert.Equal(10000u, cost.AmountPerTransaction);
+        if (expected is ShopCurrencyKind.Mgp or ShopCurrencyKind.CurrencyManager)
+        {
+            var evaluated = new EvaluatedShopOffer(offer, null, [], true, true, true, null);
+            var now = new DateTime(2026, 9, 27, 16, 0, 0, DateTimeKind.Utc);
+            var token = new ShopConfirmationToken(evaluated, 1, now);
+            Assert.False(token.TryConsumeCurrencyPrompt(6004, "Exchange 10,000 MGP for the following item?", now));
+            Assert.False(token.TryConsumeCurrencyPrompt(7565, "Exchange 30,000 MGP for the following item?", now));
+            Assert.True(token.TryConsumeCurrencyPrompt(7565, "Exchange 10,000 MGP for the following item?", now));
+            Assert.False(token.TryConsumeCurrencyPrompt(7565, "Exchange 10,000 MGP for the following item?", now));
+        }
+    }
+
     [Fact]
     public void MapMarkerCoordinatesConvertToWorldCoordinates()
     {

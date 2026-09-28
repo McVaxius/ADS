@@ -33,7 +33,11 @@ internal static class ShopCurrencyResolver
         {
             if (!items.TryGetValue(cost.ItemOrCurrencyId, out var item))
                 return false;
-            resolved = new ShopCurrencyCost(ShopCurrencyKind.Item, item.ItemId, item.Name, cost.Amount);
+            // Gold Saucer special shops use a literal Item 29 cost. Preserve
+            // its currency identity for guarded MGP requests.
+            var kind = item.ItemId == 29 ? ShopCurrencyKind.Mgp :
+                item.ItemId == 21172 ? ShopCurrencyKind.CurrencyManager : ShopCurrencyKind.Item;
+            resolved = new ShopCurrencyCost(kind, item.ItemId, item.Name, cost.Amount);
             return true;
         }
 

@@ -413,7 +413,6 @@ public sealed unsafe class UtilityAutomationService
     public bool IsExtractMateriaRunning => activeTask == UtilityTask.ExtractMateria;
     public bool IsShopPurchaseRunning => activeTask == UtilityTask.ShopPurchase && shopPurchaseRunner.IsRunning;
     public ShopPurchaseStatusSnapshot ShopPurchaseStatus => shopPurchaseRunner.Status;
-    internal string DescribeShopNpcAvailability(uint npcId) => shopRuntime.DescribeNpcAvailability(npcId);
     internal bool HasShopPurchaseSubmission => shopPurchaseRunner.HasPurchaseSubmission;
     internal bool IsRelicPurchaseReady => shopPurchaseRuntime.IsRelicPurchaseReady;
     internal static bool TryGetInnDestination(string destination, out uint aethernetId, out uint room)
@@ -1140,6 +1139,7 @@ public sealed unsafe class UtilityAutomationService
 
     public void Update()
     {
+        shopRuntime.UpdateOwnedShopCleanup();
         if (!IsRunning)
             return;
 

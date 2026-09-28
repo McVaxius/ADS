@@ -150,29 +150,38 @@ internal static class ExchangeShopRuntimeValidator
         string expectedShopName,
         uint expectedItemId,
         uint expectedReceiveCount,
-        IReadOnlyList<ShopCurrencyCost> expectedCosts)
+        IReadOnlyList<ShopCurrencyCost> expectedCosts,
+        bool certificateShop = false)
     {
         if (values.Length <= 4 || values[4] == 0)
             return ShopUiValidationResult.NotReady("ShopExchangeCurrency rows are not populated yet.");
         var count = values[4];
-        if (count is < 1 or > 122 || values.Length < 1310 + count || receives.Length != count)
-            return ShopUiValidationResult.Mismatch("ShopExchangeCurrency has an unsupported or incomplete row layout.");
+        if (count is < 1 or > 122 || values.Length < 1310 + count ||
+            (!certificateShop && receives.Length != count) ||
+            (certificateShop && (values[3] != receives.Length || receives.Length is < 1 or > 122)))
+            return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency has an unsupported or incomplete row layout: values={values.Length}, rows={count}, receives={receives.Length}.");
         if (currencyItemId == 0 || expectedCosts.Count != 1 || expectedCosts[0].ItemId != currencyItemId)
             return ShopUiValidationResult.Mismatch("ShopExchangeCurrency's displayed currency does not uniquely match the expected currency item.");
+        if (certificateShop && expectedCosts[0].Identity != new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172))
+            return ShopUiValidationResult.Mismatch("The combined Jonathas shop requires Achievement Certificates only.");
 
         var costs = new ShopRuntimeCostValue[(int)count];
+        var visibleReceives = new ShopRuntimeExchangeItem[(int)count];
         var callbacks = new HashSet<long>();
         for (var row = 0; row < count; row++)
         {
             var price = values[456 + row];
             var callback = values[1310 + row];
-            if (values[1066 + row] != receives[row].ItemId || price is <= 0 or > uint.MaxValue
-                || callback < 0 || callback >= count || !callbacks.Add(callback))
+            if (callback < 0 || callback >= receives.Length || !callbacks.Add(callback))
+                return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency row {row} has an invalid or duplicate callback index.");
+            var receive = receives[certificateShop ? (int)callback : row];
+            if (values[1066 + row] != receive.ItemId || price is <= 0 or > uint.MaxValue)
                 return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency row {row} has inconsistent item, price, or callback data.");
+            visibleReceives[row] = receive;
             costs[row] = new(currencyItemId, (uint)price);
         }
-        var result = Validate(runtimeShopName, receives, costs, expectedShopName,
-            expectedItemId, expectedReceiveCount, expectedCosts);
+        var result = Validate(runtimeShopName, visibleReceives, costs, expectedShopName,
+            expectedItemId, expectedReceiveCount, expectedCosts, requireShopName: !certificateShop);
         return result.State == ShopUiValidationState.Valid
             ? result with { RuntimeRow = (int)values[1310 + result.RuntimeRow] }
             : result;
@@ -185,11 +194,12 @@ internal static class ExchangeShopRuntimeValidator
         string expectedShopName,
         uint expectedItemId,
         uint expectedReceiveCount,
-        IReadOnlyList<ShopCurrencyCost> expectedCosts)
+        IReadOnlyList<ShopCurrencyCost> expectedCosts,
+        bool requireShopName = true)
     {
-        if (string.IsNullOrWhiteSpace(runtimeShopName))
+        if (requireShopName && string.IsNullOrWhiteSpace(runtimeShopName))
             return ShopUiValidationResult.NotReady("AgentShop has not populated its active SpecialShop name yet.");
-        if (!string.Equals(runtimeShopName, expectedShopName, StringComparison.Ordinal))
+        if (requireShopName && !string.Equals(runtimeShopName, expectedShopName, StringComparison.Ordinal))
         {
             return ShopUiValidationResult.Mismatch(
                 $"AgentShop SpecialShop name '{runtimeShopName}' does not match expected '{expectedShopName}'.");
@@ -260,9 +270,12 @@ internal interface IShopPurchaseRuntime
     bool HasLifestream { get; }
     bool HasUnexpectedConfirmation { get; }
     bool IsSelectionMenuVisible { get; }
+    bool IsTalkVisible => false;
+    bool TryAdvanceAchievementDialogue() => false;
     bool IsAnyShopVisible { get; }
     string? ShopListCleanupBlocker => IsAnyShopVisible || IsSelectionMenuVisible || HasUnexpectedConfirmation ? "shop UI remains open" : null;
     void ContinueShopListCleanup() { }
+    void UpdateOwnedShopCleanup() { }
 
     bool IsAetheryteUnlocked(uint aetheryteId);
     bool IsQuestComplete(uint questId);
@@ -271,6 +284,7 @@ internal interface IShopPurchaseRuntime
     long GetInventoryCapacity(uint itemId, uint stackSize);
     bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition);
     bool TryTeleport(ResolvedShopRoute route);
+    bool TryAethernetTransfer(ResolvedShopRoute route) => false;
     bool PrepareNavigation(Vector3 destination) => true;
     bool TryMove(Vector3 destination, string label);
     ShopNavigationStopResult TryStopNavigation();
@@ -311,6 +325,11 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private DateTime nextRelicUiCleanupUtc;
     private DateTime nextCompanyActionInventoryUtc;
     private bool companyActionUiOwned;
+    private ulong shopUiCharacter;
+    private ulong shopUiNpc;
+    private bool achievementExchangeSelected;
+    private bool achievementCategorySelected;
+    private DateTime ownedUiCleanupUntil;
 
     public ulong FreeCompanyId => InfoProxyFreeCompany.Instance() == null ? 0 : InfoProxyFreeCompany.Instance()->Id;
     public byte FreeCompanyGrandCompany => InfoProxyFreeCompany.Instance() == null ? (byte)0 : (byte)InfoProxyFreeCompany.Instance()->GrandCompany;
@@ -403,9 +422,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             => GameInteractionHelper.TryFireAddonCallback(AddonName, true, 0, runtimeRow, transactionCount);
     }
 
-    private sealed class TomestoneExchangeShopUiAdapter : IShopUiAdapter
+    private sealed class CurrencyExchangeShopUiAdapter(ShopOfferKind kind) : IShopUiAdapter
     {
-        public ShopOfferKind Kind => ShopOfferKind.SpecialShopTomestone;
+        public ShopOfferKind Kind => kind;
         public string AddonName => "ShopExchangeCurrency";
         public ShopUiValidationResult Validate(EvaluatedShopOffer offer)
             => ValidateExchangeShop(offer);
@@ -427,7 +446,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     [
         new GilShopUiAdapter(),
         new ItemExchangeShopUiAdapter(),
-        new TomestoneExchangeShopUiAdapter(),
+        new CurrencyExchangeShopUiAdapter(ShopOfferKind.SpecialShopTomestone),
+        new CurrencyExchangeShopUiAdapter(ShopOfferKind.SpecialShopMgp),
+        new CurrencyExchangeShopUiAdapter(ShopOfferKind.SpecialShopCurrency),
         new MixedExchangeShopUiAdapter(),
     ];
 
@@ -563,10 +584,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             return currency.Kind switch
             {
                 ShopCurrencyKind.Gil => manager->GetGil(),
+                ShopCurrencyKind.Mgp => Math.Max(0, manager->GetInventoryItemCount(29, false, false, false)),
                 ShopCurrencyKind.Item => Math.Max(0, manager->GetInventoryItemCount(currency.ItemId, false, false, false)),
                 ShopCurrencyKind.Tomestone => manager->GetTomestoneCount(currency.ItemId),
                 ShopCurrencyKind.CompanySeal
-                    or ShopCurrencyKind.Mgp
                     or ShopCurrencyKind.WolfMark
                     or ShopCurrencyKind.AlliedSeal
                     or ShopCurrencyKind.CurrencyManager => GetManagedCurrency(currency.ItemId),
@@ -679,6 +700,23 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (!route.RequiresTeleport || string.IsNullOrWhiteSpace(route.AetheryteName))
             return false;
         return GameInteractionHelper.TrySendChatCommand(commandManager, $"/li {route.AetheryteName}", log);
+    }
+
+    public bool TryAethernetTransfer(ResolvedShopRoute route)
+    {
+        if (route.AethernetId == 0 || CurrentTerritoryId != route.TransferTerritoryId || IsBetweenAreas) return false;
+        try
+        {
+            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc() ||
+                Plugin.PluginInterface.GetIpcSubscriber<uint>("Lifestream.GetActiveAetheryte").InvokeFunc() != route.AetheryteId)
+                return false;
+            return Plugin.PluginInterface.GetIpcSubscriber<uint, bool>("Lifestream.AethernetTeleportById").InvokeFunc(route.AethernetId);
+        }
+        catch (Exception ex)
+        {
+            log.Debug(ex, "[ADS][Shop] Lifestream aethernet transfer was unavailable.");
+            return false;
+        }
     }
 
     public bool PrepareNavigation(Vector3 destination)
@@ -817,7 +855,12 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             nearestDistance = distance;
         }
 
-        return nearest != null && GameInteractionHelper.TryInteractWithObject(targetManager, nearest, log);
+        if (nearest == null || !GameInteractionHelper.TryInteractWithObject(targetManager, nearest, log)) return false;
+        shopUiCharacter = CharacterId;
+        shopUiNpc = nearest.GameObjectId;
+        achievementExchangeSelected = achievementCategorySelected = false;
+        ownedUiCleanupUntil = default;
+        return true;
     }
 
     public bool IsExpectedShopVisible(ShopOfferKind kind)
@@ -844,6 +887,13 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public bool TrySelectMenu(ShopMenuPathStep step, uint npcId)
     {
+        // Jonathas enters his CustomTalk directly. A unique, localized exchange
+        // entry proves that this outer handler is already open; do not guess a
+        // callback for the ENpcData sheet index.
+        if (npcId == 1008145 && step.Kind == ShopMenuPathStepKind.ENpcData && step.HandlerId == 721003 &&
+            TrySelectAchievementExchange(select: false)) return true;
+        if (npcId == 1008145 && step.Kind == ShopMenuPathStepKind.CustomTalkSpecialLink && step.HandlerId == 1769813)
+            return TrySelectAchievementExchange();
         if (step.Kind == ShopMenuPathStepKind.CompanyActionPurchase)
         {
             // The exchange row is validated independently before any purchase callback.
@@ -891,10 +941,100 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         }
     }
 
+    public bool IsTalkVisible => GameInteractionHelper.IsAddonVisible("Talk");
+
+    private bool OwnsAchievementDialogue => shopUiCharacter != 0 && CharacterId == shopUiCharacter &&
+        targetManager.Target?.GameObjectId == shopUiNpc && targetManager.Target.BaseId == 1008145;
+
+    public bool TryAdvanceAchievementDialogue()
+    {
+        if (!OwnsAchievementDialogue || !condition[ConditionFlag.OccupiedInQuestEvent]) return false;
+        var talk = RaptureAtkUnitManager.Instance()->GetAddonByName("Talk");
+        if (talk == null || !talk->IsVisible || !talk->IsReady) return false;
+        new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.Talk(talk).Click();
+        return true;
+    }
+
+    private bool TrySelectAchievementExchange(bool select = true)
+    {
+        if (!OwnsAchievementDialogue) return false;
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("SelectString");
+        if (addon == null || !addon->IsVisible || !addon->IsReady) return false;
+        var text = Plugin.DataManager.GameData.Excel.GetSheet<Lumina.Excel.RawRow>(
+            name: "custom/001/CmnDefAchievementReward_00107").GetRow(5).ReadStringColumn(1).ToString().Trim();
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var menu = new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.SelectString(addon);
+        var entries = menu.Entries;
+        var matches = Enumerable.Range(0, menu.EntryCount).Where(index => entries[index].Text.Trim() == text).ToArray();
+        if (matches.Length != 1)
+        {
+            log.Debug("[ADS][Shop] Jonathas exchange entry not unique; expected={Expected}; entries={Entries}",
+                text, string.Join(" | ", entries.Select(entry => entry.Text)));
+            return false;
+        }
+        if (!select) return true;
+        log.Debug("[ADS][Shop] Jonathas exchange matched localized live menu entry {Index}.", matches[0]);
+        achievementExchangeSelected = TrySelectMenu(matches[0]);
+        return achievementExchangeSelected;
+    }
+
+    private ShopUiValidationResult EnsureAchievementCategory(uint itemId)
+    {
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+        var agent = AgentShop.Instance();
+        if (addon == null || !addon->IsVisible || !addon->IsReady || agent == null || !agent->IsAddonReady())
+            return ShopUiValidationResult.NotReady("The certificate shop is still opening.");
+        if (Plugin.DataManager.GetExcelSheet<Item>().GetRow(itemId).ItemAction.Value.Action.Value.RowId != 853)
+            return ShopUiValidationResult.Mismatch("Certificate acquisition currently supports minion items only.");
+
+        // Observed Jonathas layout: radio nodes 8..11 are Weapons, Armor,
+        // Accessories, Others. Minions use Others, independently of UI language.
+        var node = addon->GetNodeById(11);
+        var tab = node == null || !node->IsVisible() ? null : node->GetAsAtkComponentRadioButton();
+        if (tab == null)
+            return ShopUiValidationResult.Mismatch("The certificate shop's Others tab is unavailable.");
+        if (!tab->IsSelected && !achievementCategorySelected)
+        {
+            if (!tab->AtkComponentButton.IsEnabled ||
+                !GameInteractionHelper.TryClickAddonNodeButton("ShopExchangeCurrency", 11, Plugin.GameGui, log))
+                return ShopUiValidationResult.Mismatch("The certificate shop's Others tab could not be selected.");
+            achievementCategorySelected = true;
+            log.Information("[ADS][Shop] Dispatched certificate Others tab click; awaiting visible minion rows.");
+            return ShopUiValidationResult.NotReady("Waiting for the certificate shop's Others rows.");
+        }
+        // The registered event changes the native rows without toggling the
+        // radio's cosmetic checked flag. Read the actual item/price/callback
+        // rows below; never infer category readiness from dispatch alone.
+        var filterNode = addon->GetNodeById(12);
+        var recentFilter = filterNode == null || !filterNode->IsVisible() ? null : filterNode->GetAsAtkComponentCheckBox();
+        if (recentFilter == null)
+            return ShopUiValidationResult.Mismatch("The certificate shop's recent-items filter is unavailable.");
+        if (recentFilter->IsChecked)
+        {
+            if (!GameInteractionHelper.TryClickAddonNodeButton("ShopExchangeCurrency", 12, Plugin.GameGui, log))
+                return ShopUiValidationResult.Mismatch("The certificate shop's recent-items filter could not be cleared.");
+            return ShopUiValidationResult.NotReady("Waiting for all certificate rewards to become visible.");
+        }
+        if (addon->AtkValues == null || addon->AtkValuesCount <= 4)
+            return ShopUiValidationResult.NotReady("Waiting for certificate category rows.");
+        var visibleCount = ReadUnsigned(addon->AtkValues[4]);
+        if (visibleCount is < 1 or > 122 || addon->AtkValuesCount < 1066 + visibleCount)
+            return ShopUiValidationResult.NotReady("Waiting for certificate category rows.");
+        for (var index = 0; index < visibleCount; index++)
+            if (ReadUnsigned(addon->AtkValues[1066 + index]) == itemId) return ShopUiValidationResult.Valid(-1);
+        return ShopUiValidationResult.NotReady("The certificate Others tab has not exposed the requested minion; no purchase submitted.");
+    }
     public ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer)
     {
         if (HasUnexpectedConfirmation)
             return ShopUiValidationResult.Mismatch("An unexpected confirmation dialog appeared; ADS will not accept it.");
+        if (offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency)
+        {
+            if (offer.Offer.ShopId != 1769813 || offer.Offer.NpcId != 1008145 || !OwnsAchievementDialogue || !achievementExchangeSelected)
+                return ShopUiValidationResult.Mismatch("The certificate shop requires ADS's owned Jonathas exchange dialogue.");
+            var category = EnsureAchievementCategory(offer.Offer.ReceiveItemId);
+            if (category.State != ShopUiValidationState.Valid) return category;
+        }
         if (offer.Offer.Kind == ShopOfferKind.InclusionShop)
             return ValidateInclusionShop(offer);
         if (offer.Offer.Kind == ShopOfferKind.GrandCompanyShop)
@@ -977,7 +1117,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         if (!GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)
             || string.IsNullOrWhiteSpace(prompt)
-            || (offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone && !TryGetSelectYesNoExchangeItemId(out _)))
+            || (offer.Offer.Kind is ShopOfferKind.SpecialShopTomestone or ShopOfferKind.SpecialShopMgp or ShopOfferKind.SpecialShopCurrency && !TryGetSelectYesNoExchangeItemId(out _)))
         {
             WarnUnreadableOwnedSelectYesno(token);
             return true;
@@ -1005,14 +1145,14 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 return false;
             }
             uint displayedItemId = 0;
-            var tomestoneExchange = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone;
-            if (tomestoneExchange && !TryGetSelectYesNoExchangeItemId(out displayedItemId))
+            var currencyExchange = offer.Offer.Kind is ShopOfferKind.SpecialShopTomestone or ShopOfferKind.SpecialShopMgp or ShopOfferKind.SpecialShopCurrency;
+            if (currencyExchange && !TryGetSelectYesNoExchangeItemId(out displayedItemId))
             {
                 WarnUnreadableOwnedSelectYesno(token);
                 return false;
             }
-            var matches = tomestoneExchange
-                ? token.TryConsumeTomestonePrompt(displayedItemId, prompt, now)
+            var matches = currencyExchange
+                ? token.TryConsumeCurrencyPrompt(displayedItemId, prompt, now)
                 : token.TryConsumePrompt(prompt, now);
             if (!matches)
             {
@@ -1064,8 +1204,17 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public void CloseOwnedShopUi()
     {
-        foreach (var adapter in UiAdapters)
-            CloseShopAddon(adapter.AddonName);
+        if (shopUiCharacter != 0 && (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc))
+            return;
+        ownedUiCleanupUntil = shopUiCharacter == 0 ? default : DateTime.UtcNow.AddSeconds(10);
+        CloseShopUiOnce();
+    }
+
+    private void CloseShopUiOnce()
+    {
+        if (IsTalkVisible) TryAdvanceAchievementDialogue();
+        foreach (var addon in UiAdapters.Select(adapter => adapter.AddonName).Distinct())
+            CloseShopAddon(addon);
         CloseShopAddon("InclusionShop");
         CloseShopAddon("GrandCompanyExchange");
         CloseShopAddon("FreeCompanyCreditShop");
@@ -1092,10 +1241,30 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     internal void ContinueRelicUiCleanup()
     {
+        if (shopUiCharacter != 0 && (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc))
+            return;
         // Closing an exchange can return to its parent menu on a later frame.
         // The opt-in test owns a ten-second cleanup phase, including after reload.
-        if (DateTime.UtcNow >= nextRelicUiCleanupUtc && (IsAnyShopVisible || IsSelectionMenuVisible))
-            CloseOwnedShopUi();
+        if (DateTime.UtcNow >= nextRelicUiCleanupUtc && (IsAnyShopVisible || IsSelectionMenuVisible || IsTalkVisible))
+            CloseShopUiOnce();
+    }
+
+    public void UpdateOwnedShopCleanup()
+    {
+        if (ownedUiCleanupUntil == default) return;
+        if (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc || IsBetweenAreas)
+        { ownedUiCleanupUntil = default; return; }
+        if (DateTime.UtcNow >= ownedUiCleanupUntil)
+        {
+            if (IsAnyShopVisible || IsSelectionMenuVisible || condition[ConditionFlag.OccupiedInQuestEvent])
+                log.Warning("[ADS][Shop] Owned vendor cleanup exceeded ten seconds; leaving the remaining UI untouched.");
+            ownedUiCleanupUntil = default;
+            return;
+        }
+        if (DateTime.UtcNow < nextRelicUiCleanupUtc) return;
+        if (!IsAnyShopVisible && !IsSelectionMenuVisible && !condition[ConditionFlag.OccupiedInQuestEvent])
+        { ownedUiCleanupUntil = default; return; }
+        ContinueRelicUiCleanup();
     }
 
     private void CloseShopAddon(string name)
@@ -1104,7 +1273,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (addon == null || !addon->IsVisible)
             return;
         // Send the shop's cancel response; Close(true) can leave its NPC event active.
-        addon->FireCallbackInt(-1);
+        GameInteractionHelper.TryFireAddonCallback(name, true, -1);
         log.Debug("[ADS][Shop] Dispatched shop cancel callback for {Addon}.", name);
     }
 
@@ -1543,7 +1712,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         var runtimeReceives = new ShopRuntimeExchangeItem[receives.Length];
         for (var index = 0; index < receives.Length; index++)
             runtimeReceives[index] = new ShopRuntimeExchangeItem(receives[index].ItemId, receives[index].ItemCount);
-        if (offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone)
+        if (offer.Offer.Kind is ShopOfferKind.SpecialShopTomestone or ShopOfferKind.SpecialShopMgp or ShopOfferKind.SpecialShopCurrency)
         {
             if (offer.Offer.AllOutputs.Count != 1)
                 return ShopUiValidationResult.Mismatch("ShopExchangeCurrency cannot validate a multi-output exchange.");
@@ -1554,11 +1723,21 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             var currencies = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()
                 .Where(item => item.Icon == icon).Take(2).ToArray();
             var currencyId = icon > 0 && currencies.Length == 1 ? currencies[0].RowId : 0;
-            var values = new long[Math.Min(1432, (int)addon->AtkValuesCount)];
+            var values = new long[Math.Min(3400, (int)addon->AtkValuesCount)];
             for (var index = 0; index < values.Length; index++)
                 values[index] = ReadSigned(addon->AtkValues[index]);
-            return ExchangeShopRuntimeValidator.ValidateCurrency(values, agent->ShopName.ToString(), runtimeReceives,
-                currencyId, offer.Offer.ShopName, offer.Offer.ReceiveItemId, offer.Offer.ReceiveCount, offer.Offer.Currencies);
+            var currencyValidation = ExchangeShopRuntimeValidator.ValidateCurrency(values, agent->ShopName.ToString(), runtimeReceives,
+                currencyId, offer.Offer.ShopName, offer.Offer.ReceiveItemId, offer.Offer.ReceiveCount, offer.Offer.Currencies,
+                certificateShop: offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency);
+            if (currencyValidation.State == ShopUiValidationState.Mismatch && offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency)
+                Plugin.Log.Information("[ADS][Shop] Certificate layout snapshot: valuesCount={Count}, name={Name}, icon={Icon}, currency={Currency}, header={Header}, receives={Receives}, rows={Rows}, targetOffsets={Offsets}",
+                    addon->AtkValuesCount, agent->ShopName.ToString(), icon, currencyId,
+                    string.Join(",", values.Take(100).Select((value, index) => $"{index}:{value}").Where(value => !value.EndsWith(":0") && !value.EndsWith(":-1"))),
+                    string.Join(",", runtimeReceives.Take(64).Select((item, index) => $"{index}:{item.ItemId}x{item.ItemCount}")),
+                    string.Join(";", Enumerable.Range(0, Math.Min(64, runtimeReceives.Length)).Where(index => 1310 + index < values.Length)
+                        .Select(index => $"{index}:id={values[1066 + index]},price={values[456 + index]},callback={values[1310 + index]}")),
+                    string.Join(",", values.Select((value, index) => (value, index)).Where(entry => entry.value == offer.Offer.ReceiveItemId).Select(entry => entry.index)));
+            return currencyValidation;
         }
         var runtimeCosts = new ShopRuntimeCostValue[costs.Length];
         for (var index = 0; index < costs.Length; index++)

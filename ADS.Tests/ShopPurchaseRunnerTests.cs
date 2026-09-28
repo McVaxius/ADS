@@ -6,6 +6,87 @@ namespace ADS.Tests;
 
 public sealed class ShopPurchaseRunnerTests
 {
+    [Fact]
+    public void CertificateVisibleRowsMustMatchTheirGlobalReceiveAndCurrency()
+    {
+        var values = new long[3325];
+        values[3] = 3; values[4] = 2;
+        values[1066] = 7561; values[456] = 2; values[1310] = 2;
+        values[1067] = 6212; values[457] = 2; values[1311] = 1;
+        ShopRuntimeExchangeItem[] receives = [new(7545, 1), new(6212, 1), new(7561, 1)];
+        ShopCurrencyCost[] costs = [new(ShopCurrencyKind.CurrencyManager, 21172, "Achievement Certificate", 2)];
+        ShopUiValidationResult Validate(bool certificate = true) => ExchangeShopRuntimeValidator.ValidateCurrency(values, "", receives,
+            21172, "Special Shop 1769813", 7561, 1, costs, certificate);
+        Assert.Equal(ShopUiValidationState.Valid, Validate().State);
+        Assert.Equal(2, Validate().RuntimeRow);
+        Assert.NotEqual(ShopUiValidationState.Valid, Validate(false).State);
+        values[1310] = 1;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[1310] = 2; values[456] = 3;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+        values[456] = 2; values[3] = 4;
+        Assert.Equal(ShopUiValidationState.Mismatch, Validate().State);
+    }
+
+    [Theory]
+    [InlineData("arrived", true)]
+    [InlineData("stuck-at-main", false)]
+    [InlineData("character-changed", false)]
+    [InlineData("cancelled", false)]
+    public void JonathasTransferRequiresActualOldGridaniaArrival(string scenario, bool succeeds)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, AethernetArrives = scenario != "stuck-at-main" };
+        var offer = Offer(1769813, 1008145, 1, 133) with
+        { AetheryteRoutes = [new(2, "Gridania", Vector3.Zero, 100, 132, 27)] };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        DriveUntil(runner, () => runner.Status.Phase == "teleporting");
+        Assert.Equal(132u, runtime.CurrentTerritoryId);
+        Assert.Empty(runtime.InteractedNpcIds);
+        if (scenario == "character-changed") runtime.CharacterId++;
+        if (scenario == "cancelled") runner.Cancel("FULL STOP");
+        DriveWithTime(runner, clock);
+        Assert.Equal(succeeds, runner.Status.Succeeded);
+        Assert.Equal(1, runtime.TeleportCount);
+        Assert.Equal(scenario is "arrived" or "stuck-at-main" ? 1 : 0, runtime.AethernetTransfers);
+        if (!succeeds) { Assert.Empty(runtime.InteractedNpcIds); Assert.Equal(0, runtime.SubmitCount); }
+    }
+
+    [Theory]
+    [InlineData("claimed", true)]
+    [InlineData("no-award", false)]
+    [InlineData("spent-during-dialogue", false)]
+    [InlineData("cancelled", false)]
+    [InlineData("owner-refused", false)]
+    public void CertificateVisitRequiresActualFundsAndAGuardedReceipt(string scenario, bool succeeds)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var currency = new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172);
+        runtime.SetCurrency(currency, scenario == "spent-during-dialogue" ? 4 : 0);
+        var offer = Offer(1769813, 1008145, 1) with
+        { Currencies = [new(ShopCurrencyKind.CurrencyManager, 21172, "Achievement Certificate", 2)] };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        long quotedBalance = -1;
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { ClaimAchievementCertificates = true }, false, currency,
+            quote => { quotedBalance = quote.CurrencyBefore; if (scenario == "owner-refused") throw new InvalidOperationException("cap exhausted"); }, _ => { }));
+        DriveUntil(runner, () => runner.Status.Phase == "opening-menu");
+        if (scenario != "no-award") runtime.SetCurrency(currency, scenario == "spent-during-dialogue" ? 3 : 6);
+        if (scenario == "cancelled") runner.Cancel("FULL STOP");
+        DriveWithTime(runner, clock);
+        Assert.Equal(succeeds, runner.Status.Succeeded);
+        Assert.Equal(succeeds ? 1 : 0, runtime.SubmitCount);
+        Assert.True(runtime.CloseUiCount > 0);
+        if (succeeds)
+        {
+            Assert.Equal(6, quotedBalance);
+            Assert.Equal(6, runner.Status.AchievementCertificatesClaimed);
+            Assert.Equal(4, runtime.GetAvailableCurrency(offer.Currencies[0]));
+            Assert.Equal(1, runner.VerifiedAcquiredQuantity);
+        }
+    }
+
     [Theory]
     [InlineData("success")]
     [InlineData("missing-credit-delta")]
@@ -159,6 +240,27 @@ public sealed class ShopPurchaseRunnerTests
         Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
         Assert.Null(runner.Status.OperationId);
         runner.Cancel("End test");
+    }
+
+    [Fact]
+    public void SinglePurchaseContinuesOwnedCleanupAfterItsVerifiedResult()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        Assert.True(utility.StartShopPurchase(new(100, 1)));
+        for (var tick = 0; tick < 100 && utility.IsRunning; tick++) utility.Update();
+        Assert.True(utility.ShopPurchaseStatus.Succeeded);
+        Assert.False(utility.IsRunning);
+        var submissions = runtime.SubmitCount;
+        // The NPC returns its parent menu after the exchange close completed.
+        runtime.IsSelectionMenuVisible = true;
+        runtime.OwnedCleanupUpdate = runtime.CloseOwnedShopUi;
+        utility.Update();
+        Assert.False(runtime.IsSelectionMenuVisible);
+        Assert.Equal(submissions, runtime.SubmitCount);
+        Assert.Equal(1, utility.ShopPurchaseStatus.AcquiredQuantity);
+        Assert.True(utility.ShopPurchaseStatus.Succeeded);
     }
 
     [Fact]
@@ -1997,6 +2099,8 @@ public sealed class ShopPurchaseRunnerTests
 
     private sealed class FakeRuntime : IShopPurchaseRuntime
     {
+        public Action? OwnedCleanupUpdate { get; set; }
+        public void UpdateOwnedShopCleanup() => OwnedCleanupUpdate?.Invoke();
         private readonly Dictionary<ShopCurrencyIdentity, long> currencies = new()
         {
             [new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500)] = 10_000,
@@ -2040,6 +2144,8 @@ public sealed class ShopPurchaseRunnerTests
         private readonly Dictionary<uint, long> additionalItemCounts = [];
         public int SubmitCount { get; private set; }
         public int TeleportCount { get; private set; }
+        public int AethernetTransfers { get; private set; }
+        public bool AethernetArrives { get; set; } = true;
         public int MoveCount { get; private set; }
         public int StopNavigationCount { get; private set; }
         public int CloseUiCount { get; private set; }
@@ -2087,8 +2193,15 @@ public sealed class ShopPurchaseRunnerTests
             Events.Add($"teleport:{route.AetheryteId}");
             var accepted = TeleportResults.Count == 0 || TeleportResults.Dequeue();
             if (accepted && (TeleportArrivalResults.Count == 0 || TeleportArrivalResults.Dequeue()))
-                CurrentTerritoryId = route.TerritoryId;
+                CurrentTerritoryId = route.TransferTerritoryId != 0 ? route.TransferTerritoryId : route.TerritoryId;
             return accepted;
+        }
+
+        public bool TryAethernetTransfer(ResolvedShopRoute route)
+        {
+            AethernetTransfers++;
+            if (AethernetArrives) CurrentTerritoryId = route.TerritoryId;
+            return true;
         }
 
         public bool TryMove(Vector3 destination, string label)

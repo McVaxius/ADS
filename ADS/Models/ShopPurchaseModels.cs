@@ -24,6 +24,7 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
 {
     public string? OperationId { get; init; }
     public bool CompanyAction { get; init; }
+    public bool ClaimAchievementCertificates { get; init; }
     public const int MaximumQuantity = 9_999;
 
     public static bool TryCreate(uint itemId, int quantity, out ShopPurchaseRequest request, out string error)
@@ -96,6 +97,8 @@ public enum ShopOfferKind
     GrandCompanyShop,
     FreeCompanyShop,
     CompanyActionShop,
+    SpecialShopMgp,
+    SpecialShopCurrency,
 }
 
 public enum ShopCurrencyKind
@@ -397,7 +400,9 @@ internal sealed record ShopRouteCandidate(
     uint AetheryteId,
     string AetheryteName,
     Vector3 Position,
-    float DistanceToNpc);
+    float DistanceToNpc,
+    uint TransferTerritoryId = 0,
+    uint AethernetId = 0);
 
 internal sealed record ShopOfferOutput(
     uint ItemId,
@@ -465,7 +470,9 @@ internal sealed record ResolvedShopRoute(
     uint AetheryteId,
     string AetheryteName,
     float RouteDistance,
-    bool RequiresFloorResolution = false);
+    bool RequiresFloorResolution = false,
+    uint TransferTerritoryId = 0,
+    uint AethernetId = 0);
 
 internal sealed record EvaluatedShopCurrency(
     ShopCurrencyCost Currency,
@@ -539,4 +546,5 @@ public sealed record ShopPurchaseStatusSnapshot(
 {
     public string? OperationId { get; init; }
     public bool CompanyAction { get; init; }
+    public long AchievementCertificatesClaimed { get; init; }
 }

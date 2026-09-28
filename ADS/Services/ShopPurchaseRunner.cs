@@ -83,12 +83,14 @@ internal sealed class ShopPurchaseRunner
     private Func<ShopPurchaseCheckpoint, bool>? confirmationGuard;
     private ShopPurchaseCheckpoint? callbackCheckpoint;
     private bool teleportCommandAccepted;
+    private bool aethernetTransferAccepted;
     private bool navigationOwned;
     private System.Numerics.Vector3? navigationDestination;
     private bool navigationUsingLiveNpc;
     private Action? navigationStoppedContinuation;
     private bool shopUiOwned;
     private bool interactionSent;
+    private long achievementCertificatesClaimed;
     private int callbackTransactions;
     private long callbackItemCountBefore;
     private IReadOnlyDictionary<uint, long> callbackOutputsBefore = new Dictionary<uint, long>();
@@ -124,7 +126,7 @@ internal sealed class ShopPurchaseRunner
 
     public bool IsRunning => status.Running;
     internal int VerifiedAcquiredQuantity { get; private set; }
-    public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction };
+    public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction, AchievementCertificatesClaimed = achievementCertificatesClaimed };
     internal string? LastStartFailureCode => lastStartFailureCode;
     internal bool HasPurchaseSubmission => anyPurchaseCallbackSent || callbackCheckpoint != null;
 
@@ -265,6 +267,9 @@ internal sealed class ShopPurchaseRunner
             return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
         if (IsRunning)
             return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
+        if (purchaseRequest.ClaimAchievementCertificates && (purchaseRequest.CompanyAction ||
+            requiredCurrency != new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172)))
+            return RejectStart("Certificate claiming requires an exact Achievement Certificate purchase.", ShopPurchaseFailureCodes.InvalidRequest);
         if (isDutyOwned() || isInnEntryRunning())
             return RejectStart("Cannot start a shop purchase while ADS owns a duty or inn entry is active.", ShopPurchaseFailureCodes.Busy);
         if (!runtime.IsPlayerAvailable)
@@ -275,7 +280,7 @@ internal sealed class ShopPurchaseRunner
             runtime.GetCompanyActionCount(purchaseRequest.ItemId) < 0))
             return RejectStart("Company action purchases require readable FC action inventory and at most 16 actions.", ShopPurchaseFailureCodes.InvalidRequest);
         var reusableOwnedShopVisible = shopUiOwned && runtime.IsAnyShopVisible;
-        if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible
+        if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible || runtime.IsTalkVisible
             || (!reusableOwnedShopVisible && runtime.IsAnyShopVisible))
             return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.", ShopPurchaseFailureCodes.UiMismatch);
 
@@ -331,6 +336,7 @@ internal sealed class ShopPurchaseRunner
         navigationStoppedContinuation = null;
         shopUiOwned = false;
         interactionSent = false;
+        achievementCertificatesClaimed = 0;
         callbackTransactions = 0;
         callbackOutputsBefore = new Dictionary<uint, long>();
         callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
@@ -404,8 +410,12 @@ internal sealed class ShopPurchaseRunner
                 return;
             }
 
-            if (request.CompanyAction && (runtime.CharacterId != companyActionOwner ||
-                runtime.FreeCompanyId == 0 || runtime.FreeCompanyId != companyActionFreeCompany))
+            if (runtime.CharacterId != companyActionOwner)
+            {
+                Cancel("Character changed during shop purchasing.");
+                return;
+            }
+            if (request.CompanyAction && (runtime.FreeCompanyId == 0 || runtime.FreeCompanyId != companyActionFreeCompany))
             {
                 Cancel("Character or Free Company changed during company action purchasing.");
                 return;
@@ -578,6 +588,7 @@ internal sealed class ShopPurchaseRunner
     private void BeginTeleport()
     {
         teleportCommandAccepted = false;
+        aethernetTransferAccepted = false;
         SetPhase(RunnerPhase.Teleporting, $"Teleporting to {selected!.Route!.AetheryteName} for {selected.Offer.NpcName}.");
         TryTeleportNow();
     }
@@ -609,7 +620,17 @@ internal sealed class ShopPurchaseRunner
         }
 
         if (teleportCommandAccepted)
+        {
+            if (!aethernetTransferAccepted && selected.Route.AethernetId != 0 &&
+                runtime.CurrentTerritoryId == selected.Route.TransferTerritoryId && clock.UtcNow - lastActionAtUtc >= ActionRetryDelay)
+            {
+                lastActionAtUtc = clock.UtcNow;
+                aethernetTransferAccepted = runtime.TryAethernetTransfer(selected.Route);
+                if (aethernetTransferAccepted)
+                    diagnostic($"Aethernet transfer {selected.Route.AethernetId} accepted; awaiting actual arrival in {selected.Route.TerritoryId}.");
+            }
             return;
+        }
 
         if (phaseAttempts >= MaximumAttempts && clock.UtcNow - lastActionAtUtc >= ActionRetryDelay)
         {
@@ -923,7 +944,7 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (runtime.IsExpectedShopVisible(selected.Offer.Kind) || runtime.IsSelectionMenuVisible)
+        if (runtime.IsExpectedShopVisible(selected.Offer.Kind) || runtime.IsSelectionMenuVisible || runtime.IsTalkVisible)
         {
             if (!interactionSent)
             {
@@ -1019,6 +1040,16 @@ internal sealed class ShopPurchaseRunner
         if (clock.UtcNow - phaseStartedAtUtc > ShopOpeningTimeout)
         {
             TryFallbackOrFail(ShopPurchaseFailureCodes.Timeout, "The supported shop addon did not open in time.");
+            return;
+        }
+
+        if (runtime.IsTalkVisible && request.ClaimAchievementCertificates && selected.Offer.NpcId == 1008145)
+        {
+            if (clock.UtcNow - lastActionAtUtc >= ActionRetryDelay)
+            {
+                lastActionAtUtc = clock.UtcNow;
+                runtime.TryAdvanceAchievementDialogue();
+            }
             return;
         }
 
@@ -1360,7 +1391,10 @@ internal sealed class ShopPurchaseRunner
         var nextResolution = purchaseRequest.CompanyAction
             ? catalog.ResolveCompanyAction(purchaseRequest.ItemId, purchaseRequest.Quantity, runtime.FreeCompanyGrandCompany)
             : catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
-        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(purchaseRequest.CompanyAction), requiredCurrency));
+        if (purchaseRequest.ClaimAchievementCertificates)
+            nextResolution = nextResolution with { Offers = nextResolution.Offers.Where(offer => offer.NpcId == 1008145).ToArray() };
+        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(purchaseRequest.CompanyAction), requiredCurrency,
+            purchaseRequest.ClaimAchievementCertificates));
     }
 
     private void Complete()
@@ -1512,8 +1546,18 @@ internal sealed class ShopPurchaseRunner
             if (expected < 0)
                 continue;
 
-            if (runtime.GetAvailableCurrency(currency) == expected)
+            var actual = runtime.GetAvailableCurrency(currency);
+            if (actual == expected)
                 continue;
+            if (request.ClaimAchievementCertificates && interactionSent && selected.Offer.NpcId == 1008145 &&
+                phase is RunnerPhase.Interacting or RunnerPhase.OpeningMenu &&
+                currency.Identity == new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172) && actual > expected)
+            {
+                achievementCertificatesClaimed = checked(achievementCertificatesClaimed + actual - expected);
+                lastVerifiedCurrencies = new Dictionary<ShopCurrencyIdentity, long>(lastVerifiedCurrencies) { [currency.Identity] = actual };
+                diagnostic($"Jonathas certificate balance increased by {actual - expected}; total claimed this visit={achievementCertificatesClaimed}, balance={actual}. Purchase remains separately guarded.");
+                continue;
+            }
             message = $"{currency.Name} changed outside ADS's verified purchase callback window.";
             return true;
         }

@@ -870,14 +870,17 @@ internal static class ShopCatalogBuilder
                 foreach (var placement in placements)
                 {
                     var aetheryteRoutes = snapshot.Aetherytes
-                        .Where(aetheryte => aetheryte.TerritoryId == placement.TerritoryId)
+                        .Where(aetheryte => aetheryte.TerritoryId == placement.TerritoryId ||
+                            link.NpcId == 1008145 && placement.TerritoryId == 133 && aetheryte.AetheryteId == 2 && aetheryte.TerritoryId == 132)
                         .Select(aetheryte => new ShopRouteCandidate(
                             aetheryte.AetheryteId,
                             aetheryte.Name,
                             aetheryte.Position,
                             Vector2.Distance(
                                 new Vector2(aetheryte.Position.X, aetheryte.Position.Z),
-                                new Vector2(placement.Position.X, placement.Position.Z))))
+                                new Vector2(placement.Position.X, placement.Position.Z)),
+                            aetheryte.TerritoryId != placement.TerritoryId ? 132u : 0u,
+                            aetheryte.TerritoryId != placement.TerritoryId ? 27u : 0u))
                         .OrderBy(route => route.DistanceToNpc)
                         .ThenBy(route => route.AetheryteId)
                         .ToArray();
@@ -1006,6 +1009,10 @@ internal static class ShopCatalogBuilder
             ? ShopOfferKind.SpecialShopMixed
             : currencies[0].Kind == ShopCurrencyKind.Tomestone
                 ? ShopOfferKind.SpecialShopTomestone
+                : currencies[0].Kind == ShopCurrencyKind.Mgp
+                ? ShopOfferKind.SpecialShopMgp
+                : currencies.Count == 1 && currencies[0].Identity == new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172)
+                ? ShopOfferKind.SpecialShopCurrency
                 : ShopOfferKind.SpecialShopItem;
         return true;
     }
@@ -1027,7 +1034,8 @@ internal static class ShopOfferSelector
     public static ShopOfferSelectionResult Select(
         ShopCatalogResolution resolution,
         ShopSelectionContext context,
-        ShopCurrencyIdentity? requiredCurrency = null)
+        ShopCurrencyIdentity? requiredCurrency = null,
+        bool claimAchievementCertificates = false)
     {
         var evaluated = resolution.Offers
             .Select(offer => Evaluate(offer, resolution, context))
@@ -1090,7 +1098,12 @@ internal static class ShopOfferSelector
                 $"Inventory cannot accept {resolution.RequestedQuantity} additional {resolution.ItemName}.");
         }
 
-        var affordable = capacityAccepted.Where(offer => offer.Affordable).ToArray();
+        // Claiming is a visit to this one NPC, not a promise that funds exist.
+        // The runner still requires the actual balance before the purchase quote.
+        var affordable = capacityAccepted.Where(offer => offer.Affordable ||
+            claimAchievementCertificates && offer.Offer.NpcId == 1008145 &&
+            offer.Currencies.Count == 1 && offer.Currencies[0].Currency.Identity ==
+                new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172)).ToArray();
         if (affordable.Length == 0)
         {
             return new ShopOfferSelectionResult(
@@ -1245,7 +1258,9 @@ internal static class ShopOfferSelector
                     aetheryte.AetheryteId,
                     aetheryte.AetheryteName,
                     aetheryte.DistanceToNpc,
-                    offer.RequiresFloorResolution);
+                    offer.RequiresFloorResolution,
+                    aetheryte.TransferTerritoryId,
+                    aetheryte.AethernetId);
             }
         }
 
@@ -1347,6 +1362,8 @@ internal static class ShopOfferSelector
             ShopOfferKind.GilShop => "gil-shop",
             ShopOfferKind.SpecialShopItem => "special-shop-item",
             ShopOfferKind.SpecialShopTomestone => "special-shop-tomestone",
+            ShopOfferKind.SpecialShopMgp => "special-shop-mgp",
+            ShopOfferKind.SpecialShopCurrency => "special-shop-currency",
             ShopOfferKind.SpecialShopMixed => "special-shop-mixed",
             ShopOfferKind.InclusionShop => "inclusion-shop",
             ShopOfferKind.GrandCompanyShop => "grand-company-shop",

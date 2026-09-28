@@ -451,15 +451,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
-        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260927-11; guarded sale cleanup");
-#if DEBUG
-        Framework.RunOnFrameworkThread(() =>
-        {
-            if (ClientState.IsLoggedIn && ClientState.TerritoryType == 139)
-                Log.Information("[ADS][Shop] Baby Bat availability: {Availability}",
-                    UtilityAutomationService.DescribeShopNpcAvailability(1307));
-        });
-#endif
+        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260928-33; verified certificate purchases");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -1414,6 +1406,7 @@ public sealed class Plugin : IDalamudPlugin
             using var document = JsonDocument.Parse(requestJson);
             var root = document.RootElement;
             var operationId = root.GetProperty("operationId").GetString();
+            var claimCertificates = root.TryGetProperty("claimAchievementCertificates", out var claim) && claim.GetBoolean();
             if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 ||
                 !root.GetProperty("itemId").TryGetUInt32(out var itemId) || itemId == 0 ||
                 !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString(), true, out var kind) ||
@@ -1429,7 +1422,7 @@ public sealed class Plugin : IDalamudPlugin
                 checkpoint =>
                 {
                     if (!Guard(checkpoint)) throw new InvalidOperationException("The purchase owner did not authorize the verified quote.");
-                }, _ => { }, Guard, operationId);
+                }, _ => { }, Guard, operationId, claimAchievementCertificates: claimCertificates);
         }
         catch (Exception ex)
         {
@@ -1461,14 +1454,15 @@ public sealed class Plugin : IDalamudPlugin
 
     private bool StartShopPurchaseCore(uint itemId, int quantity, ShopCurrencyIdentity? currency,
         Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified,
-        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null, string? operationId = null, bool companyAction = false)
+        Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null, string? operationId = null, bool companyAction = false,
+        bool claimAchievementCertificates = false)
     {
         if (RejectAutomationActionInExcludedTerritory("Shop purchase"))
             return currency.HasValue ? RejectShopPurchaseStart(AutomationTerritoryPolicy.InactiveStatus) : false;
 
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
             return RejectShopPurchaseStart(error);
-        request = request with { OperationId = operationId, CompanyAction = companyAction };
+        request = request with { OperationId = operationId, CompanyAction = companyAction, ClaimAchievementCertificates = claimAchievementCertificates };
         if (ExecutionService.IsOwned)
             return RejectShopPurchaseStart("Cannot start shop purchasing while ADS owns active duty execution.");
         if (InnEntryService.IsRunning)

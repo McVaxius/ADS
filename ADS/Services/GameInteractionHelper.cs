@@ -264,14 +264,32 @@ public static class GameInteractionHelper
             if (atkEvent == null)
                 return false;
 
-            addon->ReceiveEvent(atkEvent->State.EventType, (int)atkEvent->Param, atkEvent);
-            return true;
+            return TryDispatchRegisteredClick(atkEvent);
         }
         catch (Exception ex)
         {
             log?.Warning(ex, $"[ADS] Failed to click {addonName} node {nodeId}.");
             return false;
         }
+    }
+
+    internal static unsafe bool TryDispatchRegisteredClick(AtkEvent* registeredEvent)
+    {
+        if (registeredEvent == null || registeredEvent->Listener == null ||
+            registeredEvent->Listener->VirtualTable == null ||
+            registeredEvent->Listener->VirtualTable->ReceiveEvent == null ||
+            registeredEvent->Param > int.MaxValue ||
+            registeredEvent->State.StateFlags.HasFlag(AtkEventStateFlags.IsGlobalEvent) ||
+            registeredEvent->State.EventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick or
+                AtkEventType.MouseDown or AtkEventType.MouseUp)) return false;
+
+        // Preserve the registered receiver and supply initialized event data;
+        // the currency-shop category handler dereferences its data argument.
+        // Do not let the receiver modify the node's persistent event registration.
+        var click = *registeredEvent;
+        var data = new AtkEventData();
+        click.Listener->ReceiveEvent(click.State.EventType, (int)click.Param, &click, &data);
+        return true;
     }
 
     private static unsafe bool TryClickSelectYesNoButton(AddonSelectYesno* addon, bool yes, IPluginLog? log)

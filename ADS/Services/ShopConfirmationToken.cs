@@ -10,14 +10,20 @@ internal static class ShopPurchaseTiming
 internal sealed class ShopConfirmationToken
 {
     private readonly IReadOnlyDictionary<ShopCurrencyIdentity, long> expectedCosts;
-    private readonly bool isTomestoneExchange;
+    private readonly ShopCurrencyKind? previewCurrency;
     private readonly bool isCompanyAction;
     private bool consumed;
 
     public ShopConfirmationToken(EvaluatedShopOffer offer, int transactions, DateTime createdAtUtc)
     {
         ItemId = offer.Offer.ReceiveItemId;
-        isTomestoneExchange = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone;
+        previewCurrency = offer.Offer.Kind switch
+        {
+            ShopOfferKind.SpecialShopTomestone => ShopCurrencyKind.Tomestone,
+            ShopOfferKind.SpecialShopMgp => ShopCurrencyKind.Mgp,
+            ShopOfferKind.SpecialShopCurrency => ShopCurrencyKind.CurrencyManager,
+            _ => null,
+        };
         isCompanyAction = offer.Offer.Kind == ShopOfferKind.CompanyActionShop;
         ItemName = offer.Offer.ReceiveItemName;
         Quantity = checked((int)((long)offer.Offer.ReceiveCount * transactions));
@@ -75,14 +81,14 @@ internal sealed class ShopConfirmationToken
         return true;
     }
 
-    public bool TryConsumeTomestonePrompt(uint displayedItemId, string? prompt, DateTime observedAtUtc)
+    public bool TryConsumeCurrencyPrompt(uint displayedItemId, string? prompt, DateTime observedAtUtc)
     {
         if (!CanConsume(observedAtUtc)
-            || !isTomestoneExchange
+            || previewCurrency == null
             || displayedItemId != ItemId
             || Quantity <= 0
             || expectedCosts.Count != 1
-            || expectedCosts.Single().Key.Kind != ShopCurrencyKind.Tomestone
+            || expectedCosts.Single().Key.Kind != previewCurrency
             || string.IsNullOrWhiteSpace(prompt))
             return false;
 

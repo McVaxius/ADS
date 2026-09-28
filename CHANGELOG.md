@@ -2,6 +2,15 @@
 
 ## Unreleased - Guarded purchase handoff
 
+- Add opt-in Jonathas certificate claims to guarded minion purchases. Resolve his localized exchange entry, advance only owned dialogue, use the managed certificate balance, and require actual funds plus the caller's saved authorization before spending. Report observed claims separately from purchase receipts. Claims and exact two-certificate purchases of Wind-up Odin and Wind-up Cursor are verified.
+- Route Jonathas visits through Gridania's main aetheryte and the Lancers' Guild shard, requiring actual arrival in Old Gridania before NPC navigation. Cancel all shop purchases on character changes.
+- Select Jonathas's observed Others tab for minions, clear the recent-items filter, and verify the displayed item, global callback row and exact certificate cost before purchase. Native claims, travel and purchases are verified; an initially checked recent-items filter remains untested.
+- Send node clicks to their registered receiver with a copied event and non-null event data. Native evidence confirms the category event exposes Others items without toggling the radio's visual flag; validate the displayed rows instead. Remove temporary category diagnostics after successful purchase verification.
+
+- Continue single-purchase vendor cleanup for up to ten seconds when the shop returns to its parent menu. Require the same character and targeted NPC; retain the verified purchase receipt independently.
+- Route MGP special shops through the existing currency-exchange UI adapter, validating the live item, price, callback row and owned confirmation before spending.
+- Read MGP from InventoryManager's currency item balance; CurrencyManager reports no MGP and incorrectly rejected affordable Gold Saucer purchases.
+- Classify literal Item 29 costs in Gold Saucer special shops as MGP, so guarded requests use the MGP balance and exact currency identity. Preserve ordinary item-token costs.
 - Guard NPC sale cleanup against character changes, changed vendor targets and AutoRetainer work already becoming idle. ADS dismisses the sale confirmation with its tracked shop; the underlying AutoRetainer reset remains global.
 - Route caller-owned NPC selling through ADS's existing mender travel flow and AutoRetainer's configured sell task. Support local-only onboard operation, observe busy-to-idle completion, and cancel only a matching request. Do not infer sale completion from gear repair status. Live validation remains pending.
 - Add correlated company-action purchases to the existing shop runner. ADS owns quartermaster travel, exact action/rank/price validation, single-action confirmations, action-count and credit reconciliation, cancellation and shop cleanup. FC action inventory is distinct from item inventory; changed character/company, missing evidence and unknown results stop the request. Native validation remains pending.
