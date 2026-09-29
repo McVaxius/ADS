@@ -1863,7 +1863,7 @@ public sealed unsafe class UtilityAutomationService
                 UpdateNpcRepairInnPath(now, route);
                 break;
             case NpcRepairTravelStage.AwaitingRepairNpc:
-                UpdateNpcRepairInnNpcSearch(now, route);
+                UpdateNpcRepairInnNpcSearch(route);
                 break;
         }
     }
@@ -2581,7 +2581,7 @@ public sealed unsafe class UtilityAutomationService
         SendMoveCommand(waypoint, waypointLabel, initial: lastMoveCommandUtc == DateTime.MinValue);
     }
 
-    private void UpdateNpcRepairInnNpcSearch(DateTime now, ResolvedInnRepairRoute route)
+    private void UpdateNpcRepairInnNpcSearch(ResolvedInnRepairRoute route)
     {
         if (TryFindNearbyRepairNpc(out var targetNpc))
         {
@@ -2589,13 +2589,7 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (now - npcRepairTravelStageStartedUtc < UiSettleCooldown)
-        {
-            StatusMessage = $"Looking for a repair NPC near the {route.TerritoryName} inn.";
-            return;
-        }
-
-        Fail($"Reached the {route.TerritoryName} inn repair route, but no repair NPC was found within {RepairNpcSearchRadius:0}y.");
+        StatusMessage = $"Looking for a repair NPC near the {route.TerritoryName} inn.";
     }
 
     private void UpdateNpcRepairInnExit()

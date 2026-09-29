@@ -385,7 +385,7 @@ public sealed class StartingCityInnRepairRegressionTests
         Assert.Equal(0u, Get(automatic, "npcRepairDestinationAethernet"));
         automatic.Cancel("test complete");
 
-        // Missing door, mender, and innkeeper are terminal; none skips ahead to success.
+        // Missing doors and innkeepers fail; a loading mender waits within the existing timeouts.
         territory = 178;
         var missingDoor = Create();
         Assert.True(missingDoor.StartNpcRepairYesInn("uldah"));
@@ -393,16 +393,47 @@ public sealed class StartingCityInnRepairRegressionTests
         Assert.False(missingDoor.IsRunning);
         Assert.Contains("exit door", missingDoor.LastFailureMessage);
 
-        territory = 179;
-        var missingMender = Create();
-        Assert.True(missingMender.StartNpcRepairYesInn("gridania"));
         var routeType = typeof(UtilityAutomationService).GetNestedType("ResolvedInnRepairRoute", BindingFlags.NonPublic)!;
         var resolvedRoute = Activator.CreateInstance(routeType, 132u, "Gridania", 94u, "test route", Array.Empty<Vector3>(), 0)!;
-        territory = 132;
-        Set(missingMender, "npcRepairTravelStageStartedUtc", DateTime.UtcNow.AddSeconds(-3));
-        Invoke(missingMender, "UpdateNpcRepairInnNpcSearch", DateTime.UtcNow, resolvedRoute);
-        Assert.False(missingMender.IsRunning);
-        Assert.Contains("no repair NPC", missingMender.LastFailureMessage);
+        foreach (var ending in new[] { "stage timeout", "overall timeout", "Stop", "logout", "plugin dispose" })
+        {
+            territory = 179;
+            var missingMender = Create();
+            Assert.True(missingMender.StartNpcRepairYesInn("gridania"));
+            territory = 132;
+            Set(missingMender, "activeNpcRepairInnRoute", resolvedRoute);
+            Set(missingMender, "npcRepairTravelStage", Enum.Parse(Get(missingMender, "npcRepairTravelStage")!.GetType(), "AwaitingRepairNpc"));
+            var searchStarted = DateTime.UtcNow.AddSeconds(-3);
+            Set(missingMender, "npcRepairTravelStageStartedUtc", searchStarted);
+            var commandCount = commands.Count;
+            foreach (var elapsedSeconds in new[] { 3, 74 })
+            {
+                Invoke(missingMender, "UpdateNpcRepairTravel", searchStarted.AddSeconds(elapsedSeconds));
+                Assert.True(missingMender.IsRunning);
+                Assert.Empty(missingMender.LastFailureMessage);
+                Assert.Empty(missingMender.LastSuccessMessage);
+                Assert.Contains("Looking for a repair NPC", missingMender.StatusMessage);
+                Assert.Equal(179u, Get(missingMender, "npcRepairRequiredInnTerritory"));
+                Assert.Equal(searchStarted, Get(missingMender, "npcRepairTravelStageStartedUtc"));
+                Assert.Equal(commandCount, commands.Count);
+            }
+
+            if (ending == "stage timeout")
+                Invoke(missingMender, "UpdateNpcRepairTravel", searchStarted.AddSeconds(76));
+            else if (ending == "overall timeout")
+            {
+                Set(missingMender, "startedAtUtc", DateTime.UtcNow.AddSeconds(-121));
+                missingMender.Update();
+            }
+            else
+                missingMender.Cancel(ending);
+
+            Assert.False(missingMender.IsRunning);
+            Assert.Empty(missingMender.LastSuccessMessage);
+            Assert.Contains(ending.EndsWith("timeout") ? "Timed out" : ending, missingMender.LastFailureMessage);
+            Assert.Equal(0u, Get(missingMender, "npcRepairRequiredInnTerritory"));
+            Assert.Equal("None", Get(missingMender, "npcRepairTravelStage")!.ToString());
+        }
 
         territory = 179;
         var failedEntry = Create();

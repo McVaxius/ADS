@@ -34,6 +34,8 @@
 
 ## Unreleased
 
+- Keep looking for a repair NPC near the inn while NPCs load, up to the existing 75-second stage or 120-second overall timeout. Preserve the 80-yalm search radius, cancellation, and repair continuation; live verification remains pending.
+
 - Manual Update (including `/ads mini`) now reloads all four data categories even when downloads are unchanged, then runs Stop followed by Start Inside once if ADS still owns the same duty run. Zoning and Yes/No dialogs defer the reloads; failed downloads/reloads, Stop, Leave, logout, duty changes, or a new ownership run prevent the pending restart. The selected custom object-rule preset and its overrides are preserved; automatic updates keep their existing reload behavior.
 
 - Fixed Otopa Pottopa inn entry in Ul'dah to stop at the existing accessible counter approach point within one yalm, including while waiting for the menu. Inn entry no longer replaces an active vnavmesh path or pending pathfinding request on its movement retry.
