@@ -451,7 +451,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
-        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260928-33; verified certificate purchases");
+        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260929-34; culture-invariant confirmation numbers");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();

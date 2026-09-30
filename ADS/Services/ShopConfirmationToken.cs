@@ -9,6 +9,7 @@ internal static class ShopPurchaseTiming
 
 internal sealed class ShopConfirmationToken
 {
+    private const string DisplayNumberPattern = @"[0-9](?:[0-9,.\u00A0\u202F]*[0-9])?";
     private readonly IReadOnlyDictionary<ShopCurrencyIdentity, long> expectedCosts;
     private readonly ShopCurrencyKind? previewCurrency;
     private readonly bool isCompanyAction;
@@ -95,13 +96,10 @@ internal sealed class ShopConfirmationToken
         // This prompt displays only the total cost; the item is in the separate preview.
         // The validated unit cost and submitted batch already fix the token's quantity.
         var total = expectedCosts.Single().Value;
-        var numbers = System.Text.RegularExpressions.Regex.Matches(prompt, @"[0-9](?:[0-9,.\u00A0\u202F]*[0-9])?");
+        var numbers = System.Text.RegularExpressions.Regex.Matches(prompt, DisplayNumberPattern);
         if (total <= 0 || numbers.Count != 1)
             return false;
-        var displayed = numbers[0].Value;
-        if (displayed != total.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            && displayed != total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)
-            && displayed != total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
+        if (!IsExactDisplayNumber(numbers[0].Value, total))
             return false;
 
         consumed = true;
@@ -115,22 +113,25 @@ internal sealed class ShopConfirmationToken
 
     private static bool ContainsExactDisplayNumber(string prompt, long value)
     {
-        var display = value.ToString(System.Globalization.CultureInfo.CurrentCulture);
-        var searchStart = 0;
-        while (searchStart <= prompt.Length - display.Length)
+        foreach (System.Text.RegularExpressions.Match number in System.Text.RegularExpressions.Regex.Matches(prompt, DisplayNumberPattern))
         {
-            var index = prompt.IndexOf(display, searchStart, StringComparison.CurrentCulture);
-            if (index < 0)
-                return false;
-            var beforeIsDigit = index > 0 && char.IsDigit(prompt[index - 1]);
-            var after = index + display.Length;
-            var afterIsDigit = after < prompt.Length && char.IsDigit(prompt[after]);
-            if (!beforeIsDigit && !afterIsDigit)
+            if (IsExactDisplayNumber(number.Value, value))
                 return true;
-            searchStart = index + display.Length;
         }
 
         return false;
+    }
+
+    private static bool IsExactDisplayNumber(string display, long value)
+    {
+        var plain = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var grouped = value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        // Match the entire token in a valid integer format, independent of the machine's culture.
+        return display == plain
+            || display == grouped
+            || display == grouped.Replace(',', '.')
+            || display == grouped.Replace(',', '\u00A0')
+            || display == grouped.Replace(',', '\u202F');
     }
 
     /// <summary>

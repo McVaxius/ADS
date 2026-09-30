@@ -2,6 +2,7 @@
 
 ## Unreleased - Guarded purchase handoff
 
+- Match complete purchase-confirmation numbers independently of the machine's culture. Accept ungrouped prices and valid comma, period or nonbreaking-space thousands separators; reject partial amounts, malformed grouping and wrong quantities. Preserve owned-token, item-preview, expiry and single-use checks. Native validation completed one Wayward Hatchling purchase for 2,400 gil.
 - Add opt-in Jonathas certificate claims to guarded minion purchases. Resolve his localized exchange entry, advance only owned dialogue, use the managed certificate balance, and require actual funds plus the caller's saved authorization before spending. Report observed claims separately from purchase receipts. Claims and exact two-certificate purchases of Wind-up Odin and Wind-up Cursor are verified.
 - Route Jonathas visits through Gridania's main aetheryte and the Lancers' Guild shard, requiring actual arrival in Old Gridania before NPC navigation. Cancel all shop purchases on character changes.
 - Select Jonathas's observed Others tab for minions, clear the recent-items filter, and verify the displayed item, global callback row and exact certificate cost before purchase. Native claims, travel and purchases are verified; an initially checked recent-items filter remains untested.

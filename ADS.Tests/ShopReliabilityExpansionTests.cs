@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using ADS.Models;
 using ADS.Services;
@@ -399,6 +400,69 @@ public sealed class ShopReliabilityExpansionTests
             .TryConsumePrompt("Purchase 2 ragworms for 15 gil?", created.AddSeconds(1)));
         Assert.False(new ShopConfirmationToken(Gil("Ragworm"), 2, created)
             .TryConsumePrompt("Purchase 2 plump worms for 16 gil?", created.AddSeconds(1)));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    [InlineData("fr-FR")]
+    public void ConfirmationNumbersMatchWholeInvariantAmountsAcrossCultures(string culture)
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            var gil = new EvaluatedShopOffer(
+                Offer(false, ShopCurrencyKind.Gil, 1) with
+                {
+                    ReceiveItemId = 6005,
+                    ReceiveItemName = "Wayward Hatchling",
+                    Currencies = [new(ShopCurrencyKind.Gil, 1, "Gil", 2400)],
+                }, null, [], true, true, true, null);
+            var exchange = gil with
+            {
+                Offer = gil.Offer with
+                {
+                    Kind = ShopOfferKind.SpecialShopMgp,
+                    Currencies = [new(ShopCurrencyKind.Mgp, 29, "MGP", 2400)],
+                },
+            };
+            var created = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+
+            foreach (var price in new[] { "2400", "2,400", "2.400", "2\u00A0400", "2\u202F400" })
+            {
+                var token = new ShopConfirmationToken(gil, 1, created);
+                var prompt = $"Purchase 1 wayward hatchling for {price} gil?";
+                Assert.True(token.TryConsumePrompt(prompt, created.AddSeconds(10)), prompt);
+                Assert.False(token.TryConsumePrompt(prompt, created.AddSeconds(10)));
+                Assert.False(new ShopConfirmationToken(gil, 1, created)
+                    .TryConsumePrompt(prompt, created.AddSeconds(10).AddTicks(1)));
+                Assert.True(new ShopConfirmationToken(exchange, 1, created)
+                    .TryConsumeCurrencyPrompt(6005, $"Exchange {price} MGP for the following item?", created));
+            }
+
+            var rejected = new ShopConfirmationToken(gil, 1, created);
+            foreach (var wrongPrice in new[] { "240", "2401", "24000", "12,400", "12.400", "24,00", "24.00", "2,400.0", "2.400,0", "2,400,000", "2.400.000" })
+            {
+                Assert.False(rejected.TryConsumePrompt($"Purchase 1 wayward hatchling for {wrongPrice} gil?", created));
+                Assert.False(new ShopConfirmationToken(exchange, 1, created)
+                    .TryConsumeCurrencyPrompt(6005, $"Exchange {wrongPrice} MGP for the following item?", created));
+            }
+            foreach (var wrongQuantity in new[] { "2", "11", "1,000", "1.000", "1,0", "1.0", "0,1", "0.1" })
+                Assert.False(rejected.TryConsumePrompt($"Purchase {wrongQuantity} wayward hatchlings for 2,400 gil?", created));
+            Assert.False(rejected.TryConsumePrompt("Purchase 1 wind-up airship for 2,400 gil?", created));
+            Assert.False(rejected.IsConsumed);
+            Assert.True(rejected.TryConsumePrompt("Purchase 1 wayward hatchling for 2,400 gil?", created));
+
+            var batch = new ShopConfirmationToken(gil, 515, created);
+            Assert.False(batch.TryConsumePrompt("Purchase 515 wayward hatchlings for 1,236.000 gil?", created));
+            Assert.True(batch.TryConsumePrompt("Purchase 515 wayward hatchlings for 1.236.000 gil?", created));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]
