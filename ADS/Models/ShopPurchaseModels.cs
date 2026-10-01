@@ -99,8 +99,10 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
             if (!TryParseJson(root, out request, out error)) return false;
             var operationId = root.GetProperty("operationId").GetString();
             if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 ||
-                !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString(), true, out var kind) ||
+                !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString()?.Trim().Replace("-", ""), true, out var kind) ||
                 !Enum.IsDefined(kind) || !root.GetProperty("currencyItemId").TryGetUInt32(out var currencyItemId) ||
+                (kind == ShopCurrencyKind.Gil ? currencyItemId != 1 :
+                    kind == ShopCurrencyKind.FreeCompanyCredit ? currencyItemId != 0 : currencyItemId == 0) ||
                 !root.GetProperty("maximumCurrencySpend").TryGetInt64(out var maximumSpend) || maximumSpend < 0)
             {
                 error = "Currency purchase requires an operation ID, exact currency identity and nonnegative maximumCurrencySpend.";

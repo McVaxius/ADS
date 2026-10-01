@@ -2,7 +2,8 @@
 
 ## Unreleased - Bounded currency shop purchases
 
-- Add `ADS.StartCurrencyShopPurchase(string requestJson) -> bool` for bulk requests with an operation ID, item, quantity, exact currency identity and maximum currency spend. Enforce cumulative verified batch costs before purchase callbacks through the existing runner; preserve guarded single-purchase behavior and version 0.9.4.4.
+- Add `ADS.StartCurrencyShopPurchase(string requestJson) -> bool` for bulk requests with an operation ID, item, quantity, exact currency identity and maximum currency spend. Enforce cumulative verified batch costs before purchase callbacks through the existing runner; preserve guarded single-purchase behavior. Accept the catalog's currency names and reject invalid currency item identities.
+- Offline verification: 193 focused purchase, catalog, reliability and IPC checks pass. Prepare the requested Debug x64 collection payload as 0.9.4.4 without changing the repository's separately committed 0.9.5.0 version. Live collection integration remains pending.
 
 ## Unreleased - Guarded purchase handoff
 

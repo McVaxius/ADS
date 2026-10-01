@@ -84,7 +84,7 @@ public sealed class AdsEnableCompatibilityTests
             }
             using var ipc = new AdsIpcService(pi,
                 () => false, () => false, () => false, () => false, () => false, () => false,
-                _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, (_, _, _) => false,
+                _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, _ => false, (_, _, _) => false,
                 (_, _) => false, () => "{}", _ => false, (_, _) => false, _ => false, _ => false, () => false,
                 () => false, () => false, () => "{}", () => "{}", () => "{}", Invoke,
                 plugin.GetConfigurationJson, Patch, () => "{}", () => "{}", () => "{}", () => "{}",

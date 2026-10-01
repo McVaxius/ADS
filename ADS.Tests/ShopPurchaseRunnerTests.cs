@@ -6,6 +6,77 @@ namespace ADS.Tests;
 
 public sealed class ShopPurchaseRunnerTests
 {
+    [Theory]
+    [InlineData("gil", 1)]
+    [InlineData("item", 500)]
+    [InlineData("tomestone", 28)]
+    [InlineData("company-seal", 20)]
+    [InlineData("mgp", 29)]
+    [InlineData("wolf-mark", 25)]
+    [InlineData("allied-seal", 27)]
+    [InlineData("currency-manager", 21172)]
+    [InlineData("free-company-credit", 0)]
+    public void CurrencyRequestsAcceptCatalogIdentitiesAndPreserveOwnership(string kind, uint itemId)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        { operationId = "vmx-owned", itemId = 100, quantity = 105, currencyKind = kind, currencyItemId = itemId, maximumCurrencySpend = 200L });
+        Assert.True(ShopPurchaseRequest.TryParseCurrencyJson(json, out var request, out var currency, out var error), error);
+        Assert.Equal("vmx-owned", request.OperationId);
+        Assert.Equal(200, request.MaximumCurrencySpend);
+        Assert.Equal(itemId, currency.ItemId);
+        Assert.Equal(kind, ShopOfferSelector.CurrencyKindName(currency.Kind));
+    }
+
+    [Theory]
+    [InlineData("gil", 0, "owned", 100)]
+    [InlineData("free-company-credit", 1, "owned", 100)]
+    [InlineData("item", 0, "owned", 100)]
+    [InlineData("unknown", 1, "owned", 100)]
+    [InlineData("gil", 1, "", 100)]
+    [InlineData("gil", 1, "owned", -1)]
+    public void InvalidCurrencyAuthorizationCannotCreateARequest(string kind, uint itemId, string operationId, long cap)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        { operationId, itemId = 100, quantity = 1, currencyKind = kind, currencyItemId = itemId, maximumCurrencySpend = cap });
+        Assert.False(ShopPurchaseRequest.TryParseCurrencyJson(json, out _, out _, out var error));
+        Assert.NotEmpty(error);
+        Assert.False(ShopPurchaseRequest.TryParseCurrencyJson("{}", out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData(200, 2, 100, true)]
+    [InlineData(198, 1, 99, false)]
+    [InlineData(197, 0, 0, false)]
+    [InlineData(0, 0, 0, false)]
+    public void BulkCurrencyCapsAreCumulativeAndCheckedBeforeEveryCallback(long cap, int callbacks, int transactions, bool succeeds)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var currency = new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500);
+        var offer = Offer(10, 100, 100) with
+        { ReceiveCount = 5, Currencies = [new(ShopCurrencyKind.Item, 500, "Fixture Token", 2)] };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(500, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 500)
+            { OperationId = "vmx-bulk", MaximumCurrencySpend = cap }, false, currency));
+        DriveWithTime(runner, clock);
+        Assert.Equal(succeeds, runner.Status.Succeeded);
+        Assert.Equal(callbacks, runtime.SubmitCount);
+        Assert.Equal(transactions * 5, runtime.ItemCount);
+        Assert.Equal(10_000 - transactions * 2, runtime.GetAvailableCurrency(offer.Currencies[0]));
+        Assert.Equal("vmx-bulk", runner.Status.OperationId);
+        if (!succeeds) Assert.Equal(ShopPurchaseFailureCodes.InsufficientCurrency, runner.Status.FailureCode);
+    }
+
+    [Fact]
+    public void CappedPurchaseCannotStartWithoutAnExactCurrencyAndOperation()
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.False(runner.Start(new ShopPurchaseRequest(100, 1) { MaximumCurrencySpend = 100 }));
+        Assert.False(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "owned", MaximumCurrencySpend = 100 }));
+        Assert.Equal(0, runtime.SubmitCount);
+    }
+
     [Fact]
     public void CertificateVisibleRowsMustMatchTheirGlobalReceiveAndCurrency()
     {
