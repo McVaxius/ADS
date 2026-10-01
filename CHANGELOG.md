@@ -40,6 +40,8 @@
 
 ## Unreleased
 
+- Exclude beast companions (`Pet`) and chocobos (`Buddy`) alongside NPC party members before object rules, clearing remembered state so they cannot become targets, follow anchors, or ghosts.
+
 - Build only the ADS plugin in GitHub Actions so regression-test compilation does not block release artifacts.
 
 - Keep looking for a repair NPC near the inn while NPCs load, up to the existing 75-second stage or 120-second overall timeout. Preserve the 80-yalm search radius, cancellation, and repair continuation; live verification remains pending.

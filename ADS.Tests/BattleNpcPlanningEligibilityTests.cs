@@ -3,12 +3,108 @@ using System.Reflection;
 using ADS.Models;
 using ADS.Services;
 using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 
 namespace ADS.Tests;
 
 public sealed class BattleNpcPlanningEligibilityTests
 {
+    [Theory]
+    [InlineData(BattleNpcSubKind.Pet, null, true)]
+    [InlineData(BattleNpcSubKind.Pet, "Required", true)]
+    [InlineData(BattleNpcSubKind.Pet, "Follow", true)]
+    [InlineData(BattleNpcSubKind.Pet, "CombatFriendly", true)]
+    [InlineData(BattleNpcSubKind.Buddy, null, true)]
+    [InlineData(BattleNpcSubKind.Buddy, "Required", true)]
+    [InlineData(BattleNpcSubKind.Buddy, "Follow", true)]
+    [InlineData(BattleNpcSubKind.Buddy, "CombatFriendly", true)]
+    [InlineData(BattleNpcSubKind.NpcPartyMember, null, true)]
+    [InlineData(BattleNpcSubKind.NpcPartyMember, "Required", true)]
+    [InlineData(BattleNpcSubKind.NpcPartyMember, "Follow", true)]
+    [InlineData(BattleNpcSubKind.NpcPartyMember, "CombatFriendly", true)]
+    [InlineData(BattleNpcSubKind.Combatant, null, false)]
+    [InlineData(BattleNpcSubKind.Combatant, "Required", false)]
+    [InlineData(BattleNpcSubKind.Combatant, "Follow", false)]
+    [InlineData(BattleNpcSubKind.Combatant, "CombatFriendly", false)]
+    public void ObservationExcludesCompanionsBeforeRulesAndForgetsRememberedState(
+        BattleNpcSubKind subKind,
+        string? classification,
+        bool excluded)
+    {
+        using var fixture = new RuleServiceFixture();
+        var battleNpc = DispatchProxy.Create<IBattleNpc, BattleNpcProxy>();
+        var proxy = (BattleNpcProxy)(object)battleNpc;
+        proxy.Name = "Target";
+        proxy.ObjectKind = ObjectKind.BattleNpc;
+        proxy.GameObjectId = 1;
+        proxy.BaseId = 100;
+        proxy.IsTargetable = true;
+        proxy.BattleNpcKind = BattleNpcSubKind.Combatant;
+
+        var objectTable = DispatchProxy.Create<IObjectTable, TreasureCofferObservationPolicyTests.ObjectTableProxy>();
+        var objectTableProxy = (TreasureCofferObservationPolicyTests.ObjectTableProxy)(object)objectTable;
+        objectTableProxy.Objects = [battleNpc];
+        var partyList = DispatchProxy.Create<IPartyList, TreasureCofferObservationPolicyTests.PartyListProxy>();
+        var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
+        var observation = new ObservationMemoryService(objectTable, partyList, log, fixture.Service);
+        var context = Context();
+
+        observation.Update(context, considerTreasureCoffers: true);
+        var rememberedMonster = Assert.Single(observation.Current.LiveMonsters);
+        var knownMonsters = GetPrivateDictionary<string, ObservedMonster>(observation, "knownMonsters");
+        var knownInteractables = GetPrivateDictionary<string, ObservedInteractable>(observation, "knownInteractables");
+        var suppressions = GetPrivateDictionary<string, DateTime>(observation, "treasureSuppressionUntil");
+        knownInteractables[rememberedMonster.Key] = new ObservedInteractable
+        {
+            Key = rememberedMonster.Key,
+            GameObjectId = rememberedMonster.GameObjectId,
+            DataId = rememberedMonster.DataId,
+            MapId = rememberedMonster.MapId,
+            ObjectKind = ObjectKind.BattleNpc,
+            Name = rememberedMonster.Name,
+            Position = rememberedMonster.Position,
+            LastSeenUtc = rememberedMonster.LastSeenUtc,
+            Classification = InteractableClass.CombatFriendly,
+            GhostReason = GhostReason.SeenPreviously,
+        };
+        suppressions[rememberedMonster.Key] = DateTime.UtcNow.AddMinutes(1);
+        if (classification is not null)
+            Assert.True(fixture.Service.SaveManifest(new ObjectPriorityRuleManifest { Rules = [Rule(classification, priority: 10)] }));
+
+        proxy.BattleNpcKind = subKind;
+        observation.Update(context, considerTreasureCoffers: true);
+
+        if (excluded)
+        {
+            Assert.Empty(observation.Current.LiveMonsters);
+            Assert.Empty(observation.Current.LiveFollowTargets);
+            Assert.Empty(observation.Current.LiveInteractables);
+            Assert.Empty(observation.Current.MonsterGhosts);
+            Assert.Empty(observation.Current.InteractableGhosts);
+            Assert.Empty(knownMonsters);
+            Assert.Empty(knownInteractables);
+            Assert.Empty(suppressions);
+
+            objectTableProxy.Objects = [];
+            observation.Update(context, considerTreasureCoffers: true);
+            Assert.Empty(observation.Current.MonsterGhosts);
+            Assert.Empty(observation.Current.InteractableGhosts);
+        }
+        else if (classification == "Follow")
+        {
+            Assert.Equal(rememberedMonster.Key, Assert.Single(observation.Current.LiveFollowTargets).Key);
+        }
+        else if (classification == "CombatFriendly")
+        {
+            Assert.Equal(rememberedMonster.Key, Assert.Single(observation.Current.LiveInteractables).Key);
+        }
+        else
+        {
+            Assert.Equal(rememberedMonster.Key, Assert.Single(observation.Current.LiveMonsters).Key);
+        }
+    }
+
     [Fact]
     public void RequiredOutsideYGateIsNotEligibleFrontierBlocker()
     {
@@ -190,6 +286,26 @@ public sealed class BattleNpcPlanningEligibilityTests
 
         public void Dispose()
             => tempDirectory.Dispose();
+    }
+
+    private static Dictionary<TKey, TValue> GetPrivateDictionary<TKey, TValue>(object target, string fieldName)
+        where TKey : notnull
+        => (Dictionary<TKey, TValue>)target
+            .GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(target)!;
+
+    public class BattleNpcProxy : TreasureCofferObservationPolicyTests.GameObjectProxy
+    {
+        public BattleNpcSubKind BattleNpcKind { get; set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            => targetMethod?.Name switch
+            {
+                "get_BattleNpcKind" => BattleNpcKind,
+                "get_CurrentHp" => 100u,
+                _ => base.Invoke(targetMethod, args),
+            };
     }
 
     public class NoOpProxy : DispatchProxy
