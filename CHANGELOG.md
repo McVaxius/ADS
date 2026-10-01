@@ -39,6 +39,8 @@
 
 ## Unreleased
 
+- Build only the ADS plugin in GitHub Actions so regression-test compilation does not block release artifacts.
+
 - Keep looking for a repair NPC near the inn while NPCs load, up to the existing 75-second stage or 120-second overall timeout. Preserve the 80-yalm search radius, cancellation, and repair continuation; live verification remains pending.
 
 - Manual Update (including `/ads mini`) now reloads all four data categories even when downloads are unchanged, then runs Stop followed by Start Inside once if ADS still owns the same duty run. Zoning and Yes/No dialogs defer the reloads; failed downloads/reloads, Stop, Leave, logout, duty changes, or a new ownership run prevent the pending restart. The selected custom object-rule preset and its overrides are preserved; automatic updates keep their existing reload behavior.
