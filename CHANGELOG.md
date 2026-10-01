@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased - Bounded currency shop purchases
+
+- Add `ADS.StartCurrencyShopPurchase(string requestJson) -> bool` for bulk requests with an operation ID, item, quantity, exact currency identity and maximum currency spend. Enforce cumulative verified batch costs before purchase callbacks through the existing runner; preserve guarded single-purchase behavior and version 0.9.4.4.
+
 ## Unreleased - Guarded purchase handoff
 
 - Match complete purchase-confirmation numbers independently of the machine's culture. Accept ungrouped prices and valid comma, period or nonbreaking-space thousands separators; reject partial amounts, malformed grouping and wrong quantities. Preserve owned-token, item-preview, expiry and single-use checks. Native validation completed one Wayward Hatchling purchase for 2,400 gil.

@@ -23,6 +23,7 @@ public static class ShopPurchaseFailureCodes
 public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
 {
     public string? OperationId { get; init; }
+    public long? MaximumCurrencySpend { get; init; }
     public bool CompanyAction { get; init; }
     public bool ClaimAchievementCertificates { get; init; }
     public const int MaximumQuantity = 9_999;
@@ -84,6 +85,36 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
         }
 
         return TryCreate(itemId, quantity, out request, out error);
+    }
+
+    public static bool TryParseCurrencyJson(string json, out ShopPurchaseRequest request,
+        out ShopCurrencyIdentity currency, out string error)
+    {
+        request = default;
+        currency = default;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (!TryParseJson(root, out request, out error)) return false;
+            var operationId = root.GetProperty("operationId").GetString();
+            if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 ||
+                !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString(), true, out var kind) ||
+                !Enum.IsDefined(kind) || !root.GetProperty("currencyItemId").TryGetUInt32(out var currencyItemId) ||
+                !root.GetProperty("maximumCurrencySpend").TryGetInt64(out var maximumSpend) || maximumSpend < 0)
+            {
+                error = "Currency purchase requires an operation ID, exact currency identity and nonnegative maximumCurrencySpend.";
+                return false;
+            }
+            currency = new ShopCurrencyIdentity(kind, currencyItemId);
+            request = request with { OperationId = operationId, MaximumCurrencySpend = maximumSpend };
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentException)
+        {
+            error = $"Invalid currency purchase: {ex.Message}";
+            return false;
+        }
     }
 }
 

@@ -21,6 +21,7 @@ public sealed class AdsIpcService : IDisposable
         Func<string, bool> startDesynth,
         Func<uint, int, bool> startShopPurchase,
         Func<string, uint, int, bool> startGilShopPurchase,
+        Func<string, bool> startCurrencyShopPurchase,
         Func<string, uint, int, bool> startCompanyActionPurchase,
         Func<string, bool, bool> startNpcSale,
         Func<string> getNpcSaleStatus,
@@ -60,6 +61,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartDesynth", startDesynth);
         Register(pluginInterface, "ADS.StartShopPurchase", startShopPurchase);
         Register(pluginInterface, "ADS.StartGilShopPurchase", startGilShopPurchase);
+        Register(pluginInterface, "ADS.StartCurrencyShopPurchase", startCurrencyShopPurchase);
         Register(pluginInterface, "ADS.StartCompanyActionPurchase", startCompanyActionPurchase);
         Register(pluginInterface, "ADS.StartNpcSale", startNpcSale);
         Register(pluginInterface, "ADS.GetNpcSaleStatusJson", getNpcSaleStatus);

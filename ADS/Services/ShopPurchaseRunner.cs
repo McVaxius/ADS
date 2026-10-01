@@ -92,6 +92,7 @@ internal sealed class ShopPurchaseRunner
     private bool interactionSent;
     private long achievementCertificatesClaimed;
     private int callbackTransactions;
+    private long currencySpendReserved;
     private long callbackItemCountBefore;
     private IReadOnlyDictionary<uint, long> callbackOutputsBefore = new Dictionary<uint, long>();
     private IReadOnlyDictionary<ShopCurrencyIdentity, long> callbackCurrenciesBefore =
@@ -267,6 +268,10 @@ internal sealed class ShopPurchaseRunner
             return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
         if (IsRunning)
             return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
+        if (purchaseRequest.MaximumCurrencySpend is < 0 ||
+            (purchaseRequest.MaximumCurrencySpend.HasValue &&
+             (!requiredCurrency.HasValue || string.IsNullOrWhiteSpace(purchaseRequest.OperationId))))
+            return RejectStart("A capped currency purchase requires an operation ID and exact currency.", ShopPurchaseFailureCodes.InvalidRequest);
         if (purchaseRequest.ClaimAchievementCertificates && (purchaseRequest.CompanyAction ||
             requiredCurrency != new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172)))
             return RejectStart("Certificate claiming requires an exact Achievement Certificate purchase.", ShopPurchaseFailureCodes.InvalidRequest);
@@ -338,6 +343,7 @@ internal sealed class ShopPurchaseRunner
         interactionSent = false;
         achievementCertificatesClaimed = 0;
         callbackTransactions = 0;
+        currencySpendReserved = 0;
         callbackOutputsBefore = new Dictionary<uint, long>();
         callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
         lastVerifiedCurrencies = selected?.Offer.Currencies
@@ -1182,6 +1188,21 @@ internal sealed class ShopPurchaseRunner
         }
 
         callbackCurrenciesBefore = before;
+        long nextCurrencySpend = 0;
+        if (request.MaximumCurrencySpend.HasValue)
+        {
+            if (selected.Offer.Currencies.Count != 1)
+            {
+                Fail(ShopPurchaseFailureCodes.UnsupportedOffer, "A capped currency purchase requires one exact currency.");
+                return;
+            }
+            nextCurrencySpend = checked((long)selected.Offer.Currencies[0].AmountPerTransaction * callbackTransactions);
+            if (nextCurrencySpend > request.MaximumCurrencySpend.Value - currencySpendReserved)
+            {
+                Fail(ShopPurchaseFailureCodes.InsufficientCurrency, "The next purchase batch would exceed maximumCurrencySpend.");
+                return;
+            }
+        }
         if (beforeSubmit != null)
         {
             if (callbackTransactions != 1 || selected.Offer.ReceiveCount != 1
@@ -1214,6 +1235,7 @@ internal sealed class ShopPurchaseRunner
         }
 
         anyPurchaseCallbackSent = true;
+        currencySpendReserved = checked(currencySpendReserved + nextCurrencySpend);
         SetPhase(
             RunnerPhase.VerifyingInventory,
             $"Verifying inventory and currency deltas for {callbackTransactions} shop transaction(s).");
