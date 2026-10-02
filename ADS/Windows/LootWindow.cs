@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
 using Dalamud.Bindings.ImGui;
@@ -29,17 +30,17 @@ public sealed class LootWindow : PositionedWindow, IDisposable
     {
         FinalizePendingWindowPlacement();
 
-        ImGui.TextUnformatted($"Mode: {plugin.Configuration.LootMode}");
-        ImGui.TextWrapped(plugin.LootAutomationService.Status);
+        ImGui.TextUnformatted(Ui.T("Mode: {0}", Ui.Display(plugin.Configuration.LootMode.ToString())));
+        ImGui.TextWrapped(Ui.Display(plugin.LootAutomationService.Status));
         ImGui.Spacing();
 
         DrawModeButtons();
         ImGui.Separator();
         var glamourNeed = plugin.Configuration.LootGlamourNeedingEnabled;
-        if (ImGui.Checkbox("Need/Greed missing glamour gear (XA Database)", ref glamourNeed))
+        if (WindowLayout.Checkbox("Need/Greed missing glamour gear (XA Database)", ref glamourNeed))
             plugin.SetLootGlamourNeedingEnabled(glamourNeed);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap.");
+            ImGui.SetTooltip(Ui.T("Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap."));
         ImGui.Separator();
         DrawRegistrableControls();
     }
@@ -58,14 +59,14 @@ public sealed class LootWindow : PositionedWindow, IDisposable
     private void DrawModeButton(string label, LootRollMode mode)
     {
         var selected = plugin.Configuration.LootMode == mode;
-        if (ImGui.RadioButton(label, selected))
+        if (ImGui.RadioButton(Ui.L(label), selected))
             plugin.SetLootMode(mode);
     }
 
     private void DrawRegistrableControls()
     {
         var registrableNeed = plugin.Configuration.LootRegistrableNeedingEnabled;
-        if (ImGui.Checkbox("Need missing registrables", ref registrableNeed))
+        if (WindowLayout.Checkbox("Need missing registrables", ref registrableNeed))
             plugin.SetLootRegistrableNeedingEnabled(registrableNeed);
 
         ImGui.BeginDisabled(!plugin.Configuration.LootRegistrableNeedingEnabled);
@@ -86,7 +87,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
     private static void DrawCategoryCheckbox(string label, bool current, Action<bool> setter)
     {
         var value = current;
-        if (ImGui.Checkbox(label, ref value))
+        if (WindowLayout.Checkbox(label, ref value))
             setter(value);
     }
 }

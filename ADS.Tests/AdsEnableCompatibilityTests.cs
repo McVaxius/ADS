@@ -86,7 +86,7 @@ public sealed class AdsEnableCompatibilityTests
                 () => false, () => false, () => false, () => false, () => false, () => false,
                 _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, _ => false, (_, _, _) => false,
                 (_, _) => false, () => "{}", _ => false, (_, _) => false, _ => false, _ => false, () => false,
-                () => false, () => false, () => "{}", () => "{}", () => "{}", Invoke,
+                () => false, () => false, () => false, () => "{}", () => "{}", () => "{}", Invoke,
                 plugin.GetConfigurationJson, Patch, () => "{}", () => "{}", () => "{}", () => "{}",
                 _ => "{}", _ => "{}", _ => "{}", _ => false, _ => "{}", () => false, log);
             foreach (var endpoint in new[] { "ADS.PatchConfigurationJson", "ADS.Invoke" })

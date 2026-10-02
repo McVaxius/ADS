@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ADS\ADS.csproj" />
+    <ProjectReference Include="..\..\FrenRider\FrenRider\FrenRider.csproj" />
     <Reference Include="Dalamud;Lumina;Lumina.Excel;FFXIVClientStructs">
       <HintPath>$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
       <Private>true</Private>

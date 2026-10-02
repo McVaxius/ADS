@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
@@ -25,19 +26,22 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     {
     }
 
+    public override void PreDraw()
+        => WindowName = Ui.L("LazyLoot Warning###ADSLazyLootWarning");
+
     public override void Draw()
     {
-        ImGui.TextWrapped("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once.");
+        ImGui.TextWrapped(Ui.T("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once."));
         ImGui.Spacing();
 
-        if (ImGui.Button("Open /ads loot"))
+        if (ImGui.Button(Ui.L("Open /ads loot")))
         {
             plugin.OpenLootUi();
             IsOpen = false;
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Don't show this message again"))
+        if (ImGui.Button(Ui.L("Don't show this message again")))
         {
             plugin.Configuration.LazyLootWarningDismissed = true;
             plugin.SaveConfiguration();

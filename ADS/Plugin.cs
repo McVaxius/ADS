@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using ADS.Localization;
 using ADS.Models;
 using ADS.Services;
 using ADS.Windows;
@@ -123,6 +124,7 @@ public sealed class Plugin : IDalamudPlugin
         => PluginInfo.DisplayName;
 
     public Configuration Configuration { get; }
+    internal UiFonts Fonts { get; }
     public WindowSystem WindowSystem { get; } = new(PluginInfo.InternalName);
     public DutyCatalogService DutyCatalogService { get; }
     public DutyContextService DutyContextService { get; }
@@ -215,6 +217,8 @@ public sealed class Plugin : IDalamudPlugin
         var loadedConfiguration = PluginInterface.GetPluginConfig() as Configuration;
         var loadedExistingConfiguration = loadedConfiguration is not null;
         Configuration = loadedConfiguration ?? new Configuration();
+        Ui.SetLanguage(Ui.ResolveLanguage(Configuration.UiLanguage, ClientState.ClientLanguage));
+        Fonts = new UiFonts(PluginInterface.UiBuilder);
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         if (configurationChanged)
             Configuration.Save();
@@ -366,6 +370,7 @@ public sealed class Plugin : IDalamudPlugin
             CancelUtility,
             OpenDesynthConfigUiIpc,
             IsDutyOwned,
+            () => ExecutionService.IsPhoenixDownRecoveryHoldActive,
             GetStatusJson,
             GetCurrentAnalysisJson,
             GetCapabilitiesJson,
@@ -384,6 +389,8 @@ public sealed class Plugin : IDalamudPlugin
             OpenPlayerObjectExplorer,
             Log);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
+        ExecutionService.QueryPhoenixDownRecoveryHold = () =>
+            PluginInterface.GetIpcSubscriber<bool>("FrenRider.PhoenixDown.ShouldPauseDutyProgression").InvokeFunc();
 
         mainWindow = new MainWindow(this);
         configWindow = new ConfigWindow(this);
@@ -437,7 +444,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // ADS diagnostic windows should remain available when opened by slash command during cutscenes.
         PluginInterface.UiBuilder.DisableCutsceneUiHide = true;
-        PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw += DrawUi;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
         Framework.Update += OnFrameworkUpdate;
@@ -475,7 +482,7 @@ public sealed class Plugin : IDalamudPlugin
         ClientState.TerritoryChanged -= OnTerritoryChanged;
         ClientState.Logout -= OnLogout;
         DutyState.DutyStarted -= OnDutyStarted;
-        PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw -= DrawUi;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
         DutyState.DutyCompleted -= OnDutyCompleted;
@@ -516,7 +523,24 @@ public sealed class Plugin : IDalamudPlugin
         desynthesisWindow.Dispose();
         shopListsWindow.Dispose();
         wizardWindow.Dispose();
+        Fonts.Dispose();
+        Ui.Resources.ReleaseAllResources();
         ECommonsMain.Dispose();
+    }
+
+    private void DrawUi()
+    {
+        // Keep one language/font for the entire frame, even when the picker changes it.
+        Ui.SetLanguage(Ui.ResolveLanguage(Configuration.UiLanguage, ClientState.ClientLanguage));
+        using (Fonts.Push(Ui.Language)) WindowSystem.Draw();
+    }
+
+    public void SetUiLanguage(UiLanguage language)
+    {
+        if (!Enum.IsDefined(language) || Configuration.UiLanguage == language) return;
+        Configuration.UiLanguage = language;
+        Configuration.Save();
+        // DrawUi applies the saved choice with its font at the next frame boundary.
     }
 
     public void OpenMainUi()
@@ -2479,6 +2503,12 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            if (ExecutionService.RefreshPhoenixDownRecoveryHold(DutyContextService.Current, Configuration.PluginEnabled))
+            {
+                ObjectivePlannerService.HoldPhoenixDownRecovery();
+                UpdateDtrBar();
+                return;
+            }
             pendingRemoteJsonOwnedDutyRestart?.Observe(DutyContextService.Current, ExecutionService.CurrentMode);
             ExecutionService.ObserveDutyCompletion(DutyContextService.Current);
             RelicPurchaseTestService.Update();

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Native UI and localization
+
+- Refresh the main operator console with captioned actions, state summaries, and responsive Overview cards while retaining the existing controls and automation safeguards.
+- Add nine UI languages with a remembered preference, client-language defaults, native Dalamud fonts, and translated settings, setup flows, warnings, and status displays. Commands, IPC, editable data, and raw diagnostics retain their original values.
+
+## Unreleased - Phoenix Down recovery hold
+
+- Check `FrenRider.PhoenixDown.ShouldPauseDutyProgression` before planning, owned movement, and objective actions. Stop ADS movement once on recovery entry, retain ownership and run state, and publish `ADS.IsPhoenixDownRecoveryHoldActive` after yielding movement.
+- Resume planning from fresh observations after revival without a Stop/Resume cycle. Explicit operator Stop and Leave remain authoritative. Offline integration uses the real ADS and Fren Rider coordinators with synthetic four-client death, inventory, cast, and revival state; native cast/revival/resumption still requires David-controlled live acceptance.
+
 ## Unreleased - Bounded currency shop purchases
 
 - Add `ADS.StartCurrencyShopPurchase(string requestJson) -> bool` for bulk requests with an operation ID, item, quantity, exact currency identity and maximum currency spend. Enforce cumulative verified batch costs before purchase callbacks through the existing runner; preserve guarded single-purchase behavior. Accept the catalog's currency names and reject invalid currency item identities.

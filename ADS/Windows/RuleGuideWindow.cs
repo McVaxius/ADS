@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
 using Dalamud.Bindings.ImGui;
@@ -27,52 +28,52 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
 
         DrawSection("Quick Start");
-        ImGui.TextWrapped("Object Explorer -> RULE -> choose Class -> fill the relevant colored fields -> save an active custom preset -> retest from a clean enough state.");
-        ImGui.TextWrapped("Field cues: red = required, amber = recommended, normal = optional, dim = ignored by this class. Class selection and cues never clear ignored stored values.");
+        ImGui.TextWrapped(Ui.T("Object Explorer -> RULE -> choose Class -> fill the relevant colored fields -> save an active custom preset -> retest from a clean enough state."));
+        ImGui.TextWrapped(Ui.T("Field cues: red = required, amber = recommended, normal = optional, dim = ignored by this class. Class selection and cues never clear ignored stored values."));
 
         DrawSection("How A Rule Wins");
-        ImGui.BulletText("1. Scope: Duty, Terr, CFC, then Layer.");
-        ImGui.BulletText("2. Object match: Kind, BaseId, Name/Match, then optional positional selector.");
-        ImGui.BulletText("3. Gates: candidates failing Dist or Y are removed before a winner is selected.");
-        ImGui.BulletText("4. Priority: lower Pri wins among eligible matching candidates.");
-        ImGui.BulletText("5. Behavior and timing: Class, Wait-before, and Wait-after control execution.");
-        ImGui.TextWrapped("A failed higher-ranked candidate cannot shadow a lower eligible rule. Failed Required/BossFight/CombatFriendly BattleNpc rules are non-blocking; failed Ignored/Follow BattleNpc rules keep generic monster fallback.");
+        ImGui.BulletText(Ui.T("1. Scope: Duty, Terr, CFC, then Layer."));
+        ImGui.BulletText(Ui.T("2. Object match: Kind, BaseId, Name/Match, then optional positional selector."));
+        ImGui.BulletText(Ui.T("3. Gates: candidates failing Dist or Y are removed before a winner is selected."));
+        ImGui.BulletText(Ui.T("4. Priority: lower Pri wins among eligible matching candidates."));
+        ImGui.BulletText(Ui.T("5. Behavior and timing: Class, Wait-before, and Wait-after control execution."));
+        ImGui.TextWrapped(Ui.T("A failed higher-ranked candidate cannot shadow a lower eligible rule. Failed Required/BossFight/CombatFriendly BattleNpc rules are non-blocking; failed Ignored/Follow BattleNpc rules keep generic monster fallback."));
 
         DrawSection("Choose Class By Goal");
         if (ImGui.BeginTable("ADSRuleGuideGoals", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
         {
-            ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 180f);
-            ImGui.TableSetupColumn("Use When", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Common Example", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn(Ui.L("Class"), ImGuiTableColumnFlags.WidthFixed, 180f);
+            ImGui.TableSetupColumn(Ui.L("Use When"), ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn(Ui.L("Common Example"), ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableHeadersRow();
             foreach (var semantics in RuleSemanticsCatalog.Classifications)
             {
                 ImGui.TableNextRow();
                 ImGui.TableSetColumnIndex(0);
-                ImGui.TextUnformatted(semantics.Label);
+                ImGui.TextUnformatted(Ui.Display(semantics.Label));
                 ImGui.TableSetColumnIndex(1);
-                ImGui.TextWrapped(semantics.Goal);
+                ImGui.TextWrapped(Ui.Display(semantics.Goal));
                 ImGui.TableSetColumnIndex(2);
-                ImGui.TextWrapped(semantics.CommonExample);
+                ImGui.TextWrapped(Ui.Display(semantics.CommonExample));
             }
             ImGui.EndTable();
         }
 
         DrawSection("Class Help And Field Matrix");
-        ImGui.TextWrapped("Use the ? button beside a row's Class for focused help. Expand a class below for full required/recommended/optional/ignored guidance.");
+        ImGui.TextWrapped(Ui.T("Use the ? button beside a row's Class for focused help. Expand a class below for full required/recommended/optional/ignored guidance."));
         foreach (var semantics in RuleSemanticsCatalog.Classifications)
         {
-            if (!ImGui.CollapsingHeader(semantics.Label))
+            if (!ImGui.CollapsingHeader(Ui.L(semantics.Label)))
                 continue;
 
-            ImGui.TextWrapped(semantics.Behavior);
-            ImGui.TextWrapped($"Relevant editor fields: {string.Join(", ", RuleSemanticsCatalog.GetRelevantEditorFieldLabels(semantics))}");
+            ImGui.TextWrapped(Ui.Display(semantics.Behavior));
+            ImGui.TextWrapped(Ui.T("Relevant editor fields: {0}", string.Join(", ", RuleSemanticsCatalog.GetRelevantEditorFieldLabels(semantics).Select(Ui.Display))));
             if (ImGui.BeginTable($"ADSRuleGuideMatrix{semantics.Value}", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
-                ImGui.TableSetupColumn("Required", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("Recommended", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("Optional", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("Ignored", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn(Ui.L("Required"), ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn(Ui.L("Recommended"), ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn(Ui.L("Optional"), ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn(Ui.L("Ignored"), ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableHeadersRow();
                 ImGui.TableNextRow();
                 DrawFieldList(semantics, RuleFieldUse.Required, 0);
@@ -86,8 +87,8 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
         DrawSection("Advanced Field Reference");
         if (ImGui.BeginTable("ADSRuleGuideGlossary", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
         {
-            ImGui.TableSetupColumn("JSON Field", ImGuiTableColumnFlags.WidthFixed, 240f);
-            ImGui.TableSetupColumn("Meaning", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn(Ui.L("JSON Field"), ImGuiTableColumnFlags.WidthFixed, 240f);
+            ImGui.TableSetupColumn(Ui.L("Meaning"), ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableHeadersRow();
             foreach (var field in RuleSemanticsCatalog.UniversalFields)
             {
@@ -95,13 +96,13 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
                 ImGui.TableSetColumnIndex(0);
                 ImGui.TextUnformatted(field);
                 ImGui.TableSetColumnIndex(1);
-                ImGui.TextWrapped(RuleSemanticsCatalog.FieldGlossary[field]);
+                ImGui.TextWrapped(Ui.Display(RuleSemanticsCatalog.FieldGlossary[field]));
             }
             ImGui.EndTable();
         }
 
         DrawSection("Coordinate And JSON Examples");
-        ImGui.TextWrapped("Map coordinates use X,Z: `11.3,10.4`. Ordinary/manual world coordinates use X,Y,Z: `154.1,101.9,-34.2`. Cardinal holds use world X,Z: `123.4,-56.7`; X,Y,Z is accepted and Y is ignored.");
+        ImGui.TextWrapped(Ui.T("Map coordinates use X,Z: `11.3,10.4`. Ordinary/manual world coordinates use X,Y,Z: `154.1,101.9,-34.2`. Cardinal holds use world X,Z: `123.4,-56.7`; X,Y,Z is accepted and Y is ignored."));
         ImGui.TextUnformatted("""
 {
   "classification": "CardinalHoldNorth",
@@ -111,7 +112,7 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
   "priority": 100
 }
 """);
-        ImGui.TextWrapped("A cardinal hold activates only while ADS owns duty execution and the player is inside its X/Z radius. ADS stops vnav, holds direct movement for the full duration, releases input, then ghosts the row. Interrupted holds remain unconsumed.");
+        ImGui.TextWrapped(Ui.T("A cardinal hold activates only while ADS owns duty execution and the player is inside its X/Z radius. ADS stops vnav, holds direct movement for the full duration, releases input, then ghosts the row. Interrupted holds remain unconsumed."));
     }
 
     private static void DrawFieldList(RuleClassificationSemantics semantics, RuleFieldUse use, int column)
@@ -125,7 +126,7 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
     {
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(text);
+        ImGui.TextUnformatted(Ui.T(text));
         ImGui.Separator();
     }
 }

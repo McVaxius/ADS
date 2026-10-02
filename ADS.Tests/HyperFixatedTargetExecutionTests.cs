@@ -67,7 +67,7 @@ public sealed class HyperFixatedTargetExecutionTests
         Assert.Equal(1, fixture.HeartbeatCalls);
     }
 
-    private static PlannerSnapshot HyperPlanner(TargetFixture target)
+    internal static PlannerSnapshot HyperPlanner(TargetFixture target)
         => new()
         {
             Mode = PlannerMode.Progression,
@@ -90,7 +90,7 @@ public sealed class HyperFixatedTargetExecutionTests
             CapturedAtUtc = DateTime.UtcNow,
         };
 
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         private readonly TempDirectory tempDirectory = new();
         private readonly ObjectTableProxy objectTableProxy;
@@ -187,10 +187,10 @@ public sealed class HyperFixatedTargetExecutionTests
             return target;
         }
 
-        public void Update(PlannerSnapshot planner)
+        public void Update(PlannerSnapshot planner, DutyContextSnapshot? context = null)
         {
             Execution.Update(
-                TestDutyContextFactory.Create(DutyCategory.Solo),
+                context ?? TestDutyContextFactory.Create(DutyCategory.Solo),
                 planner,
                 new ObservationSnapshot
                 {

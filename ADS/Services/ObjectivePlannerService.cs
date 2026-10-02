@@ -41,6 +41,16 @@ public sealed class ObjectivePlannerService
 
     public PlannerSnapshot Current { get; private set; }
 
+    internal void HoldPhoenixDownRecovery()
+        => Current = new PlannerSnapshot
+        {
+            Mode = PlannerMode.Recovery,
+            ObjectiveKind = PlannerObjectiveKind.None,
+            Objective = "Wait for party revival",
+            Explanation = "Phoenix Down recovery holds progression; replan from live observations after revival.",
+            CapturedAtUtc = DateTime.UtcNow,
+        };
+
     public void Update(
         DutyContextSnapshot context,
         ObservationSnapshot observation,

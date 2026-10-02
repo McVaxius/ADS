@@ -32,6 +32,7 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> cancelUtility,
         Func<bool> openDesynthConfigUi,
         Func<bool> isDutyOwned,
+        Func<bool> isPhoenixDownRecoveryHoldActive,
         Func<string> getStatusJson,
         Func<string> getCurrentAnalysisJson,
         Func<string> getCapabilitiesJson,
@@ -72,6 +73,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.CancelUtility", cancelUtility);
         Register(pluginInterface, "ADS.OpenDesynthConfigUi", openDesynthConfigUi);
         Register(pluginInterface, "ADS.IsDutyOwned", isDutyOwned);
+        Register(pluginInterface, "ADS.IsPhoenixDownRecoveryHoldActive", isPhoenixDownRecoveryHoldActive);
         Register(pluginInterface, "ADS.GetStatusJson", getStatusJson);
         Register(pluginInterface, "ADS.GetCurrentAnalysisJson", getCurrentAnalysisJson);
         Register(pluginInterface, "ADS.GetCapabilitiesJson", getCapabilitiesJson);

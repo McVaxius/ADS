@@ -1,4 +1,5 @@
 using System.Numerics;
+using ADS.Localization;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
@@ -7,12 +8,14 @@ namespace ADS.Windows;
 
 public abstract class PositionedWindow : Window
 {
+    private readonly string originalWindowName;
     private Vector2? pendingWindowPosition;
     private bool pendingPositionConditionReset;
 
     protected PositionedWindow(string name, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
         : base(name, flags)
     {
+        originalWindowName = name;
         SizeCondition = ImGuiCond.FirstUseEver;
         Flags &= ~ImGuiWindowFlags.AlwaysAutoResize;
         Flags &= ~ImGuiWindowFlags.NoResize;
@@ -26,6 +29,7 @@ public abstract class PositionedWindow : Window
 
     public override void PreDraw()
     {
+        WindowName = Ui.L(originalWindowName);
         if (!pendingWindowPosition.HasValue)
             return;
 

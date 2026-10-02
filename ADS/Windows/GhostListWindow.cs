@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
 using Dalamud.Bindings.ImGui;
@@ -42,36 +43,36 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             .ToList();
         var frontierOrManualRowCount = rows.Count(x => x.Type is "Frontier" or "ManualMapXZ" or "ManualXYZ");
 
-        ImGui.TextUnformatted("Ghost Inspector");
-        ImGui.TextWrapped("Shows the current recovery ghost memory ADS is carrying for this duty, plus the live, remembered, and last-ghosted manual destination state. Monster ghosts are stale battle targets; interactable ghosts include class and ghost-reason metadata.");
-        ImGui.TextUnformatted($"Duty: {context.CurrentDuty?.EnglishName ?? "None"}");
-        ImGui.TextUnformatted($"Current live map id: {context.MapId}");
-        ImGui.TextUnformatted($"Monster ghosts: {plugin.ObservationMemoryService.Current.MonsterGhosts.Count}");
+        ImGui.TextUnformatted(Ui.T("Ghost Inspector"));
+        ImGui.TextWrapped(Ui.T("Shows the current recovery ghost memory ADS is carrying for this duty, plus the live, remembered, and last-ghosted manual destination state. Monster ghosts are stale battle targets; interactable ghosts include class and ghost-reason metadata."));
+        ImGui.TextUnformatted(Ui.T("Duty: {0}", context.CurrentDuty is { } duty ? Ui.DutyName(duty) : Ui.T("None")));
+        ImGui.TextUnformatted(Ui.T("Current live map id: {0}", context.MapId));
+        ImGui.TextUnformatted(Ui.T("Monster ghosts: {0}", plugin.ObservationMemoryService.Current.MonsterGhosts.Count));
         ImGui.SameLine();
-        ImGui.TextUnformatted($"Interactable ghosts: {plugin.ObservationMemoryService.Current.InteractableGhosts.Count}");
+        ImGui.TextUnformatted(Ui.T("Interactable ghosts: {0}", plugin.ObservationMemoryService.Current.InteractableGhosts.Count));
         ImGui.SameLine();
-        ImGui.TextUnformatted($"Frontier/manual rows: {frontierOrManualRowCount}");
+        ImGui.TextUnformatted(Ui.T("Frontier/manual rows: {0}", frontierOrManualRowCount));
 
         ImGui.SetNextItemWidth(320f);
-        ImGui.InputTextWithHint("##ADSGhostFilter", "filter by name, type, class, or map", ref filter, 128);
+        ImGui.InputTextWithHint("##ADSGhostFilter", Ui.T("filter by name, type, class, or map"), ref filter, 128);
         ImGui.SameLine();
-        if (ImGui.SmallButton("Clear"))
+        if (ImGui.SmallButton(Ui.L("Clear")))
             filter = string.Empty;
         ImGui.SameLine();
-        ImGui.Checkbox("Current Map Only", ref currentMapOnly);
+        WindowLayout.Checkbox("Current Map Only", ref currentMapOnly);
 
-        ImGui.TextUnformatted($"Ghosts shown: {rows.Count}");
+        ImGui.TextUnformatted(Ui.T("Ghosts shown: {0}", rows.Count));
         if (!ImGui.BeginTable("ADSGhostTable", 8, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 110f);
-        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch, 260f);
-        ImGui.TableSetupColumn("Class", ImGuiTableColumnFlags.WidthFixed, 140f);
-        ImGui.TableSetupColumn("Reason", ImGuiTableColumnFlags.WidthFixed, 130f);
-        ImGui.TableSetupColumn("Map", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Age", ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableSetupColumn("Pos", ImGuiTableColumnFlags.WidthFixed, 250f);
-        ImGui.TableSetupColumn("Flag", ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Type"), ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn(Ui.L("Name"), ImGuiTableColumnFlags.WidthStretch, 260f);
+        ImGui.TableSetupColumn(Ui.L("Class"), ImGuiTableColumnFlags.WidthFixed, 140f);
+        ImGui.TableSetupColumn(Ui.L("Reason"), ImGuiTableColumnFlags.WidthFixed, 130f);
+        ImGui.TableSetupColumn(Ui.L("Map"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Age"), ImGuiTableColumnFlags.WidthFixed, 80f);
+        ImGui.TableSetupColumn(Ui.L("Pos"), ImGuiTableColumnFlags.WidthFixed, 250f);
+        ImGui.TableSetupColumn(Ui.L("Flag"), ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableHeadersRow();
 
         for (var index = 0; index < rows.Count; index++)
@@ -88,11 +89,11 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted(row.Classification);
+            ImGui.TextUnformatted(Ui.Display(row.Classification));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(row.GhostReason);
+            ImGui.TextUnformatted(Ui.Display(row.GhostReason));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
@@ -100,15 +101,15 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(5);
-            ImGui.TextUnformatted($"{(DateTime.UtcNow - row.LastSeenUtc).TotalSeconds:0.0}s");
+            ImGui.TextUnformatted(Ui.T("{0:0.0}s", (DateTime.UtcNow - row.LastSeenUtc).TotalSeconds));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(6);
-            ImGui.TextUnformatted($"{row.Position.X:0.0}, {row.Position.Y:0.0}, {row.Position.Z:0.0}");
+            ImGui.TextUnformatted(Ui.T("{0:0.0}, {1:0.0}, {2:0.0}", row.Position.X, row.Position.Y, row.Position.Z));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(7);
-            if (ImGui.SmallButton($"[FLAG]##ADSGhostFlag{index}"))
+            if (ImGui.SmallButton(Ui.L("[FLAG]##ADSGhostFlag{0}", index)))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
         }
 
@@ -212,14 +213,14 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
         ImGui.BeginTooltip();
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 35f);
         ImGui.TextUnformatted(row.Name);
-        ImGui.TextUnformatted($"Type: {row.Type}");
-        ImGui.TextUnformatted($"Class: {row.Classification}");
-        ImGui.TextUnformatted($"Reason: {row.GhostReason}");
-        ImGui.TextUnformatted($"MapId: {row.MapId}");
-        ImGui.TextUnformatted($"DataId: {row.DataId}");
-        ImGui.TextUnformatted($"GameObjectId: {row.GameObjectId}");
-        ImGui.TextUnformatted($"Last seen: {row.LastSeenUtc:O}");
-        ImGui.TextUnformatted($"Position: {row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
+        ImGui.TextUnformatted(Ui.T("Type: {0}", row.Type));
+        ImGui.TextUnformatted(Ui.T("Class: {0}", row.Classification));
+        ImGui.TextUnformatted(Ui.T("Reason: {0}", row.GhostReason));
+        ImGui.TextUnformatted(Ui.T("MapId: {0}", row.MapId));
+        ImGui.TextUnformatted(Ui.T("DataId: {0}", row.DataId));
+        ImGui.TextUnformatted(Ui.T("GameObjectId: {0}", row.GameObjectId));
+        ImGui.TextUnformatted(Ui.T("Last seen: {0:O}", row.LastSeenUtc));
+        ImGui.TextUnformatted(Ui.T("Position: {0:0.00}, {1:0.00}, {2:0.00}", row.Position.X, row.Position.Y, row.Position.Z));
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
     }

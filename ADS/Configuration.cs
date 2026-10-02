@@ -1,4 +1,5 @@
 using ADS.Models;
+using ADS.Localization;
 using Dalamud.Configuration;
 
 namespace ADS;
@@ -9,6 +10,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconDisabled = "\uE04C";
 
     public int Version { get; set; } = 24;
+    public UiLanguage? UiLanguage { get; set; }
     private bool requestedPluginEnabled = true;
     // Keep the serialized field and setter for older configs/callers. Ownership controls execution.
     public bool PluginEnabled { get => true; set => requestedPluginEnabled = value; }

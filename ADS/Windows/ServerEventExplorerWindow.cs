@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using ADS.Services;
 using Dalamud.Bindings.ImGui;
@@ -57,25 +58,25 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
             ? rows.OrderByDescending(x => x.TimestampUtc).ThenByDescending(x => x.Sequence).ToList()
             : rows.OrderBy(x => x.TimestampUtc).ThenBy(x => x.Sequence).ToList();
 
-        ImGui.TextUnformatted("BossMod-Style Server Event Trace");
-        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
-        ImGui.TextUnformatted($"Hooks: {plugin.HigherLowerServerEventTraceService.InstalledHookCount} installed");
+        ImGui.TextUnformatted(Ui.T("BossMod-Style Server Event Trace"));
+        ImGui.TextUnformatted(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
+        ImGui.TextUnformatted(Ui.T("Hooks: {0} installed", plugin.HigherLowerServerEventTraceService.InstalledHookCount));
         ImGui.SameLine();
-        ImGui.TextUnformatted($"Pending: {plugin.HigherLowerServerEventTraceService.PendingCount}");
+        ImGui.TextUnformatted(Ui.T("Pending: {0}", plugin.HigherLowerServerEventTraceService.PendingCount));
 
         DrawLoggingAndExportControls();
         DrawHookStatus();
         DrawFilters();
 
-        ImGui.TextUnformatted($"Rows shown: {rows.Count}");
-        ImGui.TextWrapped($"Action status: {actionStatus}");
+        ImGui.TextUnformatted(Ui.T("Rows shown: {0}", rows.Count));
+        ImGui.TextWrapped(Ui.T("Action status: {0}", actionStatus));
         DrawTable(rows);
     }
 
     private void DrawLoggingAndExportControls()
     {
         var diskLoggingEnabled = plugin.TreasureHighLowDiagnosticService.VfxDataminingEnabled;
-        if (ImGui.Checkbox("JSONL logging (disk)", ref diskLoggingEnabled))
+        if (WindowLayout.Checkbox("JSONL logging (disk)", ref diskLoggingEnabled))
         {
             plugin.TreasureHighLowDiagnosticService.SetVfxDataminingEnabled(diskLoggingEnabled);
             actionStatus = diskLoggingEnabled
@@ -84,10 +85,10 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Persistent datamine JSONL logging. Off by default. Enabling this can use substantial disk space.");
+            ImGui.SetTooltip(Ui.T("Persistent datamine JSONL logging. Off by default. Enabling this can use substantial disk space."));
 
         ImGui.SameLine();
-        if (ImGui.SmallButton("Open JSONL"))
+        if (ImGui.SmallButton(Ui.L("Open JSONL")))
         {
             var path = plugin.TreasureHighLowDiagnosticService.FindLatestDatamineJsonlPath();
             if (string.IsNullOrWhiteSpace(path))
@@ -102,7 +103,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton("Open Log Folder"))
+        if (ImGui.SmallButton(Ui.L("Open Log Folder")))
         {
             Directory.CreateDirectory(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
             plugin.OpenPath(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
@@ -110,14 +111,14 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton("Export All JSON"))
+        if (ImGui.SmallButton(Ui.L("Export All JSON")))
         {
             var result = plugin.ExportExplorerSnapshot();
             actionStatus = result.Status;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton("Open Export Folder"))
+        if (ImGui.SmallButton(Ui.L("Open Export Folder")))
         {
             Directory.CreateDirectory(plugin.ExplorerSnapshotExportService.ExportDirectory);
             plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
@@ -125,12 +126,12 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         if (diskLoggingEnabled)
-            ImGui.TextColored(new Vector4(1f, 0.72f, 0.2f, 1f), "JSONL DISK LOGGING IS ON");
+            ImGui.TextColored(new Vector4(1f, 0.72f, 0.2f, 1f), Ui.T("JSONL DISK LOGGING IS ON"));
     }
 
     private void DrawHookStatus()
     {
-        if (!ImGui.CollapsingHeader("Hook status"))
+        if (!ImGui.CollapsingHeader(Ui.L("Hook status")))
             return;
 
         foreach (var line in plugin.HigherLowerServerEventTraceService.HookStatus)
@@ -140,19 +141,19 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     private void DrawFilters()
     {
         ImGui.SetNextItemWidth(340f);
-        ImGui.InputTextWithHint("##ADSServerEventsFilter", "filter text / ids / params / data", ref textFilter, 160);
+        ImGui.InputTextWithHint("##ADSServerEventsFilter", Ui.T("filter text / ids / params / data"), ref textFilter, 160);
         ImGui.SameLine();
-        if (ImGui.SmallButton("Clear"))
+        if (ImGui.SmallButton(Ui.L("Clear")))
             textFilter = string.Empty;
         ImGui.SameLine();
-        if (ImGui.SmallButton("Clear Rows"))
+        if (ImGui.SmallButton(Ui.L("Clear Rows")))
             plugin.HigherLowerServerEventTraceService.Clear();
         ImGui.SameLine();
-        ImGui.Checkbox("Newest First", ref newestFirst);
+        WindowLayout.Checkbox("Newest First", ref newestFirst);
 
-        ImGui.Checkbox("Current territory/map only", ref currentTerritoryMapOnly);
+        WindowLayout.Checkbox("Current territory/map only", ref currentTerritoryMapOnly);
         ImGui.SameLine();
-        ImGui.Checkbox("Higher/Lower relevant only", ref higherLowerRelevantOnly);
+        WindowLayout.Checkbox("Higher/Lower relevant only", ref higherLowerRelevantOnly);
 
         DrawKindToggle(HigherLowerServerEventTraceService.ServerEventKind.EObjAnim, "EObjAnim");
         ImGui.SameLine();
@@ -172,7 +173,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     private void DrawKindToggle(HigherLowerServerEventTraceService.ServerEventKind kind, string label)
     {
         var enabled = kindFilters.GetValueOrDefault(kind, true);
-        if (ImGui.Checkbox($"{label}##ADSServerEventKind{kind}", ref enabled))
+        if (WindowLayout.Checkbox($"{label}##ADSServerEventKind{kind}", ref enabled))
             kindFilters[kind] = enabled;
     }
 
@@ -181,15 +182,15 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginTable("ADSServerEventTable", 9, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("Age/Time", ImGuiTableColumnFlags.WidthFixed, 155f);
-        ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 130f);
-        ImGui.TableSetupColumn("Actor/Object", ImGuiTableColumnFlags.WidthFixed, 260f);
-        ImGui.TableSetupColumn("State/Data", ImGuiTableColumnFlags.WidthStretch, 300f);
-        ImGui.TableSetupColumn("Terr/Map", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Position", ImGuiTableColumnFlags.WidthFixed, 190f);
-        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Source Params", ImGuiTableColumnFlags.WidthStretch, 380f);
-        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 290f);
+        ImGui.TableSetupColumn(Ui.L("Age/Time"), ImGuiTableColumnFlags.WidthFixed, 155f);
+        ImGui.TableSetupColumn(Ui.L("Kind"), ImGuiTableColumnFlags.WidthFixed, 130f);
+        ImGui.TableSetupColumn(Ui.L("Actor/Object"), ImGuiTableColumnFlags.WidthFixed, 260f);
+        ImGui.TableSetupColumn(Ui.L("State/Data"), ImGuiTableColumnFlags.WidthStretch, 300f);
+        ImGui.TableSetupColumn(Ui.L("Terr/Map"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(Ui.L("Position"), ImGuiTableColumnFlags.WidthFixed, 190f);
+        ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Source Params"), ImGuiTableColumnFlags.WidthStretch, 380f);
+        ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, 290f);
         ImGui.TableHeadersRow();
 
         var now = DateTime.UtcNow;
@@ -245,21 +246,21 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     {
         var hasPosition = row.Position.HasValue;
         ImGui.BeginDisabled(!hasPosition);
-        if (ImGui.SmallButton($"move##ADSServerEventMove{row.Sequence}") && row.Position.HasValue)
+        if (ImGui.SmallButton(Ui.L("move##ADSServerEventMove{0}", row.Sequence)) && row.Position.HasValue)
         {
             plugin.TryExplorerNavigation(row.Position.Value, useFly: false);
             actionStatus = plugin.ObjectExplorerStatus;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton($"fly##ADSServerEventFly{row.Sequence}") && row.Position.HasValue)
+        if (ImGui.SmallButton(Ui.L("fly##ADSServerEventFly{0}", row.Sequence)) && row.Position.HasValue)
         {
             plugin.TryExplorerNavigation(row.Position.Value, useFly: true);
             actionStatus = plugin.ObjectExplorerStatus;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton($"FLAG##ADSServerEventFlag{row.Sequence}") && row.Position.HasValue)
+        if (ImGui.SmallButton(Ui.L("FLAG##ADSServerEventFlag{0}", row.Sequence)) && row.Position.HasValue)
         {
             var label = string.IsNullOrWhiteSpace(row.ObjectName)
                 ? $"{row.KindLabel} 0x{row.ActorId:X8}"
@@ -269,7 +270,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton($"XYZ##ADSServerEventXyz{row.Sequence}") && row.Position.HasValue)
+        if (ImGui.SmallButton(Ui.L("XYZ##ADSServerEventXyz{0}", row.Sequence)) && row.Position.HasValue)
         {
             ImGui.SetClipboardText(row.PositionText);
             actionStatus = $"Copied {row.PositionText}";
@@ -277,7 +278,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
         ImGui.EndDisabled();
         ImGui.SameLine();
-        if (ImGui.SmallButton($"LINE##ADSServerEventLine{row.Sequence}"))
+        if (ImGui.SmallButton(Ui.L("LINE##ADSServerEventLine{0}", row.Sequence)))
         {
             ImGui.SetClipboardText(row.ToBossModLogLine());
             actionStatus = $"Copied {row.KindLabel} log line.";
@@ -291,26 +292,26 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
         ImGui.BeginTooltip();
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 70f);
-        ImGui.TextUnformatted($"{row.BossModKind} / {row.KindLabel}");
-        ImGui.TextUnformatted($"Time UTC: {row.TimestampUtc:O}");
-        ImGui.TextUnformatted($"Actor: 0x{row.ActorId:X8}");
-        ImGui.TextUnformatted($"Target: 0x{row.TargetId:X}");
-        ImGui.TextUnformatted($"Object name: {(string.IsNullOrWhiteSpace(row.ObjectName) ? "(blank)" : row.ObjectName)}");
-        ImGui.TextUnformatted($"Object id: 0x{row.GameObjectId:X}");
-        ImGui.TextUnformatted($"Entity id: 0x{row.EntityId:X8}");
-        ImGui.TextUnformatted($"Base id: {row.BaseId}");
-        ImGui.TextUnformatted($"Object kind: {row.ObjectKind}");
-        ImGui.TextUnformatted($"Layout id: {row.LayoutId}");
-        ImGui.TextUnformatted($"Gimmick id: {row.GimmickId}");
-        ImGui.TextUnformatted($"Event state: {row.EventState}");
-        ImGui.TextUnformatted($"Event id: 0x{row.EventId:X}");
-        ImGui.TextUnformatted($"Targetable: {row.Targetable?.ToString() ?? "unknown"}");
-        ImGui.TextUnformatted($"Territory/map: {row.TerritoryId}/{row.MapId}");
-        ImGui.TextUnformatted($"Position: {row.PositionText}");
-        ImGui.TextUnformatted($"Distance: {row.DistanceText}");
-        ImGui.TextWrapped($"State/data: {row.StateData}");
-        ImGui.TextWrapped($"Source params: {row.SourceParams}");
-        ImGui.TextWrapped($"HL relevant: {row.HigherLowerRelevant}");
+        ImGui.TextUnformatted(Ui.T("{0} / {1}", row.BossModKind, row.KindLabel));
+        ImGui.TextUnformatted(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
+        ImGui.TextUnformatted(Ui.T("Actor: 0x{0:X8}", row.ActorId));
+        ImGui.TextUnformatted(Ui.T("Target: 0x{0:X}", row.TargetId));
+        ImGui.TextUnformatted(Ui.T("Object name: {0}", (string.IsNullOrWhiteSpace(row.ObjectName) ? "(blank)" : row.ObjectName)));
+        ImGui.TextUnformatted(Ui.T("Object id: 0x{0:X}", row.GameObjectId));
+        ImGui.TextUnformatted(Ui.T("Entity id: 0x{0:X8}", row.EntityId));
+        ImGui.TextUnformatted(Ui.T("Base id: {0}", row.BaseId));
+        ImGui.TextUnformatted(Ui.T("Object kind: {0}", row.ObjectKind));
+        ImGui.TextUnformatted(Ui.T("Layout id: {0}", row.LayoutId));
+        ImGui.TextUnformatted(Ui.T("Gimmick id: {0}", row.GimmickId));
+        ImGui.TextUnformatted(Ui.T("Event state: {0}", row.EventState));
+        ImGui.TextUnformatted(Ui.T("Event id: 0x{0:X}", row.EventId));
+        ImGui.TextUnformatted(Ui.T("Targetable: {0}", row.Targetable?.ToString() ?? "unknown"));
+        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
+        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
+        ImGui.TextWrapped(Ui.T("State/data: {0}", row.StateData));
+        ImGui.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
+        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
         ImGui.TextWrapped(row.ToBossModLogLine());
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();

@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Globalization;
 using System.Numerics;
 using ADS.Models;
@@ -51,34 +52,34 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             ? rows.OrderByDescending(x => x.TimestampUtc).ThenByDescending(x => x.Sequence).ToList()
             : rows.OrderBy(x => x.TimestampUtc).ThenBy(x => x.Sequence).ToList();
 
-        ImGui.TextUnformatted("ECommons VFX Trace");
-        ImGui.TextUnformatted($"Territory / Map / CFC: {context.TerritoryTypeId} / {context.MapId} / {context.ContentFinderConditionId}");
+        ImGui.TextUnformatted(Ui.T("ECommons VFX Trace"));
+        ImGui.TextUnformatted(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
         ImGui.SameLine();
-        ImGui.TextUnformatted($"Pending: {plugin.HigherLowerVfxTraceService.PendingCount}");
+        ImGui.TextUnformatted(Ui.T("Pending: {0}", plugin.HigherLowerVfxTraceService.PendingCount));
 
         DrawFilters();
         DrawTrackedNow(context);
 
-        ImGui.TextUnformatted($"Rows shown: {rows.Count}");
+        ImGui.TextUnformatted(Ui.T("Rows shown: {0}", rows.Count));
         DrawEventTable(rows);
     }
 
     private void DrawFilters()
     {
         ImGui.SetNextItemWidth(360f);
-        ImGui.InputTextWithHint("##ADSVfxFilter", "filter path / ids / params", ref textFilter, 180);
+        ImGui.InputTextWithHint("##ADSVfxFilter", Ui.T("filter path / ids / params"), ref textFilter, 180);
         ImGui.SameLine();
-        if (ImGui.SmallButton("Clear"))
+        if (ImGui.SmallButton(Ui.L("Clear")))
             textFilter = string.Empty;
         ImGui.SameLine();
-        if (ImGui.SmallButton("Clear Rows"))
+        if (ImGui.SmallButton(Ui.L("Clear Rows")))
             plugin.HigherLowerVfxTraceService.Clear();
         ImGui.SameLine();
-        ImGui.Checkbox("Newest First", ref newestFirst);
+        WindowLayout.Checkbox("Newest First", ref newestFirst);
 
-        ImGui.Checkbox("Current territory/map only", ref currentTerritoryMapOnly);
+        WindowLayout.Checkbox("Current territory/map only", ref currentTerritoryMapOnly);
         ImGui.SameLine();
-        ImGui.Checkbox("Higher/Lower relevant only", ref higherLowerRelevantOnly);
+        WindowLayout.Checkbox("Higher/Lower relevant only", ref higherLowerRelevantOnly);
 
         foreach (var kind in Enum.GetValues<HigherLowerVfxTraceService.VfxEventKind>())
         {
@@ -92,7 +93,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
     private void DrawKindToggle(HigherLowerVfxTraceService.VfxEventKind kind, string label)
     {
         var enabled = kindFilters.GetValueOrDefault(kind, true);
-        if (ImGui.Checkbox($"{label}##ADSVfxKind{kind}", ref enabled))
+        if (WindowLayout.Checkbox($"{label}##ADSVfxKind{kind}", ref enabled))
             kindFilters[kind] = enabled;
     }
 
@@ -105,25 +106,25 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             .Take(80)
             .ToList();
 
-        if (!ImGui.CollapsingHeader($"Tracked now ({tracked.Count})", ImGuiTreeNodeFlags.DefaultOpen))
+        if (!ImGui.CollapsingHeader(Ui.L("Tracked now ({0})", tracked.Count), ImGuiTreeNodeFlags.DefaultOpen))
             return;
 
         if (!ImGui.BeginTable("ADSVfxTrackedNow", 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, 180f)))
             return;
 
-        ImGui.TableSetupColumn("Age", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Path", ImGuiTableColumnFlags.WidthStretch, 380f);
-        ImGui.TableSetupColumn("cardSource", ImGuiTableColumnFlags.WidthFixed, 150f);
-        ImGui.TableSetupColumn("slot", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("textureIndex", ImGuiTableColumnFlags.WidthFixed, 95f);
-        ImGui.TableSetupColumn("decodedCard", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("solverReason", ImGuiTableColumnFlags.WidthStretch, 220f);
-        ImGui.TableSetupColumn("Caster", ImGuiTableColumnFlags.WidthFixed, 210f);
-        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 210f);
-        ImGui.TableSetupColumn("Terr/Map", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Position", ImGuiTableColumnFlags.WidthFixed, 190f);
-        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Scale/Rotation", ImGuiTableColumnFlags.WidthStretch, 260f);
+        ImGui.TableSetupColumn(Ui.L("Age"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Path"), ImGuiTableColumnFlags.WidthStretch, 380f);
+        ImGui.TableSetupColumn(Ui.L("cardSource"), ImGuiTableColumnFlags.WidthFixed, 150f);
+        ImGui.TableSetupColumn(Ui.L("slot"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("textureIndex"), ImGuiTableColumnFlags.WidthFixed, 95f);
+        ImGui.TableSetupColumn(Ui.L("decodedCard"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(Ui.L("solverReason"), ImGuiTableColumnFlags.WidthStretch, 220f);
+        ImGui.TableSetupColumn(Ui.L("Caster"), ImGuiTableColumnFlags.WidthFixed, 210f);
+        ImGui.TableSetupColumn(Ui.L("Target"), ImGuiTableColumnFlags.WidthFixed, 210f);
+        ImGui.TableSetupColumn(Ui.L("Terr/Map"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(Ui.L("Position"), ImGuiTableColumnFlags.WidthFixed, 190f);
+        ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Scale/Rotation"), ImGuiTableColumnFlags.WidthStretch, 260f);
         ImGui.TableHeadersRow();
 
         foreach (var row in tracked)
@@ -157,7 +158,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             ImGui.TextWrapped(row.TargetLabel);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted($"{row.TerritoryId}/{row.MapId}");
+            ImGui.TextUnformatted(Ui.T("{0}/{1}", row.TerritoryId, row.MapId));
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.PositionText);
@@ -178,21 +179,21 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginTable("ADSVfxEvents", 15, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("Age/Time", ImGuiTableColumnFlags.WidthFixed, 155f);
-        ImGui.TableSetupColumn("Kind", ImGuiTableColumnFlags.WidthFixed, 105f);
-        ImGui.TableSetupColumn("Path", ImGuiTableColumnFlags.WidthStretch, 380f);
-        ImGui.TableSetupColumn("cardSource", ImGuiTableColumnFlags.WidthFixed, 150f);
-        ImGui.TableSetupColumn("slot", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("textureIndex", ImGuiTableColumnFlags.WidthFixed, 95f);
-        ImGui.TableSetupColumn("decodedCard", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("solverReason", ImGuiTableColumnFlags.WidthStretch, 220f);
-        ImGui.TableSetupColumn("Caster", ImGuiTableColumnFlags.WidthFixed, 210f);
-        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 210f);
-        ImGui.TableSetupColumn("Terr/Map", ImGuiTableColumnFlags.WidthFixed, 90f);
-        ImGui.TableSetupColumn("Position", ImGuiTableColumnFlags.WidthFixed, 190f);
-        ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Scale/Rotation", ImGuiTableColumnFlags.WidthStretch, 260f);
-        ImGui.TableSetupColumn("Source Params", ImGuiTableColumnFlags.WidthStretch, 380f);
+        ImGui.TableSetupColumn(Ui.L("Age/Time"), ImGuiTableColumnFlags.WidthFixed, 155f);
+        ImGui.TableSetupColumn(Ui.L("Kind"), ImGuiTableColumnFlags.WidthFixed, 105f);
+        ImGui.TableSetupColumn(Ui.L("Path"), ImGuiTableColumnFlags.WidthStretch, 380f);
+        ImGui.TableSetupColumn(Ui.L("cardSource"), ImGuiTableColumnFlags.WidthFixed, 150f);
+        ImGui.TableSetupColumn(Ui.L("slot"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("textureIndex"), ImGuiTableColumnFlags.WidthFixed, 95f);
+        ImGui.TableSetupColumn(Ui.L("decodedCard"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(Ui.L("solverReason"), ImGuiTableColumnFlags.WidthStretch, 220f);
+        ImGui.TableSetupColumn(Ui.L("Caster"), ImGuiTableColumnFlags.WidthFixed, 210f);
+        ImGui.TableSetupColumn(Ui.L("Target"), ImGuiTableColumnFlags.WidthFixed, 210f);
+        ImGui.TableSetupColumn(Ui.L("Terr/Map"), ImGuiTableColumnFlags.WidthFixed, 90f);
+        ImGui.TableSetupColumn(Ui.L("Position"), ImGuiTableColumnFlags.WidthFixed, 190f);
+        ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Scale/Rotation"), ImGuiTableColumnFlags.WidthStretch, 260f);
+        ImGui.TableSetupColumn(Ui.L("Source Params"), ImGuiTableColumnFlags.WidthStretch, 380f);
         ImGui.TableHeadersRow();
 
         var now = DateTime.UtcNow;
@@ -263,19 +264,19 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
         ImGui.BeginTooltip();
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 80f);
         ImGui.TextUnformatted(row.KindLabel);
-        ImGui.TextUnformatted($"Time UTC: {row.TimestampUtc:O}");
-        ImGui.TextUnformatted($"Ptr: 0x{row.Pointer:X}");
-        ImGui.TextWrapped($"Path: {(string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)}");
+        ImGui.TextUnformatted(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
+        ImGui.TextUnformatted(Ui.T("Ptr: 0x{0:X}", row.Pointer));
+        ImGui.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
         ImGui.TextWrapped($"Card: source={row.CardSource} slot={row.Slot} textureIndex={row.TextureIndexText} decoded={row.DecodedCardText} reason={row.SolverReason}");
-        ImGui.TextWrapped($"Caster: {row.CasterLabel}");
-        ImGui.TextWrapped($"Target: {row.TargetLabel}");
-        ImGui.TextUnformatted($"Caster base / target base: {row.CasterBaseId} / {row.TargetBaseId}");
-        ImGui.TextUnformatted($"Territory/map: {row.TerritoryId}/{row.MapId}");
-        ImGui.TextUnformatted($"Position: {row.PositionText}");
-        ImGui.TextUnformatted($"Distance: {row.DistanceText}");
+        ImGui.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
+        ImGui.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
+        ImGui.TextUnformatted(Ui.T("Caster base / target base: {0} / {1}", row.CasterBaseId, row.TargetBaseId));
+        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
+        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
         ImGui.TextWrapped(row.ScaleRotationText);
-        ImGui.TextWrapped($"Source params: {row.SourceParams}");
-        ImGui.TextWrapped($"HL relevant: {row.HigherLowerRelevant}");
+        ImGui.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
+        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
         ImGui.TextWrapped(row.ToHldbgLogLine());
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
@@ -288,17 +289,17 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
 
         ImGui.BeginTooltip();
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 80f);
-        ImGui.TextUnformatted($"VfxId: 0x{row.VfxId:X}");
-        ImGui.TextWrapped($"Path: {(string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)}");
+        ImGui.TextUnformatted(Ui.T("VfxId: 0x{0:X}", row.VfxId));
+        ImGui.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
         ImGui.TextWrapped($"Card: source={row.CardSource} slot={row.Slot} textureIndex={row.TextureIndexText} decoded={row.DecodedCardText} reason={row.SolverReason}");
-        ImGui.TextWrapped($"Caster: {row.CasterLabel}");
-        ImGui.TextWrapped($"Target: {row.TargetLabel}");
-        ImGui.TextUnformatted($"Territory/map: {row.TerritoryId}/{row.MapId}");
-        ImGui.TextUnformatted($"Position: {row.PositionText}");
-        ImGui.TextUnformatted($"Distance: {row.DistanceText}");
+        ImGui.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
+        ImGui.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
+        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
+        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
         ImGui.TextWrapped(row.ScaleRotationText);
-        ImGui.TextWrapped($"Static: {row.IsStatic} run: {row.HasRun}");
-        ImGui.TextWrapped($"HL relevant: {row.HigherLowerRelevant}");
+        ImGui.TextWrapped(Ui.T("Static: {0} run: {1}", row.IsStatic, row.HasRun));
+        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
     }

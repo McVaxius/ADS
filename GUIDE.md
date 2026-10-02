@@ -37,6 +37,14 @@ Main keeps six controls visible above every tab:
 
 For an immediate chat stop, use `/ads stop`.
 
+### Phoenix Down Recovery With Fren Rider
+
+When Fren Rider requests recovery in a regular four-player dungeon, ADS reports **Phoenix Down recovery; duty progression paused**, stops its movement once, and retains the current owned run. It acknowledges the hold through `ADS.IsPhoenixDownRecoveryHoldActive` before Fren Rider approaches a party corpse or attempts item use. The planner displays **Wait for party revival** while the hold is active.
+
+Fren Rider's Profile settings enable Phoenix Down recovery and nearby outdoor revival by default; combat use defaults off. A living healer within 20 yalms of a corpse blocks item attempts. Missing items, medicine cooldown, combat waiting, unreachable corpses, and pending revival keep party progression held. Inspect Fren Rider's **Phoenix Down** status for the blocker.
+
+After revival, ADS observes the current duty and chooses a fresh objective without automatically stopping or resuming ownership. **Stop** still releases ownership, and explicit **Leave** still takes precedence. If Fren Rider reports that the recovery acknowledgement IPC is unavailable, use an ADS build supporting this contract before expecting coordinated recovery. Live acceptance requires a real Phoenix Down cast, revival, and resumed ADS progression; David controls live testing and deployment.
+
 ### XA Slave Skipper Fallback
 
 On a successful **Start Outside**, **Start Inside**, or **Resume**, ADS checks `TextAdvance.IsEnabled`. When TextAdvance is enabled, ADS leaves all skipping to it. Otherwise, ADS can enable XA Slave's dialog and cutscene skipper for that ADS-owned run, then turns that fallback off only after ownership (including **Leaving**) has ended. ADS never changes TextAdvance or FrenRider.

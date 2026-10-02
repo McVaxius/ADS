@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
 using ADS.Services;
@@ -14,7 +15,13 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
     private bool dirty;
     private bool filterCurrentTerritory = true;
     private uint selectedTerritoryId;
-    private string editorStatus = "Treasure routes not loaded.";
+    private string editorStatusValue = "Treasure routes not loaded.";
+    private string editorStatusDetail = string.Empty;
+    private string editorStatus
+    {
+        get => editorStatusValue;
+        set { editorStatusValue = value; editorStatusDetail = string.Empty; }
+    }
 
     public TreasureRouteEditorWindow(Plugin plugin)
         : base("ADS Treasure Routes###ADSTreasureRoutes")
@@ -52,15 +59,15 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         EnsureSelectedRoute(visibleRoutes);
         var selectedRoute = draft.Routes.FirstOrDefault(x => x.TerritoryTypeId == selectedTerritoryId);
 
-        ImGui.TextUnformatted($"Path: {TreasureDungeonData.ConfigPath}");
-        ImGui.TextUnformatted($"Active routes: {TreasureDungeonData.ActiveRouteCount}");
-        ImGui.TextWrapped(TreasureDungeonData.LastLoadStatus);
+        ImGui.TextUnformatted(Ui.T("Path: {0}", TreasureDungeonData.ConfigPath));
+        ImGui.TextUnformatted(Ui.T("Active routes: {0}", TreasureDungeonData.ActiveRouteCount));
+        ImGui.TextWrapped(Ui.Display(TreasureDungeonData.LastLoadStatus));
         foreach (var warning in TreasureDungeonData.FallbackWarnings.Take(3))
-            ImGui.TextDisabled(warning);
+            ImGui.TextDisabled(Ui.Display(warning));
         if (dirty)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.97f, 0.84f, 0.31f, 1f));
-            ImGui.TextUnformatted("Unsaved treasure route edits");
+            ImGui.TextUnformatted(Ui.T("Unsaved treasure route edits"));
             ImGui.PopStyleColor();
         }
 
@@ -85,16 +92,17 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         draft = TreasureDungeonData.CreateEditableCopy();
         draftLoaded = true;
         dirty = false;
-        editorStatus = $"{status} {TreasureDungeonData.LastLoadStatus}";
+        editorStatus = status;
+        editorStatusDetail = TreasureDungeonData.LastLoadStatus;
         if (selectedTerritoryId != 0 && draft.Routes.All(x => x.TerritoryTypeId != selectedTerritoryId))
             selectedTerritoryId = 0;
     }
 
     private void DrawToolbar(uint currentTerritoryId, IReadOnlyList<TreasureRouteDefinition> visibleRoutes)
     {
-        ImGui.TextUnformatted($"Current territory: {(currentTerritoryId == 0 ? "-" : currentTerritoryId.ToString())}");
+        ImGui.TextUnformatted(Ui.T("Current territory: {0}", (currentTerritoryId == 0 ? "-" : currentTerritoryId.ToString())));
         ImGui.SameLine();
-        ImGui.Checkbox("Current territory route", ref filterCurrentTerritory);
+        WindowLayout.Checkbox("Current territory route", ref filterCurrentTerritory);
 
         ImGui.SameLine();
         ImGui.SetNextItemWidth(320f);
@@ -114,18 +122,18 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(!dirty))
         {
-            if (ImGui.Button("Save"))
+            if (ImGui.Button(Ui.L("Save")))
                 SaveDraft();
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Reload"))
+        if (ImGui.Button(Ui.L("Reload")))
             RefreshDraft("Reloaded treasure routes.");
 
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(plugin.RemoteJsonUpdateService.IsUpdateRunning))
         {
-            if (ImGui.Button("Update"))
+            if (ImGui.Button(Ui.L("Update")))
             {
                 plugin.ForceRemoteJsonUpdate();
                 editorStatus = plugin.RemoteJsonUpdateService.LastUpdateStatus;
@@ -133,7 +141,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Open JSON"))
+        if (ImGui.Button(Ui.L("Open JSON")))
         {
             EnsureJsonFileForOpen();
             plugin.OpenPath(TreasureDungeonData.ConfigPath);
@@ -142,24 +150,24 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(selectedTerritoryId == 0 || !TreasureDungeonData.GetBuiltInRouteTerritoryIds().Contains(selectedTerritoryId)))
         {
-            if (ImGui.Button("Reset Route"))
+            if (ImGui.Button(Ui.L("Reset Route")))
                 ResetSelectedRoute();
         }
 
-        ImGui.TextWrapped(editorStatus);
-        ImGui.TextDisabled(plugin.RemoteJsonUpdateService.LastUpdateStatus);
+        ImGui.TextWrapped(Ui.Display(editorStatus) + (string.IsNullOrEmpty(editorStatusDetail) ? string.Empty : " " + Ui.Display(editorStatusDetail)));
+        ImGui.TextDisabled(Ui.Display(plugin.RemoteJsonUpdateService.LastUpdateStatus));
     }
 
     private void DrawLiveSummary(Vector3? playerPosition)
     {
         if (!playerPosition.HasValue)
         {
-            ImGui.TextUnformatted("Player XYZ: unavailable");
+            ImGui.TextUnformatted(Ui.T("Player XYZ: unavailable"));
             return;
         }
 
         var player = playerPosition.Value;
-        ImGui.TextUnformatted($"Player XYZ: {FormatVector(player)}");
+        ImGui.TextUnformatted(Ui.T("Player XYZ: {0}", FormatVector(player)));
 
         var nearestLiveDoor = plugin.ObservationMemoryService.Current.LiveInteractables
             .Where(x => x.Classification == InteractableClass.TreasureDoor)
@@ -172,11 +180,11 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         if (nearestLiveDoor is not null)
         {
             ImGui.TextUnformatted(
-                $"Nearest live door: {nearestLiveDoor.Name} | {FormatVector(nearestLiveDoor.Position)}");
+                Ui.T("Nearest live door: {0} | {1}", nearestLiveDoor.Name, FormatVector(nearestLiveDoor.Position)));
         }
         else
         {
-            ImGui.TextUnformatted("Nearest live door: none");
+            ImGui.TextUnformatted(Ui.T("Nearest live door: none"));
         }
     }
 
@@ -184,7 +192,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
     {
         if (route is null)
         {
-            ImGui.TextUnformatted("No treasure route selected.");
+            ImGui.TextUnformatted(Ui.T("No treasure route selected."));
             return;
         }
 
@@ -196,10 +204,10 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
 
     private void DrawEntrySection(TreasureRouteDefinition route)
     {
-        ImGui.TextUnformatted("Entry XYZ");
+        ImGui.TextUnformatted(Ui.T("Entry XYZ"));
         if (route.EntryPoint is null)
         {
-            ImGui.TextUnformatted("Entry point missing.");
+            ImGui.TextUnformatted(Ui.T("Entry point missing."));
             return;
         }
 
@@ -211,9 +219,9 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginTable("ADSTreasureRouteEntry", 3, tableFlags))
             return;
 
-        ImGui.TableSetupColumn("X", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Y", ImGuiTableColumnFlags.WidthFixed, 120f);
-        ImGui.TableSetupColumn("Z", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn(Ui.L("X"), ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn(Ui.L("Y"), ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn(Ui.L("Z"), ImGuiTableColumnFlags.WidthFixed, 120f);
         ImGui.TableHeadersRow();
 
         ImGui.TableNextRow();
@@ -255,11 +263,11 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginTable("ADSTreasureRouteRooms", columnCount, tableFlags, new Vector2(-1f, -1f)))
             return;
 
-        ImGui.TableSetupColumn("Room", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Left XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
+        ImGui.TableSetupColumn(Ui.L("Room"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Left XYZ"), ImGuiTableColumnFlags.WidthFixed, 300f);
         if (isThief)
-            ImGui.TableSetupColumn("Middle XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
-        ImGui.TableSetupColumn("Right XYZ", ImGuiTableColumnFlags.WidthFixed, 300f);
+            ImGui.TableSetupColumn(Ui.L("Middle XYZ"), ImGuiTableColumnFlags.WidthFixed, 300f);
+        ImGui.TableSetupColumn(Ui.L("Right XYZ"), ImGuiTableColumnFlags.WidthFixed, 300f);
         ImGui.TableHeadersRow();
 
         foreach (var room in route.Rooms.OrderBy(x => x.Room))
@@ -292,7 +300,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
     {
         if (coordinate is null)
         {
-            ImGui.TextDisabled("-");
+            ImGui.TextDisabled(Ui.T("-"));
             return;
         }
 
@@ -388,8 +396,8 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
 
     private static string GetRouteLabel(TreasureRouteDefinition? route)
         => route is null
-            ? "(no route)"
-            : $"{route.TerritoryTypeId} - {(string.IsNullOrWhiteSpace(route.DutyName) ? "Treasure route" : route.DutyName)}";
+            ? Ui.T("(no route)")
+            : $"{route.TerritoryTypeId} - {(string.IsNullOrWhiteSpace(route.DutyName) ? Ui.T("Treasure route") : route.DutyName)}";
 
     private static string FormatVector(Vector3 value)
         => $"{value.X:0.00}, {value.Y:0.00}, {value.Z:0.00}";

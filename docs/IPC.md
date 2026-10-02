@@ -35,6 +35,7 @@ Existing ADS IPC endpoints remain available.
 - `ADS.OpenDesynthConfigUi() -> bool`
 - `ADS.OpenPlayerObjectExplorer() -> bool`
 - `ADS.IsDutyOwned() -> bool`
+- `ADS.IsPhoenixDownRecoveryHoldActive() -> bool`
 - `ADS.GetDesynthStatusJson() -> string`
 
 `ADS.OpenPlayerObjectExplorer` opens the existing object explorer, clears its search, level, targetable, and same-map filters, and selects Player. Player rows show a whitelist action only while the loaded DhogNav plugin exposes `DhogNav.AddWhitelistedPlayer(string identity) -> bool`; parasite mode may be off. The action resolves the live player by object ID and sends a complete `Name@HomeServer` identity. DhogNav rejects incomplete identities and active whitelist edits, deduplicates accepted entries, and returns false if saving fails. Save failures can leave the entry in memory; check DhogNav's save status.
@@ -42,6 +43,8 @@ Existing ADS IPC endpoints remain available.
 `ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. They best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty.
 
 `ADS.IsDutyOwned` is authoritative runtime duty ownership. It returns `true` only while live instanced-duty truth is active and ADS mode is `OwnedStartOutside`, `OwnedStartInside`, `OwnedResumeInside`, or `Leaving`. It returns `false` for `Idle`, `Observing`, `Failed`, and queued outside-duty ownership.
+
+`ADS.IsPhoenixDownRecoveryHoldActive` acknowledges that ADS has stopped its owned movement and paused duty planning for `FrenRider.PhoenixDown.ShouldPauseDutyProgression() -> bool`. Fren Rider waits for this acknowledgement before recovery approach or item use while ADS owns a dungeon. ADS stops movement once on entry, retains ownership and run state, and replans after the request clears. Explicit Stop and Leave override the hold; transition, logout, or duty exit clear acknowledgement. Missing Fren Rider IPC does not request a hold.
 
 `ADS.StartDesynth` accepts legacy modes `configured`, `all`, `whitelist`, `last-duty`, and `skillups`, plus direct source-scope aliases `inventory-only`, `everywhere-skip-gearsets`, and `everywhere`.
 

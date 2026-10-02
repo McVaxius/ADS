@@ -16,6 +16,36 @@ namespace ADS.Services;
 
 public sealed class ExecutionService
 {
+    internal Func<bool> QueryPhoenixDownRecoveryHold { get; set; } = () => false;
+    public bool IsPhoenixDownRecoveryHoldActive { get; private set; }
+
+    internal bool RefreshPhoenixDownRecoveryHold(DutyContextSnapshot context, bool pluginEnabled)
+    {
+        var requested = false;
+        if (pluginEnabled && context.IsLoggedIn && context.InInstancedDuty && !context.IsUnsafeTransition
+            && (IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving && !explicitLeaveRequested))
+        {
+            try { requested = QueryPhoenixDownRecoveryHold(); }
+            catch { /* Fren Rider absent or an older version: no hold request. */ }
+        }
+
+        if (requested && !IsPhoenixDownRecoveryHoldActive)
+        {
+            // Stop only on entry. Subsequent ticks must leave Fren Rider's recovery
+            // navigation alone, and retain ADS ownership and the current run.
+            ReleaseHyperFocus("Phoenix Down recovery");
+            InterruptCardinalHold("Phoenix Down recovery");
+            StopMovementAssists();
+            ClearInteractableCommitment();
+            ClearCommittedForceMarchManualDestination();
+        }
+        if (!requested && IsPhoenixDownRecoveryHoldActive)
+            nextNavigationCommandUtc = DateTime.MinValue;
+        IsPhoenixDownRecoveryHoldActive = requested;
+        if (requested)
+            SetPhase(ExecutionPhase.RecoveryHint, "Phoenix Down recovery; duty progression paused. Ownership retained.");
+        return requested;
+    }
     private const float NavigationPhaseRange = 6f;
     private const float PreferredInteractArrivalRange = 0.8f;
     private const float CloseRecoveryInteractAttemptRange = 1.5f;
@@ -594,6 +624,7 @@ public sealed class ExecutionService
 
     public bool LeaveDuty(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
+        IsPhoenixDownRecoveryHoldActive = false;
         InterruptCardinalHold("leave request");
         if (!context.InInstancedDuty)
         {
@@ -670,6 +701,7 @@ public sealed class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        IsPhoenixDownRecoveryHoldActive = false;
         ReleaseHyperFocus("stop");
         InterruptCardinalHold("stop");
         StopMovementAssists();
@@ -718,6 +750,8 @@ public sealed class ExecutionService
         string dialogAutomationStatus,
         bool sessionDebugEnabled = false)
     {
+        if (RefreshPhoenixDownRecoveryHold(context, pluginEnabled))
+            return;
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateDebugRuleCommand(context, planner, pluginEnabled, sessionDebugEnabled);
         if (!pluginEnabled

@@ -1,3 +1,4 @@
+using ADS.Localization;
 using System.Globalization;
 using System.Numerics;
 using ADS.Models;
@@ -69,7 +70,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         if (!string.IsNullOrWhiteSpace(status))
         {
             ImGui.Separator();
-            ImGui.TextWrapped(status);
+            ImGui.TextWrapped(Ui.Display(status));
         }
     }
 
@@ -77,12 +78,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     {
         var service = plugin.ShopListService;
         var batch = plugin.UtilityAutomationService.ShopListBatchStatus;
-        ImGui.TextUnformatted("Preset test and purchase");
-        ImGui.TextWrapped(batch.Running ? batch.StatusMessage : plugin.UtilityAutomationService.StatusMessage);
+        ImGui.TextUnformatted(Ui.T("Preset test and purchase"));
+        ImGui.TextWrapped(Ui.Display(batch.Running ? batch.StatusMessage : plugin.UtilityAutomationService.StatusMessage));
         if (batch.TotalRows > 0)
-            ImGui.TextDisabled($"Completed rows: {batch.CompletedRows}/{batch.TotalRows} | operation: {batch.OperationId}");
+            ImGui.TextDisabled(Ui.T("Completed rows: {0}/{1} | operation: {2}", batch.CompletedRows, batch.TotalRows, batch.OperationId));
 
-        if (ImGui.Button("Test preset (preview only)"))
+        if (ImGui.Button(Ui.L("Test preset (preview only)")))
         {
             var test = service.PreviewActivePreset();
             ApplyPreviewRows(test.Rows);
@@ -92,12 +93,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             status = $"Test {test.Disposition}: {test.Message} No travel or purchase was started.";
         }
         ImGui.SameLine();
-        if (ImGui.Button("Refresh local preview"))
+        if (ImGui.Button(Ui.L("Refresh local preview")))
             RefreshPreview();
 
         var runBlocker = GetRunBlocker();
         ImGui.BeginDisabled(!string.IsNullOrEmpty(runBlocker));
-        if (ImGui.Button("Run Shop List"))
+        if (ImGui.Button(Ui.L("Run Shop List")))
         {
             plugin.StartShopListBatch(out status);
             RefreshPreview();
@@ -106,25 +107,25 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
         ImGui.SameLine();
         ImGui.BeginDisabled(!batch.Running);
-        if (ImGui.Button("Cancel Shop List"))
+        if (ImGui.Button(Ui.L("Cancel Shop List")))
             plugin.CancelUtility();
         ImGui.EndDisabled();
 
         if (!string.IsNullOrEmpty(runBlocker))
-            ImGui.TextDisabled(runBlocker);
+            ImGui.TextDisabled(Ui.Display(runBlocker));
 
-        if (service.IsStandaloneOrderComplete && ImGui.Button("Start new order"))
+        if (service.IsStandaloneOrderComplete && ImGui.Button(Ui.L("Start new order")))
         {
             SetStatus(service.StartNewOrder(out var error), error);
             RefreshPreview();
         }
-        ImGui.TextWrapped("Targeted refill uses current ownership thresholds. Spend until currency/capacity keeps spending under its repeat rules. Fill order over multiple runs credits initial ownership once, then verified purchases; consuming or moving items keeps that progress.");
+        ImGui.TextWrapped(Ui.T("Targeted refill uses current ownership thresholds. Spend until currency/capacity keeps spending under its repeat rules. Fill order over multiple runs credits initial ownership once, then verified purchases; consuming or moving items keeps that progress."));
 
-        ImGui.TextWrapped(service.OwnershipStatus);
+        ImGui.TextWrapped(Ui.Display(service.OwnershipStatus));
         if (service.OwnershipRefreshedAtUtc != DateTime.MinValue)
         {
             ImGui.TextDisabled(
-                $"Ownership response read: {service.OwnershipRefreshedAtUtc.ToString("u", CultureInfo.InvariantCulture)}");
+                Ui.T("Ownership response read: {0}", service.OwnershipRefreshedAtUtc.ToString("u", CultureInfo.InvariantCulture)));
         }
         DrawWarnings("XA Database warnings", service.OwnershipWarnings);
     }
@@ -133,10 +134,10 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     {
         var service = plugin.ShopListService;
         var store = service.PresetStore;
-        ImGui.TextUnformatted("Presets");
-        ImGui.TextWrapped(store.LastStatus);
+        ImGui.TextUnformatted(Ui.T("Presets"));
+        ImGui.TextWrapped(Ui.Display(store.LastStatus));
         ImGui.BeginDisabled(plugin.UtilityAutomationService.IsRunning);
-        if (ImGui.Button("Reload saved lists"))
+        if (ImGui.Button(Ui.L("Reload saved lists")))
         {
             store.Reload();
             settingsPresetId = Guid.Empty;
@@ -148,23 +149,23 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         var presetIndex = Math.Max(0, Array.FindIndex(
             presetNames,
             name => string.Equals(name, store.ActivePresetName, StringComparison.OrdinalIgnoreCase)));
-        if (ImGui.Combo("Active preset", ref presetIndex, presetNames, presetNames.Length))
+        if (ImGui.Combo(Ui.L("Active preset"), ref presetIndex, presetNames, presetNames.Length))
         {
             SetStatus(service.SelectPreset(presetNames[presetIndex], out var error), error);
             settingsPresetId = Guid.Empty;
             RefreshPreview();
         }
         ImGui.SameLine();
-        if (ImGui.SmallButton("Copy preset ID"))
+        if (ImGui.SmallButton(Ui.L("Copy preset ID")))
             ImGui.SetClipboardText(store.ActivePresetId.ToString("D"));
         ImGui.TextDisabled(store.ActivePresetId.ToString("D"));
 
         var examples = ShopListExamples.RelicSteps;
         var exampleNames = examples.Select(example => example.Name).ToArray();
         ImGui.SetNextItemWidth(460f);
-        ImGui.Combo("Relic step example", ref relicExampleIndex, exampleNames, exampleNames.Length);
+        ImGui.Combo(Ui.L("Relic step example"), ref relicExampleIndex,exampleNames.Select(Ui.Display).ToArray(), exampleNames.Length);
         ImGui.SameLine();
-        if (ImGui.Button("Add example"))
+        if (ImGui.Button(Ui.L("Add example")))
         {
             var succeeded = service.AddExamplePreset(examples[relicExampleIndex], out var error);
             SetStatus(succeeded, error);
@@ -176,13 +177,13 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
                 status = "Example added as an editable preset. Review targets, then Test preset before Run Shop List.";
             }
         }
-        ImGui.TextWrapped(examples[relicExampleIndex].Description);
-        ImGui.TextWrapped("Examples use Poetics and inventory-only refill targets. Adjust targets for your unfinished step; Add example does not start purchases. Mysterious Map and its farming belong to Loot Goblin.");
+        ImGui.TextWrapped(Ui.Display(examples[relicExampleIndex].Description));
+        ImGui.TextWrapped(Ui.T("Examples use Poetics and inventory-only refill targets. Adjust targets for your unfinished step; Add example does not start purchases. Mysterious Map and its farming belong to Loot Goblin."));
 
         ImGui.SetNextItemWidth(240f);
-        ImGui.InputText("New preset", ref newPresetName, 80);
+        ImGui.InputText(Ui.L("New preset"), ref newPresetName, 80);
         ImGui.SameLine();
-        if (ImGui.Button("Create"))
+        if (ImGui.Button(Ui.L("Create")))
         {
             var succeeded = service.CreatePreset(newPresetName, out var error);
             SetStatus(succeeded, error);
@@ -196,9 +197,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SetNextItemWidth(240f);
-        ImGui.InputText("Rename active", ref renamePresetName, 80);
+        ImGui.InputText(Ui.L("Rename active"), ref renamePresetName, 80);
         ImGui.SameLine();
-        if (ImGui.Button("Rename"))
+        if (ImGui.Button(Ui.L("Rename")))
         {
             var succeeded = service.RenameActivePreset(renamePresetName, out var error);
             SetStatus(succeeded, error);
@@ -210,7 +211,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         }
         ImGui.SameLine();
         ImGui.BeginDisabled(string.Equals(store.ActivePresetName, ShopListPresetStore.DefaultPresetName, StringComparison.OrdinalIgnoreCase));
-        if (ImGui.Button("Delete active"))
+        if (ImGui.Button(Ui.L("Delete active")))
         {
             SetStatus(service.DeleteActivePreset(out var error), error);
             renamePresetName = string.Empty;
@@ -222,12 +223,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         EnsurePresetSettings();
         var modes = new[] { "Targeted refill", "Spend until currency/capacity", "Fill order over multiple runs" };
         ImGui.SetNextItemWidth(275f);
-        ImGui.Combo("Purchase type", ref presetModeIndex, modes, modes.Length);
+        ImGui.Combo(Ui.L("Purchase type"), ref presetModeIndex,modes.Select(Ui.Display).ToArray(), modes.Length);
 
         var currencyKinds = Enum.GetValues<ShopCurrencyKind>();
         var currencyNames = currencyKinds.Select(ShopOfferSelector.CurrencyKindName).ToArray();
         ImGui.SetNextItemWidth(210f);
-        if (ImGui.Combo("Exact currency kind", ref currencyKindIndex, currencyNames, currencyNames.Length))
+        if (ImGui.Combo(Ui.L("Exact currency kind"), ref currencyKindIndex,currencyNames.Select(Ui.Display).ToArray(), currencyNames.Length))
         {
             currencyItemId = currencyKinds[currencyKindIndex] switch
             {
@@ -238,12 +239,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         }
         ImGui.SameLine();
         ImGui.SetNextItemWidth(120f);
-        ImGui.InputInt("Currency item ID", ref currencyItemId);
+        ImGui.InputInt(Ui.L("Currency item ID"), ref currencyItemId);
         ImGui.SameLine();
         ImGui.SetNextItemWidth(130f);
-        ImGui.InputInt("Trigger at >=", ref currencyThreshold);
+        ImGui.InputInt(Ui.L("Trigger at >="), ref currencyThreshold);
         ImGui.SameLine();
-        if (ImGui.Button("Save preset settings"))
+        if (ImGui.Button(Ui.L("Save preset settings")))
         {
             if (currencyItemId < 0 || currencyThreshold < 0)
             {
@@ -263,45 +264,45 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
         }
 
-        ImGui.TextUnformatted("Add row");
+        ImGui.TextUnformatted(Ui.T("Add row"));
         ImGui.SetNextItemWidth(120f);
-        ImGui.InputInt("Item ID", ref newItemId);
+        ImGui.InputInt(Ui.L("Item ID"), ref newItemId);
         ImGui.SameLine();
         ImGui.SetNextItemWidth(95f);
         if (store.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
         {
-            ImGui.InputInt("Target quantity", ref newRefillToAtLeast);
+            ImGui.InputInt(Ui.L("Target quantity"), ref newRefillToAtLeast);
             newTriggerBelow = newRefillToAtLeast;
             newRepeatable = false;
         }
         else
         {
-            ImGui.InputInt("If owned <", ref newTriggerBelow);
+            ImGui.InputInt(Ui.L("If owned <"), ref newTriggerBelow);
             ImGui.SameLine();
             ImGui.SetNextItemWidth(95f);
-            ImGui.InputInt("Refill to >=", ref newRefillToAtLeast);
+            ImGui.InputInt(Ui.L("Refill to >="), ref newRefillToAtLeast);
             ImGui.SameLine();
-            ImGui.Checkbox("Repeatable", ref newRepeatable);
+            WindowLayout.Checkbox("Repeatable", ref newRepeatable);
         }
         ImGui.SameLine();
         var scopes = new[] { "Inventory only", "Inventory + XA Database retainers" };
         ImGui.SetNextItemWidth(255f);
-        ImGui.Combo("Ownership", ref newOwnershipScopeIndex, scopes, scopes.Length);
+        ImGui.Combo(Ui.L("Item ownership"), ref newOwnershipScopeIndex,scopes.Select(Ui.Display).ToArray(), scopes.Length);
         ImGui.SameLine();
-        if (ImGui.Button("Add / update item"))
+        if (ImGui.Button(Ui.L("Add / update item")))
             AddOrUpdateItem((uint)Math.Max(0, newItemId));
     }
 
     private void DrawImportControls()
     {
-        ImGui.TextUnformatted("Preset sharing (Base64)");
-        if (ImGui.Button("Export active preset to clipboard"))
+        ImGui.TextUnformatted(Ui.T("Preset sharing (Base64)"));
+        if (ImGui.Button(Ui.L("Export active preset to clipboard")))
         {
             ImGui.SetClipboardText(plugin.ShopListService.ExportActivePresetBase64());
             status = "Copied the active Base64 preset. Stable preset and row IDs were preserved.";
         }
         ImGui.SameLine();
-        if (ImGui.Button("Import Base64 preset from clipboard"))
+        if (ImGui.Button(Ui.L("Import Base64 preset from clipboard")))
         {
             var succeeded = plugin.ShopListService.ImportPresetBase64(ImGui.GetClipboardText() ?? string.Empty, out var error);
             SetStatus(succeeded, error);
@@ -312,18 +313,18 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
         }
 
-        ImGui.TextUnformatted("Replace active rows from clipboard");
-        if (ImGui.Button("Import TeamCraft"))
+        ImGui.TextUnformatted(Ui.T("Replace active rows from clipboard"));
+        if (ImGui.Button(Ui.L("Import TeamCraft")))
             ImportClipboard(ShopListImportSource.TeamCraft);
         ImGui.SameLine();
-        if (ImGui.Button("Import Crafting as a Service"))
+        if (ImGui.Button(Ui.L("Import Crafting as a Service")))
             ImportClipboard(ShopListImportSource.CraftingAsAService);
         ImGui.SameLine();
-        if (ImGui.Button("Import Artisan"))
+        if (ImGui.Button(Ui.L("Import Artisan")))
             ImportClipboard(ShopListImportSource.Artisan);
 
         if (!string.IsNullOrWhiteSpace(plugin.ShopListService.ImportStatus))
-            ImGui.TextWrapped(plugin.ShopListService.ImportStatus);
+            ImGui.TextWrapped(Ui.Display(plugin.ShopListService.ImportStatus));
         if (plugin.ShopListService.LastImportResult is { } importResult)
             DrawWarnings("Skipped / unresolved import rows", importResult.Warnings);
     }
@@ -331,17 +332,17 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     private void DrawCatalogSearch()
     {
         var active = plugin.ShopListService.PresetStore.ActivePreset;
-        ImGui.TextUnformatted("Deterministic vendor catalog");
+        ImGui.TextUnformatted(Ui.T("Deterministic vendor catalog"));
         ImGui.SetNextItemWidth(300f);
-        ImGui.InputText("Item / vendor / NPC / territory / currency", ref catalogQuery, 120);
+        ImGui.InputText(Ui.L("Item / vendor / NPC / territory / currency"), ref catalogQuery, 120);
         ImGui.SameLine();
-        if (ImGui.Button("Search exact preset currency"))
+        if (ImGui.Button(Ui.L("Search exact preset currency")))
         {
             catalogRows = plugin.UtilityAutomationService.SearchShopCatalog(catalogQuery, active.Currency, 100).Rows;
             status = $"Catalog returned {catalogRows.Count} exact-currency offer(s).";
         }
         ImGui.SameLine();
-        if (ImGui.Button("Discover currencies"))
+        if (ImGui.Button(Ui.L("Discover currencies")))
         {
             catalogRows = plugin.UtilityAutomationService.SearchShopCatalog(catalogQuery, null, 100).Rows;
             status = $"Catalog returned {catalogRows.Count} offer(s); use a row's exact currency identity below.";
@@ -349,7 +350,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
         if (catalogRows.Count == 0)
         {
-            ImGui.TextDisabled("Search results appear here. Catalog search and Test never travel or purchase.");
+            ImGui.TextDisabled(Ui.T("Search results appear here. Catalog search and Test never travel or purchase."));
             return;
         }
 
@@ -361,11 +362,11 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         {
             return;
         }
-        ImGui.TableSetupColumn("Currency", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-        ImGui.TableSetupColumn("Item / bundle", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-        ImGui.TableSetupColumn("Vendor / NPC", ImGuiTableColumnFlags.WidthStretch, 1.7f);
-        ImGui.TableSetupColumn("Territory / XYZ", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 160f);
+        ImGui.TableSetupColumn(Ui.L("Currency"), ImGuiTableColumnFlags.WidthStretch, 1.2f);
+        ImGui.TableSetupColumn(Ui.L("Item / bundle"), ImGuiTableColumnFlags.WidthStretch, 1.2f);
+        ImGui.TableSetupColumn(Ui.L("Vendor / NPC"), ImGuiTableColumnFlags.WidthStretch, 1.7f);
+        ImGui.TableSetupColumn(Ui.L("Territory / XYZ"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
+        ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, 160f);
         ImGui.TableHeadersRow();
 
         foreach (var row in catalogRows)
@@ -373,25 +374,25 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             ImGui.PushID(HashCode.Combine(row.ItemId, row.ShopId, row.ShopRow, row.NpcId, row.TerritoryId));
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextWrapped($"{row.CurrencyName}: {row.CurrencyCostPerTransaction}");
-            ImGui.TextDisabled($"{row.CurrencyKind}:{row.CurrencyItemId}");
+            ImGui.TextWrapped(Ui.T("{0}: {1}", Ui.ItemName(row.CurrencyItemId, row.CurrencyName), row.CurrencyCostPerTransaction));
+            ImGui.TextDisabled(Ui.T("{0}:{1}", row.CurrencyKind, row.CurrencyItemId));
             ImGui.TableSetColumnIndex(1);
-            ImGui.TextWrapped(row.ItemName);
-            ImGui.TextDisabled($"{row.ItemId} | receive {row.ReceiveCount}");
+            ImGui.TextWrapped(Ui.ItemName(row.ItemId, row.ItemName));
+            ImGui.TextDisabled(Ui.T("{0} | receive {1}", row.ItemId, row.ReceiveCount));
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextWrapped(row.ShopName);
-            ImGui.TextDisabled($"shop {row.ShopId} row {row.ShopRow}");
-            ImGui.TextWrapped(row.NpcName);
+            ImGui.TextWrapped(Ui.ShopName(row.ShopKind, row.ShopId, row.ShopName));
+            ImGui.TextDisabled(Ui.T("shop {0} row {1}", row.ShopId, row.ShopRow));
+            ImGui.TextWrapped(Ui.NpcName(row.NpcId, row.NpcName));
             ImGui.TextDisabled(row.NpcId.ToString(CultureInfo.InvariantCulture));
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextWrapped(row.TerritoryName);
-            ImGui.TextDisabled($"{row.TerritoryId} | {row.CopyableXyz}");
+            ImGui.TextWrapped(Ui.TerritoryName(row.TerritoryId, row.TerritoryName));
+            ImGui.TextDisabled(Ui.T("{0} | {1}", row.TerritoryId, row.CopyableXyz));
             ImGui.TableSetColumnIndex(4);
-            if (ImGui.SmallButton("Use currency"))
+            if (ImGui.SmallButton(Ui.L("Use currency")))
                 UseCatalogCurrency(row);
-            if (ImGui.SmallButton("Add item"))
+            if (ImGui.SmallButton(Ui.L("Add item")))
                 AddOrUpdateItem(row.ItemId);
-            if (ImGui.SmallButton("Copy XYZ"))
+            if (ImGui.SmallButton(Ui.L("Copy XYZ")))
                 ImGui.SetClipboardText(row.CopyableXyz);
             ImGui.PopID();
         }
@@ -400,15 +401,15 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
     private void DrawPreview()
     {
-        ImGui.TextUnformatted("Preview");
+        ImGui.TextUnformatted(Ui.T("Preview"));
         if (previewRows.Count == 0)
         {
-            ImGui.TextDisabled("The active preset has no items.");
+            ImGui.TextDisabled(Ui.T("The active preset has no items."));
             return;
         }
 
         if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.TargetedRefill)
-            ImGui.TextWrapped("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items.");
+            ImGui.TextWrapped(Ui.T("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items."));
 
         if (!ImGui.BeginTable(
                 "ADSShopListPreview",
@@ -419,14 +420,14 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         {
             return;
         }
-        ImGui.TableSetupColumn("Item / row", ImGuiTableColumnFlags.WidthStretch, 1.1f);
-        ImGui.TableSetupColumn("Rule", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-        ImGui.TableSetupColumn("Owned", ImGuiTableColumnFlags.WidthFixed, 95f);
-        ImGui.TableSetupColumn("Retainer locations", ImGuiTableColumnFlags.WidthStretch, 1.6f);
-        ImGui.TableSetupColumn("Would buy", ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn("Selected vendor", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-        ImGui.TableSetupColumn("Outcome / status", ImGuiTableColumnFlags.WidthStretch, 1.6f);
-        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 72f);
+        ImGui.TableSetupColumn(Ui.L("Item / row"), ImGuiTableColumnFlags.WidthStretch, 1.1f);
+        ImGui.TableSetupColumn(Ui.L("Rule"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
+        ImGui.TableSetupColumn(Ui.L("Owned"), ImGuiTableColumnFlags.WidthFixed, 95f);
+        ImGui.TableSetupColumn(Ui.L("Retainer locations"), ImGuiTableColumnFlags.WidthStretch, 1.6f);
+        ImGui.TableSetupColumn(Ui.L("Would buy"), ImGuiTableColumnFlags.WidthFixed, 70f);
+        ImGui.TableSetupColumn(Ui.L("Selected vendor"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
+        ImGui.TableSetupColumn(Ui.L("Outcome / status"), ImGuiTableColumnFlags.WidthStretch, 1.6f);
+        ImGui.TableSetupColumn(Ui.L("Action"), ImGuiTableColumnFlags.WidthFixed, 72f);
         ImGui.TableHeadersRow();
 
         foreach (var row in previewRows)
@@ -437,33 +438,33 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextWrapped(row.ItemName);
+            ImGui.TextWrapped(Ui.ItemName(row.ItemId, row.ItemName));
             ImGui.TextDisabled(row.ItemId.ToString(CultureInfo.InvariantCulture));
-            if (ImGui.SmallButton("Copy row ID"))
+            if (ImGui.SmallButton(Ui.L("Copy row ID")))
                 ImGui.SetClipboardText(row.RowId.ToString("D"));
 
             ImGui.TableSetColumnIndex(1);
             ImGui.SetNextItemWidth(70f);
             if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
             {
-                ImGui.InputInt("Target", ref edit.RefillToAtLeast);
+                ImGui.InputInt(Ui.L("Target"), ref edit.RefillToAtLeast);
                 edit.TriggerBelow = edit.RefillToAtLeast;
                 edit.Repeatable = false;
                 var credited = plugin.ShopListService.PresetStore.GetOrderProgress(
                     plugin.UtilityAutomationService.ShopCharacterId, plugin.ShopListService.PresetStore.ActivePresetId);
-                ImGui.TextDisabled($"Credited: {credited.GetValueOrDefault(row.RowId)} / {row.RefillToAtLeast}");
+                ImGui.TextDisabled(Ui.T("Credited: {0} / {1}", credited.GetValueOrDefault(row.RowId), row.RefillToAtLeast));
             }
             else
             {
-                ImGui.InputInt("If owned <##Trigger", ref edit.TriggerBelow);
+                ImGui.InputInt(Ui.L("If owned <##Trigger"), ref edit.TriggerBelow);
                 ImGui.SetNextItemWidth(70f);
-                ImGui.InputInt("Refill to >=##Refill", ref edit.RefillToAtLeast);
-                ImGui.Checkbox("Repeatable", ref edit.Repeatable);
+                ImGui.InputInt(Ui.L("Refill to >=##Refill"), ref edit.RefillToAtLeast);
+                WindowLayout.Checkbox("Repeatable", ref edit.Repeatable);
             }
             var scopeNames = new[] { "Inventory", "Inventory + retainers" };
             ImGui.SetNextItemWidth(155f);
-            ImGui.Combo("##Scope", ref edit.OwnershipScopeIndex, scopeNames, scopeNames.Length);
-            if (ImGui.SmallButton("Save row"))
+            ImGui.Combo("##Scope", ref edit.OwnershipScopeIndex,scopeNames.Select(Ui.Display).ToArray(), scopeNames.Length);
+            if (ImGui.SmallButton(Ui.L("Save row")))
             {
                 var succeeded = plugin.ShopListService.UpdateItem(
                     row.RowId,
@@ -478,34 +479,34 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted(row.OwnedQuantity.ToString("N0", CultureInfo.InvariantCulture));
-            ImGui.TextDisabled($"Inv {row.LiveInventoryQuantity:N0}");
+            ImGui.TextUnformatted(row.OwnedQuantity.ToString("N0", Ui.Culture));
+            ImGui.TextDisabled(Ui.T("Inv {0:N0}", row.LiveInventoryQuantity));
 
             ImGui.TableSetColumnIndex(3);
             DrawRetainerLocations(row);
 
             ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(row.PurchaseQuantity.ToString("N0", CultureInfo.InvariantCulture));
+            ImGui.TextUnformatted(row.PurchaseQuantity.ToString("N0", Ui.Culture));
 
             ImGui.TableSetColumnIndex(5);
             if (row.SelectedOffer == null)
             {
-                ImGui.TextDisabled("None needed / available");
+                ImGui.TextDisabled(Ui.T("None needed / available"));
             }
             else
             {
-                ImGui.TextWrapped(row.SelectedOffer.ShopName);
-                ImGui.TextDisabled($"{row.SelectedOffer.ShopKind} {row.SelectedOffer.ShopId}");
-                ImGui.TextDisabled($"{row.SelectedOffer.NpcName} - {row.SelectedOffer.TerritoryName}");
+                ImGui.TextWrapped(Ui.ShopName(row.SelectedOffer.ShopKind, row.SelectedOffer.ShopId, row.SelectedOffer.ShopName));
+                ImGui.TextDisabled(Ui.T("{0} {1}", row.SelectedOffer.ShopKind, row.SelectedOffer.ShopId));
+                ImGui.TextDisabled(Ui.T("{0} - {1}", Ui.NpcName(row.SelectedOffer.NpcId, row.SelectedOffer.NpcName), Ui.TerritoryName(row.SelectedOffer.TerritoryId, row.SelectedOffer.TerritoryName)));
             }
 
             ImGui.TableSetColumnIndex(6);
-            ImGui.TextWrapped($"{row.Outcome}: {row.StatusMessage}");
+            ImGui.TextWrapped(Ui.T("{0}: {1}", Ui.Display(row.Outcome), Ui.Display(row.StatusMessage)));
             if (!string.IsNullOrWhiteSpace(row.FailureCode))
                 ImGui.TextDisabled(row.FailureCode);
 
             ImGui.TableSetColumnIndex(7);
-            if (ImGui.SmallButton("Remove"))
+            if (ImGui.SmallButton(Ui.L("Remove")))
             {
                 SetStatus(plugin.ShopListService.RemoveItem(row.RowId, out var error), error);
                 RefreshPreview();
@@ -574,12 +575,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
     private static void DrawRetainerLocations(ShopListPreviewRow row)
     {
-        ImGui.TextUnformatted(row.RetainerQuantity.ToString("N0", CultureInfo.InvariantCulture));
+        ImGui.TextUnformatted(row.RetainerQuantity.ToString("N0", Ui.Culture));
         foreach (var location in row.RetainerLocations)
         {
             var quality = location.IsHq ? " HQ" : string.Empty;
             ImGui.TextWrapped(
-                $"{location.RetainerName}: {location.Quantity.ToString("N0", CultureInfo.InvariantCulture)}{quality} | "
+                $"{location.RetainerName}: {location.Quantity.ToString("N0", Ui.Culture)}{quality} | "
                 + $"{location.ContainerName} | {location.LastSeenUtc} | {location.SnapshotQuality}");
         }
     }
@@ -674,10 +675,10 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
     private static void DrawWarnings(string label, IReadOnlyList<string> warnings)
     {
-        if (warnings.Count == 0 || !ImGui.TreeNode($"{label} ({warnings.Count})"))
+        if (warnings.Count == 0 || !ImGui.TreeNode(Ui.T("{0} ({1})", Ui.Display(label), warnings.Count) + $"###{label} ({warnings.Count})"))
             return;
         foreach (var warning in warnings)
-            ImGui.BulletText(warning);
+            ImGui.BulletText(Ui.Display(warning));
         ImGui.TreePop();
     }
 
