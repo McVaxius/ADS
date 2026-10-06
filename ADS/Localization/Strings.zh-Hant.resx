@@ -274,7 +274,7 @@
     <value>活躍</value>
   </data>
   <data name="ADS Controls" xml:space="preserve">
-    <value>ADS 控制</value>
+    <value>ADS 快速控制</value>
   </data>
   <data name="ADS Desynthesis" xml:space="preserve">
     <value>ADS 合成</value>
@@ -775,7 +775,7 @@
     <value>透過 ADS 聯繫 NPC 供應商。</value>
   </data>
   <data name="ApproachingInteractableObjective" xml:space="preserve">
-    <value>ApproachingInteractableObjective</value>
+    <value>正在接近互動目標</value>
   </data>
   <data name="Arcane Sphere" xml:space="preserve">
     <value>奧術領域</value>
@@ -820,7 +820,7 @@
     <value>嘗試另外一個{0}。</value>
   </data>
   <data name="AttemptingInteractableObjective" xml:space="preserve">
-    <value>AttemptingInteractableObjective</value>
+    <value>正在嘗試目標互動</value>
   </data>
   <data name="Authoring" xml:space="preserve">
     <value>創作</value>
@@ -871,7 +871,7 @@
     <value>等待寶藏追隨者路線保持：{0}</value>
   </data>
   <data name="AwaitingSupportedPilotDuty" xml:space="preserve">
-    <value>AwaitingSupportedPilotDuty</value>
+    <value>等待受支援的試行任務</value>
   </data>
   <data name="B" xml:space="preserve">
     <value>乙</value>
@@ -946,7 +946,7 @@
     <value>BossFight</value>
   </data>
   <data name="BossFightMonster" xml:space="preserve">
-    <value>BossFightMonster</value>
+    <value>首領戰怪物</value>
   </data>
   <data name="BossMod IPC active preset list resolved." xml:space="preserve">
     <value>BossMod IPC 活動預設清單已解決。</value>
@@ -1159,7 +1159,7 @@
     <value>卡片地圖 ({0})</value>
   </data>
   <data name="CardinalHold" xml:space="preserve">
-    <value>CardinalHold</value>
+    <value>保持方位方向移動</value>
   </data>
   <data name="CardinalHoldEast" xml:space="preserve">
     <value>CardinalHoldEast</value>
@@ -1453,10 +1453,10 @@
     <value>CombatFriendly</value>
   </data>
   <data name="CombatFriendlyInteractable" xml:space="preserve">
-    <value>CombatFriendlyInteractable</value>
+    <value>戰鬥中可互動物件</value>
   </data>
   <data name="CombatHold" xml:space="preserve">
-    <value>CombatHold</value>
+    <value>戰鬥期間暫停</value>
   </data>
   <data name="Combined effective view: this table can merge many backing JSON shards. Missing custom contexts inherit DEFAULT; saving a changed context writes one complete replacement shard." xml:space="preserve">
     <value>組合有效視圖：此表可以合併多個支援的 JSON 分片。缺少自訂上下文繼承DEFAULT；保存變更的上下文會寫入一個完整的替換分片。</value>
@@ -2581,7 +2581,7 @@
     <value>消耗性互動後續工作已完成 {0}；物件消失了，因此 ADS 正在等待刷新的實例事實，然後再選擇另一個目標。</value>
   </data>
   <data name="ExpendableInteractable" xml:space="preserve">
-    <value>ExpendableInteractable</value>
+    <value>消耗型互動物件</value>
   </data>
   <data name="Experimental Higher/Lower datamining for treasure maps" xml:space="preserve">
     <value>藏寶圖實驗性高/低資料探勘</value>
@@ -2884,7 +2884,7 @@
     <value>關注：{0} {1} | {2}</value>
   </data>
   <data name="FollowTarget" xml:space="preserve">
-    <value>FollowTarget</value>
+    <value>跟隨目標</value>
   </data>
   <data name="FollowThrough" xml:space="preserve">
     <value>FollowThrough</value>
@@ -3031,7 +3031,7 @@
     <value>邊境/manual rows：{0}</value>
   </data>
   <data name="FrontierHint" xml:space="preserve">
-    <value>FrontierHint</value>
+    <value>探索提示</value>
   </data>
   <data name="Full-manifest disk import/export" xml:space="preserve">
     <value>完整清單磁碟匯入/export</value>
@@ -3214,7 +3214,7 @@
     <value>航向偵察 {0}</value>
   </data>
   <data name="HeadingScout" xml:space="preserve">
-    <value>HeadingScout</value>
+    <value>方向探索</value>
   </data>
   <data name="HealBot" xml:space="preserve">
     <value>HealBot</value>
@@ -3364,7 +3364,7 @@
     <value>{0}後的超焦點版本無法到達 FrenRider：{1}</value>
   </data>
   <data name="HyperFixatedAttackTarget" xml:space="preserve">
-    <value>HyperFixatedAttackTarget</value>
+    <value>鎖定的攻擊目標</value>
   </data>
   <data name="Hypnoslot Machine" xml:space="preserve">
     <value>催眠老虎機</value>
@@ -3403,7 +3403,7 @@
     <value>閒置的。</value>
   </data>
   <data name="IdleObserve" xml:space="preserve">
-    <value>IdleObserve</value>
+    <value>待機觀察</value>
   </data>
   <data name="If owned &lt;" xml:space="preserve">
     <value>如果擁有&lt;</value>
@@ -3634,7 +3634,7 @@
     <value>可交互的{0}報告了無效位置； ADS 將重新解析它並在重試之前關閉導航至 {1:0.0}y。</value>
   </data>
   <data name="InteractableGhost" xml:space="preserve">
-    <value>InteractableGhost</value>
+    <value>已記憶的互動物件殘影</value>
   </data>
   <data name="Interacting with innkeeper {0}" xml:space="preserve">
     <value>與旅館老闆{0}互動</value>
@@ -3961,7 +3961,7 @@
     <value>從旅館房間的門離開去NPC修理。</value>
   </data>
   <data name="LeavingDuty" xml:space="preserve">
-    <value>LeavingDuty</value>
+    <value>正在退出任務</value>
   </data>
   <data name="Left" xml:space="preserve">
     <value>左</value>
@@ -4366,16 +4366,16 @@
     <value>MapXz</value>
   </data>
   <data name="MapXzDestination" xml:space="preserve">
-    <value>MapXzDestination</value>
+    <value>地圖 XZ 目的地</value>
   </data>
   <data name="MapXzDestinationHint" xml:space="preserve">
-    <value>MapXzDestinationHint</value>
+    <value>地圖 XZ 目的地提示</value>
   </data>
   <data name="MapXzForceMarch" xml:space="preserve">
     <value>MapXzForceMarch</value>
   </data>
   <data name="MapXzForceMarchDestination" xml:space="preserve">
-    <value>MapXzForceMarchDestination</value>
+    <value>強制移動的地圖 XZ 目的地</value>
   </data>
   <data name="Mark a special coffer as treasure." xml:space="preserve">
     <value>將一個特殊的保險箱標記為寶藏。</value>
@@ -4453,10 +4453,10 @@
     <value>怪物優先的偏見很活躍。 {0} 中的活體怪物的排名超過了 {1} 中的可選互動怪物。</value>
   </data>
   <data name="MonsterGhost" xml:space="preserve">
-    <value>MonsterGhost</value>
+    <value>已記憶的怪物殘影</value>
   </data>
   <data name="MountedDutyCombat" xml:space="preserve">
-    <value>MountedDutyCombat</value>
+    <value>任務騎乘戰鬥</value>
   </data>
   <data name="Mounts" xml:space="preserve">
     <value>坐騎</value>
@@ -4579,25 +4579,25 @@
     <value>導航至</value>
   </data>
   <data name="NavigatingToFollowObjective" xml:space="preserve">
-    <value>NavigatingToFollowObjective</value>
+    <value>正在前往跟隨目標</value>
   </data>
   <data name="NavigatingToFrontierObjective" xml:space="preserve">
-    <value>NavigatingToFrontierObjective</value>
+    <value>正在前往探索目標</value>
   </data>
   <data name="NavigatingToInteractableObjective" xml:space="preserve">
-    <value>NavigatingToInteractableObjective</value>
+    <value>正在前往互動目標</value>
   </data>
   <data name="NavigatingToMapXzDestination" xml:space="preserve">
-    <value>NavigatingToMapXzDestination</value>
+    <value>正在前往地圖 XZ 目的地</value>
   </data>
   <data name="NavigatingToMonsterObjective" xml:space="preserve">
-    <value>NavigatingToMonsterObjective</value>
+    <value>正在前往怪物目標</value>
   </data>
   <data name="NavigatingToRecoveryObjective" xml:space="preserve">
-    <value>NavigatingToRecoveryObjective</value>
+    <value>正在前往恢復目標</value>
   </data>
   <data name="NavigatingToXyzDestination" xml:space="preserve">
-    <value>NavigatingToXyzDestination</value>
+    <value>正在前往 XYZ 目的地</value>
   </data>
   <data name="Navigation command accepted on send {0}; distance monitoring is active without resends." xml:space="preserve">
     <value>發送 {0} 時接受導航命令；距離監控處於活動狀態，無需重新發送。</value>
@@ -5056,7 +5056,7 @@
     <value>僅觀察； ADS 目前不擁有此實例。</value>
   </data>
   <data name="ObservingOnly" xml:space="preserve">
-    <value>ObservingOnly</value>
+    <value>僅觀察</value>
   </data>
   <data name="Caption.OffTitle" xml:space="preserve">
     <value>關閉</value>
@@ -5296,7 +5296,7 @@
     <value>普通/manual rules可選垂直距離門。</value>
   </data>
   <data name="OptionalInteractable" xml:space="preserve">
-    <value>OptionalInteractable</value>
+    <value>可選互動物件</value>
   </data>
   <data name="Orchestrion rolls" xml:space="preserve">
     <value>管弦樂卷</value>
@@ -5341,7 +5341,7 @@
     <value>輸出驗證狀態不完整。</value>
   </data>
   <data name="OutsideQueue" xml:space="preserve">
-    <value>OutsideQueue</value>
+    <value>外部排隊</value>
   </data>
   <data name="Override" xml:space="preserve">
     <value>覆蓋</value>
@@ -5377,13 +5377,13 @@
     <value>擁有數量 {0} 不低於觸發器 {1}。</value>
   </data>
   <data name="OwnedResumeInside" xml:space="preserve">
-    <value>OwnedResumeInside</value>
+    <value>已接管內部恢復</value>
   </data>
   <data name="OwnedStartInside" xml:space="preserve">
-    <value>OwnedStartInside</value>
+    <value>已接管內部啟動</value>
   </data>
   <data name="OwnedStartOutside" xml:space="preserve">
-    <value>OwnedStartOutside</value>
+    <value>已接管外部啟動</value>
   </data>
   <data name="Caption.OwnershipTitle" xml:space="preserve">
     <value>控制權</value>
@@ -5932,13 +5932,13 @@
     <value>準備好：{0}</value>
   </data>
   <data name="ReadyForFollowObjective" xml:space="preserve">
-    <value>ReadyForFollowObjective</value>
+    <value>已準備跟隨目標</value>
   </data>
   <data name="ReadyForInteractableObjective" xml:space="preserve">
-    <value>ReadyForInteractableObjective</value>
+    <value>已準備處理互動目標</value>
   </data>
   <data name="ReadyForMonsterObjective" xml:space="preserve">
-    <value>ReadyForMonsterObjective</value>
+    <value>已準備處理怪物目標</value>
   </data>
   <data name="Reason" xml:space="preserve">
     <value>原因</value>
@@ -5965,7 +5965,7 @@
     <value>恢復操作保持控制意識並避免不安全的轉換、過場動畫和事件狀態。</value>
   </data>
   <data name="RecoveryHint" xml:space="preserve">
-    <value>RecoveryHint</value>
+    <value>恢復提示</value>
   </data>
   <data name="Refill to &gt;=" xml:space="preserve">
     <value>補充至 &gt;=</value>
@@ -6283,7 +6283,7 @@
     <value>{0} 所需的互動後續工作已完成；物件消失了，因此 ADS 正在等待刷新的實例事實，然後再選擇另一個目標。</value>
   </data>
   <data name="RequiredInteractable" xml:space="preserve">
-    <value>RequiredInteractable</value>
+    <value>必要互動物件</value>
   </data>
   <data name="Requires a clean draft, no disk conflict, and confirmation of any empty overrides. Only included contexts are written." xml:space="preserve">
     <value>需要乾淨的草稿，沒有磁碟衝突，並確認任何空覆蓋。僅寫入包含的上下文。</value>
@@ -7861,7 +7861,7 @@
     <value>追蹤實例 {0} 的增益。</value>
   </data>
   <data name="TransitionHold" xml:space="preserve">
-    <value>TransitionHold</value>
+    <value>過渡期間暫停</value>
   </data>
   <data name="TransitionUsed" xml:space="preserve">
     <value>TransitionUsed</value>
@@ -8017,16 +8017,16 @@
     <value>寶物：{0} |開場白 {1} ({2})</value>
   </data>
   <data name="TreasureCoffer" xml:space="preserve">
-    <value>TreasureCoffer</value>
+    <value>寶箱</value>
   </data>
   <data name="TreasureDoor" xml:space="preserve">
-    <value>TreasureDoor</value>
+    <value>藏寶室門</value>
   </data>
   <data name="TreasureDungeon" xml:space="preserve">
-    <value>TreasureDungeon</value>
+    <value>藏寶地牢</value>
   </data>
   <data name="TreasureFollowerLoot" xml:space="preserve">
-    <value>TreasureFollowerLoot</value>
+    <value>寶藏跟隨者戰利品</value>
   </data>
   <data name="TreasureHighLow is visible but no reliable current card was decoded" xml:space="preserve">
     <value>TreasureHighLow 可見，但沒有可靠的當前卡被解碼</value>
@@ -8170,7 +8170,7 @@
     <value>正在進行不安全的轉換。</value>
   </data>
   <data name="UnsafeTransition" xml:space="preserve">
-    <value>UnsafeTransition</value>
+    <value>不安全的過渡</value>
   </data>
   <data name="Unsaved Change" xml:space="preserve">
     <value>未儲存的更改</value>
@@ -8212,7 +8212,7 @@
     <value>不支援的區域索引架構 {0}；預期為{1}。</value>
   </data>
   <data name="UnsupportedDuty" xml:space="preserve">
-    <value>UnsupportedDuty</value>
+    <value>不支援的任務</value>
   </data>
   <data name="Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion." xml:space="preserve">
     <value>未經測試的/default maturity行。運行時控制仍然可以從即時實例真相運行，但該實例需要在升級之前進行偵察。</value>
@@ -8557,7 +8557,7 @@
     <value>WaitingForRoomCombatEnd</value>
   </data>
   <data name="WaitingForTruth" xml:space="preserve">
-    <value>WaitingForTruth</value>
+    <value>等待已確認的狀態</value>
   </data>
   <data name="Warning: {0} will disappear from this preset because no DEFAULT shard exists to inherit." xml:space="preserve">
     <value>警告：{0} 將從該預設中消失，因為不存在可繼承的 DEFAULT 分片。</value>
@@ -8689,13 +8689,13 @@
     <value>XYZ</value>
   </data>
   <data name="XyzDestination" xml:space="preserve">
-    <value>XyzDestination</value>
+    <value>XYZ 目的地</value>
   </data>
   <data name="XyzDestinationHint" xml:space="preserve">
-    <value>XyzDestinationHint</value>
+    <value>XYZ 目的地提示</value>
   </data>
   <data name="XyzForceMarchDestination" xml:space="preserve">
-    <value>XyzForceMarchDestination</value>
+    <value>強制移動的 XYZ 目的地</value>
   </data>
   <data name="Y" xml:space="preserve">
     <value>是</value>
@@ -11090,5 +11090,88 @@
   </data>
   <data name="Item ownership" xml:space="preserve">
     <value>物品持有範圍</value>
+  </data>
+  <data name="Compact mode" xml:space="preserve"><value>精簡模式</value></data>
+  <data name="Color" xml:space="preserve"><value>顏色</value></data>
+  <data name="Teal" xml:space="preserve"><value>青色</value></data>
+  <data name="Blue" xml:space="preserve"><value>藍色</value></data>
+  <data name="Pink" xml:space="preserve"><value>粉紅色</value></data>
+  <data name="Custom RGB" xml:space="preserve"><value>自訂 RGB</value></data>
+  <data name="Loading UI fonts..." xml:space="preserve"><value>正在載入介面字型...</value></data>
+  <data name="UI fonts failed to load. See the plugin log." xml:space="preserve"><value>介面字型載入失敗。請查看插件記錄。</value></data>
+  <data name="H/L auto: enabled={0} hold={1} dutyKey={2} step={3} card={4} action={5} source={6} directionSource={7} target={8}@{9} pendingTarget={10} pendingPhase={11} pendingAge={12} pendingPhaseAge={13} retryAttempts={14}/{15} lastInteractAge={16} nextRetryIn={17} retryReason={18} pendingBaselineRowSeq={19} terminalProof={20} callbackAction={21} callbackPhase={22} callbackAge={23} surface={24} blocked='{25}' retained={26} retainedStep={27} retainedCard={28} retainedAction={29}" xml:space="preserve">
+    <value>大小自動： 啟用={0} 暫停移動={1} 任務ID={2} 步驟={3} 卡牌={4} 操作={5} 來源={6} 方向來源={7} 目標={8}@{9} 待處理目標={10} 待處理階段={11} 等待時間={12} 階段時間={13} 重試次數={14}/{15} 互動後時間={16} 距下次重試={17} 重試原因={18} 基準行序號={19} 結束證據={20} 回呼操作={21} 回呼階段={22} 回呼時間={23} 介面={24} 阻止原因='{25}' 保留={26} 保留步驟={27} 保留卡牌={28} 保留操作={29}</value>
+  </data>
+  <data name="H/L solver: card={0} choice={1} confidence={2} source={3} sourceRowSeq={4} sourceState={5} reason='{6}' textureIndex={7} textureIndexSource={8}" xml:space="preserve">
+    <value>大小判定： 卡牌={0} 選擇={1} 可信度={2} 來源={3} 來源行序號={4} 來源狀態={5} 原因='{6}' 紋理索引={7} 紋理索引來源={8}</value>
+  </data>
+  <data name="Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}" xml:space="preserve">
+    <value>卡牌： 來源={0} 欄位={1} 紋理索引={2} 識別結果={3} 原因={4}</value>
+  </data>
+  <data name="{0} Final navigation cleanup reported that the owned path was still running." xml:space="preserve">
+    <value>{0} 最終導覽清理回報所持有的路徑仍在執行。</value>
+  </data>
+  <data name="{0} Final navigation cleanup could not verify that the owned path stopped." xml:space="preserve">
+    <value>{0} 最終導覽清理無法確認所持有的路徑已停止。</value>
+  </data>
+  <data name="Higher/Lower automation {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} card={5} action={6} source='{7}' directionSource={8} directionTarget={9}@{10} pendingTarget={11} pendingPhase={12} pendingAge={13} pendingPhaseAge={14} {15} pendingBaselineServerRowSeq={16} terminalProof={17} callbackAction={18} callbackPhase={19} callbackAge={20} blocksDutyExit={21} exitGrace={22} lastActivity={23} blockedReason='{24}' active={25} addonCurrentCard={26} addonOtherCard={27} knownCards={28}." xml:space="preserve">
+    <value>大小自動 {0}; 介面={1} 任務ID={2} 步驟={3} 完成局數={4} 卡牌={5} 操作={6} 來源='{7}' 方向來源={8} 方向目標={9}@{10} 待處理目標={11} 待處理階段={12} 等待時間={13} 階段時間={14} {15} 基準行序號={16} 結束證據={17} 回呼操作={18} 回呼階段={19} 回呼時間={20} 阻止退出任務={21} 退出等待時間={22} 最後活動={23} 阻止原因='{24}' 執行中={25} 外掛目前卡牌={26} 外掛另一張卡牌={27} 已知卡牌數={28}.</value>
+  </data>
+  <data name="Higher/Lower solver {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} directionSource={5} directionTarget={6}@{7} pendingTarget={8} pendingPhase={9} pendingAge={10} pendingPhaseAge={11} {12} pendingBaselineServerRowSeq={13} terminalProof={14} callbackAction={15} callbackPhase={16} callbackAge={17} blocksDutyExit={18} exitGrace={19} lastActivity={20} blockedReason='{21}' active={22} addonCurrentCard={23} addonOtherCard={24} decodedCard={25} solverChoice={26} confidence={27} reason='{28}' source='{29}' slot={30} textureIndex={31}." xml:space="preserve">
+    <value>大小求解器 {0}; 介面={1} 任務ID={2} 步驟={3} 完成局數={4} 方向來源={5} 方向目標={6}@{7} 待處理目標={8} 待處理階段={9} 等待時間={10} 階段時間={11} {12} 基準行序號={13} 結束證據={14} 回呼操作={15} 回呼階段={16} 回呼時間={17} 阻止退出任務={18} 退出等待時間={19} 最後活動={20} 阻止原因='{21}' 執行中={22} 外掛目前卡牌={23} 外掛另一張卡牌={24} 解碼卡牌={25} 求解器選擇={26} 信心度={27} 原因='{28}' 來源='{29}' 欄位={30} 紋理索引={31}.</value>
+  </data>
+  <data name="directionAttempts={0}/{1} directionLastInteractAge={2} directionNextRetryIn={3} directionNextRetryAt={4} directionRetryReason={5}" xml:space="preserve">
+    <value>方向嘗試次數={0}/{1} 方向互動後時間={2} 距下次方向嘗試={3} 下次方向嘗試時間={4} 方向重試原因={5}</value>
+  </data>
+  <data name="no trusted runtime card decode; addon atk ignored; addonCard={0}; currentGraphicKey='{1}'; solverCard={2}; solverConfidence={3}; solverReason='{4}'" xml:space="preserve">
+    <value>執行時沒有可信的卡牌解碼；忽略外掛ATK；外掛卡牌={0}；目前圖形鍵='{1}'；求解器卡牌={2}；求解器信心度={3}；求解器原因='{4}'</value>
+  </data>
+  <data name="Owned in {0}. {1}" xml:space="preserve">
+    <value>正在控制{0}。 {1}</value>
+  </data>
+  <data name="Owned after outside start in {0}. {1}" xml:space="preserve">
+    <value>從外部開始後正在控制{0}。 {1}</value>
+  </data>
+  <data name="association-completed" xml:space="preserve">
+    <value>關聯已完成</value>
+  </data>
+  <data name="already-satisfied" xml:space="preserve">
+    <value>已滿足</value>
+  </data>
+  <data name="running" xml:space="preserve">
+    <value>執行中</value>
+  </data>
+  <data name="skipped" xml:space="preserve">
+    <value>已略過</value>
+  </data>
+  <data name="purchased" xml:space="preserve">
+    <value>已購買</value>
+  </data>
+  <data name="waiting" xml:space="preserve">
+    <value>等待中</value>
+  </data>
+  <data name="Window appearance" xml:space="preserve">
+    <value>視窗外觀</value>
+  </data>
+  <data name="Compact visible on main window" xml:space="preserve">
+    <value>在主視窗顯示精簡模式開關</value>
+  </data>
+  <data name="Language visible on main window" xml:space="preserve">
+    <value>在主視窗顯示語言選擇</value>
+  </data>
+  <data name="Transparency" xml:space="preserve">
+    <value>透明度</value>
+  </data>
+  <data name="Opacity (%)" xml:space="preserve">
+    <value>不透明度 (%)</value>
+  </data>
+  <data name="Auto-fade when unfocused" xml:space="preserve">
+    <value>失去焦點後自動淡化</value>
+  </data>
+  <data name="Unfocused opacity (%)" xml:space="preserve">
+    <value>未聚焦時的不透明度 (%)</value>
+  </data>
+  <data name="Unfocused delay (seconds)" xml:space="preserve">
+    <value>失去焦點後的等待時間 (秒)</value>
   </data>
 </root>

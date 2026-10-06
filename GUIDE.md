@@ -43,7 +43,7 @@ When Fren Rider requests recovery in a regular four-player dungeon, ADS reports 
 
 Fren Rider's Profile settings enable Phoenix Down recovery and nearby outdoor revival by default; combat use defaults off. A living healer within 20 yalms of a corpse blocks item attempts. Missing items, medicine cooldown, combat waiting, unreachable corpses, and pending revival keep party progression held. Inspect Fren Rider's **Phoenix Down** status for the blocker.
 
-After revival, ADS observes the current duty and chooses a fresh objective without automatically stopping or resuming ownership. **Stop** still releases ownership, and explicit **Leave** still takes precedence. If Fren Rider reports that the recovery acknowledgement IPC is unavailable, use an ADS build supporting this contract before expecting coordinated recovery. Live acceptance requires a real Phoenix Down cast, revival, and resumed ADS progression; David controls live testing and deployment.
+After revival, ADS observes the current duty and chooses a fresh objective without automatically stopping or resuming ownership. **Stop** still releases ownership, and explicit **Leave** still takes precedence. If Fren Rider reports that the recovery acknowledgement IPC is unavailable, use an ADS build supporting this contract before expecting coordinated recovery. Live acceptance requires a real Phoenix Down cast, revival, and resumed ADS progression; mcvaxius controls live testing and deployment.
 
 ### XA Slave Skipper Fallback
 

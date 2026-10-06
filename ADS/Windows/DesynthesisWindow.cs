@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
@@ -65,6 +66,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         EnsureDesynthItemsLoaded();
         DrawRunControls();
@@ -75,35 +77,35 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         ImGui.Separator();
         DrawLedger();
         if (!string.IsNullOrWhiteSpace(status))
-            ImGui.TextWrapped(Ui.Display(status));
+            MaterialText.TextWrapped(Ui.Display(status));
     }
 
     private void DrawRunControls()
     {
-        ImGui.TextUnformatted(Ui.T("Run"));
-        ImGui.TextUnformatted(Ui.T("Status: {0}", Ui.Display(plugin.UtilityAutomationService.StatusMessage)));
-        ImGui.TextDisabled(Ui.T("Mode: {0}", Ui.Display(plugin.UtilityAutomationService.ActiveDesynthModeName)));
-        ImGui.TextDisabled(Ui.T("Scope: {0}", Ui.Display(plugin.UtilityAutomationService.ActiveDesynthScopeName)));
-        ImGui.TextDisabled(Ui.T("Eligible: {0}; completed: {1}", plugin.UtilityAutomationService.DesynthEligibleCount, plugin.UtilityAutomationService.DesynthCompletedCount));
+        MaterialText.Text(Ui.T("Run"));
+        MaterialText.Text(Ui.T("Status: {0}", Ui.Display(plugin.UtilityAutomationService.StatusMessage)));
+        MaterialText.TextDisabled(Ui.T("Mode: {0}", Ui.Display(plugin.UtilityAutomationService.ActiveDesynthModeName)));
+        MaterialText.TextDisabled(Ui.T("Scope: {0}", Ui.Display(plugin.UtilityAutomationService.ActiveDesynthScopeName)));
+        MaterialText.TextDisabled(Ui.T("Eligible: {0}; completed: {1}", plugin.UtilityAutomationService.DesynthEligibleCount, plugin.UtilityAutomationService.DesynthCompletedCount));
 
         var modeLabels = RunModes.Select(ModeDisplayLabel).ToArray();
         ImGui.SetNextItemWidth(300f);
-        ImGui.Combo(WindowLayout.InputLabel("Run mode"), ref runModeIndex,modeLabels.Select(Ui.Display).ToArray(), modeLabels.Length);
-        if (ImGui.Button(Ui.L("Start")))
+        WindowLayout.Combo(WindowLayout.InputLabel("Run mode"), ref runModeIndex,modeLabels.Select(Ui.Display).ToArray(), modeLabels.Length);
+        if (WindowLayout.Button(Ui.L("Start")))
             plugin.StartDesynth(ModeLabel(RunModes[runModeIndex]));
         ImGui.SameLine();
         ImGui.BeginDisabled(!plugin.UtilityAutomationService.IsDesynthRunning);
-        if (ImGui.Button(Ui.L("Stop Desynthesis")))
+        if (WindowLayout.Button(Ui.L("Stop Desynthesis")))
             plugin.CancelUtility();
         ImGui.EndDisabled();
     }
 
     private void DrawPolicy()
     {
-        ImGui.TextUnformatted(Ui.T("Policy"));
+        MaterialText.Text(Ui.T("Policy"));
         var sourceIndex = Math.Max(0, Array.FindIndex(SourceOptions, x => x.Source == plugin.Configuration.DesynthSource));
         var sourceLabels = SourceOptions.Select(x => x.Label).ToArray();
-        if (ImGui.Combo(WindowLayout.InputLabel("Choose items from"), ref sourceIndex,sourceLabels.Select(Ui.Display).ToArray(), sourceLabels.Length))
+        if (WindowLayout.Combo(WindowLayout.InputLabel("Choose items from"), ref sourceIndex,sourceLabels.Select(Ui.Display).ToArray(), sourceLabels.Length))
         {
             plugin.Configuration.DesynthSource = SourceOptions[sourceIndex].Source;
             plugin.SaveConfiguration();
@@ -111,7 +113,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
         var scopeIndex = Math.Max(0, Array.FindIndex(ScopeOptions, x => x.Scope == plugin.Configuration.DesynthInventoryScope));
         var scopeLabels = ScopeOptions.Select(x => x.Label).ToArray();
-        if (ImGui.Combo(WindowLayout.InputLabel("Search these inventories"), ref scopeIndex,scopeLabels.Select(Ui.Display).ToArray(), scopeLabels.Length))
+        if (WindowLayout.Combo(WindowLayout.InputLabel("Search these inventories"), ref scopeIndex,scopeLabels.Select(Ui.Display).ToArray(), scopeLabels.Length))
         {
             DesynthPolicyService.ApplyScopeToConfiguration(plugin.Configuration, ScopeOptions[scopeIndex].Scope);
             plugin.SaveConfiguration();
@@ -125,7 +127,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         }
 
         var threshold = plugin.Configuration.DesynthSkillUpThreshold;
-        if (ImGui.InputInt(WindowLayout.InputLabel("Skill-up item-level allowance"), ref threshold))
+        if (WindowLayout.InputInt(WindowLayout.InputLabel("Skill-up item-level allowance"), ref threshold))
         {
             plugin.Configuration.DesynthSkillUpThreshold = Math.Clamp(threshold, 0, 1000);
             plugin.SaveConfiguration();
@@ -141,17 +143,17 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawPresets()
     {
-        ImGui.TextUnformatted(Ui.T("Presets"));
+        MaterialText.Text(Ui.T("Presets"));
         var presetNames = plugin.DesynthPresetStore.Presets.Select(x => x.Name).ToArray();
         var presetIndex = Math.Max(0, Array.FindIndex(presetNames, x => string.Equals(x, plugin.Configuration.DesynthActivePreset, StringComparison.OrdinalIgnoreCase)));
-        if (ImGui.Combo(WindowLayout.InputLabel("Active preset"), ref presetIndex, presetNames, presetNames.Length))
+        if (WindowLayout.Combo(WindowLayout.InputLabel("Active preset"), ref presetIndex, presetNames, presetNames.Length))
             SetStatus(plugin.SelectDesynthPreset(presetNames[presetIndex], out var error), error);
 
         var active = plugin.DesynthPresetStore.Get(plugin.Configuration.DesynthActivePreset);
-        ImGui.TextDisabled(Ui.T("{0} item(s) in {1}", active.ItemIds.Count, active.Name));
+        MaterialText.TextDisabled(Ui.T("{0} item(s) in {1}", active.ItemIds.Count, active.Name));
 
-        ImGui.InputText(WindowLayout.InputLabel("New preset"), ref newPresetName, 80);
-        if (ImGui.Button(Ui.L("Create preset")))
+        WindowLayout.InputText(WindowLayout.InputLabel("New preset"), ref newPresetName, 80);
+        if (WindowLayout.Button(Ui.L("Create preset")))
         {
             var success = plugin.DesynthPresetStore.Create(newPresetName, string.Empty, out var error);
             SetStatus(success, error);
@@ -159,20 +161,20 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
                 newPresetName = string.Empty;
         }
 
-        ImGui.InputText(WindowLayout.InputLabel("Rename active to"), ref renamePresetName, 80);
-        if (ImGui.Button(Ui.L("Rename active")))
+        WindowLayout.InputText(WindowLayout.InputLabel("Rename active to"), ref renamePresetName, 80);
+        if (WindowLayout.Button(Ui.L("Rename active")))
         {
             var oldName = active.Name;
             var success = plugin.RenameDesynthPreset(oldName, renamePresetName, out var error);
             SetStatus(success, error);
         }
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Delete active")))
+        if (WindowLayout.Button(Ui.L("Delete active")))
             SetStatus(plugin.DeleteDesynthPreset(active.Name, out var error), error);
 
         DrawItemSearchDropdown("Desynth item", ref itemSearch, desynthableItems, ref selectedItemId, ref selectedItemName);
         ImGui.BeginDisabled(selectedItemId == 0);
-        if (ImGui.Button(Ui.L("Add Selected Item")))
+        if (WindowLayout.Button(Ui.L("Add Selected Item")))
         {
             var success = plugin.TryMutateActiveDesynthPresetItem(selectedItemId.ToString(), true, out var error);
             SetStatus(success, error);
@@ -187,21 +189,21 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
         DrawActivePresetItems(active);
 
-        if (ImGui.Button(Ui.L("Copy Presets")))
+        if (WindowLayout.Button(Ui.L("Copy Presets")))
         {
             ImGui.SetClipboardText(plugin.DesynthPresetStore.ExportRaw());
             status = "Copied formatted preset JSON to clipboard.";
         }
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Import Presets")))
+        if (WindowLayout.Button(Ui.L("Import Presets")))
             SetStatus(plugin.ImportDesynthPresetsClipboard(ImGui.GetClipboardText() ?? string.Empty, out var error), error);
     }
 
     private void DrawLedger()
     {
-        ImGui.TextUnformatted(Ui.T("Last-Duty Ledger"));
-        ImGui.TextWrapped(Ui.Display(plugin.DesynthDutyLedgerStore.LastStatus));
-        if (ImGui.Button(Ui.L("Clear ledger")))
+        MaterialText.Text(Ui.T("Last-Duty Ledger"));
+        MaterialText.TextWrapped(Ui.Display(plugin.DesynthDutyLedgerStore.LastStatus));
+        if (WindowLayout.Button(Ui.L("Clear ledger")))
             plugin.DesynthDutyLedgerStore.Clear();
     }
 
@@ -233,10 +235,10 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawActivePresetItems(DesynthPreset active)
     {
-        ImGui.TextUnformatted(Ui.T("Active preset contents"));
+        MaterialText.Text(Ui.T("Active preset contents"));
         if (active.ItemIds.Count == 0)
         {
-            ImGui.TextDisabled(Ui.T("No items in active preset."));
+            MaterialText.TextDisabled(Ui.T("No items in active preset."));
             return;
         }
 
@@ -252,16 +254,16 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Item"));
         ImGui.TableSetupColumn(Ui.L("ID"), ImGuiTableColumnFlags.WidthFixed, 90f);
         ImGui.TableSetupColumn(Ui.L("Action"), ImGuiTableColumnFlags.WidthFixed, 80f);
-        ImGui.TableHeadersRow();
+        WindowLayout.TableHeadersRow();
         foreach (var itemId in active.ItemIds.ToArray())
         {
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextUnformatted(GetItemName(itemId));
+            MaterialText.Text(GetItemName(itemId));
             ImGui.TableSetColumnIndex(1);
-            ImGui.TextUnformatted(itemId.ToString());
+            MaterialText.Text(itemId.ToString());
             ImGui.TableSetColumnIndex(2);
-            if (ImGui.SmallButton(Ui.L("Remove##ADSDesynthPresetRemove{0}", itemId)))
+            if (WindowLayout.SmallButton(Ui.L("Remove##ADSDesynthPresetRemove{0}", itemId)))
                 SetStatus(plugin.DesynthPresetStore.RemoveItem(active.Name, itemId, out var error), error);
         }
 
@@ -304,10 +306,11 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         var displayText = selectedId > 0 ? $"{Ui.ItemName(selectedId, selectedName)} ({selectedId})" : Ui.T("Select {0}...", Ui.T(label));
 
         ImGui.SetNextItemWidth(420f);
-        if (ImGui.BeginCombo($"##{label}Select",Ui.Display(displayText)))
+        if (MaterialText.BeginCombo($"##{label}Select",Ui.Display(displayText)))
         {
+            try {
             ImGui.SetNextItemWidth(400f);
-            ImGui.InputText(Ui.L("Search##{0}", label), ref search, 128);
+            WindowLayout.InputText(Ui.L("Search##{0}", label), ref search, 128);
             ImGui.Separator();
 
             const int maxResults = 25;
@@ -328,7 +331,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
                     shown++;
                     var isSelected = item.Id == selectedId;
-                    if (ImGui.Selectable($"{item.Name} ({item.Id})##{label}{index}", isSelected))
+                    if (MaterialText.Selectable($"{item.Name} ({item.Id})##{label}{index}", isSelected))
                     {
                         selectedId = item.Id;
                         selectedName = item.Name;
@@ -340,14 +343,15 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
                 }
 
                 if (shown == 0)
-                    ImGui.TextDisabled(Ui.T("No results."));
+                    MaterialText.TextDisabled(Ui.T("No results."));
             }
             else
             {
-                ImGui.TextDisabled(Ui.T("Type at least 2 characters to search."));
+                MaterialText.TextDisabled(Ui.T("Type at least 2 characters to search."));
             }
 
-            ImGui.EndCombo();
+
+            } finally { ImGui.EndCombo(); }
         }
 
         return changed;

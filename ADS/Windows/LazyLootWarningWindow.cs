@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -7,6 +8,7 @@ namespace ADS.Windows;
 
 public sealed class LazyLootWarningWindow : Window, IDisposable
 {
+    private readonly AethertekUI.Dalamud.MaterialWindowMotion windowMotion = new();
     private readonly Plugin plugin;
 
     public LazyLootWarningWindow(Plugin plugin)
@@ -27,21 +29,28 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     }
 
     public override void PreDraw()
-        => WindowName = Ui.L("LazyLoot Warning###ADSLazyLootWarning");
+    {
+        WindowName = Ui.L("LazyLoot Warning###ADSLazyLootWarning");
+        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+    }
+
+    public override void PostDraw()
+        => windowMotion.Restore(this);
 
     public override void Draw()
     {
-        ImGui.TextWrapped(Ui.T("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once."));
+        windowMotion.DrawChrome();
+        MaterialText.TextWrapped(Ui.T("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once."));
         ImGui.Spacing();
 
-        if (ImGui.Button(Ui.L("Open /ads loot")))
+        if (WindowLayout.Button(Ui.L("Open /ads loot")))
         {
             plugin.OpenLootUi();
             IsOpen = false;
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Don't show this message again")))
+        if (WindowLayout.Button(Ui.L("Don't show this message again")))
         {
             plugin.Configuration.LazyLootWarningDismissed = true;
             plugin.SaveConfiguration();

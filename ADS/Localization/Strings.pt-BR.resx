@@ -274,7 +274,7 @@
     <value>ATIVO</value>
   </data>
   <data name="ADS Controls" xml:space="preserve">
-    <value>Controles ADS</value>
+    <value>Controles rápidos do ADS</value>
   </data>
   <data name="ADS Desynthesis" xml:space="preserve">
     <value>Dessíntese ADS</value>
@@ -775,7 +775,7 @@
     <value>Abordando um fornecedor NPC por meio de ADS.</value>
   </data>
   <data name="ApproachingInteractableObjective" xml:space="preserve">
-    <value>ApproachingInteractableObjective</value>
+    <value>Aproximando-se do objetivo interativo</value>
   </data>
   <data name="Arcane Sphere" xml:space="preserve">
     <value>Esfera Arcana</value>
@@ -820,7 +820,7 @@
     <value>Tentando um {0} adicional.</value>
   </data>
   <data name="AttemptingInteractableObjective" xml:space="preserve">
-    <value>AttemptingInteractableObjective</value>
+    <value>Tentando interagir com o objetivo</value>
   </data>
   <data name="Authoring" xml:space="preserve">
     <value>Autoria</value>
@@ -871,7 +871,7 @@
     <value>Aguarde a rota do seguidor do tesouro: {0}</value>
   </data>
   <data name="AwaitingSupportedPilotDuty" xml:space="preserve">
-    <value>AwaitingSupportedPilotDuty</value>
+    <value>Aguardando missão piloto compatível</value>
   </data>
   <data name="B" xml:space="preserve">
     <value>B</value>
@@ -946,7 +946,7 @@
     <value>BossFight</value>
   </data>
   <data name="BossFightMonster" xml:space="preserve">
-    <value>BossFightMonster</value>
+    <value>Monstro de combate de chefe</value>
   </data>
   <data name="BossMod IPC active preset list resolved." xml:space="preserve">
     <value>Lista de predefinições ativas BossMod IPC resolvida.</value>
@@ -1159,7 +1159,7 @@
     <value>Mapa de cartão ({0})</value>
   </data>
   <data name="CardinalHold" xml:space="preserve">
-    <value>CardinalHold</value>
+    <value>Manter direção cardinal</value>
   </data>
   <data name="CardinalHoldEast" xml:space="preserve">
     <value>CardinalHoldEast</value>
@@ -1453,10 +1453,10 @@
     <value>CombatFriendly</value>
   </data>
   <data name="CombatFriendlyInteractable" xml:space="preserve">
-    <value>CombatFriendlyInteractable</value>
+    <value>Objeto interativo utilizável em combate</value>
   </data>
   <data name="CombatHold" xml:space="preserve">
-    <value>CombatHold</value>
+    <value>Pausa durante combate</value>
   </data>
   <data name="Combined effective view: this table can merge many backing JSON shards. Missing custom contexts inherit DEFAULT; saving a changed context writes one complete replacement shard." xml:space="preserve">
     <value>Visualização efetiva combinada: esta tabela pode mesclar muitos fragmentos JSON de apoio. Contextos personalizados ausentes herdam DEFAULT; salvar um contexto alterado grava um fragmento de substituição completo.</value>
@@ -2581,7 +2581,7 @@
     <value>Acompanhamento de interação dispensável concluído para {0}; o objeto desapareceu, então ADS está aguardando a verdade da instância atualizada antes de selecionar outro objetivo.</value>
   </data>
   <data name="ExpendableInteractable" xml:space="preserve">
-    <value>ExpendableInteractable</value>
+    <value>Objeto interativo consumível</value>
   </data>
   <data name="Experimental Higher/Lower datamining for treasure maps" xml:space="preserve">
     <value>Datamining experimental superior/inferior para mapas do tesouro</value>
@@ -2884,7 +2884,7 @@
     <value>Siga: {0} {1} | {2}</value>
   </data>
   <data name="FollowTarget" xml:space="preserve">
-    <value>FollowTarget</value>
+    <value>Alvo de acompanhamento</value>
   </data>
   <data name="FollowThrough" xml:space="preserve">
     <value>FollowThrough</value>
@@ -3031,7 +3031,7 @@
     <value>Fronteira/manual rows: {0}</value>
   </data>
   <data name="FrontierHint" xml:space="preserve">
-    <value>FrontierHint</value>
+    <value>Indicação de exploração</value>
   </data>
   <data name="Full-manifest disk import/export" xml:space="preserve">
     <value>Importação de disco de manifesto completo/export</value>
@@ -3214,7 +3214,7 @@
     <value>Escoteiro de direção {0}</value>
   </data>
   <data name="HeadingScout" xml:space="preserve">
-    <value>HeadingScout</value>
+    <value>Exploração de direção</value>
   </data>
   <data name="HealBot" xml:space="preserve">
     <value>HealBot</value>
@@ -3364,7 +3364,7 @@
     <value>A liberação do hiperfoco após {0} não conseguiu alcançar FrenRider: {1}</value>
   </data>
   <data name="HyperFixatedAttackTarget" xml:space="preserve">
-    <value>HyperFixatedAttackTarget</value>
+    <value>Alvo de ataque fixado</value>
   </data>
   <data name="Hypnoslot Machine" xml:space="preserve">
     <value>Máquina Hipnoslot</value>
@@ -3403,7 +3403,7 @@
     <value>Parado.</value>
   </data>
   <data name="IdleObserve" xml:space="preserve">
-    <value>IdleObserve</value>
+    <value>Observação em espera</value>
   </data>
   <data name="If owned &lt;" xml:space="preserve">
     <value>Se possuído &lt;</value>
@@ -3634,7 +3634,7 @@
     <value>{0} interativo relatou localização inválida; ADS irá resolvê-lo novamente e navegar até {1:0.0}y antes de tentar novamente.</value>
   </data>
   <data name="InteractableGhost" xml:space="preserve">
-    <value>InteractableGhost</value>
+    <value>Objeto interativo memorizado</value>
   </data>
   <data name="Interacting with innkeeper {0}" xml:space="preserve">
     <value>Interagindo com o estalajadeiro {0}</value>
@@ -3961,7 +3961,7 @@
     <value>Saindo da pousada pela porta para conserto do NPC.</value>
   </data>
   <data name="LeavingDuty" xml:space="preserve">
-    <value>LeavingDuty</value>
+    <value>Saindo da missão</value>
   </data>
   <data name="Left" xml:space="preserve">
     <value>Esquerda</value>
@@ -4366,16 +4366,16 @@
     <value>MapXz</value>
   </data>
   <data name="MapXzDestination" xml:space="preserve">
-    <value>MapXzDestination</value>
+    <value>Destino XZ do mapa</value>
   </data>
   <data name="MapXzDestinationHint" xml:space="preserve">
-    <value>MapXzDestinationHint</value>
+    <value>Indicação de destino XZ do mapa</value>
   </data>
   <data name="MapXzForceMarch" xml:space="preserve">
     <value>MapXzForceMarch</value>
   </data>
   <data name="MapXzForceMarchDestination" xml:space="preserve">
-    <value>MapXzForceMarchDestination</value>
+    <value>Destino XZ do mapa de marcha forçada</value>
   </data>
   <data name="Mark a special coffer as treasure." xml:space="preserve">
     <value>Marque um cofre especial como tesouro.</value>
@@ -4453,10 +4453,10 @@
     <value>A tendência do monstro primeiro está ativa. Os monstros vivos {0} superam os interativos opcionais em {1}.</value>
   </data>
   <data name="MonsterGhost" xml:space="preserve">
-    <value>MonsterGhost</value>
+    <value>Monstro memorizado</value>
   </data>
   <data name="MountedDutyCombat" xml:space="preserve">
-    <value>MountedDutyCombat</value>
+    <value>Combate de missão em montaria</value>
   </data>
   <data name="Mounts" xml:space="preserve">
     <value>Montagens</value>
@@ -4579,25 +4579,25 @@
     <value>Navegando em direção</value>
   </data>
   <data name="NavigatingToFollowObjective" xml:space="preserve">
-    <value>NavigatingToFollowObjective</value>
+    <value>Indo ao objetivo de acompanhamento</value>
   </data>
   <data name="NavigatingToFrontierObjective" xml:space="preserve">
-    <value>NavigatingToFrontierObjective</value>
+    <value>Indo ao objetivo de exploração</value>
   </data>
   <data name="NavigatingToInteractableObjective" xml:space="preserve">
-    <value>NavigatingToInteractableObjective</value>
+    <value>Indo ao objetivo interativo</value>
   </data>
   <data name="NavigatingToMapXzDestination" xml:space="preserve">
-    <value>NavigatingToMapXzDestination</value>
+    <value>Indo ao destino XZ do mapa</value>
   </data>
   <data name="NavigatingToMonsterObjective" xml:space="preserve">
-    <value>NavigatingToMonsterObjective</value>
+    <value>Indo ao objetivo de monstro</value>
   </data>
   <data name="NavigatingToRecoveryObjective" xml:space="preserve">
-    <value>NavigatingToRecoveryObjective</value>
+    <value>Indo ao objetivo de recuperação</value>
   </data>
   <data name="NavigatingToXyzDestination" xml:space="preserve">
-    <value>NavigatingToXyzDestination</value>
+    <value>Indo ao destino XYZ</value>
   </data>
   <data name="Navigation command accepted on send {0}; distance monitoring is active without resends." xml:space="preserve">
     <value>Comando de navegação aceito no envio {0}; o monitoramento de distância está ativo sem reenvios.</value>
@@ -5056,7 +5056,7 @@
     <value>Observando apenas; ADS atualmente não possui esta instância.</value>
   </data>
   <data name="ObservingOnly" xml:space="preserve">
-    <value>ObservingOnly</value>
+    <value>Somente observação</value>
   </data>
   <data name="Caption.OffTitle" xml:space="preserve">
     <value>Desativado</value>
@@ -5296,7 +5296,7 @@
     <value>Portão de distância vertical opcional para /manual rules comum.</value>
   </data>
   <data name="OptionalInteractable" xml:space="preserve">
-    <value>OptionalInteractable</value>
+    <value>Objeto interativo opcional</value>
   </data>
   <data name="Orchestrion rolls" xml:space="preserve">
     <value>Rolos de orquestração</value>
@@ -5341,7 +5341,7 @@
     <value>O estado de verificação de saída estava incompleto.</value>
   </data>
   <data name="OutsideQueue" xml:space="preserve">
-    <value>OutsideQueue</value>
+    <value>Fila externa</value>
   </data>
   <data name="Override" xml:space="preserve">
     <value>Substituir</value>
@@ -5377,13 +5377,13 @@
     <value>A quantidade possuída {0} não está abaixo do acionador {1}.</value>
   </data>
   <data name="OwnedResumeInside" xml:space="preserve">
-    <value>OwnedResumeInside</value>
+    <value>Retomada interna controlada</value>
   </data>
   <data name="OwnedStartInside" xml:space="preserve">
-    <value>OwnedStartInside</value>
+    <value>Início interno controlado</value>
   </data>
   <data name="OwnedStartOutside" xml:space="preserve">
-    <value>OwnedStartOutside</value>
+    <value>Início externo controlado</value>
   </data>
   <data name="Caption.OwnershipTitle" xml:space="preserve">
     <value>Controle</value>
@@ -5932,13 +5932,13 @@
     <value>Pronto: {0}</value>
   </data>
   <data name="ReadyForFollowObjective" xml:space="preserve">
-    <value>ReadyForFollowObjective</value>
+    <value>Pronto para objetivo de acompanhamento</value>
   </data>
   <data name="ReadyForInteractableObjective" xml:space="preserve">
-    <value>ReadyForInteractableObjective</value>
+    <value>Pronto para objetivo interativo</value>
   </data>
   <data name="ReadyForMonsterObjective" xml:space="preserve">
-    <value>ReadyForMonsterObjective</value>
+    <value>Pronto para objetivo de monstro</value>
   </data>
   <data name="Reason" xml:space="preserve">
     <value>Razão</value>
@@ -5965,7 +5965,7 @@
     <value>As ações de recuperação permanecem conscientes do controle e evitam transições, cenas e estados de eventos inseguros.</value>
   </data>
   <data name="RecoveryHint" xml:space="preserve">
-    <value>RecoveryHint</value>
+    <value>Indicação de recuperação</value>
   </data>
   <data name="Refill to &gt;=" xml:space="preserve">
     <value>Reabasteça até &gt;=</value>
@@ -6283,7 +6283,7 @@
     <value>Acompanhamento de interação necessário concluído para {0}; o objeto desapareceu, então ADS está aguardando a verdade da instância atualizada antes de selecionar outro objetivo.</value>
   </data>
   <data name="RequiredInteractable" xml:space="preserve">
-    <value>RequiredInteractable</value>
+    <value>Objeto interativo obrigatório</value>
   </data>
   <data name="Requires a clean draft, no disk conflict, and confirmation of any empty overrides. Only included contexts are written." xml:space="preserve">
     <value>Requer um rascunho limpo, nenhum conflito de disco e confirmação de quaisquer substituições vazias. Somente contextos incluídos são escritos.</value>
@@ -7861,7 +7861,7 @@
     <value>Ganhos da instância de rastreamento {0}.</value>
   </data>
   <data name="TransitionHold" xml:space="preserve">
-    <value>TransitionHold</value>
+    <value>Pausa durante transição</value>
   </data>
   <data name="TransitionUsed" xml:space="preserve">
     <value>TransitionUsed</value>
@@ -8017,16 +8017,16 @@
     <value>Tesouro: {0} | abridor {1} ({2})</value>
   </data>
   <data name="TreasureCoffer" xml:space="preserve">
-    <value>TreasureCoffer</value>
+    <value>Baú de tesouro</value>
   </data>
   <data name="TreasureDoor" xml:space="preserve">
-    <value>TreasureDoor</value>
+    <value>Porta de tesouro</value>
   </data>
   <data name="TreasureDungeon" xml:space="preserve">
-    <value>TreasureDungeon</value>
+    <value>Masmorra de tesouro</value>
   </data>
   <data name="TreasureFollowerLoot" xml:space="preserve">
-    <value>TreasureFollowerLoot</value>
+    <value>Saque do acompanhante de tesouro</value>
   </data>
   <data name="TreasureHighLow is visible but no reliable current card was decoded" xml:space="preserve">
     <value>TreasureHighLow está visível, mas nenhum cartão atual confiável foi decodificado</value>
@@ -8170,7 +8170,7 @@
     <value>Transição insegura em andamento.</value>
   </data>
   <data name="UnsafeTransition" xml:space="preserve">
-    <value>UnsafeTransition</value>
+    <value>Transição insegura</value>
   </data>
   <data name="Unsaved Change" xml:space="preserve">
     <value>Alteração não salva</value>
@@ -8212,7 +8212,7 @@
     <value>Esquema de índice de território não suportado {0}; esperado {1}.</value>
   </data>
   <data name="UnsupportedDuty" xml:space="preserve">
-    <value>UnsupportedDuty</value>
+    <value>Missão não compatível</value>
   </data>
   <data name="Untested/default maturity row. Runtime ownership can still run from live duty truth, but this duty needs scouting before promotion." xml:space="preserve">
     <value>Linha /default maturity não testada. O controle de tempo de execução ainda pode ser executado a partir da verdade da instância ativa, mas esta instância precisa de reconhecimento antes da promoção.</value>
@@ -8557,7 +8557,7 @@
     <value>WaitingForRoomCombatEnd</value>
   </data>
   <data name="WaitingForTruth" xml:space="preserve">
-    <value>WaitingForTruth</value>
+    <value>Aguardando estado verificado</value>
   </data>
   <data name="Warning: {0} will disappear from this preset because no DEFAULT shard exists to inherit." xml:space="preserve">
     <value>Aviso: {0} desaparecerá desta predefinição porque não existe nenhum fragmento DEFAULT para herdar.</value>
@@ -8689,13 +8689,13 @@
     <value>Xyz</value>
   </data>
   <data name="XyzDestination" xml:space="preserve">
-    <value>XyzDestination</value>
+    <value>Destino XYZ</value>
   </data>
   <data name="XyzDestinationHint" xml:space="preserve">
-    <value>XyzDestinationHint</value>
+    <value>Indicação de destino XYZ</value>
   </data>
   <data name="XyzForceMarchDestination" xml:space="preserve">
-    <value>XyzForceMarchDestination</value>
+    <value>Destino XYZ de marcha forçada</value>
   </data>
   <data name="Y" xml:space="preserve">
     <value>S</value>
@@ -11090,5 +11090,88 @@
   </data>
   <data name="Item ownership" xml:space="preserve">
     <value>Posse de itens</value>
+  </data>
+  <data name="Compact mode" xml:space="preserve"><value>Modo compacto</value></data>
+  <data name="Color" xml:space="preserve"><value>Cor</value></data>
+  <data name="Teal" xml:space="preserve"><value>Turquesa</value></data>
+  <data name="Blue" xml:space="preserve"><value>Azul</value></data>
+  <data name="Pink" xml:space="preserve"><value>Rosa</value></data>
+  <data name="Custom RGB" xml:space="preserve"><value>RGB personalizado</value></data>
+  <data name="Loading UI fonts..." xml:space="preserve"><value>Carregando fontes da interface...</value></data>
+  <data name="UI fonts failed to load. See the plugin log." xml:space="preserve"><value>Falha ao carregar fontes. Consulte o registro do plugin.</value></data>
+  <data name="H/L auto: enabled={0} hold={1} dutyKey={2} step={3} card={4} action={5} source={6} directionSource={7} target={8}@{9} pendingTarget={10} pendingPhase={11} pendingAge={12} pendingPhaseAge={13} retryAttempts={14}/{15} lastInteractAge={16} nextRetryIn={17} retryReason={18} pendingBaselineRowSeq={19} terminalProof={20} callbackAction={21} callbackPhase={22} callbackAge={23} surface={24} blocked='{25}' retained={26} retainedStep={27} retainedCard={28} retainedAction={29}" xml:space="preserve">
+    <value>Automação H/L: ativada={0} movimento suspenso={1} ID do conteúdo={2} etapa={3} carta={4} ação={5} origem={6} origem da direção={7} alvo={8}@{9} alvo pendente={10} fase pendente={11} tempo pendente={12} tempo da fase={13} tentativas={14}/{15} tempo desde interação={16} próxima tentativa em={17} motivo da tentativa={18} sequência de referência={19} prova de conclusão={20} ação do callback={21} fase do callback={22} tempo do callback={23} interface={24} bloqueio='{25}' retido={26} etapa retida={27} carta retida={28} ação retida={29}</value>
+  </data>
+  <data name="H/L solver: card={0} choice={1} confidence={2} source={3} sourceRowSeq={4} sourceState={5} reason='{6}' textureIndex={7} textureIndexSource={8}" xml:space="preserve">
+    <value>Solução H/L: carta={0} escolha={1} confiança={2} origem={3} sequência de origem={4} estado de origem={5} motivo='{6}' índice da textura={7} origem do índice={8}</value>
+  </data>
+  <data name="Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}" xml:space="preserve">
+    <value>Carta: origem={0} posição={1} índice da textura={2} decodificada={3} motivo={4}</value>
+  </data>
+  <data name="{0} Final navigation cleanup reported that the owned path was still running." xml:space="preserve">
+    <value>{0} A limpeza final da navegação informou que a rota controlada ainda estava ativa.</value>
+  </data>
+  <data name="{0} Final navigation cleanup could not verify that the owned path stopped." xml:space="preserve">
+    <value>{0} A limpeza final da navegação não pôde verificar a parada da rota controlada.</value>
+  </data>
+  <data name="Higher/Lower automation {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} card={5} action={6} source='{7}' directionSource={8} directionTarget={9}@{10} pendingTarget={11} pendingPhase={12} pendingAge={13} pendingPhaseAge={14} {15} pendingBaselineServerRowSeq={16} terminalProof={17} callbackAction={18} callbackPhase={19} callbackAge={20} blocksDutyExit={21} exitGrace={22} lastActivity={23} blockedReason='{24}' active={25} addonCurrentCard={26} addonOtherCard={27} knownCards={28}." xml:space="preserve">
+    <value>Automação H/L {0}; interface={1} ID do conteúdo={2} etapa={3} partidas concluídas={4} carta={5} ação={6} origem='{7}' origem da direção={8} alvo da direção={9}@{10} alvo pendente={11} fase pendente={12} tempo pendente={13} tempo da fase={14} {15} sequência de referência={16} prova de conclusão={17} ação do callback={18} fase do callback={19} tempo do callback={20} bloqueia a saída do conteúdo={21} espera para sair={22} última atividade={23} motivo do bloqueio='{24}' ativo={25} carta atual do addon={26} outra carta do addon={27} cartas conhecidas={28}.</value>
+  </data>
+  <data name="Higher/Lower solver {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} directionSource={5} directionTarget={6}@{7} pendingTarget={8} pendingPhase={9} pendingAge={10} pendingPhaseAge={11} {12} pendingBaselineServerRowSeq={13} terminalProof={14} callbackAction={15} callbackPhase={16} callbackAge={17} blocksDutyExit={18} exitGrace={19} lastActivity={20} blockedReason='{21}' active={22} addonCurrentCard={23} addonOtherCard={24} decodedCard={25} solverChoice={26} confidence={27} reason='{28}' source='{29}' slot={30} textureIndex={31}." xml:space="preserve">
+    <value>Solucionador H/L {0}; interface={1} ID do conteúdo={2} etapa={3} partidas concluídas={4} origem da direção={5} alvo da direção={6}@{7} alvo pendente={8} fase pendente={9} tempo pendente={10} tempo da fase={11} {12} sequência de referência={13} prova de conclusão={14} ação do callback={15} fase do callback={16} tempo do callback={17} bloqueia a saída do conteúdo={18} espera para sair={19} última atividade={20} motivo do bloqueio='{21}' ativo={22} carta atual do addon={23} outra carta do addon={24} carta decodificada={25} escolha do solucionador={26} confiança={27} motivo='{28}' origem='{29}' slot={30} índice de textura={31}.</value>
+  </data>
+  <data name="directionAttempts={0}/{1} directionLastInteractAge={2} directionNextRetryIn={3} directionNextRetryAt={4} directionRetryReason={5}" xml:space="preserve">
+    <value>tentativas de direção={0}/{1} tempo desde interação de direção={2} próxima tentativa de direção em={3} horário da próxima tentativa de direção={4} motivo da nova tentativa de direção={5}</value>
+  </data>
+  <data name="no trusted runtime card decode; addon atk ignored; addonCard={0}; currentGraphicKey='{1}'; solverCard={2}; solverConfidence={3}; solverReason='{4}'" xml:space="preserve">
+    <value>sem decodificação confiável da carta em execução; ATK do addon ignorado; carta do addon={0}; chave gráfica atual='{1}'; carta do solucionador={2}; confiança do solucionador={3}; motivo do solucionador='{4}'</value>
+  </data>
+  <data name="Owned in {0}. {1}" xml:space="preserve">
+    <value>Controle assumido em {0}. {1}</value>
+  </data>
+  <data name="Owned after outside start in {0}. {1}" xml:space="preserve">
+    <value>Controle assumido após iniciar fora de {0}. {1}</value>
+  </data>
+  <data name="association-completed" xml:space="preserve">
+    <value>Associação concluída</value>
+  </data>
+  <data name="already-satisfied" xml:space="preserve">
+    <value>Já satisfeito</value>
+  </data>
+  <data name="running" xml:space="preserve">
+    <value>Em execução</value>
+  </data>
+  <data name="skipped" xml:space="preserve">
+    <value>Ignorado</value>
+  </data>
+  <data name="purchased" xml:space="preserve">
+    <value>Comprado</value>
+  </data>
+  <data name="waiting" xml:space="preserve">
+    <value>aguardando</value>
+  </data>
+  <data name="Window appearance" xml:space="preserve">
+    <value>Aparência da janela</value>
+  </data>
+  <data name="Compact visible on main window" xml:space="preserve">
+    <value>Mostrar modo compacto na janela principal</value>
+  </data>
+  <data name="Language visible on main window" xml:space="preserve">
+    <value>Mostrar idioma na janela principal</value>
+  </data>
+  <data name="Transparency" xml:space="preserve">
+    <value>Transparência</value>
+  </data>
+  <data name="Opacity (%)" xml:space="preserve">
+    <value>Opacidade (%)</value>
+  </data>
+  <data name="Auto-fade when unfocused" xml:space="preserve">
+    <value>Esmaecer automaticamente sem foco</value>
+  </data>
+  <data name="Unfocused opacity (%)" xml:space="preserve">
+    <value>Opacidade sem foco (%)</value>
+  </data>
+  <data name="Unfocused delay (seconds)" xml:space="preserve">
+    <value>Espera sem foco (segundos)</value>
   </data>
 </root>

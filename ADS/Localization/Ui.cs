@@ -13,6 +13,8 @@ public enum UiLanguage
 {
     English = 0, French = 1, German = 2, Japanese = 3,
     SimplifiedChinese = 4, TraditionalChinese = 5, Spanish = 6, BrazilianPortuguese = 7, Korean = 8,
+    Italian = 9, Russian = 10,
+    Vietnamese = 11, Indonesian = 12, Polish = 13, Turkish = 14, Hindi = 15,
 }
 
 // Localization belongs to display code; services, command tokens and IPC stay unchanged.
@@ -21,7 +23,7 @@ public static class Ui
     internal static readonly ResourceManager Resources = new EmbeddedResourceManager();
     public static UiLanguage Language { get; private set; }
     public static readonly string[] LanguageLabels =
-        ["English", "Français", "Deutsch", "日本語", "简体中文", "繁體中文", "Español", "Português (Brasil)", "한국어"];
+        ["English", "Français", "Deutsch", "日本語", "简体中文", "繁體中文", "Español", "Português (Brasil)", "한국어", "Italiano", "Русский", "Tiếng Việt", "Bahasa Indonesia", "Polski", "Türkçe", "हिन्दी"];
     public static CultureInfo Culture => CultureFor(Language);
 
     public static void SetLanguage(UiLanguage language)
@@ -57,6 +59,8 @@ public static class Ui
         UiLanguage.French => "fr", UiLanguage.German => "de", UiLanguage.Japanese => "ja",
         UiLanguage.SimplifiedChinese => "zh-Hans", UiLanguage.TraditionalChinese => "zh-Hant",
         UiLanguage.Spanish => "es", UiLanguage.BrazilianPortuguese => "pt-BR", UiLanguage.Korean => "ko",
+        UiLanguage.Italian => "it", UiLanguage.Russian => "ru",
+        UiLanguage.Vietnamese => "vi", UiLanguage.Indonesian => "id", UiLanguage.Polish => "pl", UiLanguage.Turkish => "tr", UiLanguage.Hindi => "hi",
         _ => "en",
     });
 
@@ -67,6 +71,7 @@ public static class Ui
         "Current duty" => "Caption.CurrentDutySentence",
         "Duty" => "Caption.DutyTitle",
         "duty" => "Caption.DutyLower",
+        "enabled" => "Enabled",
         "deep dungeon" => "Caption.DeepDungeonLower",
         "Dialog rules" => "Caption.DialogRulesSentence",
         "Execution Phase" => "Caption.ExecutionPhaseTitle",
@@ -197,12 +202,15 @@ public static class Ui
     // Legacy service statuses remain English internally. Only complete registered
     // templates are recognized, and captured values retain their original content.
     // Unit/version formats such as "{0} v{1}" are not status prose.
-    private static readonly Lazy<(string Key, Regex Pattern, string Prefix)[]> Templates = new(() =>
+    private static readonly Lazy<(string Key, Lazy<Regex> Pattern, string Prefix)[]> Templates = new(() =>
         Resources.GetResourceSet(CultureInfo.GetCultureInfo("en"), true, true)!
             .Cast<DictionaryEntry>().Select(entry => (string)entry.Value!)
             .Where(key => Placeholder.IsMatch(key) && Regex.IsMatch(Placeholder.Replace(key, ""), @"\p{L}{4,}", RegexOptions.CultureInvariant))
-            .OrderByDescending(key => key.Length)
-            .Select(key => (key, BuildPattern(key), UnescapeBraces(key[..Placeholder.Match(key).Index]))).ToArray());
+            .OrderBy(key => Placeholder.Match(key).Index == 0 &&
+                // The lazy factory runs after Ui's static fields have initialized.
+                (!NestedStatusArguments!.TryGetValue(key, out var nested) || !nested.Contains(0)) ? 1 : 0)
+            .ThenByDescending(key => Placeholder.Replace(key, "").Length)
+            .Select(key => (key, new Lazy<Regex>(() => BuildPattern(key)), UnescapeBraces(key[..Placeholder.Match(key).Index]).Replace("\r\n", "\n").Split('\n')[0])).ToArray());
 
     private static Regex BuildPattern(string key)
     {
@@ -210,19 +218,47 @@ public static class Ui
         var offset = 0;
         foreach (Match token in Placeholder.Matches(key))
         {
-            pattern.Append(Regex.Escape(UnescapeBraces(key[offset..token.Index])));
+            pattern.Append(LiteralPattern(UnescapeBraces(key[offset..token.Index])));
             pattern.Append("(?<p").Append(token.Groups["index"].Value).Append(">.*?)");
             offset = token.Index + token.Length;
         }
-        pattern.Append(Regex.Escape(UnescapeBraces(key[offset..]))).Append(@"\z");
-        return new Regex(pattern.ToString(), RegexOptions.CultureInvariant | RegexOptions.Singleline | RegexOptions.NonBacktracking);
+        pattern.Append(LiteralPattern(UnescapeBraces(key[offset..]))).Append(@"\z");
+        return new Regex(pattern.ToString(), RegexOptions.CultureInvariant | RegexOptions.Singleline,
+            TimeSpan.FromMilliseconds(20));
     }
 
     private static string UnescapeBraces(string text) => text.Replace("{{", "{").Replace("}}", "}");
+    private static string LiteralPattern(string text)
+        => string.Join(@"(?:\r\n|\n)", text.Replace("\r\n", "\n").Split('\n').Select(Regex.Escape));
 
     // Only these captured fields are generated statuses. Names, paths and diagnostics stay raw.
     private static readonly Dictionary<string, int[]> NestedStatusArguments = new(StringComparer.Ordinal)
     {
+        ["Another ADS utility is active: {0}"] = [0],
+        ["Cancelled {0}: {1}"] = [0, 1],
+        ["Shop-list preset {0}: {1}"] = [0, 1],
+        [" Cleanup result: {0}"] = [0],
+        ["Shop-list batch cancelled after {0} completed row(s); current row acquired {1} of {2}.{3}"] = [3],
+        ["Shop-list batch stopped on {0}: {1} Acquired {2} of {3} before stopping."] = [1],
+        ["Timed out validating live shop UI: {0}"] = [0],
+        ["Shop purchase cancelled: {0}"] = [0],
+        ["Cancelling shop-list batch: {0}"] = [0],
+        ["{0} could not start: {1}"] = [1],
+        ["NPC repair could not enter the inn: {0}"] = [0],
+        ["NPC repair did not enter the inn room: {0}"] = [0],
+        ["Returning to the inn room: {0}"] = [0],
+        ["{0} Returning to the inn room."] = [0],
+        ["no trusted runtime card decode; addonCurrentCard={0}; solverCard={1}; solverConfidence={2}; solverReason='{3}'"] = [3],
+        ["no trusted runtime card decode; addon atk ignored; addonCard={0}; currentGraphicKey='{1}'; solverCard={2}; solverConfidence={3}; solverReason='{4}'"] = [4],
+        ["Higher/Lower automation {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} card={5} action={6} source='{7}' directionSource={8} directionTarget={9}@{10} pendingTarget={11} pendingPhase={12} pendingAge={13} pendingPhaseAge={14} {15} pendingBaselineServerRowSeq={16} terminalProof={17} callbackAction={18} callbackPhase={19} callbackAge={20} blocksDutyExit={21} exitGrace={22} lastActivity={23} blockedReason='{24}' active={25} addonCurrentCard={26} addonOtherCard={27} knownCards={28}."] = [0, 15, 24],
+        ["Higher/Lower solver {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} directionSource={5} directionTarget={6}@{7} pendingTarget={8} pendingPhase={9} pendingAge={10} pendingPhaseAge={11} {12} pendingBaselineServerRowSeq={13} terminalProof={14} callbackAction={15} callbackPhase={16} callbackAge={17} blocksDutyExit={18} exitGrace={19} lastActivity={20} blockedReason='{21}' active={22} addonCurrentCard={23} addonOtherCard={24} decodedCard={25} solverChoice={26} confidence={27} reason='{28}' source='{29}' slot={30} textureIndex={31}."] = [0, 12, 21, 28],
+        ["Owned in {0}. {1}"] = [1],
+        ["Owned after outside start in {0}. {1}"] = [1],
+        ["Leave requested. Higher/Lower activity is blocking duty exit; ADS is holding leave UI and will re-run final treasure sweep after the quiet grace. {0}"] = [0],
+        ["Resolve the preview error for {0} before running: {1}"] = [1],
+        ["All {0} identical-cost candidates failed before purchase. Last failure: {1}"] = [1],
+        ["{0} Final navigation cleanup reported that the owned path was still running."] = [0],
+        ["{0} Final navigation cleanup could not verify that the owned path stopped."] = [0],
         ["Added a new global rule row. {0}"] = [0],
         ["Added a new rule row scoped to current area and label '{0}'. {1}"] = [1],
         ["Added a new rule row scoped to current area. {0}"] = [0],
@@ -252,9 +288,10 @@ public static class Ui
         foreach (var (key, pattern, prefix) in Templates.Value)
         {
             if (!text.StartsWith(prefix, StringComparison.Ordinal)) continue;
-            var match = pattern.Match(text);
+            var regex = pattern.Value;
+            var match = regex.Match(text);
             if (!match.Success) continue;
-            var indices = pattern.GetGroupNames().Where(name => name.StartsWith('p'))
+            var indices = regex.GetGroupNames().Where(name => name.StartsWith('p'))
                 .Select(name => int.Parse(name[1..], CultureInfo.InvariantCulture)).ToArray();
             var args = new object?[indices.Max() + 1];
             foreach (var index in indices) args[index] = match.Groups["p" + index].Value;

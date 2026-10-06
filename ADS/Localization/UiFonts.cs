@@ -1,5 +1,8 @@
 using System.Collections;
+using AethertekUI;
+using ADS.Windows;
 using Dalamud;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ManagedFontAtlas;
 
@@ -8,69 +11,94 @@ namespace ADS.Localization;
 internal sealed class UiFonts : IDisposable
 {
     private readonly IFontAtlas atlas;
-    private readonly IUiBuilder uiBuilder;
-    private IFontHandle? japanese;
-    private IFontHandle? simplifiedChinese;
-    private IFontHandle? traditionalChinese;
-    private IFontHandle? korean;
+    private IFontHandle[] handles = [];
+    private UiLanguage? applied;
+    private IReadOnlyList<string> required = [];
+    private int generation;
+    private int checkedGeneration = -1;
+    internal Exception? LoadException { get; private set; }
+    internal bool Ready => handles.Length > 0 && handles.All(h => h.Available && h.LoadException is null);
 
     internal UiFonts(IUiBuilder uiBuilder)
     {
-        this.uiBuilder = uiBuilder;
         atlas = uiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.Async, true, "ADS languages");
-        try
-        {
-            var glyphs = GlyphRanges();
-            using (atlas.SuppressAutoRebuild())
-            {
-                japanese = Create(0, glyphs);
-                simplifiedChinese = Create(2, glyphs);
-                traditionalChinese = Create(1, glyphs);
-                korean = Create(3, glyphs);
-            }
-        }
-        catch { Dispose(); throw; }
     }
 
-    private IFontHandle Create(int face, ushort[] glyphs)
+    internal bool Prepare(UiLanguage language, MaterialTextRenderer shapingRenderer)
+    {
+        if (applied != language)
+        {
+            foreach (var handle in handles) { handle.ImFontChanged -= FontChanged; handle.Dispose(); }
+            applied = language;
+            LoadException = null;
+            checkedGeneration = -1;
+            required = RequiredText(language);
+            var ranges = required.SelectMany(MaterialText.NativeGlyphText)
+                .Concat(Enumerable.Range(0x20, 0x500 - 0x20).Select(value => (char)value)).ToGlyphRange();
+            using (atlas.SuppressAutoRebuild())
+                handles = AdsPresentation.FontSizes.Select((_, index) => Create((UiFontRole)index, language, ranges)).ToArray();
+            foreach (var handle in handles) handle.ImFontChanged += FontChanged;
+        }
+        LoadException ??= handles.FirstOrDefault(handle => handle.LoadException is not null)?.LoadException;
+        if (!Ready || LoadException is not null) return false;
+        if (checkedGeneration == generation) return true;
+        try
+        {
+            foreach (var size in AdsPresentation.FontSizes)
+                shapingRenderer.CheckGlyphs(required, size * Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
+            CheckGlyphs(); checkedGeneration = generation; return true;
+        }
+        catch (Exception error) { LoadException = error; return false; }
+    }
+
+    internal static string[] RequiredText(UiLanguage language)
+        => Values(language).Concat(Values(UiLanguage.English)).Concat(Ui.LanguageLabels)
+            .Append("♥♡●").Append(Ui.CultureFor(language).NumberFormat.NumberGroupSeparator).Distinct().ToArray();
+
+    private static IEnumerable<string> Values(UiLanguage language)
+        => Ui.Resources.GetResourceSet(Ui.CultureFor(language), true, false)!
+            .Cast<DictionaryEntry>().Select(entry => (string)entry.Value!);
+
+    private IFontHandle Create(UiFontRole role, UiLanguage language, ushort[] ranges)
         => atlas.NewDelegateFontHandle(step => step.OnPreBuild(toolkit =>
         {
-            var defaultFont = uiBuilder.DefaultFontSpec;
-            var config = new SafeFontConfig { FontNo = face, SizePx = defaultFont.SizePx, GlyphRanges = glyphs };
-            var font = toolkit.AddDalamudAssetFont(DalamudAsset.NotoSansCjkRegular, config);
-            defaultFont.AddToBuildToolkit(toolkit, font);
-            config.MergeFont = font;
-            toolkit.AddGameSymbol(config);
-            toolkit.Font = font;
+            var size = AdsPresentation.AtlasHeight(role);
+            var fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            toolkit.Font = toolkit.AddFontFromFile(Path.Combine(fonts, AdsPresentation.FontFiles[(int)role]),
+                new SafeFontConfig { SizePx = size, GlyphRanges = ranges });
+            toolkit.AddFontFromFile(Path.Combine(fonts, "seguisym.ttf"),
+                new SafeFontConfig { SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font });
+            foreach (var locale in new[] { UiLanguage.Japanese, UiLanguage.Korean, UiLanguage.SimplifiedChinese, UiLanguage.TraditionalChinese }
+                .OrderBy(locale => locale == language ? 0 : 1))
+                toolkit.AddDalamudAssetFont(DalamudAsset.NotoSansCjkRegular, new SafeFontConfig
+                {
+                    SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font,
+                    FontNo = locale switch { UiLanguage.Korean => 1, UiLanguage.SimplifiedChinese => 2, UiLanguage.TraditionalChinese => 3, _ => 0 },
+                });
+            toolkit.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
+            toolkit.AddGameSymbol(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
         }));
 
-    // Resource glyphs cover all picker choices; Latin Extended supports accents
-    // and default-font merging preserves dynamic names from the game client.
-    internal static ushort[] GlyphRanges()
-        => Enum.GetValues<UiLanguage>().SelectMany(language =>
-                Ui.Resources.GetResourceSet(Ui.CultureFor(language), true, false)!
-                    .Cast<DictionaryEntry>().SelectMany(entry => (string)entry.Value!))
-            .Concat(string.Concat(Ui.LanguageLabels))
-            .Concat(Enumerable.Range(0x20, 0x250 - 0x20).Select(value => (char)value))
-            .ToGlyphRange();
+    private void FontChanged(IFontHandle handle, ILockedImFont font) => Interlocked.Increment(ref generation);
 
-    internal IDisposable? Push(UiLanguage language) => Handle(language)?.Push();
-    internal IDisposable? PushPicker(UiLanguage language) => Handle(language)?.Push();
-
-    private IFontHandle? Handle(UiLanguage language) => language switch
+    private unsafe void CheckGlyphs()
     {
-        UiLanguage.SimplifiedChinese => simplifiedChinese,
-        UiLanguage.TraditionalChinese => traditionalChinese,
-        UiLanguage.Korean => korean,
-        _ => japanese,
-    };
+        for (var index = 0; index < handles.Length; index++)
+        {
+            using var font = handles[index].Lock();
+            foreach (var character in required.SelectMany(MaterialText.NativeGlyphText).Where(c => !char.IsControl(c)).Distinct())
+                if (ImGui.FindGlyphNoFallback(font.ImFont, character).Handle == null)
+                    throw new InvalidOperationException($"Required UI glyph missing: U+{(int)character:X4} in {(UiFontRole)index}");
+        }
+    }
+
+    internal IDisposable Push(UiLanguage language) => Push(UiFontRole.Body);
+    internal IDisposable PushPicker(UiLanguage language) => Push(UiFontRole.Body);
+    internal IDisposable Push(UiFontRole role) => handles[(int)role].Push();
 
     public void Dispose()
     {
-        japanese?.Dispose();
-        simplifiedChinese?.Dispose();
-        traditionalChinese?.Dispose();
-        korean?.Dispose();
+        foreach (var handle in handles) { handle.ImFontChanged -= FontChanged; handle.Dispose(); }
         atlas.Dispose();
     }
 }

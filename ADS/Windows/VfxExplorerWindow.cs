@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Globalization;
 using System.Numerics;
@@ -38,6 +39,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;
@@ -52,27 +54,27 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             ? rows.OrderByDescending(x => x.TimestampUtc).ThenByDescending(x => x.Sequence).ToList()
             : rows.OrderBy(x => x.TimestampUtc).ThenBy(x => x.Sequence).ToList();
 
-        ImGui.TextUnformatted(Ui.T("ECommons VFX Trace"));
-        ImGui.TextUnformatted(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
+        MaterialText.Text(Ui.T("ECommons VFX Trace"));
+        MaterialText.Text(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
         ImGui.SameLine();
-        ImGui.TextUnformatted(Ui.T("Pending: {0}", plugin.HigherLowerVfxTraceService.PendingCount));
+        MaterialText.Text(Ui.T("Pending: {0}", plugin.HigherLowerVfxTraceService.PendingCount));
 
         DrawFilters();
         DrawTrackedNow(context);
 
-        ImGui.TextUnformatted(Ui.T("Rows shown: {0}", rows.Count));
+        MaterialText.Text(Ui.T("Rows shown: {0}", rows.Count));
         DrawEventTable(rows);
     }
 
     private void DrawFilters()
     {
         ImGui.SetNextItemWidth(360f);
-        ImGui.InputTextWithHint("##ADSVfxFilter", Ui.T("filter path / ids / params"), ref textFilter, 180);
+        WindowLayout.InputTextWithHint("##ADSVfxFilter", Ui.T("filter path / ids / params"), ref textFilter, 180);
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Clear")))
+        if (WindowLayout.SmallButton(Ui.L("Clear")))
             textFilter = string.Empty;
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Clear Rows")))
+        if (WindowLayout.SmallButton(Ui.L("Clear Rows")))
             plugin.HigherLowerVfxTraceService.Clear();
         ImGui.SameLine();
         WindowLayout.Checkbox("Newest First", ref newestFirst);
@@ -106,7 +108,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             .Take(80)
             .ToList();
 
-        if (!ImGui.CollapsingHeader(Ui.L("Tracked now ({0})", tracked.Count), ImGuiTreeNodeFlags.DefaultOpen))
+        if (!MaterialText.CollapsingHeader(Ui.L("Tracked now ({0})", tracked.Count), ImGuiTreeNodeFlags.DefaultOpen))
             return;
 
         if (!ImGui.BeginTable("ADSVfxTrackedNow", 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, 180f)))
@@ -125,49 +127,49 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Position"), ImGuiTableColumnFlags.WidthFixed, 190f);
         ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn(Ui.L("Scale/Rotation"), ImGuiTableColumnFlags.WidthStretch, 260f);
-        ImGui.TableHeadersRow();
+        WindowLayout.TableHeadersRow();
 
         foreach (var row in tracked)
         {
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.AgeSeconds.ToString("0.0s", CultureInfo.InvariantCulture));
+            MaterialText.Text(row.AgeSeconds.ToString("0.0s", CultureInfo.InvariantCulture));
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(string.IsNullOrWhiteSpace(row.Path) ? "-" : row.Path);
+            MaterialText.TextWrapped(string.IsNullOrWhiteSpace(row.Path) ? "-" : row.Path);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(string.IsNullOrWhiteSpace(row.CardSource) ? "-" : row.CardSource);
+            MaterialText.TextWrapped(string.IsNullOrWhiteSpace(row.CardSource) ? "-" : row.CardSource);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(string.IsNullOrWhiteSpace(row.Slot) ? "-" : row.Slot);
+            MaterialText.Text(string.IsNullOrWhiteSpace(row.Slot) ? "-" : row.Slot);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.TextureIndexText);
+            MaterialText.Text(row.TextureIndexText);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.DecodedCardText);
+            MaterialText.Text(row.DecodedCardText);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(string.IsNullOrWhiteSpace(row.SolverReason) ? "-" : row.SolverReason);
+            MaterialText.TextWrapped(string.IsNullOrWhiteSpace(row.SolverReason) ? "-" : row.SolverReason);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(row.CasterLabel);
+            MaterialText.TextWrapped(row.CasterLabel);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(row.TargetLabel);
+            MaterialText.TextWrapped(row.TargetLabel);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(Ui.T("{0}/{1}", row.TerritoryId, row.MapId));
+            MaterialText.Text(Ui.T("{0}/{1}", row.TerritoryId, row.MapId));
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.PositionText);
+            MaterialText.Text(row.PositionText);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.DistanceText);
+            MaterialText.Text(row.DistanceText);
             DrawTrackedTooltip(row);
             ImGui.TableNextColumn();
-            ImGui.TextWrapped(row.ScaleRotationText);
+            MaterialText.TextWrapped(row.ScaleRotationText);
             DrawTrackedTooltip(row);
         }
 
@@ -194,7 +196,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn(Ui.L("Scale/Rotation"), ImGuiTableColumnFlags.WidthStretch, 260f);
         ImGui.TableSetupColumn(Ui.L("Source Params"), ImGuiTableColumnFlags.WidthStretch, 380f);
-        ImGui.TableHeadersRow();
+        WindowLayout.TableHeadersRow();
 
         var now = DateTime.UtcNow;
         foreach (var row in rows)
@@ -252,7 +254,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
 
     private static void DrawCell(string value, HigherLowerVfxTraceService.VfxEventRow row)
     {
-        ImGui.TextWrapped(string.IsNullOrWhiteSpace(value) ? "-" : value);
+        MaterialText.TextWrapped(string.IsNullOrWhiteSpace(value) ? "-" : value);
         DrawRowTooltip(row);
     }
 
@@ -262,24 +264,29 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
+        try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 80f);
-        ImGui.TextUnformatted(row.KindLabel);
-        ImGui.TextUnformatted(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
-        ImGui.TextUnformatted(Ui.T("Ptr: 0x{0:X}", row.Pointer));
-        ImGui.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
-        ImGui.TextWrapped($"Card: source={row.CardSource} slot={row.Slot} textureIndex={row.TextureIndexText} decoded={row.DecodedCardText} reason={row.SolverReason}");
-        ImGui.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
-        ImGui.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
-        ImGui.TextUnformatted(Ui.T("Caster base / target base: {0} / {1}", row.CasterBaseId, row.TargetBaseId));
-        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
-        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
-        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
-        ImGui.TextWrapped(row.ScaleRotationText);
-        ImGui.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
-        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
-        ImGui.TextWrapped(row.ToHldbgLogLine());
-        ImGui.PopTextWrapPos();
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(row.KindLabel);
+        MaterialText.Text(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
+        MaterialText.Text(Ui.T("Ptr: 0x{0:X}", row.Pointer));
+        MaterialText.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
+        MaterialText.TextWrapped(Ui.T("Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}", row.CardSource, row.Slot,
+            row.TextureIndex?.ToString(Ui.Culture) ?? Ui.T("unknown"), row.DecodedCard?.ToString(Ui.Culture) ?? Ui.T("unknown"), Ui.Display(row.SolverReason)));
+        MaterialText.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
+        MaterialText.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
+        MaterialText.Text(Ui.T("Caster base / target base: {0} / {1}", row.CasterBaseId, row.TargetBaseId));
+        MaterialText.Text(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        MaterialText.Text(Ui.T("Position: {0}", row.PositionText));
+        MaterialText.Text(Ui.T("Distance: {0}", row.DistanceText));
+        MaterialText.TextWrapped(row.ScaleRotationText);
+        MaterialText.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
+        MaterialText.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
+        MaterialText.TextWrapped(row.ToHldbgLogLine());
+
+        } finally { ImGui.PopTextWrapPos(); }
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static void DrawTrackedTooltip(HigherLowerVfxTraceService.TrackedVfxRow row)
@@ -288,20 +295,25 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
+        try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 80f);
-        ImGui.TextUnformatted(Ui.T("VfxId: 0x{0:X}", row.VfxId));
-        ImGui.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
-        ImGui.TextWrapped($"Card: source={row.CardSource} slot={row.Slot} textureIndex={row.TextureIndexText} decoded={row.DecodedCardText} reason={row.SolverReason}");
-        ImGui.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
-        ImGui.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
-        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
-        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
-        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
-        ImGui.TextWrapped(row.ScaleRotationText);
-        ImGui.TextWrapped(Ui.T("Static: {0} run: {1}", row.IsStatic, row.HasRun));
-        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
-        ImGui.PopTextWrapPos();
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(Ui.T("VfxId: 0x{0:X}", row.VfxId));
+        MaterialText.TextWrapped(Ui.T("Path: {0}", (string.IsNullOrWhiteSpace(row.Path) ? "(blank)" : row.Path)));
+        MaterialText.TextWrapped(Ui.T("Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}", row.CardSource, row.Slot,
+            row.TextureIndex?.ToString(Ui.Culture) ?? Ui.T("unknown"), row.DecodedCard?.ToString(Ui.Culture) ?? Ui.T("unknown"), Ui.Display(row.SolverReason)));
+        MaterialText.TextWrapped(Ui.T("Caster: {0}", row.CasterLabel));
+        MaterialText.TextWrapped(Ui.T("Target: {0}", row.TargetLabel));
+        MaterialText.Text(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        MaterialText.Text(Ui.T("Position: {0}", row.PositionText));
+        MaterialText.Text(Ui.T("Distance: {0}", row.DistanceText));
+        MaterialText.TextWrapped(row.ScaleRotationText);
+        MaterialText.TextWrapped(Ui.T("Static: {0} run: {1}", row.IsStatic, row.HasRun));
+        MaterialText.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
+
+        } finally { ImGui.PopTextWrapPos(); }
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static bool MatchesText(HigherLowerVfxTraceService.TrackedVfxRow row, string text)

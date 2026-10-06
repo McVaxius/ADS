@@ -1,4 +1,5 @@
 using ADS.Localization;
+using AethertekUI;
 using System.Numerics;
 using ADS.Services;
 using Dalamud.Bindings.ImGui;
@@ -22,6 +23,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             MaximumSize = new Vector2(2200f, 1600f),
         };
         Size = new Vector2(760f, 640f);
+        Flags |= ImGuiWindowFlags.HorizontalScrollbar;
     }
 
     public void Dispose()
@@ -30,40 +32,44 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
         var changed = false;
-        ImGui.TextUnformatted(Ui.T("{0} Settings", PluginInfo.DisplayName));
-        ImGui.TextDisabled(Ui.T("Configuration saves immediately."));
+        MaterialText.Text(Ui.T("{0} Settings", PluginInfo.DisplayName));
+        MaterialText.TextDisabled(Ui.T("Configuration saves immediately."));
         ImGui.Spacing();
 
-        if (ImGui.BeginTabBar("ADSSettingsTabs"))
+        bool tabsVisible;
+        using(MaterialText.PushLineHeight(new[] { "General", "Automation", "Data & Rules", "Advanced", "About" }.Select(label => Ui.T(label)).ToArray()))
+            tabsVisible = ImGui.BeginTabBar("ADSSettingsTabs");
+        if (tabsVisible)
         {
-            if (ImGui.BeginTabItem(Ui.L("General")))
+            if (WindowLayout.BeginTabItem(Ui.L("General")))
             {
                 DrawGeneral(ref changed);
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem(Ui.L("Automation")))
+            if (WindowLayout.BeginTabItem(Ui.L("Automation")))
             {
                 DrawAutomation(ref changed);
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem(Ui.L("Data & Rules")))
+            if (WindowLayout.BeginTabItem(Ui.L("Data & Rules")))
             {
                 DrawDataAndRules();
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem(Ui.L("Advanced")))
+            if (WindowLayout.BeginTabItem(Ui.L("Advanced")))
             {
                 DrawAdvanced(ref changed);
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem(Ui.L("About")))
+            if (WindowLayout.BeginTabItem(Ui.L("About")))
             {
                 DrawAbout();
                 ImGui.EndTabItem();
@@ -78,14 +84,16 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawGeneral(ref bool changed)
     {
-        ImGui.TextUnformatted(Ui.T("Startup"));
+        plugin.Appearance.DrawWindowAppearanceSettings();
+        ImGui.Spacing();
+        MaterialText.Text(Ui.T("Startup"));
         var pluginEnabled = plugin.Configuration.PluginEnabled;
         if (WindowLayout.Checkbox("Plugin enabled", ref pluginEnabled))
         {
             plugin.Configuration.PluginEnabled = pluginEnabled;
             changed = true;
         }
-        ImGui.TextDisabled(Ui.T("ADS stays enabled. Start/Resume and Stop control duty ownership."));
+        MaterialText.TextDisabled(Ui.T("ADS stays enabled. Start/Resume and Stop control duty ownership."));
 
         var openMainWindowOnLoad = plugin.Configuration.OpenMainWindowOnLoad;
         if (WindowLayout.Checkbox("Open main window on load", ref openMainWindowOnLoad))
@@ -103,7 +111,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("DTR Bar"));
+        MaterialText.Text(Ui.T("DTR Bar"));
         var dtrBarEnabled = plugin.Configuration.DtrBarEnabled;
         if (WindowLayout.Checkbox("Enable DTR bar", ref dtrBarEnabled))
         {
@@ -113,32 +121,33 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
         var dtrModes = new[] { "Text only", "Icon + text", "Icon only" };
         var dtrMode = plugin.Configuration.DtrBarMode;
-        if (ImGui.Combo(WindowLayout.InputLabel("DTR mode"), ref dtrMode,dtrModes.Select(Ui.Display).ToArray(), dtrModes.Length))
+        var dtrLabels = dtrModes.Select(Ui.Display).ToArray();
+        if (WindowLayout.Combo(WindowLayout.InputLabel("DTR mode", WindowLayout.ComboMinimum(dtrLabels)), ref dtrMode,dtrLabels, dtrModes.Length))
         {
             plugin.Configuration.DtrBarMode = dtrMode;
             changed = true;
         }
 
         var enabledGlyph = plugin.Configuration.DtrIconEnabled;
-        if (ImGui.InputText(WindowLayout.InputLabel("Enabled glyph"), ref enabledGlyph, 8))
+        if (WindowLayout.InputText(WindowLayout.InputLabel("Enabled glyph", WindowLayout.TextMinimum(8)), ref enabledGlyph, 8))
         {
             plugin.Configuration.DtrIconEnabled = enabledGlyph;
             changed = true;
         }
 
         var disabledGlyph = plugin.Configuration.DtrIconDisabled;
-        if (ImGui.InputText(WindowLayout.InputLabel("Disabled glyph"), ref disabledGlyph, 8))
+        if (WindowLayout.InputText(WindowLayout.InputLabel("Disabled glyph", WindowLayout.TextMinimum(8)), ref disabledGlyph, 8))
         {
             plugin.Configuration.DtrIconDisabled = disabledGlyph;
             changed = true;
         }
 
-        ImGui.TextDisabled(Ui.T("Click the DTR entry to open the Main window."));
+        MaterialText.TextDisabled(Ui.T("Click the DTR entry to open the Main window."));
     }
 
     private void DrawAutomation(ref bool changed)
     {
-        ImGui.TextUnformatted(Ui.T("Regular Duties"));
+        MaterialText.Text(Ui.T("Regular Duties"));
         var enableBmraiVbmInRegularDuties = plugin.Configuration.EnableBmraiVbmInRegularDuties;
         if (WindowLayout.Checkbox("Enable BMRAI/VBM in regular duties", ref enableBmraiVbmInRegularDuties))
         {
@@ -146,11 +155,11 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("When enabled, entering a regular duty resets BMRAI and VBM follow targets to Slot1. Changes take effect on the next regular-duty entry."));
+        MaterialText.TextWrapped(Ui.T("When enabled, entering a regular duty resets BMRAI and VBM follow targets to Slot1. Changes take effect on the next regular-duty entry."));
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Treasure"));
+        MaterialText.Text(Ui.T("Treasure"));
         var considerTreasureCoffers = plugin.Configuration.ConsiderTreasureCoffers;
         if (WindowLayout.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
         {
@@ -158,7 +167,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
+        MaterialText.TextWrapped(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
 
         var treasureDoorJiggleRecoveryEnabled = plugin.Configuration.TreasureDoorJiggleRecoveryEnabled;
         if (WindowLayout.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
@@ -167,11 +176,11 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("Briefly strafe when treasure-door follow-through appears stuck while vnav continues toward the route."));
+        MaterialText.TextWrapped(Ui.T("Briefly strafe when treasure-door follow-through appears stuck while vnav continues toward the route."));
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Dialog Rules"));
+        MaterialText.Text(Ui.T("Dialog Rules"));
         var processDialogRulesOutsideOwnedDuty = plugin.Configuration.ProcessDialogRulesOutsideOwnedDuty;
         if (WindowLayout.Checkbox("Process dialog rules outside owned duties", ref processDialogRulesOutsideOwnedDuty))
         {
@@ -179,99 +188,99 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("When enabled, dialog rules can run while ADS is enabled, logged in, and not zoning. Disable to require ADS-owned or leaving duty execution."));
+        MaterialText.TextWrapped(Ui.T("When enabled, dialog rules can run while ADS is enabled, logged in, and not zoning. Disable to require ADS-owned or leaving duty execution."));
     }
 
     private void DrawDataAndRules()
     {
-        ImGui.TextUnformatted(Ui.T("Remote JSON Cache"));
+        MaterialText.Text(Ui.T("Remote JSON Cache"));
         ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
-        if (ImGui.Button(Ui.L("Update rules cache"), new Vector2(-1f, 30f)))
+        if (WindowLayout.Button(Ui.L("Update rules cache"), new Vector2(-1f, 30f)))
             plugin.ForceRemoteJsonUpdate();
         ImGui.EndDisabled();
-        ImGui.TextWrapped(Ui.Display(plugin.RemoteJsonUpdateService.LastUpdateStatus));
-        ImGui.TextWrapped(Ui.Display(TreasureDungeonData.LastLoadStatus));
+        MaterialText.TextWrapped(Ui.Display(plugin.RemoteJsonUpdateService.LastUpdateStatus));
+        MaterialText.TextWrapped(Ui.Display(TreasureDungeonData.LastLoadStatus));
         foreach (var statusLine in plugin.RemoteJsonUpdateService.GetCacheStatusLines())
-            ImGui.TextDisabled(Ui.Display(statusLine));
+            MaterialText.TextDisabled(Ui.Display(statusLine));
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Duty Object Rules: {0} active", plugin.ObjectPriorityRuleService.ActiveRuleCount));
-        ImGui.TextWrapped(Ui.T("Active preset: {0}", plugin.ObjectPriorityRuleService.ActivePresetName));
-        ImGui.TextWrapped(Ui.T("Territory shard index: {0}", plugin.ObjectPriorityRuleService.ConfigPath));
+        MaterialText.Text(Ui.T("Duty Object Rules: {0} active", plugin.ObjectPriorityRuleService.ActiveRuleCount));
+        MaterialText.TextWrapped(Ui.T("Active preset: {0}", plugin.ObjectPriorityRuleService.ActivePresetName));
+        MaterialText.TextWrapped(Ui.T("Territory shard index: {0}", plugin.ObjectPriorityRuleService.ConfigPath));
         DrawActionGrid(
             "ADSObjectRuleActions",
             ("Open territory shards", () => plugin.OpenPath(plugin.ObjectPriorityRuleService.TerritoriesPath)),
             ("Open frontier labels", plugin.OpenFrontierLabelUi),
             ("Open rules table", plugin.OpenRuleEditorUi),
             ("Reload active object rules", () => plugin.ObjectPriorityRuleService.Reload()));
-        if (ImGui.Button(Ui.L("Rules walkthrough"), new Vector2(-1f, 28f)))
+        if (WindowLayout.Button(Ui.L("Rules walkthrough"), new Vector2(-1f, 28f)))
             plugin.OpenRulesWalkthroughUi();
-        ImGui.TextWrapped(Ui.Display(plugin.ObjectPriorityRuleService.LastSyncStatus));
-        ImGui.TextWrapped(Ui.Display(plugin.ObjectPriorityRuleService.LastLoadStatus));
-        ImGui.TextDisabled(Ui.T("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require debug mode."));
+        MaterialText.TextWrapped(Ui.Display(plugin.ObjectPriorityRuleService.LastSyncStatus));
+        MaterialText.TextWrapped(Ui.Display(plugin.ObjectPriorityRuleService.LastLoadStatus));
+        MaterialText.TextDisabled(Ui.T("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require debug mode."));
 
         ImGui.Spacing();
-        ImGui.TextUnformatted(Ui.T("PR-ready Checkout"));
+        MaterialText.Text(Ui.T("PR-ready Checkout"));
         DrawCheckoutConfiguration();
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Dialog Yes/No Rules: {0} active", plugin.DialogYesNoRuleService.ActiveRuleCount));
-        ImGui.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
+        MaterialText.Text(Ui.T("Dialog Yes/No Rules: {0} active", plugin.DialogYesNoRuleService.ActiveRuleCount));
+        MaterialText.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
         DrawActionGrid(
             "ADSDialogRuleActions",
             ("Open dialog rules JSON", () => plugin.OpenPath(plugin.DialogYesNoRuleService.ConfigPath)),
             ("Open dialog rules table", plugin.OpenDialogRuleEditorUi),
             ("Reload dialog rules JSON", () => plugin.DialogYesNoRuleService.Reload()));
-        ImGui.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastSyncStatus));
-        ImGui.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastLoadStatus));
-        ImGui.TextDisabled(Ui.T("Only saving or importing into DEFAULT changes runtime dialog behavior."));
+        MaterialText.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastSyncStatus));
+        MaterialText.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastLoadStatus));
+        MaterialText.TextDisabled(Ui.T("Only saving or importing into DEFAULT changes runtime dialog behavior."));
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Duty Manager"));
-        ImGui.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
+        MaterialText.Text(Ui.T("Duty Manager"));
+        MaterialText.TextWrapped(plugin.DutyCatalogService.MaturityConfigPath);
         DrawActionGrid(
             "ADSDutyMaturityActions",
             ("Open duty metadata JSON", () => plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath)),
             ("Open Duty Manager", plugin.OpenDutyMaturityEditorUi),
             ("Reload duty metadata JSON", () => plugin.DutyCatalogService.ReloadMaturity()));
-        ImGui.TextWrapped(Ui.Display(plugin.DutyCatalogService.LastMaturityLoadStatus));
+        MaterialText.TextWrapped(Ui.Display(plugin.DutyCatalogService.LastMaturityLoadStatus));
     }
 
     private void DrawCheckoutConfiguration()
     {
         checkoutState.RefreshFromConfiguration();
 
-        ImGui.TextWrapped(Ui.T("ADS only prepares local shard and index files. Reviewing and submitting them to GitHub remains manual."));
-        ImGui.SetNextItemWidth(-1f);
+        MaterialText.TextWrapped(Ui.T("ADS only prepares local shard and index files. Reviewing and submitting them to GitHub remains manual."));
+        ImGui.SetNextItemWidth(MaterialLayout.FitNextItemWidth(-1f, WindowLayout.TextMinimum(512)));
         var candidatePath = checkoutState.CandidatePath;
-        var submitted = ImGui.InputTextWithHint(
+        var submitted = WindowLayout.InputTextWithHint(
             "##ADSSettingsCheckoutPath",
             Ui.T("repository root or ads\\territories folder"),
             ref candidatePath,
             512,
             ImGuiInputTextFlags.EnterReturnsTrue);
         checkoutState.SetCandidatePath(candidatePath);
-        if (ImGui.Button(Ui.L("Use checkout")) || submitted)
+        if (WindowLayout.Button(Ui.L("Use checkout")) || submitted)
             checkoutState.TryUseCheckout();
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Clear")))
+        if (WindowLayout.Button(Ui.L("Clear")))
             checkoutState.Clear();
         ImGui.SameLine();
         var cannotOpen = string.IsNullOrWhiteSpace(checkoutState.ConfiguredRoot)
                          || !Directory.Exists(checkoutState.ConfiguredRoot);
         ImGui.BeginDisabled(cannotOpen);
-        if (ImGui.Button(Ui.L("Open checkout")))
+        if (WindowLayout.Button(Ui.L("Open checkout")))
             plugin.OpenPath(checkoutState.ConfiguredRoot);
         ImGui.EndDisabled();
-        ImGui.TextWrapped(Ui.Display(checkoutState.Status));
+        MaterialText.TextWrapped(Ui.Display(checkoutState.Status));
     }
 
     private void DrawAdvanced(ref bool changed)
     {
-        ImGui.TextUnformatted(Ui.T("Display"));
+        MaterialText.Text(Ui.T("Display"));
         var showDebugSections = plugin.Configuration.ShowDebugSections;
         if (WindowLayout.Checkbox("Show debug sections in the Main window", ref showDebugSections))
         {
@@ -279,11 +288,11 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("Enables live JSON preview and short observation samples in Main > Diagnostics."));
+        MaterialText.TextWrapped(Ui.T("Enables live JSON preview and short observation samples in Main > Diagnostics."));
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextUnformatted(Ui.T("Framework Hitch Profiler"));
+        MaterialText.Text(Ui.T("Framework Hitch Profiler"));
         var frameworkHitchProfilerEnabled = plugin.Configuration.FrameworkHitchProfilerEnabled;
         if (WindowLayout.Checkbox("Enable framework hitch profiler", ref frameworkHitchProfilerEnabled))
         {
@@ -291,13 +300,13 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.TextWrapped(Ui.T("Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play."));
+        MaterialText.TextWrapped(Ui.T("Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play."));
     }
 
     private void DrawAbout()
     {
-        ImGui.TextUnformatted(Ui.T("{0} v{1}", PluginInfo.DisplayName, PluginInfo.GetVersion()));
-        ImGui.TextWrapped(Ui.Display(PluginInfo.Summary));
+        MaterialText.Text(Ui.T("{0} v{1}", PluginInfo.DisplayName, PluginInfo.GetVersion()));
+        MaterialText.TextWrapped(Ui.Display(PluginInfo.Summary));
         ImGui.Spacing();
         DrawActionGrid(
             "ADSAboutLinks",
@@ -305,14 +314,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             ("Ko-fi", () => plugin.OpenUrl(PluginInfo.SupportUrl)),
             ("Discord", () => plugin.OpenUrl(PluginInfo.DiscordUrl)),
             ("Repository", () => plugin.OpenUrl(PluginInfo.RepoUrl)));
-        ImGui.TextDisabled(Ui.T(PluginInfo.DiscordFeedbackNote));
+        MaterialText.TextDisabled(Ui.T(PluginInfo.DiscordFeedbackNote));
         ImGui.Spacing();
-        ImGui.TextWrapped(Ui.T("ADS includes staged execution phases, explicit planner objectives, immediate dead/opened ghosting, specialist inspectors, human-edited rule overrides, duty catalog, ownership controls, and IPC."));
+        MaterialText.TextWrapped(Ui.T("ADS includes staged execution phases, explicit planner objectives, immediate dead/opened ghosting, specialist inspectors, human-edited rule overrides, duty catalog, ownership controls, and IPC."));
     }
 
     private void DrawActionGrid(string id, params (string Label, Action Action)[] actions)
     {
-        var columnCount = ImGui.GetContentRegionAvail().X >= 800f ? 4 : 2;
+        var minimum = actions.Max(action => WindowLayout.ButtonMinimum(Ui.L(action.Label))) + ImGui.GetStyle().CellPadding.X * 2;
+        var columnCount = Math.Clamp((int)(ImGui.GetContentRegionAvail().X / minimum), 1, 4);
         if (!ImGui.BeginTable(id, columnCount, ImGuiTableFlags.SizingStretchSame))
             return;
 
@@ -322,7 +332,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
                 ImGui.TableNextRow();
 
             ImGui.TableSetColumnIndex(index % columnCount);
-            if (ImGui.Button(Ui.L(actions[index].Label + "##" + id + index), new Vector2(-1f, 28f)))
+            if (WindowLayout.Button(Ui.L(actions[index].Label + "##" + id + index), new Vector2(-1f, 28f)))
                 actions[index].Action();
         }
 

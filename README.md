@@ -4,6 +4,12 @@ AI Duty Solver (ADS) is an operator-controlled Dalamud plugin for observing, pla
 
 ADS is observer-first. Entering a duty does not automatically grant ADS ownership unless the operator starts or resumes execution.
 
+## Appearance and language
+
+The main header and Settings share the language, colour and compact preference. Full and compact layouts retain the same actions and saved choices. Sixteen language choices retain Brazilian Portuguese and Traditional Chinese and include Vietnamese, Indonesian, Polish, Turkish and Hindi. Each embedded catalogue contains 3,726 keys, covering authored controls, ownership, execution, planner statuses and displayed service diagnostics. Commands, schema identifiers, editable data, external game/plugin names and exception details keep their original values. Managed font preparation includes the selected catalogue, English and all native language names. Hindi uses the shared shaped-text renderer across retained controls, editors, tabs and expanded/collapsed window titles; game, GPU, managed-font and IME acceptance remains separate from the offline checks.
+
+Debug x64 compilation, exact embedded-resource/status checks and native selector interaction are verified. The new choices preserve existing language ordinals, control IDs and saved nonlanguage preferences at both densities and scales 1 and 1.5. Per-language offline role-font verification within the diagnostic memory limit, native-client managed-font readiness and full-window visual acceptance remain open.
+
 ## Desynthesis
 
 ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; Main > Tools > Treasure And Operations has compact Desynth Controls and Extract Materia launchers. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).

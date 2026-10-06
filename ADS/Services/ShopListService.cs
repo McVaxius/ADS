@@ -508,7 +508,8 @@ public sealed class ShopListService
             var response = utilityAutomation.SearchShopCatalog(
                 request.Query,
                 currency,
-                request.Limit is < 1 or > 100 ? 50 : request.Limit);
+                request.Limit is < 1 or > 100 ? 50 : request.Limit,
+                request.ItemId);
             return JsonSerializer.Serialize(response, JsonOptions);
         }
         catch (Exception ex) when (ex is JsonException or InvalidDataException)
@@ -801,6 +802,7 @@ public sealed class ShopListService
     private sealed class ShopCatalogSearchRequest
     {
         public int Version { get; set; }
+        public uint ItemId { get; set; }
         public string Query { get; set; } = string.Empty;
         public string CurrencyKind { get; set; } = string.Empty;
         public uint CurrencyItemId { get; set; }

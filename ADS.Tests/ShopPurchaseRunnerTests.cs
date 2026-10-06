@@ -1531,19 +1531,40 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(0, runtime.SubmitCount);
     }
 
-    [Fact]
-    public void PreExistingShopUiRejectsStartBeforeTravelOrCallback()
+    [Theory]
+    [InlineData("Shop")]
+    [InlineData("SelectString")]
+    [InlineData("Talk")]
+    [InlineData("SelectYesno")]
+    [InlineData("ShopExchangeItemDialog")]
+    [InlineData("ShopExchangeCurrencyDialog")]
+    public void PreExistingShopUiRejectsStartBeforeTravelOrCallback(string addonName)
     {
         var clock = new FakeClock();
-        var runtime = new FakeRuntime { AnyShopVisible = true };
-        var runner = CreateRunner(1, runtime, clock);
+        var runtime = new FakeRuntime
+        {
+            VisibleBlockingAddon = addonName,
+            AnyShopVisible = addonName == "Shop",
+            IsSelectionMenuVisible = addonName == "SelectString",
+            IsTalkVisible = addonName == "Talk",
+            HasUnexpectedConfirmation = addonName is "SelectYesno" or "ShopExchangeItemDialog" or "ShopExchangeCurrencyDialog",
+        };
+        var diagnostics = new List<string>();
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [Offer(10, 100, 1)])), runtime, clock,
+            diagnostic: diagnostics.Add);
 
         Assert.False(runner.Start(new ShopPurchaseRequest(100, 1)));
 
         Assert.Contains("existing shop", runner.Status.LastStartError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"Visible addon: {addonName}.", runner.Status.LastStartError, StringComparison.Ordinal);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Contains($"Visible addon: {addonName}.", StringComparison.Ordinal));
+        Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.LastStartFailureCode);
         Assert.Equal(0, runtime.TeleportCount);
         Assert.Equal(0, runtime.MoveCount);
         Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, runtime.MenuSelectCount);
+        Assert.Equal(0, runtime.AcceptedConfirmationCount);
+        Assert.Equal(0, runtime.CloseUiCount);
     }
 
     [Fact]
@@ -2199,6 +2220,8 @@ public sealed class ShopPurchaseRunnerTests
         public bool HasLifestream { get; set; } = true;
         public bool HasUnexpectedConfirmation { get; set; }
         public bool IsSelectionMenuVisible { get; set; }
+        public bool IsTalkVisible { get; set; }
+        public string? VisibleBlockingAddon { get; set; }
         public bool IsAnyShopVisible => AnyShopVisible || ExpectedShopVisible;
         public bool AnyShopVisible { get; set; }
         public bool ExpectedShopVisible { get; set; }

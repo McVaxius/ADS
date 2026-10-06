@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
@@ -28,10 +29,11 @@ public sealed class LootWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
-        ImGui.TextUnformatted(Ui.T("Mode: {0}", Ui.Display(plugin.Configuration.LootMode.ToString())));
-        ImGui.TextWrapped(Ui.Display(plugin.LootAutomationService.Status));
+        MaterialText.Text(Ui.T("Mode: {0}", Ui.Display(plugin.Configuration.LootMode.ToString())));
+        MaterialText.TextWrapped(Ui.Display(plugin.LootAutomationService.Status));
         ImGui.Spacing();
 
         DrawModeButtons();
@@ -40,7 +42,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
         if (WindowLayout.Checkbox("Need/Greed missing glamour gear (XA Database)", ref glamourNeed))
             plugin.SetLootGlamourNeedingEnabled(glamourNeed);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap."));
+            MaterialText.SetTooltip(Ui.T("Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap."));
         ImGui.Separator();
         DrawRegistrableControls();
     }
@@ -59,7 +61,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
     private void DrawModeButton(string label, LootRollMode mode)
     {
         var selected = plugin.Configuration.LootMode == mode;
-        if (ImGui.RadioButton(Ui.L(label), selected))
+        if (WindowLayout.RadioButton(Ui.L(label), selected))
             plugin.SetLootMode(mode);
     }
 

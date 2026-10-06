@@ -8,6 +8,7 @@ namespace ADS.Windows;
 
 public abstract class PositionedWindow : Window
 {
+    protected readonly AethertekUI.Dalamud.MaterialWindowMotion windowMotion = new();
     private readonly string originalWindowName;
     private Vector2? pendingWindowPosition;
     private bool pendingPositionConditionReset;
@@ -28,6 +29,15 @@ public abstract class PositionedWindow : Window
         => QueueWindowPosition(GetRandomVisiblePosition());
 
     public override void PreDraw()
+    {
+        PrepareWindowPlacement();
+        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+    }
+
+    public override void PostDraw()
+        => windowMotion.Restore(this);
+
+    protected void PrepareWindowPlacement()
     {
         WindowName = Ui.L(originalWindowName);
         if (!pendingWindowPosition.HasValue)

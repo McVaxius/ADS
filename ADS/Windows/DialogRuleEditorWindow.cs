@@ -1,3 +1,4 @@
+using AethertekUI;
 using System.Numerics;
 using System.Text.Json;
 using ADS.Localization;
@@ -55,26 +56,27 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
 
-        ImGui.TextWrapped(Ui.T("Spreadsheet-style editor for dialog-yesno-rules.json. These rules are global dialog matches, not duty-scoped."));
-        ImGui.TextWrapped(Ui.T("Processing scope follows Settings > Process dialog rules outside owned duties."));
-        ImGui.TextWrapped(Ui.T("Default Addon is SelectYesno. Optional Notification/NotificationCB can restore minimized prompts before ADS clicks."));
-        ImGui.TextWrapped(Ui.T("Preset: {0} -> {1}", selectedPresetName, plugin.DialogYesNoRuleService.GetPresetPath(selectedPresetName)));
+        MaterialText.TextWrapped(Ui.T("Spreadsheet-style editor for dialog-yesno-rules.json. These rules are global dialog matches, not duty-scoped."));
+        MaterialText.TextWrapped(Ui.T("Processing scope follows Settings > Process dialog rules outside owned duties."));
+        MaterialText.TextWrapped(Ui.T("Default Addon is SelectYesno. Optional Notification/NotificationCB can restore minimized prompts before ADS clicks."));
+        MaterialText.TextWrapped(Ui.T("Preset: {0} -> {1}", selectedPresetName, plugin.DialogYesNoRuleService.GetPresetPath(selectedPresetName)));
         if (!plugin.DialogYesNoRuleService.IsDefaultPreset(selectedPresetName))
-            ImGui.TextWrapped(Ui.T("Runtime ADS still reads DEFAULT/live dialog rules. Non-default dialog presets are parked datasets until you import or copy them back into DEFAULT."));
-        ImGui.TextWrapped(Ui.Display(editorStatus) + (string.IsNullOrEmpty(editorStatusDetail) ? string.Empty : " " + Ui.Display(editorStatusDetail)));
+            MaterialText.TextWrapped(Ui.T("Runtime ADS still reads DEFAULT/live dialog rules. Non-default dialog presets are parked datasets until you import or copy them back into DEFAULT."));
+        MaterialText.TextWrapped(Ui.Display(editorStatus) + (string.IsNullOrEmpty(editorStatusDetail) ? string.Empty : " " + Ui.Display(editorStatusDetail)));
         if (dirty)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.97f, 0.84f, 0.31f, 1f));
-            ImGui.TextUnformatted(Ui.T("Unsaved dialog rule edits"));
+            MaterialText.Text(Ui.T("Unsaved dialog rule edits"));
             ImGui.PopStyleColor();
         }
 
         DrawPresetToolbar();
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("+ Row")))
+        if (WindowLayout.Button(Ui.L("+ Row")))
         {
             draft.Rules.Add(plugin.DialogYesNoRuleService.CreateBlankRule());
             dirty = true;
@@ -82,7 +84,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
         ImGui.SameLine();
         ImGui.BeginDisabled(!dirty);
-        if (ImGui.Button(Ui.L("Save")))
+        if (WindowLayout.Button(Ui.L("Save")))
         {
             if (plugin.DialogYesNoRuleService.SaveManifest(selectedPresetName, draft))
             {
@@ -96,13 +98,13 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.EndDisabled();
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Reload From Disk")))
+        if (WindowLayout.Button(Ui.L("Reload From Disk")))
         {
             RefreshDraft($"Dialog-rule preset {selectedPresetName} reloaded from disk.");
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Open JSON")))
+        if (WindowLayout.Button(Ui.L("Open JSON")))
             plugin.OpenPath(plugin.DialogYesNoRuleService.GetPresetPath(selectedPresetName));
 
         ImGui.Spacing();
@@ -138,33 +140,35 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawPresetToolbar()
     {
-        ImGui.TextUnformatted(Ui.T("Preset"));
+        MaterialText.Text(Ui.T("Preset"));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(220f);
-        if (ImGui.BeginCombo("##DialogRulePreset", selectedPresetName))
+        if (MaterialText.BeginCombo("##DialogRulePreset", selectedPresetName))
         {
+            try {
             foreach (var presetName in plugin.DialogYesNoRuleService.GetPresetNames())
             {
                 var isSelected = string.Equals(presetName, selectedPresetName, StringComparison.OrdinalIgnoreCase);
-                if (!ImGui.Selectable(presetName, isSelected))
+                if (!MaterialText.Selectable(presetName, isSelected))
                     continue;
 
                 SwitchPreset(presetName);
             }
 
-            ImGui.EndCombo();
+
+            } finally { ImGui.EndCombo(); }
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Export##DialogPreset")))
+        if (WindowLayout.SmallButton(Ui.L("Export##DialogPreset")))
             ExportManifestToClipboard();
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Import##DialogPreset")))
+        if (WindowLayout.SmallButton(Ui.L("Import##DialogPreset")))
             ImportManifestFromClipboard();
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Disk+##DialogPreset")))
+        if (WindowLayout.SmallButton(Ui.L("Disk+##DialogPreset")))
         {
             SyncDiskTransferPath();
             ImGui.OpenPopup("ADSDialogPresetDiskTransfer");
@@ -173,7 +177,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         DrawDiskTransferPopup();
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("+##DialogPreset")))
+        if (WindowLayout.SmallButton(Ui.L("+##DialogPreset")))
         {
             pendingPresetName = plugin.DialogYesNoRuleService.IsDefaultPreset(selectedPresetName)
                 ? "Preset"
@@ -186,14 +190,14 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         using (new ImGuiDisabledBlock(plugin.DialogYesNoRuleService.IsDefaultPreset(selectedPresetName)))
         {
-            if (ImGui.SmallButton(Ui.L("-##DialogPreset")))
+            if (WindowLayout.SmallButton(Ui.L("-##DialogPreset")))
                 DeleteCurrentPreset();
         }
 
         if (plugin.DialogYesNoRuleService.IsDefaultPreset(selectedPresetName))
         {
             ImGui.SameLine();
-            if (ImGui.SmallButton(Ui.L("@##DialogPreset")))
+            if (WindowLayout.SmallButton(Ui.L("@##DialogPreset")))
                 ResetDefaultDraftFromCache();
         }
     }
@@ -217,11 +221,11 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginPopup("ADSCreateDialogPreset"))
             return;
 
-        ImGui.TextUnformatted(Ui.T("Create preset from the current draft"));
+        MaterialText.Text(Ui.T("Create preset from the current draft"));
         ImGui.SetNextItemWidth(260f);
-        ImGui.InputTextWithHint("##NewDialogPresetName", Ui.T("preset name"), ref pendingPresetName, 64);
+        WindowLayout.InputTextWithHint("##NewDialogPresetName", Ui.T("preset name"), ref pendingPresetName, 64);
 
-        if (ImGui.Button(Ui.L("Create##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Create##DialogPreset")))
         {
             var sanitizedName = plugin.DialogYesNoRuleService.SanitizePresetName(pendingPresetName);
             if (plugin.DialogYesNoRuleService.IsDefaultPreset(sanitizedName))
@@ -244,7 +248,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Cancel##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Cancel##DialogPreset")))
             ImGui.CloseCurrentPopup();
 
         ImGui.EndPopup();
@@ -255,11 +259,11 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         if (!ImGui.BeginPopup("ADSDialogPresetDiskTransfer"))
             return;
 
-        ImGui.TextUnformatted(Ui.T("Full-manifest disk import/export"));
+        MaterialText.Text(Ui.T("Full-manifest disk import/export"));
         ImGui.SetNextItemWidth(540f);
-        ImGui.InputTextWithHint("##DialogPresetDiskPath", Ui.T("path to .json file"), ref diskTransferPath, 512);
+        WindowLayout.InputTextWithHint("##DialogPresetDiskPath", Ui.T("path to .json file"), ref diskTransferPath, 512);
 
-        if (ImGui.Button(Ui.L("Import file##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Import file##DialogPreset")))
         {
             if (plugin.DialogYesNoRuleService.TryImportManifestFromPath(diskTransferPath, out var manifest, out var status))
             {
@@ -274,7 +278,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Export file##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Export file##DialogPreset")))
         {
             if (plugin.DialogYesNoRuleService.TryExportManifestToPath(diskTransferPath, draft, out var status))
                 editorStatus = status;
@@ -283,11 +287,11 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Use preset path##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Use preset path##DialogPreset")))
             SyncDiskTransferPath();
 
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Open preset dir##DialogPreset")))
+        if (WindowLayout.Button(Ui.L("Open preset dir##DialogPreset")))
             plugin.OpenPath(plugin.DialogYesNoRuleService.PresetDirectoryPath);
 
         ImGui.EndPopup();
@@ -404,7 +408,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
             ImGui.TableSetColumnIndex(0);
             var enabled = rule.Enabled;
-            if (ImGui.Checkbox("##Enabled", ref enabled))
+            if (WindowLayout.NativeCheckbox("##Enabled", ref enabled))
             {
                 rule.Enabled = enabled;
                 dirty = true;
@@ -419,7 +423,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
             ImGui.TableSetColumnIndex(2);
             var matchModeIndex = Math.Max(0, Array.IndexOf(MatchModes, string.IsNullOrWhiteSpace(rule.MatchMode) ? "Contains" : rule.MatchMode));
-            if (ImGui.Combo("##MatchMode", ref matchModeIndex, MatchModes.Select(Ui.Display).ToArray(), MatchModes.Length))
+            if (WindowLayout.Combo("##MatchMode", ref matchModeIndex, MatchModes.Select(Ui.Display).ToArray(), MatchModes.Length))
             {
                 rule.MatchMode = MatchModes[matchModeIndex];
                 dirty = true;
@@ -434,7 +438,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
             ImGui.TableSetColumnIndex(4);
             var responseIndex = Math.Max(0, Array.IndexOf(ResponseLabels, string.IsNullOrWhiteSpace(rule.Response) ? "Yes" : rule.Response));
-            if (ImGui.Combo("##Response", ref responseIndex, ResponseLabels.Select(Ui.Display).ToArray(), ResponseLabels.Length))
+            if (WindowLayout.Combo("##Response", ref responseIndex, ResponseLabels.Select(Ui.Display).ToArray(), ResponseLabels.Length))
             {
                 rule.Response = ResponseLabels[responseIndex];
                 dirty = true;
@@ -443,7 +447,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(5);
             var delaySeconds = Math.Max(0, (int)Math.Round(rule.Delay));
             ImGui.SetNextItemWidth(-1f);
-            if (ImGui.InputInt("##Delay", ref delaySeconds))
+            if (WindowLayout.InputInt("##Delay", ref delaySeconds))
             {
                 rule.Delay = Math.Max(0, delaySeconds);
                 dirty = true;
@@ -471,7 +475,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
             }
 
             ImGui.TableSetColumnIndex(9);
-            if (ImGui.SmallButton(Ui.L("-")))
+            if (WindowLayout.SmallButton(Ui.L("-")))
                 rowToRemove = i;
 
             ImGui.PopID();
@@ -488,7 +492,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     private static void DrawHeaderRow()
     {
-        ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+        ImGui.TableNextRow(ImGuiTableRowFlags.Headers, WindowLayout.HeaderRowHeight());
         DrawHeaderCell(0, "On", "Enable this rule.");
         DrawHeaderCell(1, "Addon", "Addon to watch. Leave as SelectYesno for normal yes/no prompts.");
         DrawHeaderCell(2, "Match", "Contains or Exact prompt matching.");
@@ -504,9 +508,9 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
     private static void DrawHeaderCell(int column, string label, string tooltip)
     {
         ImGui.TableSetColumnIndex(column);
-        ImGui.TableHeader(Ui.L(label));
+        WindowLayout.TableHeader(Ui.L(label));
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.Display(tooltip));
+            MaterialText.SetTooltip(Ui.Display(tooltip));
     }
 
     private static bool EditTextCell(string id, string value, int maxLength, out string editedValue)
@@ -514,7 +518,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SetNextItemWidth(-1f);
         var local = value;
         editedValue = local;
-        if (!ImGui.InputText(id, ref local, maxLength))
+        if (!WindowLayout.InputText(id, ref local, maxLength))
             return false;
 
         editedValue = local;

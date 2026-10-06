@@ -567,8 +567,8 @@ public sealed unsafe class UtilityAutomationService
     internal long GetAvailableShopCurrency(ShopCurrencyIdentity currency)
         => shopRuntime.GetAvailableCurrency(new ShopCurrencyCost(currency.Kind, currency.ItemId, string.Empty, 1));
 
-    internal ShopCatalogSearchResponse SearchShopCatalog(string? query, ShopCurrencyIdentity? currency, int limit)
-        => shopCatalogService.Search(query, currency, limit);
+    internal ShopCatalogSearchResponse SearchShopCatalog(string? query, ShopCurrencyIdentity? currency, int limit, uint itemIdFilter = 0)
+        => shopCatalogService.Search(query, currency, limit, itemIdFilter);
 
     internal long GetLiveShopItemCount(uint itemId)
         => shopRuntime.GetItemCount(itemId);

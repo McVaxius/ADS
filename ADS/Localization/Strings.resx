@@ -274,7 +274,7 @@
     <value>ACTIVE</value>
   </data>
   <data name="ADS Controls" xml:space="preserve">
-    <value>ADS Controls</value>
+    <value>ADS Quick Controls</value>
   </data>
   <data name="ADS Desynthesis" xml:space="preserve">
     <value>ADS Desynthesis</value>
@@ -11090,5 +11090,88 @@
   </data>
   <data name="Item ownership" xml:space="preserve">
     <value>Item ownership</value>
+  </data>
+  <data name="Compact mode" xml:space="preserve"><value>Compact mode</value></data>
+  <data name="Color" xml:space="preserve"><value>Color</value></data>
+  <data name="Teal" xml:space="preserve"><value>Teal</value></data>
+  <data name="Blue" xml:space="preserve"><value>Blue</value></data>
+  <data name="Pink" xml:space="preserve"><value>Pink</value></data>
+  <data name="Custom RGB" xml:space="preserve"><value>Custom RGB</value></data>
+  <data name="Loading UI fonts..." xml:space="preserve"><value>Loading UI fonts...</value></data>
+  <data name="UI fonts failed to load. See the plugin log." xml:space="preserve"><value>UI fonts failed to load. See the plugin log.</value></data>
+  <data name="H/L auto: enabled={0} hold={1} dutyKey={2} step={3} card={4} action={5} source={6} directionSource={7} target={8}@{9} pendingTarget={10} pendingPhase={11} pendingAge={12} pendingPhaseAge={13} retryAttempts={14}/{15} lastInteractAge={16} nextRetryIn={17} retryReason={18} pendingBaselineRowSeq={19} terminalProof={20} callbackAction={21} callbackPhase={22} callbackAge={23} surface={24} blocked='{25}' retained={26} retainedStep={27} retainedCard={28} retainedAction={29}" xml:space="preserve">
+    <value>H/L auto: enabled={0} hold={1} dutyKey={2} step={3} card={4} action={5} source={6} directionSource={7} target={8}@{9} pendingTarget={10} pendingPhase={11} pendingAge={12} pendingPhaseAge={13} retryAttempts={14}/{15} lastInteractAge={16} nextRetryIn={17} retryReason={18} pendingBaselineRowSeq={19} terminalProof={20} callbackAction={21} callbackPhase={22} callbackAge={23} surface={24} blocked='{25}' retained={26} retainedStep={27} retainedCard={28} retainedAction={29}</value>
+  </data>
+  <data name="H/L solver: card={0} choice={1} confidence={2} source={3} sourceRowSeq={4} sourceState={5} reason='{6}' textureIndex={7} textureIndexSource={8}" xml:space="preserve">
+    <value>H/L solver: card={0} choice={1} confidence={2} source={3} sourceRowSeq={4} sourceState={5} reason='{6}' textureIndex={7} textureIndexSource={8}</value>
+  </data>
+  <data name="Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}" xml:space="preserve">
+    <value>Card: source={0} slot={1} textureIndex={2} decoded={3} reason={4}</value>
+  </data>
+  <data name="{0} Final navigation cleanup reported that the owned path was still running." xml:space="preserve">
+    <value>{0} Final navigation cleanup reported that the owned path was still running.</value>
+  </data>
+  <data name="{0} Final navigation cleanup could not verify that the owned path stopped." xml:space="preserve">
+    <value>{0} Final navigation cleanup could not verify that the owned path stopped.</value>
+  </data>
+  <data name="Higher/Lower automation {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} card={5} action={6} source='{7}' directionSource={8} directionTarget={9}@{10} pendingTarget={11} pendingPhase={12} pendingAge={13} pendingPhaseAge={14} {15} pendingBaselineServerRowSeq={16} terminalProof={17} callbackAction={18} callbackPhase={19} callbackAge={20} blocksDutyExit={21} exitGrace={22} lastActivity={23} blockedReason='{24}' active={25} addonCurrentCard={26} addonOtherCard={27} knownCards={28}." xml:space="preserve">
+    <value>Higher/Lower automation {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} card={5} action={6} source='{7}' directionSource={8} directionTarget={9}@{10} pendingTarget={11} pendingPhase={12} pendingAge={13} pendingPhaseAge={14} {15} pendingBaselineServerRowSeq={16} terminalProof={17} callbackAction={18} callbackPhase={19} callbackAge={20} blocksDutyExit={21} exitGrace={22} lastActivity={23} blockedReason='{24}' active={25} addonCurrentCard={26} addonOtherCard={27} knownCards={28}.</value>
+  </data>
+  <data name="Higher/Lower solver {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} directionSource={5} directionTarget={6}@{7} pendingTarget={8} pendingPhase={9} pendingAge={10} pendingPhaseAge={11} {12} pendingBaselineServerRowSeq={13} terminalProof={14} callbackAction={15} callbackPhase={16} callbackAge={17} blocksDutyExit={18} exitGrace={19} lastActivity={20} blockedReason='{21}' active={22} addonCurrentCard={23} addonOtherCard={24} decodedCard={25} solverChoice={26} confidence={27} reason='{28}' source='{29}' slot={30} textureIndex={31}." xml:space="preserve">
+    <value>Higher/Lower solver {0}; surface={1} dutyKey={2} step={3} playsCompleted={4} directionSource={5} directionTarget={6}@{7} pendingTarget={8} pendingPhase={9} pendingAge={10} pendingPhaseAge={11} {12} pendingBaselineServerRowSeq={13} terminalProof={14} callbackAction={15} callbackPhase={16} callbackAge={17} blocksDutyExit={18} exitGrace={19} lastActivity={20} blockedReason='{21}' active={22} addonCurrentCard={23} addonOtherCard={24} decodedCard={25} solverChoice={26} confidence={27} reason='{28}' source='{29}' slot={30} textureIndex={31}.</value>
+  </data>
+  <data name="directionAttempts={0}/{1} directionLastInteractAge={2} directionNextRetryIn={3} directionNextRetryAt={4} directionRetryReason={5}" xml:space="preserve">
+    <value>directionAttempts={0}/{1} directionLastInteractAge={2} directionNextRetryIn={3} directionNextRetryAt={4} directionRetryReason={5}</value>
+  </data>
+  <data name="no trusted runtime card decode; addon atk ignored; addonCard={0}; currentGraphicKey='{1}'; solverCard={2}; solverConfidence={3}; solverReason='{4}'" xml:space="preserve">
+    <value>no trusted runtime card decode; addon atk ignored; addonCard={0}; currentGraphicKey='{1}'; solverCard={2}; solverConfidence={3}; solverReason='{4}'</value>
+  </data>
+  <data name="Owned in {0}. {1}" xml:space="preserve">
+    <value>Owned in {0}. {1}</value>
+  </data>
+  <data name="Owned after outside start in {0}. {1}" xml:space="preserve">
+    <value>Owned after outside start in {0}. {1}</value>
+  </data>
+  <data name="association-completed" xml:space="preserve">
+    <value>association-completed</value>
+  </data>
+  <data name="already-satisfied" xml:space="preserve">
+    <value>already-satisfied</value>
+  </data>
+  <data name="running" xml:space="preserve">
+    <value>running</value>
+  </data>
+  <data name="skipped" xml:space="preserve">
+    <value>skipped</value>
+  </data>
+  <data name="purchased" xml:space="preserve">
+    <value>purchased</value>
+  </data>
+  <data name="waiting" xml:space="preserve">
+    <value>waiting</value>
+  </data>
+  <data name="Window appearance" xml:space="preserve">
+    <value>Window appearance</value>
+  </data>
+  <data name="Compact visible on main window" xml:space="preserve">
+    <value>Compact visible on main window</value>
+  </data>
+  <data name="Language visible on main window" xml:space="preserve">
+    <value>Language visible on main window</value>
+  </data>
+  <data name="Transparency" xml:space="preserve">
+    <value>Transparency</value>
+  </data>
+  <data name="Opacity (%)" xml:space="preserve">
+    <value>Opacity (%)</value>
+  </data>
+  <data name="Auto-fade when unfocused" xml:space="preserve">
+    <value>Auto-fade when unfocused</value>
+  </data>
+  <data name="Unfocused opacity (%)" xml:space="preserve">
+    <value>Unfocused opacity (%)</value>
+  </data>
+  <data name="Unfocused delay (seconds)" xml:space="preserve">
+    <value>Unfocused delay (seconds)</value>
   </data>
 </root>

@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
@@ -30,6 +31,7 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;
@@ -43,25 +45,25 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             .ToList();
         var frontierOrManualRowCount = rows.Count(x => x.Type is "Frontier" or "ManualMapXZ" or "ManualXYZ");
 
-        ImGui.TextUnformatted(Ui.T("Ghost Inspector"));
-        ImGui.TextWrapped(Ui.T("Shows the current recovery ghost memory ADS is carrying for this duty, plus the live, remembered, and last-ghosted manual destination state. Monster ghosts are stale battle targets; interactable ghosts include class and ghost-reason metadata."));
-        ImGui.TextUnformatted(Ui.T("Duty: {0}", context.CurrentDuty is { } duty ? Ui.DutyName(duty) : Ui.T("None")));
-        ImGui.TextUnformatted(Ui.T("Current live map id: {0}", context.MapId));
-        ImGui.TextUnformatted(Ui.T("Monster ghosts: {0}", plugin.ObservationMemoryService.Current.MonsterGhosts.Count));
+        MaterialText.Text(Ui.T("Ghost Inspector"));
+        MaterialText.TextWrapped(Ui.T("Shows the current recovery ghost memory ADS is carrying for this duty, plus the live, remembered, and last-ghosted manual destination state. Monster ghosts are stale battle targets; interactable ghosts include class and ghost-reason metadata."));
+        MaterialText.Text(Ui.T("Duty: {0}", context.CurrentDuty is { } duty ? Ui.DutyName(duty) : Ui.T("None")));
+        MaterialText.Text(Ui.T("Current live map id: {0}", context.MapId));
+        MaterialText.Text(Ui.T("Monster ghosts: {0}", plugin.ObservationMemoryService.Current.MonsterGhosts.Count));
         ImGui.SameLine();
-        ImGui.TextUnformatted(Ui.T("Interactable ghosts: {0}", plugin.ObservationMemoryService.Current.InteractableGhosts.Count));
+        MaterialText.Text(Ui.T("Interactable ghosts: {0}", plugin.ObservationMemoryService.Current.InteractableGhosts.Count));
         ImGui.SameLine();
-        ImGui.TextUnformatted(Ui.T("Frontier/manual rows: {0}", frontierOrManualRowCount));
+        MaterialText.Text(Ui.T("Frontier/manual rows: {0}", frontierOrManualRowCount));
 
         ImGui.SetNextItemWidth(320f);
-        ImGui.InputTextWithHint("##ADSGhostFilter", Ui.T("filter by name, type, class, or map"), ref filter, 128);
+        WindowLayout.InputTextWithHint("##ADSGhostFilter", Ui.T("filter by name, type, class, or map"), ref filter, 128);
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Clear")))
+        if (WindowLayout.SmallButton(Ui.L("Clear")))
             filter = string.Empty;
         ImGui.SameLine();
         WindowLayout.Checkbox("Current Map Only", ref currentMapOnly);
 
-        ImGui.TextUnformatted(Ui.T("Ghosts shown: {0}", rows.Count));
+        MaterialText.Text(Ui.T("Ghosts shown: {0}", rows.Count));
         if (!ImGui.BeginTable("ADSGhostTable", 8, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 
@@ -73,7 +75,7 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Age"), ImGuiTableColumnFlags.WidthFixed, 80f);
         ImGui.TableSetupColumn(Ui.L("Pos"), ImGuiTableColumnFlags.WidthFixed, 250f);
         ImGui.TableSetupColumn(Ui.L("Flag"), ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableHeadersRow();
+        WindowLayout.TableHeadersRow();
 
         for (var index = 0; index < rows.Count; index++)
         {
@@ -81,35 +83,35 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             ImGui.TableNextRow();
 
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextUnformatted(row.Type);
+            MaterialText.Text(Ui.Display(row.Type));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(1);
-            ImGui.TextUnformatted(row.Name);
+            MaterialText.Text(row.Name);
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted(Ui.Display(row.Classification));
+            MaterialText.Text(Ui.Display(row.Classification));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(Ui.Display(row.GhostReason));
+            MaterialText.Text(Ui.Display(row.GhostReason));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(row.MapId.ToString());
+            MaterialText.Text(row.MapId.ToString(Ui.Culture));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(5);
-            ImGui.TextUnformatted(Ui.T("{0:0.0}s", (DateTime.UtcNow - row.LastSeenUtc).TotalSeconds));
+            MaterialText.Text(Ui.T("{0:0.0}s", (DateTime.UtcNow - row.LastSeenUtc).TotalSeconds));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(6);
-            ImGui.TextUnformatted(Ui.T("{0:0.0}, {1:0.0}, {2:0.0}", row.Position.X, row.Position.Y, row.Position.Z));
+            MaterialText.Text(Ui.T("{0:0.0}, {1:0.0}, {2:0.0}", row.Position.X, row.Position.Y, row.Position.Z));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(7);
-            if (ImGui.SmallButton(Ui.L("[FLAG]##ADSGhostFlag{0}", index)))
+            if (WindowLayout.SmallButton(Ui.L("[FLAG]##ADSGhostFlag{0}", index)))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
         }
 
@@ -211,18 +213,22 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
+        try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 35f);
-        ImGui.TextUnformatted(row.Name);
-        ImGui.TextUnformatted(Ui.T("Type: {0}", row.Type));
-        ImGui.TextUnformatted(Ui.T("Class: {0}", row.Classification));
-        ImGui.TextUnformatted(Ui.T("Reason: {0}", row.GhostReason));
-        ImGui.TextUnformatted(Ui.T("MapId: {0}", row.MapId));
-        ImGui.TextUnformatted(Ui.T("DataId: {0}", row.DataId));
-        ImGui.TextUnformatted(Ui.T("GameObjectId: {0}", row.GameObjectId));
-        ImGui.TextUnformatted(Ui.T("Last seen: {0:O}", row.LastSeenUtc));
-        ImGui.TextUnformatted(Ui.T("Position: {0:0.00}, {1:0.00}, {2:0.00}", row.Position.X, row.Position.Y, row.Position.Z));
-        ImGui.PopTextWrapPos();
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(row.Name);
+        MaterialText.Text(Ui.T("Type: {0}", Ui.Display(row.Type)));
+        MaterialText.Text(Ui.T("Class: {0}", Ui.Display(row.Classification)));
+        MaterialText.Text(Ui.T("Reason: {0}", Ui.Display(row.GhostReason)));
+        MaterialText.Text(Ui.T("MapId: {0}", row.MapId));
+        MaterialText.Text(Ui.T("DataId: {0}", row.DataId));
+        MaterialText.Text(Ui.T("GameObjectId: {0}", row.GameObjectId));
+        MaterialText.Text(Ui.T("Last seen: {0:O}", row.LastSeenUtc));
+        MaterialText.Text(Ui.T("Position: {0:0.00}, {1:0.00}, {2:0.00}", row.Position.X, row.Position.Y, row.Position.Z));
+
+        } finally { ImGui.PopTextWrapPos(); }
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static string GetFrontierRowType(DungeonFrontierPoint point)

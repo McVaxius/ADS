@@ -287,7 +287,7 @@ internal sealed class ShopPurchaseRunner
         var reusableOwnedShopVisible = shopUiOwned && runtime.IsAnyShopVisible;
         if (runtime.HasUnexpectedConfirmation || runtime.IsSelectionMenuVisible || runtime.IsTalkVisible
             || (!reusableOwnedShopVisible && runtime.IsAnyShopVisible))
-            return RejectStart("Close existing shop, selection, and confirmation UI before starting shop purchasing.", ShopPurchaseFailureCodes.UiMismatch);
+            return RejectStart(DescribeBlockingUi("Close existing shop, selection, and confirmation UI before starting shop purchasing."), ShopPurchaseFailureCodes.UiMismatch);
 
         ShopCatalogResolution nextResolution;
         ShopOfferSelectionResult nextSelection;
@@ -314,7 +314,7 @@ internal sealed class ShopPurchaseRunner
             if (nextSelection.Selected != null && runtime.IsExpectedShopVisible(nextSelection.Selected.Offer.Kind))
                 reuseOpenShop = true;
             else
-                return RejectStart("A different shop is already open; close it before starting shop purchasing.", ShopPurchaseFailureCodes.UiMismatch);
+                return RejectStart(DescribeBlockingUi("A different shop is already open; close it before starting shop purchasing."), ShopPurchaseFailureCodes.UiMismatch);
         }
 
         request = purchaseRequest;
@@ -400,8 +400,12 @@ internal sealed class ShopPurchaseRunner
         lastStartError = string.IsNullOrWhiteSpace(message) ? "Shop purchase was rejected." : message.Trim();
         lastStartFailureCode = failureCode;
         status = status with { LastStartError = lastStartError };
+        diagnostic($"Purchase start rejected ({failureCode}): {lastStartError}");
         return false;
     }
+
+    private string DescribeBlockingUi(string message)
+        => runtime.VisibleBlockingAddon is { } addonName ? $"{message} Visible addon: {addonName}." : message;
 
     public void Update()
     {
@@ -481,7 +485,7 @@ internal sealed class ShopPurchaseRunner
                     {
                         return;
                     }
-                    Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
+                    Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("An unexpected confirmation dialog appeared; ADS did not accept it."));
                     return;
                 }
 
@@ -691,13 +695,13 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.HasUnexpectedConfirmation)
         {
-            Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared during navigation; ADS did not accept it.");
+            Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("An unexpected confirmation dialog appeared during navigation; ADS did not accept it."));
             return;
         }
 
         if (runtime.IsAnyShopVisible || runtime.IsSelectionMenuVisible)
         {
-            Fail(ShopPurchaseFailureCodes.UiMismatch, "A shop or selection window appeared unexpectedly during navigation; ADS stopped before interaction.");
+            Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("A shop or selection window appeared unexpectedly during navigation; ADS stopped before interaction."));
             return;
         }
 
@@ -946,7 +950,7 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.HasUnexpectedConfirmation)
         {
-            Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
+            Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("An unexpected confirmation dialog appeared; ADS did not accept it."));
             return;
         }
 
@@ -954,7 +958,7 @@ internal sealed class ShopPurchaseRunner
         {
             if (!interactionSent)
             {
-                Fail(ShopPurchaseFailureCodes.UiMismatch, "A shop or selection menu was already open before ADS interacted with the resolved NPC.");
+                Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("A shop or selection menu was already open before ADS interacted with the resolved NPC."));
                 return;
             }
 
@@ -1033,7 +1037,7 @@ internal sealed class ShopPurchaseRunner
 
         if (runtime.HasUnexpectedConfirmation)
         {
-            Fail(ShopPurchaseFailureCodes.UiMismatch, "An unexpected confirmation dialog appeared; ADS did not accept it.");
+            Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("An unexpected confirmation dialog appeared; ADS did not accept it."));
             return;
         }
 

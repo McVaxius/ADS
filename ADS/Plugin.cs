@@ -109,6 +109,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -125,6 +126,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public Configuration Configuration { get; }
     internal UiFonts Fonts { get; }
+    internal UiAppearance Appearance { get; }
     public WindowSystem WindowSystem { get; } = new(PluginInfo.InternalName);
     public DutyCatalogService DutyCatalogService { get; }
     public DutyContextService DutyContextService { get; }
@@ -219,6 +221,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = loadedConfiguration ?? new Configuration();
         Ui.SetLanguage(Ui.ResolveLanguage(Configuration.UiLanguage, ClientState.ClientLanguage));
         Fonts = new UiFonts(PluginInterface.UiBuilder);
+        Appearance = new UiAppearance(this);
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         if (configurationChanged)
             Configuration.Save();
@@ -459,6 +462,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
+        Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
         Log.Information("[ADS][Shop] startup build=guarded-vendor-20260929-34; culture-invariant confirmation numbers");
 
         if (Configuration.OpenMainWindowOnLoad)
@@ -523,6 +527,7 @@ public sealed class Plugin : IDalamudPlugin
         desynthesisWindow.Dispose();
         shopListsWindow.Dispose();
         wizardWindow.Dispose();
+        Appearance.Dispose();
         Fonts.Dispose();
         Ui.Resources.ReleaseAllResources();
         ECommonsMain.Dispose();
@@ -530,9 +535,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawUi()
     {
-        // Keep one language/font for the entire frame, even when the picker changes it.
-        Ui.SetLanguage(Ui.ResolveLanguage(Configuration.UiLanguage, ClientState.ClientLanguage));
-        using (Fonts.Push(Ui.Language)) WindowSystem.Draw();
+        Appearance.Draw();
     }
 
     public void SetUiLanguage(UiLanguage language)

@@ -91,7 +91,8 @@ internal sealed class ShopCatalogService(
     public ShopCatalogSearchResponse Search(
         string? query,
         ShopCurrencyIdentity? currency,
-        int limit)
+        int limit,
+        uint itemIdFilter = 0)
     {
         var current = GetSnapshot();
         var normalized = query?.Trim() ?? string.Empty;
@@ -99,7 +100,9 @@ internal sealed class ShopCatalogService(
         // Currency text is evaluated from the resolved offer below. Candidate pruning cannot
         // safely see that text, so keep the full deterministic item set for both discovery and
         // exact-currency searches.
-        var candidateIds = FindCandidateItemIds(current, string.Empty);
+        var candidateIds = itemIdFilter == 0
+            ? FindCandidateItemIds(current, string.Empty)
+            : new[] { itemIdFilter };
         var rows = new List<ShopCatalogSearchRow>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 

@@ -1,6 +1,65 @@
 # Changelog
 
+## 2026-10-06 - Actions shared-library revision
+
+- Pin the existing AethertekUI checkout to published commit 6c193cf06ac67f954c549cafc2033ac0efdd630a so fresh builds receive the Hindi shaping APIs required by this consumer. Preserve existing credentials, build/package paths and release behavior; GitHub execution remains pending.
+
+## Unreleased - Hindi shaping integration
+
+- Integrate the consumer-owned AethertekUI text renderer across retained windows and font-status paths. Route text, measurement, tooltips, controls, editors and expanded/collapsed window titles through shaped drawing while preserving native identities, title controls, saved values, nine font roles, configuration and automation. Reserve natural line height for Main/Settings tabs and two-line action tiles; retain tree/sorting arrows and restore modified tooltip and editor scopes on failures. Complete the 3,726-key Hindi catalog and append its locale without changing the fifteen existing ordinals.
+- Preserve captured service details, leading-zero values and terminal newlines by using the existing complete-template matcher without its nonbacktracking option; the installed runtime returned empty named captures with that option. Bound each matcher to the established 20-ms consumer limit. Keep integer-input zero-step defaults and native flags through the current binding signature.
+- Debug x64 compilation passes with zero errors and two existing explorer distance deprecation warnings. The bounded offline consumer probe passes 11,577 assertions over all sixteen exact embedded catalog key sets, Hindi values/placeholders/edge whitespace, nine original font roles and retained native controls, editors, tabs, tree/sorting and expanded/collapsed titles at both densities and 100%/150% scale. The final probe also checks the 20-ms matcher bound and finishes in 75.34 seconds with 81.09 MiB observed peak working set. Game, GPU, managed-font and IME acceptance remains separate.
+
+## 2026-10-06 - Window appearance and transparency
+
+- Move colour configuration into the existing Settings Window appearance section, retaining compact/language access there. Independently hide or show the main-window compact and language controls, both visible by default. Add the main Transparency toggle without changing automation actions or native control identities.
+- Persist full-window opacity through the existing configuration: 100% normal opacity, automatic fade enabled, 50% unfocused opacity after 10 seconds. Clamp opacity to 10-100% and delay to 0-3600 seconds. Apply one shared opacity pass per owner after native drawing and motion restoration, including collapsed and font-status windows; retain native chrome, image alpha and owned child/pop-up content.
+- Translate the eight new appearance labels in all 15 existing catalogs. Current-version compilation, focused persistence/focus checks and game acceptance remain pending for this source change.
+
+## Unreleased - UI label corrections
+
+- Remove unrelated second lines from the Italian Enabled glyph and ID labels and the Italian/Russian unknown fallback. Preserve resource keys, native controls and automation. The unchanged launcher build passes, and its delivered assembly passes 126,752 catalog/helper checks across all fifteen exact 3,718-key catalogs. Managed-host and game acceptance remain separate.
+
+## 2026-10-05 - Rounded window chrome and native minimize (source adoption)
+
+- Adopt per-window rounded chrome and animated native minimize/restore through the shared PositionedWindow and direct window lifecycle hooks, including font status. Preserve control identities, layout, saved geometry and actions, and retain LazyLootWarning's NoCollapse.
+- Compilation, native interaction and game acceptance for this source adoption remain pending verification.
+
+## 2026-10-05 - Formatted-number font coverage
+
+- Include the selected UI culture's number-group separator in the existing required glyph set, including French narrow nonbreaking spaces in inventory and purchase quantities. Reuse that set for preparation and focused checks while preserving font roles, sources and merge order.
+
+## 2026-10-04 - Client7 native reload verification
+
+- The manual client reset restores the existing Dalamud log and loads marker14 at 18:13:32 from the native A: equivalent of the authorized R: development path. Source version remains 0.9.7.0. Existing guarded supply requests reject unavailable routes and insufficient currency; the complete 24-file fishing payload matches both deployed plugin folders by direct byte comparison. Add no independent logger or watcher.
+
+## 2026-10-03 - Visible shop blockers
+
+- Include the visible addon name in existing shop UI rejection status and logs. Keep guarded purchase authorization and confirmation checks, and leave pre-existing user dialogs untouched. Preserve source version 0.9.7.0 and public IPC contracts.
+- Refresh the compiled fishing verification marker to marker14 for an isolated client7 Debug rebuild and DLL overwrite, checking the existing ADS reload path alongside VMX's unobserved reload. Add no reload transport or watcher.
+- Marker14 builds as Debug x64 and is verified in the overwritten ADS DLL and combined 24-file payload at unchanged version 0.9.7.0. A manual VERMAXION reload subsequently loaded VMX13 and verified its automatic travel Stop, but ADS14 still has no matching native startup evidence. The later VMX15 overwrite also has no matching reload event through 23:18; native ADS14 verification remains pending.
+
+- Place the complete ADS14 payload and dependencies under R:\xivlauncher7\FishCollectionClient7Verification\ADS for the requested client7 path migration. Update its existing development location and matching settings key while retaining plugin identity, automatic reload, source version 0.9.7.0 and public IPC. The combined 24-file payload matches the R: staging files; native adoption remains pending.
+
+## 2026-10-03 - Exact-item vendor discovery
+
+- Accept an optional itemId in the existing shop-catalog search request. Resolve only that item's offers for automated restocking, retaining unrestricted text/currency discovery when the field is omitted. This avoids resolving the entire catalog on the client framework thread for a known fishing supply.
+
+
+## 2026-10-02 - Build and release repair
+
+- Pin GitHub builds to SDK 10.0.201 and pass the downloaded Dalamud library path. Restore and build plugin projects with matching configuration, platform and runtime; stop on restore failure.
+- Keep build tokens read-only and release writes in a separate job. Use packaged manifest versions for untagged releases.
+- Local launchers build the plugin directly in the pinned environment and return its exit status.
+
 ## Unreleased - Native UI and localization
+
+- Align the header and card headings with the approved references and size Overview label/value columns for each density, measuring complete translated labels to keep them on one line. Keep the execution status in a concise row and remove trailing label separators. Inset native tab and detail-column text to retain edge glyphs, wrap values within their native columns and remove the surplus final card gap. Match the Quick window caption in all fifteen existing catalogs while preserving resource keys, native IDs, configuration and source version 0.9.7.0.
+- Build a registered status matcher only when its existing prefix is reached, retaining that matcher for the current template lifetime. Preserve template priority, nonbacktracking matching and nested/raw display behavior while avoiding allocation of every matcher on the first displayed service message.
+- Append Vietnamese, Indonesian, Polish and Turkish with complete 3,718-key catalogues for authored controls and displayed service messages. Retain existing language ordinals, Brazilian Portuguese/Traditional Chinese, command and schema tokens, raw exception details, configuration version and automation behavior. Locally verify all fifteen embedded catalogues and nested statuses, selector IDs, saving and both densities at 100%/150%. Verify actual Main/Quick windows at 100% with all nine original font roles in a bounded 4096-by-4096 standalone atlas; managed-host font readiness and game screenshot acceptance remain open.
+- Apply the approved regular/compact header, action bar, Overview cards and vertical Quick Controls with shared relative colour roles and measured managed-font roles. Keep existing action IDs, native language-picker identity and automation callbacks; size translated actions in their actual font roles, wrap Quick Controls status and expose clipped action text in tooltips. Format typed distances and settle times in the selected language.
+- Show the unchanged assembly version in the main title. Reflow complete native fields, selectors, checkboxes and buttons with measured editor, preview and caption minima; retain caller-specific scalar steps and current native IDs. Add shared state/card/Quick Controls artwork and retain all eleven 3,718-key catalogs.
+- Add Italian/Russian to the existing language choices and remember colour/compact selections through the current configuration path. Verify all eleven embedded catalogues at 3,718 nonempty keys with matching placeholders, including translated ownership, execution, planner and frontier values displayed by Main and Quick Controls. Local compilation is verified; native-client acceptance remains open.
 
 - Refresh the main operator console with captioned actions, state summaries, and responsive Overview cards while retaining the existing controls and automation safeguards.
 - Add nine UI languages with a remembered preference, client-language defaults, native Dalamud fonts, and translated settings, setup flows, warnings, and status displays. Commands, IPC, editable data, and raw diagnostics retain their original values.
@@ -8,7 +67,7 @@
 ## Unreleased - Phoenix Down recovery hold
 
 - Check `FrenRider.PhoenixDown.ShouldPauseDutyProgression` before planning, owned movement, and objective actions. Stop ADS movement once on recovery entry, retain ownership and run state, and publish `ADS.IsPhoenixDownRecoveryHoldActive` after yielding movement.
-- Resume planning from fresh observations after revival without a Stop/Resume cycle. Explicit operator Stop and Leave remain authoritative. Offline integration uses the real ADS and Fren Rider coordinators with synthetic four-client death, inventory, cast, and revival state; native cast/revival/resumption still requires David-controlled live acceptance.
+- Resume planning from fresh observations after revival without a Stop/Resume cycle. Explicit operator Stop and Leave remain authoritative. Offline integration uses the real ADS and Fren Rider coordinators with synthetic four-client death, inventory, cast, and revival state; native cast/revival/resumption still requires mcvaxius-controlled live acceptance.
 
 ## Unreleased - Bounded currency shop purchases
 

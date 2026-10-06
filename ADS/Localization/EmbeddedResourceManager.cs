@@ -3,7 +3,7 @@ using System.Resources;
 
 namespace ADS.Localization;
 
-// Keep all nine native translation resources in the owning plugin assembly.
+// Keep all sixteen native translation resources in the owning plugin assembly.
 internal sealed class EmbeddedResourceManager : ResourceManager
 {
     private readonly Dictionary<string, ResourceSet> sets = new(StringComparer.Ordinal);
@@ -16,7 +16,7 @@ internal sealed class EmbeddedResourceManager : ResourceManager
         if (name is not ("zh-Hans" or "zh-Hant" or "pt-BR"))
         {
             name = culture.TwoLetterISOLanguageName;
-            if (name is not ("fr" or "de" or "ja" or "es" or "ko")) name = "en";
+            if (name is not ("fr" or "de" or "ja" or "es" or "ko" or "it" or "ru" or "vi" or "id" or "pl" or "tr" or "hi")) name = "en";
         }
         lock (gate)
         {

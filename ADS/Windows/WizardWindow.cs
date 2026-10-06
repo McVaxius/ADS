@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
@@ -44,6 +45,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         var wizard = selectedWizardId is null
             ? null
@@ -59,19 +61,19 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
 
     private void DrawHub()
     {
-        ImGui.TextUnformatted(Ui.T("Guided Setup"));
-        ImGui.TextWrapped(Ui.T("Choose any feature-specific setup flow. Completion is independent, optional, and every flow remains replayable."));
+        MaterialText.Text(Ui.T("Guided Setup"));
+        MaterialText.TextWrapped(Ui.T("Choose any feature-specific setup flow. Completion is independent, optional, and every flow remains replayable."));
         ImGui.Spacing();
 
         foreach (var wizard in WizardCatalog.All)
         {
             var completed = WizardCatalog.IsCompleted(plugin.Configuration, wizard.Id);
             ImGui.Separator();
-            ImGui.TextUnformatted(Ui.Display(wizard.Title));
+            MaterialText.Text(Ui.Display(wizard.Title));
             ImGui.SameLine();
-            ImGui.TextColored(completed ? new Vector4(0.35f, 0.85f, 0.45f, 1f) : new Vector4(0.75f, 0.75f, 0.75f, 1f), Ui.Display(completed ? "Completed" : "Optional"));
-            ImGui.TextWrapped(Ui.Display(wizard.Summary));
-            if (ImGui.Button(Ui.L(Ui.T(completed ? "Replay" : "Start") + "###" + $"{(completed ? "Replay" : "Start")}##{wizard.Id}"), new Vector2(140f, 28f)))
+            MaterialText.TextColored(completed ? new Vector4(0.35f, 0.85f, 0.45f, 1f) : new Vector4(0.75f, 0.75f, 0.75f, 1f), Ui.Display(completed ? "Completed" : "Optional"));
+            MaterialText.TextWrapped(Ui.Display(wizard.Summary));
+            if (WindowLayout.Button(Ui.L(Ui.T(completed ? "Replay" : "Start") + "###" + $"{(completed ? "Replay" : "Start")}##{wizard.Id}"), new Vector2(140f, 28f)))
             {
                 selectedWizardId = wizard.Id;
                 pageIndex = 0;
@@ -83,7 +85,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
     {
         pageIndex = Math.Clamp(pageIndex, 0, wizard.Pages.Count - 1);
         var page = wizard.Pages[pageIndex];
-        if (ImGui.SmallButton(Ui.L("Back to setup hub")))
+        if (WindowLayout.SmallButton(Ui.L("Back to setup hub")))
         {
             selectedWizardId = null;
             pageIndex = 0;
@@ -91,23 +93,23 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
         }
 
         ImGui.Spacing();
-        ImGui.TextUnformatted(Ui.Display(wizard.Title));
-        ImGui.TextDisabled(Ui.T("{0} / {1}: {2}", pageIndex + 1, wizard.Pages.Count, Ui.T(page.Title)));
+        MaterialText.Text(Ui.Display(wizard.Title));
+        MaterialText.TextDisabled(Ui.T("{0} / {1}: {2}", pageIndex + 1, wizard.Pages.Count, Ui.T(page.Title)));
         ImGui.Separator();
-        ImGui.TextWrapped(Ui.Display(page.Body));
+        MaterialText.TextWrapped(Ui.Display(page.Body));
         ImGui.Spacing();
         foreach (var step in page.Steps)
-            ImGui.BulletText(Ui.Display(step));
+            MaterialText.BulletText(Ui.Display(step));
 
         if (page.Commands.Count > 0)
         {
             ImGui.Spacing();
-            ImGui.TextUnformatted(Ui.T("Useful commands"));
+            MaterialText.Text(Ui.T("Useful commands"));
             foreach (var command in page.Commands)
             {
-                ImGui.TextUnformatted(command);
+                MaterialText.Text(command);
                 ImGui.SameLine();
-                if (ImGui.SmallButton(Ui.L("Copy##{0}-{1}-{2}", wizard.Id, page.Id, command)))
+                if (WindowLayout.SmallButton(Ui.L("Copy##{0}-{1}-{2}", wizard.Id, page.Id, command)))
                     ImGui.SetClipboardText(command);
             }
         }
@@ -119,17 +121,17 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
 
         using (new ImGuiDisabledBlock(pageIndex == 0))
         {
-            if (ImGui.Button(Ui.L("Previous"), new Vector2(120f, 30f)))
+            if (WindowLayout.Button(Ui.L("Previous"), new Vector2(120f, 30f)))
                 pageIndex--;
         }
 
         ImGui.SameLine();
         if (pageIndex + 1 < wizard.Pages.Count)
         {
-            if (ImGui.Button(Ui.L("Next"), new Vector2(120f, 30f)))
+            if (WindowLayout.Button(Ui.L("Next"), new Vector2(120f, 30f)))
                 pageIndex++;
         }
-        else if (ImGui.Button(Ui.L("Mark complete"), new Vector2(150f, 30f)))
+        else if (WindowLayout.Button(Ui.L("Mark complete"), new Vector2(150f, 30f)))
         {
             WizardCatalog.SetCompleted(plugin.Configuration, wizard.Id);
             plugin.SaveConfiguration();
@@ -144,25 +146,25 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
         {
             case WizardCatalog.DutyOperationsId:
             case WizardCatalog.DiagnosticsRecoveryId:
-                if (ImGui.SmallButton(Ui.L("Open Main")))
+                if (WindowLayout.SmallButton(Ui.L("Open Main")))
                     plugin.OpenMainUi();
                 break;
             case WizardCatalog.RulesDataId:
-                if (ImGui.SmallButton(Ui.L("Open Rules")))
+                if (WindowLayout.SmallButton(Ui.L("Open Rules")))
                     plugin.OpenRuleEditorUi();
                 ImGui.SameLine();
-                if (ImGui.SmallButton(Ui.L("Open Maturity")))
+                if (WindowLayout.SmallButton(Ui.L("Open Maturity")))
                     plugin.OpenDutyMaturityEditorUi();
                 break;
             case WizardCatalog.UtilitiesId:
-                if (ImGui.SmallButton(Ui.L("Open Desynthesis")))
+                if (WindowLayout.SmallButton(Ui.L("Open Desynthesis")))
                     plugin.OpenDesynthConfigUi();
                 break;
             case WizardCatalog.TreasureFollowId:
-                if (ImGui.SmallButton(Ui.L("Open Treasure Routes")))
+                if (WindowLayout.SmallButton(Ui.L("Open Treasure Routes")))
                     plugin.OpenTreasureRouteEditorUi();
                 ImGui.SameLine();
-                if (ImGui.SmallButton(Ui.L("Open Higher/Lower")))
+                if (WindowLayout.SmallButton(Ui.L("Open Higher/Lower")))
                     plugin.OpenHigherLowerUi();
                 break;
         }

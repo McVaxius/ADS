@@ -7,6 +7,38 @@ namespace ADS.Tests;
 
 public sealed class ShopCatalogTests
 {
+    [Fact]
+    public void ExactItemSearchResolvesOnlyItsBundlesAndPreservesCurrencyDiscovery()
+    {
+        var snapshot = SpecialSnapshot(100, "Target", 10, "Fixture", 42, "Vendor", 1, 25) with
+        {
+            Items = new Dictionary<uint, ShopItemSheetRow>
+            {
+                [100] = new(100, "Target", 999, 0, false),
+                [101] = new(101, "Unrelated", 999, 0, false),
+            },
+            SpecialShopRows =
+            [
+                new(10, "Fixture", 0, [(100u, 2u, false)], [new(1, 25, 0, 2)], 4, [], false),
+                new(10, "Fixture", 1, [(101u, 1u, false)], [new(1, 40, 0, 2)], 4, [], false),
+            ],
+        };
+        var diagnostics = new List<string>();
+        var service = new ShopCatalogService(new FixedSheets(snapshot), diagnostics.Add);
+        var target = Assert.Single(service.Search(null, null, 100, 100).Rows);
+        Assert.Equal(100u, target.ItemId);
+        Assert.Equal(2u, target.ReceiveCount);
+        Assert.Equal(25u, target.CurrencyCostPerTransaction);
+        Assert.DoesNotContain(diagnostics, message => message.Contains("item=101", StringComparison.Ordinal));
+        Assert.Empty(service.Search(null, null, 100, 999).Rows);
+        Assert.Equal(2, service.Search("Poetics", null, 100).Rows.Count);
+    }
+
+    private sealed class FixedSheets(ShopCatalogSnapshot snapshot) : IShopSheetSource
+    {
+        public ShopCatalogSnapshot BuildSnapshot() => snapshot;
+    }
+
     [Theory]
     [InlineData(29u, ShopCurrencyKind.Mgp)]
     [InlineData(21172u, ShopCurrencyKind.CurrencyManager)]

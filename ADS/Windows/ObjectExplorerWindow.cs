@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Models;
@@ -61,22 +62,23 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         DrawExportControls();
-        ImGui.TextWrapped(Ui.T("Action status: {0}", Ui.Display(plugin.ObjectExplorerStatus)));
+        MaterialText.TextWrapped(Ui.T("Action status: {0}", Ui.Display(plugin.ObjectExplorerStatus)));
 
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         var context = plugin.DutyContextService.Current;
         if (!compact)
-            ImGui.TextUnformatted(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
-        ImGui.TextUnformatted(Ui.T("Current map ID: {0}", (localPlayer is null ? "Unavailable" : context.CurrentMapId?.ToString() ?? "Unavailable")));
+            MaterialText.Text(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
+        MaterialText.Text(Ui.T("Current map ID: {0}", (localPlayer is null ? "Unavailable" : context.CurrentMapId?.ToString() ?? "Unavailable")));
         if (localPlayer is null)
         {
             rulePopupObjectId = null;
             if (!compact)
             {
-                ImGui.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
-                ImGui.TextUnformatted(Ui.T("No local player is available."));
+                MaterialText.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
+                MaterialText.Text(Ui.T("No local player is available."));
             }
             return;
         }
@@ -88,24 +90,24 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         if (!compact)
         {
-            ImGui.TextUnformatted(Ui.T("Live Loaded Objects"));
-            ImGui.TextWrapped(Ui.T("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence."));
-            ImGui.TextUnformatted(Ui.T("Layer / Sub-area: {0}", activeLayer));
-            ImGui.TextUnformatted(Ui.T("Nearest frontier label: {0}", (nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")));
-            ImGui.TextWrapped(Ui.T("Frontier target: {0}", plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"));
-            ImGui.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
+            MaterialText.Text(Ui.T("Live Loaded Objects"));
+            MaterialText.TextWrapped(Ui.T("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence."));
+            MaterialText.Text(Ui.T("Layer / Sub-area: {0}", activeLayer));
+            MaterialText.Text(Ui.T("Nearest frontier label: {0}", (nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")));
+            MaterialText.TextWrapped(Ui.T("Frontier target: {0}", plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"));
+            MaterialText.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
         }
 
-        ImGui.TextUnformatted(Ui.T("Search"));
+        MaterialText.Text(Ui.T("Search"));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(-1f);
-        ImGui.InputTextWithHint("##ADSObjectTextFilter", Ui.T("name / base id / object kind; | for OR"), ref textFilter, 128);
-        ImGui.TextUnformatted(Ui.T("Kind"));
+        WindowLayout.InputTextWithHint("##ADSObjectTextFilter", Ui.T("name / base id / object kind; | for OR"), ref textFilter, 128);
+        MaterialText.Text(Ui.T("Kind"));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(180f);
-        ImGui.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters.Select(Ui.Display).ToArray(), objectKindFilters.Length);
+        WindowLayout.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters.Select(Ui.Display).ToArray(), objectKindFilters.Length);
         ImGui.SameLine();
-        if (ImGui.Button(Ui.L("Clear filters")))
+        if (WindowLayout.Button(Ui.L("Clear filters")))
             ClearFilters();
 
         if (WindowLayout.Checkbox("Filter by Lv.", ref levelFilterEnabled) && levelFilterEnabled && levelFilter <= 0)
@@ -114,15 +116,15 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         ImGui.BeginDisabled(!levelFilterEnabled);
         ImGui.SetNextItemWidth(72f);
-        ImGui.InputInt(WindowLayout.InputLabel("Lv.##ADSObjectLevelFilter"), ref levelFilter, 0, 0);
+        WindowLayout.InputInt(WindowLayout.InputLabel("Lv.##ADSObjectLevelFilter"), ref levelFilter, 0, 0);
         if (levelFilterEnabled)
             levelFilter = Math.Max(1, levelFilter);
         ImGui.SameLine();
-        ImGui.RadioButton(Ui.L("Exact##ADSObjectLevelFilter"), ref levelFilterMode, 0);
+        WindowLayout.RadioButton(Ui.L("Exact##ADSObjectLevelFilter"), ref levelFilterMode, 0);
         ImGui.SameLine();
-        ImGui.RadioButton(Ui.L("<=##ADSObjectLevelFilter"), ref levelFilterMode, 1);
+        WindowLayout.RadioButton(Ui.L("<=##ADSObjectLevelFilter"), ref levelFilterMode, 1);
         ImGui.SameLine();
-        ImGui.RadioButton(Ui.L(">=##ADSObjectLevelFilter"), ref levelFilterMode, 2);
+        WindowLayout.RadioButton(Ui.L(">=##ADSObjectLevelFilter"), ref levelFilterMode, 2);
         ImGui.EndDisabled();
         ImGui.SameLine();
         WindowLayout.Checkbox("Targetable only", ref targetableOnly);
@@ -130,11 +132,11 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         WindowLayout.Checkbox("Same-map-only", ref sameMapOnly);
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(Ui.T("Best-effort layer filter. Rows with only off-layer scoped rule hits are hidden; rows with no layer evidence stay visible."));
+            MaterialText.SetTooltip(Ui.T("Best-effort layer filter. Rows with only off-layer scoped rule hits are hidden; rows with no layer evidence stay visible."));
         }
 
         ImGui.SameLine();
-        ImGui.TextUnformatted(Ui.T("|"));
+        MaterialText.Text(Ui.T("|"));
         ImGui.SameLine();
         var seedObjectPosition = plugin.Configuration.RuleEditorSeedObjectPosition;
         if (WindowLayout.Checkbox("Pin rule to XYZ", ref seedObjectPosition))
@@ -144,14 +146,14 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         }
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("When enabled, RULE seeds object XYZ coordinates plus a 6y radius. BaseId remains 0; observed BaseId is kept in Notes."));
+            MaterialText.SetTooltip(Ui.T("When enabled, RULE seeds object XYZ coordinates plus a 6y radius. BaseId remains 0; observed BaseId is kept in Notes."));
 
         var rows = BuildRows(context, localPlayer)
             .Where(MatchesFilter)
             .ToList();
 
         if (!compact)
-            ImGui.TextUnformatted(Ui.T("Objects shown: {0}", rows.Count));
+            MaterialText.Text(Ui.T("Objects shown: {0}", rows.Count));
         var whitelistAvailable = plugin.DhogNavWhitelistAvailable;
         if (!ImGui.BeginTable("ADSObjectExplorerTable", 14, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings | ImGuiTableFlags.Sortable | ImGuiTableFlags.SortMulti, new Vector2(-1f, -1f)))
             return;
@@ -178,67 +180,67 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         {
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextUnformatted(row.Name);
+            MaterialText.Text(row.Name);
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(1);
-            ImGui.TextUnformatted(row.ObjectKind);
+            MaterialText.Text(row.ObjectKind);
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(2);
-            ImGui.TextUnformatted(row.Level?.ToString() ?? "—");
+            MaterialText.Text(row.Level?.ToString() ?? "—");
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.TextUnformatted(row.ForayLevel?.ToString() ?? "—");
+            MaterialText.Text(row.ForayLevel?.ToString() ?? "—");
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(4);
-            ImGui.TextUnformatted(FormatForayElement(row.ForayElement));
+            MaterialText.Text(FormatForayElement(row.ForayElement));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(5);
-            ImGui.TextUnformatted(row.Distance.ToString("0.00"));
+            MaterialText.Text(row.Distance.ToString("0.00"));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(6);
-            ImGui.TextUnformatted(row.VerticalDelta.ToString("0.00"));
+            MaterialText.Text(row.VerticalDelta.ToString("0.00"));
             DrawRowTooltip(row);
 
             ImGui.TableSetColumnIndex(7);
-            ImGui.TextUnformatted(row.MatchingRules.Count.ToString());
+            MaterialText.Text(row.MatchingRules.Count.ToString());
             DrawRuleTooltip(row);
 
             ImGui.TableSetColumnIndex(8);
-            if (ImGui.SmallButton(Ui.L("moveto##ADSObjectMove{0}", row.GameObjectId)))
+            if (WindowLayout.SmallButton(Ui.L("moveto##ADSObjectMove{0}", row.GameObjectId)))
                 plugin.TryExplorerNavigation(row.Position, useFly: false);
 
             ImGui.TableSetColumnIndex(9);
-            if (ImGui.SmallButton(Ui.L("flyto##ADSObjectFly{0}", row.GameObjectId)))
+            if (WindowLayout.SmallButton(Ui.L("flyto##ADSObjectFly{0}", row.GameObjectId)))
                 plugin.TryExplorerNavigation(row.Position, useFly: true);
 
             ImGui.TableSetColumnIndex(10);
-            if (ImGui.SmallButton(Ui.L("FLAG##ADSObjectFlag{0}", row.GameObjectId)))
+            if (WindowLayout.SmallButton(Ui.L("FLAG##ADSObjectFlag{0}", row.GameObjectId)))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
 
             ImGui.TableSetColumnIndex(11);
-            if (ImGui.SmallButton(Ui.L("RULE##ADSObjectRule{0}", row.GameObjectId)))
+            if (WindowLayout.SmallButton(Ui.L("RULE##ADSObjectRule{0}", row.GameObjectId)))
             {
                 rulePopupObjectId = row.GameObjectId;
                 ImGui.OpenPopup($"ADSObjectRulePopup##{row.GameObjectId}");
             }
 
             ImGui.TableSetColumnIndex(12);
-            if (ImGui.SmallButton(Ui.L("XYZ##ADSObjectCopy{0}", row.GameObjectId)))
+            if (WindowLayout.SmallButton(Ui.L("XYZ##ADSObjectCopy{0}", row.GameObjectId)))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
 
             if (whitelistAvailable && row.ObjectKind == nameof(ObjectKind.Pc))
             {
                 ImGui.TableSetColumnIndex(13);
-                if (ImGui.SmallButton(Ui.L("Whitelist##ADSObjectWhitelist{0}", row.GameObjectId)))
+                if (WindowLayout.SmallButton(Ui.L("Whitelist##ADSObjectWhitelist{0}", row.GameObjectId)))
                     plugin.TryWhitelistExplorerPlayer(row.GameObjectId);
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip(Ui.T("Add this player and their home server to DhogNav's whitelist. DhogNav must be loaded; parasite mode may be off. Finish or cancel any whitelist edit first."));
+                    MaterialText.SetTooltip(Ui.T("Add this player and their home server to DhogNav's whitelist. DhogNav must be loaded; parasite mode may be off. Finish or cancel any whitelist edit first."));
             }
         }
 
@@ -252,7 +254,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     {
         const string sortHelp = "Click: sort; Shift+click: combine.";
         const string actionHelp = "Use the row button.";
-        ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+        ImGui.TableNextRow(ImGuiTableRowFlags.Headers, WindowLayout.HeaderRowHeight());
         DrawHeaderCell(0, "Name", "Object name.", sortHelp);
         DrawHeaderCell(1, "Kind", "Object kind.", sortHelp);
         DrawHeaderCell(2, "Lv.", "Character level, when available.", sortHelp);
@@ -274,15 +276,19 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         if (!ImGui.TableSetColumnIndex(column))
             return;
 
-        ImGui.TableHeader(Ui.L(label));
+        WindowLayout.TableHeader(Ui.L(label));
         if (!ImGui.IsItemHovered())
             return;
 
         ImGui.BeginTooltip();
+        try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
-        ImGui.TextUnformatted(Ui.T("{0}\n{1}", purpose, interaction));
-        ImGui.PopTextWrapPos();
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(Ui.T("{0}\n{1}", purpose, interaction));
+
+        } finally { ImGui.PopTextWrapPos(); }
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static unsafe void SortTableRows(List<ObjectExplorerRow> rows)
@@ -363,14 +369,14 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     private void DrawExportControls()
     {
-        if (ImGui.SmallButton(Ui.L("Export All JSON")))
+        if (WindowLayout.SmallButton(Ui.L("Export All JSON")))
             plugin.ExportExplorerSnapshot();
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("Exports all buffered server events and every loaded object-table entry, independent of viewer filters."));
+            MaterialText.SetTooltip(Ui.T("Exports all buffered server events and every loaded object-table entry, independent of viewer filters."));
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Open Export Folder")))
+        if (WindowLayout.SmallButton(Ui.L("Open Export Folder")))
         {
             Directory.CreateDirectory(plugin.ExplorerSnapshotExportService.ExportDirectory);
             plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
@@ -380,7 +386,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         WindowLayout.Checkbox("Compact", ref compact);
 
         if (!compact)
-            ImGui.TextWrapped(Ui.T("Export status: {0}", plugin.ExplorerSnapshotExportService.Status));
+            MaterialText.TextWrapped(Ui.T("Export status: {0}", Ui.Display(plugin.ExplorerSnapshotExportService.Status)));
     }
 
     private IEnumerable<ObjectExplorerRow> BuildRows(DutyContextSnapshot context, IGameObject localPlayer)
@@ -521,12 +527,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return;
         }
 
-        ImGui.TextUnformatted(Ui.T("Seed rule with"));
+        MaterialText.Text(Ui.T("Seed rule with"));
         ImGui.Separator();
         for (var optionIndex = 0; optionIndex < ruleClassificationOptions.Length; optionIndex++)
         {
             var option = ruleClassificationOptions[optionIndex];
-            if (ImGui.Selectable(Ui.L(option)))
+            if (MaterialText.Selectable(Ui.L(option)))
             {
                 plugin.CreateRuleFromExplorer(
                     row.Name,
@@ -547,21 +553,23 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
-        ImGui.TextUnformatted(Ui.T(row.MatchingRules.Count == 0 ? "No matching rules." : "Matching rules"));
+        try {
+        MaterialText.Text(Ui.T(row.MatchingRules.Count == 0 ? "No matching rules." : "Matching rules"));
         if (row.MatchingRules.Count > 0)
         {
             foreach (var rule in row.MatchingRules.Take(8))
             {
                 var type = string.IsNullOrWhiteSpace(rule.Classification) ? "(blank)" : rule.Classification;
                 var scope = plugin.ObjectPriorityRuleService.DescribeRuleScope(rule);
-                ImGui.TextUnformatted(Ui.T("{0} | pri {1} | {2}", type, rule.Priority, scope));
+                MaterialText.Text(Ui.T("{0} | pri {1} | {2}", type, rule.Priority, scope));
             }
 
             if (row.MatchingRules.Count > 8)
-                ImGui.TextUnformatted(Ui.T("... {0} more", row.MatchingRules.Count - 8));
+                MaterialText.Text(Ui.T("... {0} more", row.MatchingRules.Count - 8));
         }
 
-        ImGui.EndTooltip();
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static void DrawRowTooltip(ObjectExplorerRow row)
@@ -570,19 +578,21 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
-        ImGui.TextUnformatted(row.Name);
-        ImGui.TextUnformatted(Ui.T("ObjectKind: {0}", row.ObjectKind));
-        ImGui.TextUnformatted(Ui.T("Level: {0}", row.Level?.ToString() ?? "—"));
-        ImGui.TextUnformatted(Ui.T("Foray level: {0}", row.ForayLevel?.ToString() ?? "—"));
-        ImGui.TextUnformatted(Ui.T("Foray element: {0}", FormatForayElement(row.ForayElement)));
-        ImGui.TextUnformatted(Ui.T("Distance: {0:0.00}", row.Distance));
-        ImGui.TextUnformatted(Ui.T("Y delta: {0:0.00}", row.VerticalDelta));
-        ImGui.TextUnformatted(Ui.T("BaseId: {0}", row.BaseId));
-        ImGui.TextUnformatted(Ui.T("GameObjectId: {0}", row.GameObjectId));
-        ImGui.TextUnformatted(Ui.T("Targetable: {0}", Ui.T(row.IsTargetable ? "YES" : "NO")));
-        ImGui.TextUnformatted(Ui.T("Matches current layer: {0}", Ui.T(row.MatchesCurrentLayer ? "YES" : "NO")));
-        ImGui.TextUnformatted(Ui.T("Position: {0:0.00}, {1:0.00}, {2:0.00}", row.Position.X, row.Position.Y, row.Position.Z));
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(row.Name);
+        MaterialText.Text(Ui.T("ObjectKind: {0}", row.ObjectKind));
+        MaterialText.Text(Ui.T("Level: {0}", row.Level?.ToString() ?? "—"));
+        MaterialText.Text(Ui.T("Foray level: {0}", row.ForayLevel?.ToString() ?? "—"));
+        MaterialText.Text(Ui.T("Foray element: {0}", FormatForayElement(row.ForayElement)));
+        MaterialText.Text(Ui.T("Distance: {0:0.00}", row.Distance));
+        MaterialText.Text(Ui.T("Y delta: {0:0.00}", row.VerticalDelta));
+        MaterialText.Text(Ui.T("BaseId: {0}", row.BaseId));
+        MaterialText.Text(Ui.T("GameObjectId: {0}", row.GameObjectId));
+        MaterialText.Text(Ui.T("Targetable: {0}", Ui.T(row.IsTargetable ? "YES" : "NO")));
+        MaterialText.Text(Ui.T("Matches current layer: {0}", Ui.T(row.MatchesCurrentLayer ? "YES" : "NO")));
+        MaterialText.Text(Ui.T("Position: {0:0.00}, {1:0.00}, {2:0.00}", row.Position.X, row.Position.Y, row.Position.Z));
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     internal sealed record ObjectExplorerRow(

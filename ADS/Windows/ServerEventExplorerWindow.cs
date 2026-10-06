@@ -1,3 +1,4 @@
+using AethertekUI;
 using ADS.Localization;
 using System.Numerics;
 using ADS.Services;
@@ -44,6 +45,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;
@@ -58,18 +60,18 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
             ? rows.OrderByDescending(x => x.TimestampUtc).ThenByDescending(x => x.Sequence).ToList()
             : rows.OrderBy(x => x.TimestampUtc).ThenBy(x => x.Sequence).ToList();
 
-        ImGui.TextUnformatted(Ui.T("BossMod-Style Server Event Trace"));
-        ImGui.TextUnformatted(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
-        ImGui.TextUnformatted(Ui.T("Hooks: {0} installed", plugin.HigherLowerServerEventTraceService.InstalledHookCount));
+        MaterialText.Text(Ui.T("BossMod-Style Server Event Trace"));
+        MaterialText.Text(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
+        MaterialText.Text(Ui.T("Hooks: {0} installed", plugin.HigherLowerServerEventTraceService.InstalledHookCount));
         ImGui.SameLine();
-        ImGui.TextUnformatted(Ui.T("Pending: {0}", plugin.HigherLowerServerEventTraceService.PendingCount));
+        MaterialText.Text(Ui.T("Pending: {0}", plugin.HigherLowerServerEventTraceService.PendingCount));
 
         DrawLoggingAndExportControls();
         DrawHookStatus();
         DrawFilters();
 
-        ImGui.TextUnformatted(Ui.T("Rows shown: {0}", rows.Count));
-        ImGui.TextWrapped(Ui.T("Action status: {0}", actionStatus));
+        MaterialText.Text(Ui.T("Rows shown: {0}", rows.Count));
+        MaterialText.TextWrapped(Ui.T("Action status: {0}", Ui.Display(actionStatus)));
         DrawTable(rows);
     }
 
@@ -85,10 +87,10 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("Persistent datamine JSONL logging. Off by default. Enabling this can use substantial disk space."));
+            MaterialText.SetTooltip(Ui.T("Persistent datamine JSONL logging. Off by default. Enabling this can use substantial disk space."));
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Open JSONL")))
+        if (WindowLayout.SmallButton(Ui.L("Open JSONL")))
         {
             var path = plugin.TreasureHighLowDiagnosticService.FindLatestDatamineJsonlPath();
             if (string.IsNullOrWhiteSpace(path))
@@ -103,7 +105,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Open Log Folder")))
+        if (WindowLayout.SmallButton(Ui.L("Open Log Folder")))
         {
             Directory.CreateDirectory(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
             plugin.OpenPath(plugin.TreasureHighLowDiagnosticService.DatamineDirectory);
@@ -111,14 +113,14 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Export All JSON")))
+        if (WindowLayout.SmallButton(Ui.L("Export All JSON")))
         {
             var result = plugin.ExportExplorerSnapshot();
             actionStatus = result.Status;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Open Export Folder")))
+        if (WindowLayout.SmallButton(Ui.L("Open Export Folder")))
         {
             Directory.CreateDirectory(plugin.ExplorerSnapshotExportService.ExportDirectory);
             plugin.OpenPath(plugin.ExplorerSnapshotExportService.ExportDirectory);
@@ -126,27 +128,27 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         if (diskLoggingEnabled)
-            ImGui.TextColored(new Vector4(1f, 0.72f, 0.2f, 1f), Ui.T("JSONL DISK LOGGING IS ON"));
+            MaterialText.TextColored(new Vector4(1f, 0.72f, 0.2f, 1f), Ui.T("JSONL DISK LOGGING IS ON"));
     }
 
     private void DrawHookStatus()
     {
-        if (!ImGui.CollapsingHeader(Ui.L("Hook status")))
+        if (!MaterialText.CollapsingHeader(Ui.L("Hook status")))
             return;
 
         foreach (var line in plugin.HigherLowerServerEventTraceService.HookStatus)
-            ImGui.TextWrapped(line);
+            MaterialText.TextWrapped(line);
     }
 
     private void DrawFilters()
     {
         ImGui.SetNextItemWidth(340f);
-        ImGui.InputTextWithHint("##ADSServerEventsFilter", Ui.T("filter text / ids / params / data"), ref textFilter, 160);
+        WindowLayout.InputTextWithHint("##ADSServerEventsFilter", Ui.T("filter text / ids / params / data"), ref textFilter, 160);
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Clear")))
+        if (WindowLayout.SmallButton(Ui.L("Clear")))
             textFilter = string.Empty;
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("Clear Rows")))
+        if (WindowLayout.SmallButton(Ui.L("Clear Rows")))
             plugin.HigherLowerServerEventTraceService.Clear();
         ImGui.SameLine();
         WindowLayout.Checkbox("Newest First", ref newestFirst);
@@ -191,7 +193,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn(Ui.L("Source Params"), ImGuiTableColumnFlags.WidthStretch, 380f);
         ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, 290f);
-        ImGui.TableHeadersRow();
+        WindowLayout.TableHeadersRow();
 
         var now = DateTime.UtcNow;
         foreach (var row in rows)
@@ -232,7 +234,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     private void DrawCell(string value, HigherLowerServerEventTraceService.ServerEventRow row)
     {
         var displayValue = string.IsNullOrWhiteSpace(value) ? "-" : value;
-        ImGui.TextWrapped(displayValue);
+        MaterialText.TextWrapped(displayValue);
         if (ImGui.IsItemClicked())
         {
             ImGui.SetClipboardText(displayValue);
@@ -246,21 +248,21 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     {
         var hasPosition = row.Position.HasValue;
         ImGui.BeginDisabled(!hasPosition);
-        if (ImGui.SmallButton(Ui.L("move##ADSServerEventMove{0}", row.Sequence)) && row.Position.HasValue)
+        if (WindowLayout.SmallButton(Ui.L("move##ADSServerEventMove{0}", row.Sequence)) && row.Position.HasValue)
         {
             plugin.TryExplorerNavigation(row.Position.Value, useFly: false);
             actionStatus = plugin.ObjectExplorerStatus;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("fly##ADSServerEventFly{0}", row.Sequence)) && row.Position.HasValue)
+        if (WindowLayout.SmallButton(Ui.L("fly##ADSServerEventFly{0}", row.Sequence)) && row.Position.HasValue)
         {
             plugin.TryExplorerNavigation(row.Position.Value, useFly: true);
             actionStatus = plugin.ObjectExplorerStatus;
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("FLAG##ADSServerEventFlag{0}", row.Sequence)) && row.Position.HasValue)
+        if (WindowLayout.SmallButton(Ui.L("FLAG##ADSServerEventFlag{0}", row.Sequence)) && row.Position.HasValue)
         {
             var label = string.IsNullOrWhiteSpace(row.ObjectName)
                 ? $"{row.KindLabel} 0x{row.ActorId:X8}"
@@ -270,7 +272,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("XYZ##ADSServerEventXyz{0}", row.Sequence)) && row.Position.HasValue)
+        if (WindowLayout.SmallButton(Ui.L("XYZ##ADSServerEventXyz{0}", row.Sequence)) && row.Position.HasValue)
         {
             ImGui.SetClipboardText(row.PositionText);
             actionStatus = $"Copied {row.PositionText}";
@@ -278,7 +280,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
         ImGui.EndDisabled();
         ImGui.SameLine();
-        if (ImGui.SmallButton(Ui.L("LINE##ADSServerEventLine{0}", row.Sequence)))
+        if (WindowLayout.SmallButton(Ui.L("LINE##ADSServerEventLine{0}", row.Sequence)))
         {
             ImGui.SetClipboardText(row.ToBossModLogLine());
             actionStatus = $"Copied {row.KindLabel} log line.";
@@ -291,30 +293,34 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
             return;
 
         ImGui.BeginTooltip();
+        try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 70f);
-        ImGui.TextUnformatted(Ui.T("{0} / {1}", row.BossModKind, row.KindLabel));
-        ImGui.TextUnformatted(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
-        ImGui.TextUnformatted(Ui.T("Actor: 0x{0:X8}", row.ActorId));
-        ImGui.TextUnformatted(Ui.T("Target: 0x{0:X}", row.TargetId));
-        ImGui.TextUnformatted(Ui.T("Object name: {0}", (string.IsNullOrWhiteSpace(row.ObjectName) ? "(blank)" : row.ObjectName)));
-        ImGui.TextUnformatted(Ui.T("Object id: 0x{0:X}", row.GameObjectId));
-        ImGui.TextUnformatted(Ui.T("Entity id: 0x{0:X8}", row.EntityId));
-        ImGui.TextUnformatted(Ui.T("Base id: {0}", row.BaseId));
-        ImGui.TextUnformatted(Ui.T("Object kind: {0}", row.ObjectKind));
-        ImGui.TextUnformatted(Ui.T("Layout id: {0}", row.LayoutId));
-        ImGui.TextUnformatted(Ui.T("Gimmick id: {0}", row.GimmickId));
-        ImGui.TextUnformatted(Ui.T("Event state: {0}", row.EventState));
-        ImGui.TextUnformatted(Ui.T("Event id: 0x{0:X}", row.EventId));
-        ImGui.TextUnformatted(Ui.T("Targetable: {0}", row.Targetable?.ToString() ?? "unknown"));
-        ImGui.TextUnformatted(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
-        ImGui.TextUnformatted(Ui.T("Position: {0}", row.PositionText));
-        ImGui.TextUnformatted(Ui.T("Distance: {0}", row.DistanceText));
-        ImGui.TextWrapped(Ui.T("State/data: {0}", row.StateData));
-        ImGui.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
-        ImGui.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
-        ImGui.TextWrapped(row.ToBossModLogLine());
-        ImGui.PopTextWrapPos();
-        ImGui.EndTooltip();
+        try {
+        MaterialText.Text(Ui.T("{0} / {1}", row.BossModKind, row.KindLabel));
+        MaterialText.Text(Ui.T("Time UTC: {0:O}", row.TimestampUtc));
+        MaterialText.Text(Ui.T("Actor: 0x{0:X8}", row.ActorId));
+        MaterialText.Text(Ui.T("Target: 0x{0:X}", row.TargetId));
+        MaterialText.Text(Ui.T("Object name: {0}", (string.IsNullOrWhiteSpace(row.ObjectName) ? "(blank)" : row.ObjectName)));
+        MaterialText.Text(Ui.T("Object id: 0x{0:X}", row.GameObjectId));
+        MaterialText.Text(Ui.T("Entity id: 0x{0:X8}", row.EntityId));
+        MaterialText.Text(Ui.T("Base id: {0}", row.BaseId));
+        MaterialText.Text(Ui.T("Object kind: {0}", row.ObjectKind));
+        MaterialText.Text(Ui.T("Layout id: {0}", row.LayoutId));
+        MaterialText.Text(Ui.T("Gimmick id: {0}", row.GimmickId));
+        MaterialText.Text(Ui.T("Event state: {0}", row.EventState));
+        MaterialText.Text(Ui.T("Event id: 0x{0:X}", row.EventId));
+        MaterialText.Text(Ui.T("Targetable: {0}", row.Targetable?.ToString() ?? "unknown"));
+        MaterialText.Text(Ui.T("Territory/map: {0}/{1}", row.TerritoryId, row.MapId));
+        MaterialText.Text(Ui.T("Position: {0}", row.PositionText));
+        MaterialText.Text(Ui.T("Distance: {0}", row.DistanceText));
+        MaterialText.TextWrapped(Ui.T("State/data: {0}", row.StateData));
+        MaterialText.TextWrapped(Ui.T("Source params: {0}", row.SourceParams));
+        MaterialText.TextWrapped(Ui.T("HL relevant: {0}", row.HigherLowerRelevant));
+        MaterialText.TextWrapped(row.ToBossModLogLine());
+
+        } finally { ImGui.PopTextWrapPos(); }
+
+        } finally { ImGui.EndTooltip(); }
     }
 
     private static bool MatchesCurrentTerritoryMap(

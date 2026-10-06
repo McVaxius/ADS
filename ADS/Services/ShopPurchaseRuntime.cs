@@ -273,6 +273,7 @@ internal interface IShopPurchaseRuntime
     bool IsTalkVisible => false;
     bool TryAdvanceAchievementDialogue() => false;
     bool IsAnyShopVisible { get; }
+    string? VisibleBlockingAddon => null;
     string? ShopListCleanupBlocker => IsAnyShopVisible || IsSelectionMenuVisible || HasUnexpectedConfirmation ? "shop UI remains open" : null;
     void ContinueShopListCleanup() { }
     void UpdateOwnedShopCleanup() { }
@@ -527,6 +528,23 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         || GameInteractionHelper.IsAddonVisible("FreeCompanyExchange")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeItemDialog")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeCurrencyDialog");
+
+    public string? VisibleBlockingAddon
+    {
+        get
+        {
+            string[] addonNames =
+            [
+                "SelectYesno", "ShopExchangeItemDialog", "ShopExchangeCurrencyDialog",
+                "SelectIconString", "SelectString", "Talk", "InclusionShop",
+                "GrandCompanyExchange", "FreeCompanyCreditShop", "FreeCompanyExchange",
+            ];
+            foreach (var addonName in addonNames)
+                if (GameInteractionHelper.IsAddonVisible(addonName))
+                    return addonName;
+            return UiAdapters.FirstOrDefault(adapter => GameInteractionHelper.IsAddonVisible(adapter.AddonName))?.AddonName;
+        }
+    }
 
     public bool IsAetheryteUnlocked(uint aetheryteId)
     {

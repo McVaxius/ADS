@@ -1,4 +1,5 @@
 using ADS.Localization;
+using AethertekUI;
 using System.Numerics;
 using ADS.Services;
 using Dalamud.Bindings.ImGui;
@@ -16,14 +17,22 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         this.plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(400f, 220f),
-            MaximumSize = new Vector2(620f, 620f),
+            MinimumSize = new Vector2(300f, 420f),
+            MaximumSize = new Vector2(1200f, 1600f),
         };
-        Size = new Vector2(460f, 300f);
+        Size = new Vector2(376f, 968f);
+        Flags |= ImGuiWindowFlags.HorizontalScrollbar;
     }
 
     public void Dispose()
     {
+    }
+
+    public override void PreDraw()
+    {
+        PrepareWindowPlacement();
+        WindowName = $"{Ui.T("ADS Controls")}###ADSQuickControls";
+        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
     }
 
     public override void OnClose()
@@ -33,136 +42,142 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
+        windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
 
         DrawStatusSummary();
         ImGui.Spacing();
         DrawPrimaryActions();
+        ImGui.Separator();
+        ImGui.Spacing();
 
-        if (ImGui.CollapsingHeader(Ui.L("Tools"), ImGuiTreeNodeFlags.DefaultOpen))
+        if (WindowLayout.Header(Ui.L("Tools"), MaterialIcon.Wrench, ImGuiTreeNodeFlags.DefaultOpen))
         {
-            DrawToolShortcuts();
+            AdsPresentation.ToolPanel(DrawToolShortcuts, ImGui.GetID(""));
         }
+        ImGui.Spacing();
 
         if (plugin.DebugStrafeService.Enabled
-            && ImGui.CollapsingHeader(Ui.L("Debug Strafe")))
+            && WindowLayout.Header(Ui.L("Debug Strafe"), MaterialIcon.Sliders))
         {
             DrawDebugStrafeControls();
         }
 
-        if (ImGui.CollapsingHeader(Ui.L("Details")))
+        if (WindowLayout.Header(Ui.L("Details"), MaterialIcon.Info))
             DrawDetails();
     }
 
     private void DrawStatusSummary()
     {
-        ImGui.TextUnformatted(Ui.T("{0} / {1}", Ui.Display(plugin.ExecutionService.CurrentMode.ToString()), Ui.Display(plugin.ExecutionService.CurrentPhase.ToString())));
-        ImGui.TextWrapped(Ui.Display(plugin.ExecutionService.LastStatus));
+        AdsPresentation.QuickStatus(plugin.Fonts.Push,
+            Ui.T("{0} / {1}", Ui.Display(plugin.ExecutionService.CurrentMode.ToString()), Ui.Display(plugin.ExecutionService.CurrentPhase.ToString())),
+            Ui.Display(plugin.ExecutionService.LastStatus));
     }
 
     private void DrawPrimaryActions()
     {
         var inInstancedDuty = plugin.DutyContextService.Current.InInstancedDuty;
-        if (!ImGui.BeginTable("ADSQuickPrimaryActions", 3, ImGuiTableFlags.SizingStretchSame))
-            return;
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        if (ImGui.Button(Ui.L("Start Outside"), new Vector2(-1f, 30f)))
-            plugin.StartDutyFromOutside();
-
-        ImGui.TableSetColumnIndex(1);
-        ImGui.BeginDisabled(!inInstancedDuty);
-        if (ImGui.Button(Ui.L("Start Inside"), new Vector2(-1f, 30f)))
-            plugin.StartDutyFromInside();
-        ImGui.EndDisabled();
-
-        ImGui.TableSetColumnIndex(2);
-        ImGui.BeginDisabled(!inInstancedDuty);
-        if (ImGui.Button(Ui.L("Resume"), new Vector2(-1f, 30f)))
-            plugin.ResumeDutyFromInside();
-        ImGui.EndDisabled();
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        ImGui.BeginDisabled(!inInstancedDuty);
-        if (ImGui.Button(Ui.L("Leave"), new Vector2(-1f, 30f)))
-            plugin.LeaveDuty();
-        ImGui.EndDisabled();
-
-        ImGui.TableSetColumnIndex(1);
-        if (ImGui.Button(Ui.L("Stop"), new Vector2(-1f, 30f)))
-            plugin.StopOwnership();
-
-        ImGui.EndTable();
+        using var actionStyle = new MaterialStyleScope();
+        actionStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(0, 4) * MaterialTheme.Metrics.Scale);
+        if (!ImGui.BeginTable("ADSQuickPrimaryActions", 1, ImGuiTableFlags.SizingStretchSame)) return;
+        try
+        {
+            ImGui.TableNextColumn();
+            if (AdsPresentation.QuickAction(plugin.Fonts, Ui.T("Start Outside"), Ui.T("Prepare and start"), "Start Outside", MaterialTheme.Current.Colors.Primary))
+                plugin.StartDutyFromOutside();
+            ImGui.TableNextColumn();
+            ImGui.BeginDisabled(!inInstancedDuty);
+            try
+            {
+                if (AdsPresentation.QuickAction(plugin.Fonts, Ui.T("Start Inside"), Ui.T("Start in current duty"), "Start Inside", MaterialTheme.Current.Colors.Primary))
+                    plugin.StartDutyFromInside();
+                ImGui.TableNextColumn();
+                if (AdsPresentation.QuickAction(plugin.Fonts, Ui.T("Resume"), Ui.T("Continue execution"), "Resume")) plugin.ResumeDutyFromInside();
+                ImGui.TableNextColumn();
+                if (AdsPresentation.QuickAction(plugin.Fonts, Ui.T("Leave"), Ui.T("Leave current duty"), "Leave")) plugin.LeaveDuty();
+            }
+            finally { ImGui.EndDisabled(); }
+            ImGui.TableNextColumn();
+            if (AdsPresentation.QuickAction(plugin.Fonts, Ui.T("Stop"), Ui.T("Halt execution"), "Stop", AdsPresentation.Rgb(0xBE172A))) plugin.StopOwnership();
+        }
+        finally { ImGui.EndTable(); }
     }
 
     private void DrawToolShortcuts()
     {
-        if (!ImGui.BeginTable("ADSQuickToolShortcuts", 3, ImGuiTableFlags.SizingStretchSame))
+        using var shortcutFont = plugin.Fonts.Push(UiFontRole.Caption);
+        using var shortcutStyle = new MaterialStyleScope();
+        shortcutStyle.Style(ImGuiStyleVar.FramePadding, new Vector2(10, 7) * MaterialTheme.Metrics.Scale);
+        shortcutStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(4, 4) * MaterialTheme.Metrics.Scale);
+        shortcutStyle.Style(ImGuiStyleVar.ItemSpacing, new Vector2(8, 0) * MaterialTheme.Metrics.Scale);
+        var columns = ToolColumns();
+        if (!ImGui.BeginTable("ADSQuickToolShortcuts", columns, ImGuiTableFlags.SizingStretchSame)) return;
+        try
+        {
+            ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Loot"), ShortcutSize, MaterialIcon.Chest)) plugin.OpenLootUi();
+            ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Rules"), ShortcutSize, MaterialIcon.List)) plugin.OpenRuleEditorUi();
+            ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Objects"), ShortcutSize, MaterialIcon.Cube)) plugin.OpenObjectExplorerUi();
+            ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Dialogs"), ShortcutSize, MaterialIcon.Chat)) plugin.OpenDialogRuleEditorUi();
+            ImGui.TableNextColumn();
+            ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
+            try { if (WindowLayout.Button(Ui.L("Update"), ShortcutSize, MaterialIcon.Refresh)) plugin.ForceRemoteJsonUpdate(); }
+            finally { ImGui.EndDisabled(); }
+            ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Shop Lists"), ShortcutSize, MaterialIcon.Cart)) plugin.OpenShopListsUi();
+        }
+        finally { ImGui.EndTable(); }
+
+        if (!ImGui.BeginTable("ADSQuickCompanionControls", columns, ImGuiTableFlags.SizingStretchSame))
             return;
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        if (ImGui.Button(Ui.L("Loot"), new Vector2(-1f, 28f)))
-            plugin.OpenLootUi();
-        ImGui.TableSetColumnIndex(1);
-        if (ImGui.Button(Ui.L("Rules"), new Vector2(-1f, 28f)))
-            plugin.OpenRuleEditorUi();
-        ImGui.TableSetColumnIndex(2);
-        if (ImGui.Button(Ui.L("Objects"), new Vector2(-1f, 28f)))
-            plugin.OpenObjectExplorerUi();
-
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        if (ImGui.Button(Ui.L("Dialogs"), new Vector2(-1f, 28f)))
-            plugin.OpenDialogRuleEditorUi();
-        ImGui.TableSetColumnIndex(1);
-        ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
-        if (ImGui.Button(Ui.L("Update"), new Vector2(-1f, 28f)))
-            plugin.ForceRemoteJsonUpdate();
-        ImGui.EndDisabled();
-        ImGui.TableSetColumnIndex(2);
-        if (ImGui.Button(Ui.L("Shop Lists"), new Vector2(-1f, 28f)))
-            plugin.OpenShopListsUi();
+        DrawCompanionControls("QSTcomp", QstCompanionWarningService.InternalName, columns);
+        DrawCompanionControls("HealBot", "Coppelia", columns);
         ImGui.EndTable();
-
-        if (!ImGui.BeginTable("ADSQuickCompanionControls", 2, ImGuiTableFlags.SizingStretchSame))
-            return;
-        DrawCompanionControls("QSTcomp", QstCompanionWarningService.InternalName);
-        DrawCompanionControls("HealBot", "Coppelia");
-        ImGui.EndTable();
-        if (ImGui.Button(Ui.L("Reset RSR Healing"), new Vector2(-1f, 28f)))
+        if (WindowLayout.Button(Ui.L("Reset RSR Healing"), ShortcutSize, MaterialIcon.Refresh))
             plugin.ResetRsrHealing();
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("Set RSR to Off and restore Coppelia's eleven healing defaults. Works without HealBot loaded."));
+            MaterialText.SetTooltip(Ui.T("Set RSR to Off and restore Coppelia's eleven healing defaults. Works without HealBot loaded."));
     }
 
-    private void DrawCompanionControls(string label, string internalName)
+    private static Vector2 ShortcutSize => new(-1f, (AdsPresentation.Compact ? 38 : 46) * MaterialTheme.Metrics.Scale);
+
+    private static int ToolColumns()
+    {
+        var labels = new[] { Ui.L("Loot"), Ui.L("Rules"), Ui.L("Objects"), Ui.L("Dialogs"), Ui.L("Update"), Ui.L("Shop Lists"),
+            Ui.L("Enable {0}", "QSTcomp"), Ui.L("Disable {0}", "QSTcomp"), Ui.L("Enable {0}", "HealBot"), Ui.L("Disable {0}", "HealBot") };
+        var width = labels.Max(label => WindowLayout.ButtonMinimum(label, MaterialIcon.Play)) + ImGui.GetStyle().CellPadding.X * 2;
+        return Math.Clamp((int)(ImGui.GetContentRegionAvail().X / width), 1, 2);
+    }
+
+    private void DrawCompanionControls(string label, string internalName, int columns)
     {
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
-        if (ImGui.Button(Ui.L("Enable {0}", label), new Vector2(-1f, 28f)))
+        if (WindowLayout.Button(Ui.L("Enable {0}", label), ShortcutSize, label == "HealBot" ? MaterialIcon.Plus : MaterialIcon.Play))
             plugin.SetCompanionPluginEnabled(internalName, label, true);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("/xlenableplugin {0}", internalName));
-        ImGui.TableSetColumnIndex(1);
-        if (ImGui.Button(Ui.L("Disable {0}", label), new Vector2(-1f, 28f)))
+            MaterialText.SetTooltip(Ui.T("/xlenableplugin {0}", internalName));
+        if (columns == 1) ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(columns == 1 ? 0 : 1);
+        if (WindowLayout.Button(Ui.L("Disable {0}", label), ShortcutSize, MaterialIcon.Pause))
             plugin.SetCompanionPluginEnabled(internalName, label, false);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(Ui.T("/xldisableplugin {0}", internalName));
+            MaterialText.SetTooltip(Ui.T("/xldisableplugin {0}", internalName));
     }
 
     private void DrawDebugStrafeControls()
     {
         var leftLabel = plugin.DebugStrafeService.IsHoldingLeft ? "Release Left" : "Strafe Left";
-        if (ImGui.Button(Ui.L(leftLabel), new Vector2(140f, 28f)))
+        if (WindowLayout.Button(Ui.L(leftLabel), new Vector2(140f, 28f)))
             plugin.ToggleDebugStrafeLeft();
         ImGui.SameLine();
         var rightLabel = plugin.DebugStrafeService.IsHoldingRight ? "Release Right" : "Strafe Right";
-        if (ImGui.Button(Ui.L(rightLabel), new Vector2(140f, 28f)))
+        if (WindowLayout.Button(Ui.L(rightLabel), new Vector2(140f, 28f)))
             plugin.ToggleDebugStrafeRight();
-        ImGui.TextWrapped(Ui.Display(plugin.DebugStrafeService.Status));
+        MaterialText.TextWrapped(Ui.Display(plugin.DebugStrafeService.Status));
     }
 
     private void DrawDetails()
@@ -172,14 +187,14 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         var duty = context.CurrentDuty is { } currentDuty
             ? Ui.DutyName(currentDuty)
             : context.InInstancedDuty ? Ui.T("Territory {0}", context.TerritoryTypeId) : Ui.T("No duty");
-        ImGui.TextWrapped(Ui.T("Duty: {0}", duty));
-        ImGui.TextWrapped(Ui.T("Objective: {0}", Ui.Display(planner.Objective)));
+        MaterialText.TextWrapped(Ui.T("Duty: {0}", duty));
+        MaterialText.TextWrapped(Ui.T("Objective: {0}", Ui.Display(planner.Objective)));
         DrawTreasureFollowSummary();
 
         if (plugin.InnEntryService.IsRunning)
-            ImGui.TextWrapped(Ui.T("Inn: {0}", Ui.Display(plugin.InnEntryService.StatusMessage)));
+            MaterialText.TextWrapped(Ui.T("Inn: {0}", Ui.Display(plugin.InnEntryService.StatusMessage)));
         if (plugin.UtilityAutomationService.IsRunning)
-            ImGui.TextWrapped(Ui.T("Utility: {0}", Ui.Display(plugin.UtilityAutomationService.StatusMessage)));
+            MaterialText.TextWrapped(Ui.T("Utility: {0}", Ui.Display(plugin.UtilityAutomationService.StatusMessage)));
     }
 
     private void DrawTreasureFollowSummary()
@@ -192,7 +207,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             ? Ui.T("not sent")
             : Ui.T(follow.BmraiFollowCommandAccepted.Value ? "accepted" : "rejected");
 
-        ImGui.TextWrapped(Ui.T("Treasure: {0} | opener {1} ({2})", Ui.Display(plugin.ExecutionService.TreasureDungeonRoleDisplayName), targetName, targetLocality));
-        ImGui.TextWrapped(Ui.T("Follow: {0} {1} | {2}", follow.BmraiFollowCommandMethod, commandAccepted, Ui.Display(follow.BmraiFollowCommandStatus)));
+        MaterialText.TextWrapped(Ui.T("Treasure: {0} | opener {1} ({2})", Ui.Display(plugin.ExecutionService.TreasureDungeonRoleDisplayName), targetName, targetLocality));
+        MaterialText.TextWrapped(Ui.T("Follow: {0} {1} | {2}", follow.BmraiFollowCommandMethod, commandAccepted, Ui.Display(follow.BmraiFollowCommandStatus)));
     }
 }
