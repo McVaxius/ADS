@@ -4104,4 +4104,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Задержка без фокуса (секунды)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>Продажа NPC не может начаться, пока автоматизация контента или гостиницы управляет ADS.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>Для продажи NPC требуется вошедший в игру персонаж.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>Не удалось начать продажу NPC: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Поиск ближайшего NPC-торговца для продажи.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>NPC-торговец не найден в пределах {0:0}y; локальная продажа не использует поездки.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>Ближайший торговец не найден; для поездки в полевую зону нужен приют или ближайший Aetheryte/Aethernet.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>Истекло время ожидания работы AutoRetainer после команды продажи NPC.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer не начал наблюдаемую работу после команды продажи NPC.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>Автоматизация контента или гостиницы перехватила управление до завершения продажи NPC.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>Ожидание завершения работы AutoRetainer после команды продажи NPC.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>Работа AutoRetainer завершилась после команды продажи NPC.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>Ожидание начала работы AutoRetainer после команды продажи NPC.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Торговца {0} больше нет поблизости.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Движение к торговцу {0}.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>Ожидание завершения навигации ADS к торговцу.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>Управление ADS или посторонний интерфейс изменились перед командой продажи NPC.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Торговец {0} достигнут; подготовка передачи AutoRetainer.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream уже выполняет работу; поездка для продажи NPC не началась.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>Поездка для продажи NPC недоступна: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Ожидание завершения поездки ADS для продажи через Lifestream.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>Lifestream остался занят после завершения поездки ADS для продажи; новая поездка не отправлена.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>Навигация для продажи NPC недоступна: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>Навигация уже выполняет работу; ADS не начал подход к NPC для продажи.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Очистка снаряжения</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Показывать снаряжение перед продажей</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Предпросмотр продажи снаряжения</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>Продать {0} предметов снаряжения с белым названием из {1}?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, ячейка {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Оружейная</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>Оба</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Продать</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>продажа снаряжения</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>перемещение снаряжения</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>Для очистки нужны доступный инвентарь и защита наборов снаряжения.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>Подходящее снаряжение с белым названием не найдено.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Предпросмотр продажи снаряжения: {0} предметов.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Перемещение снаряжения с белым названием в инвентарь.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>Нельзя начать очистку с текущим выбором или управлением.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>Очистка остановлена: изменился персонаж или условия безопасности автоматизации.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Перед очисткой закройте окна торговца или подтверждения инвентаря.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>Очистка остановлена: AutoRetainer управляет работой с инвентарём.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Очистка остановлена: Lifestream занят.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Не удалось проверить безопасность очистки: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>Очистка остановлена: подтверждённый предмет изменился: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Очистка завершена: обработано {0} предметов.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>Не удалось проверить отправленную ячейку инвентаря.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>Продажа остановлена из-за неподдерживаемого состояния магазина или подтверждения.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Не удалось проверить точный предмет в ячейке назначения.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Ход очистки: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>Завершение точно отправленной операции не было обнаружено.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Ожидание завершения точной операции со снаряжением.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Инвентарь заполнен: перемещено {0} из {1} предметов; остальные сохранены.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Не удалось отправить точную ячейку инвентаря для перемещения.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>Не удалось открыть выбранного торговца снаряжением.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Открытие выбранного торговца снаряжением.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>Торговец {0} достигнут; подготовка продажи снаряжения.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Команды снаряжения: /ads gear move или /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Сумка инвентаря 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Сумка инвентаря 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Сумка инвентаря 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Сумка инвентаря 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Оружейная: основная рука</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Оружейная: вторая рука</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Оружейная: голова</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Оружейная: тело</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Оружейная: руки</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Оружейная: ноги</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Оружейная: ступни</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Оружейная: серьги</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Оружейная: ожерелье</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Оружейная: браслеты</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Оружейная: кольца</value>
+  </data>
 </root>

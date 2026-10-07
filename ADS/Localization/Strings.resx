@@ -11174,4 +11174,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Unfocused delay (seconds)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>NPC selling cannot start while duty or inn automation owns ADS.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>NPC selling requires a logged-in character.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>NPC selling could not start: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Looking for a nearby NPC vendor for selling.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>No NPC sale vendor found within {0:0}y; local-only selling does not travel.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>Timed out waiting for AutoRetainer work after the NPC sale command.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer did not start observable work after the NPC sale command.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>Duty or inn automation took ownership before the NPC sale finished.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>Waiting for AutoRetainer work after the NPC sale command to settle.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer work settled after the NPC sale command.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>Waiting for AutoRetainer to start work after the NPC sale command.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Sale vendor {0} is no longer nearby.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Moving to sale vendor {0}.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>Waiting for ADS vendor navigation to settle.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>ADS ownership or unrelated UI changed before the NPC sale command.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Reached sale vendor {0}; preparing the AutoRetainer handoff.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream already owns work; NPC sale travel was not started.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC sale travel is unavailable: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Waiting for ADS sale travel through Lifestream to finish.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>Lifestream remained busy after ADS sale travel ended; no further travel was sent.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC sale navigation is unavailable: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>Navigation already owns work; ADS did not start the NPC sale approach.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Equipment cleanup</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Preview equipment before selling</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Equipment sale preview</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>Sell {0} white-name equipment items from {1}?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, slot {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Armoury</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>Both</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Sell</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>equipment selling</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>equipment moving</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>Equipment cleanup requires readable inventory and gearset protection.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>No eligible white-name equipment was found.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Equipment sale preview: {0} items.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Moving white-name equipment into inventory.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>Equipment cleanup cannot start with the current selection or ownership.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>Equipment cleanup stopped because character or automation safety changed.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Close existing vendor or inventory confirmation UI before equipment cleanup.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>Equipment cleanup stopped because AutoRetainer owns inventory work.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Equipment cleanup stopped because Lifestream is busy.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Equipment cleanup safety could not be verified: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>Equipment cleanup stopped because the confirmed item changed: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Equipment cleanup finished: {0} items processed.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>Equipment cleanup could not verify the submitted inventory slot.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>Equipment selling stopped at an unsupported shop or confirmation state.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Equipment move could not verify its exact destination item.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Equipment cleanup progress: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>Equipment cleanup did not observe the exact submitted operation finish.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Waiting for the exact equipment operation to finish.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Inventory is full: moved {0} of {1} items; remaining items were kept.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Equipment move could not submit its exact inventory slot.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>Equipment selling could not open the selected vendor.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Opening the selected equipment vendor.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>Reached sale vendor {0}; preparing equipment selling.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Inventory bag 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Inventory bag 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Inventory bag 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Inventory bag 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Armoury main hand</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Armoury off hand</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Armoury head</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Armoury body</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Armoury hands</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Armoury legs</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Armoury feet</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Armoury earrings</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Armoury necklace</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Armoury bracelets</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Armoury rings</value>
+  </data>
 </root>

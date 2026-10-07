@@ -85,6 +85,6 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 
 ## Support
 
-- [Discord](https://discord.gg/VsXqydsvpu)
+- [Discord](https://discord.gg/ac6gjDvR8R)
 - [Repository](https://github.com/McVaxius/ADS)
 - [Ko-fi](https://ko-fi.com/mcvaxius)

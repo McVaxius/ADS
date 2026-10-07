@@ -147,6 +147,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawAutomation(ref bool changed)
     {
+        MaterialText.Text(Ui.T("Equipment cleanup"));
+        var gearSaleConfirmation = plugin.Configuration.GearSaleConfirmationEnabled;
+        if (WindowLayout.Checkbox("Preview equipment before selling", ref gearSaleConfirmation))
+        {
+            plugin.Configuration.GearSaleConfirmationEnabled = gearSaleConfirmation;
+            changed = true;
+        }
+        ImGui.Spacing();
+        ImGui.Separator();
         MaterialText.Text(Ui.T("Regular Duties"));
         var enableBmraiVbmInRegularDuties = plugin.Configuration.EnableBmraiVbmInRegularDuties;
         if (WindowLayout.Checkbox("Enable BMRAI/VBM in regular duties", ref enableBmraiVbmInRegularDuties))

@@ -11174,4 +11174,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>포커스를 잃은 후 대기 시간 (초)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>임무 또는 여관 자동화가 ADS를 제어하는 동안 NPC 판매를 시작할 수 없습니다.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>NPC 판매에는 로그인한 캐릭터가 필요합니다.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>NPC 판매를 시작하지 못했습니다: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>판매할 수 있는 근처 NPC 상인을 찾는 중입니다.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>{0:0}y 이내에 NPC 상인이 없습니다. 현지 판매는 다른 곳으로 이동하지 않습니다.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>근처에 판매할 상인이 없습니다. 필드 이동에는 휴식 지역 또는 가까운 에테라이트/에테르넷이 필요합니다.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>NPC 판매 명령 후 AutoRetainer 작업 대기 시간이 초과되었습니다.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>NPC 판매 명령 후 AutoRetainer가 관찰 가능한 작업을 시작하지 않았습니다.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>NPC 판매가 끝나기 전에 임무 또는 여관 자동화가 제어권을 가져갔습니다.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>NPC 판매 명령 후 AutoRetainer 작업이 끝나기를 기다리는 중입니다.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>NPC 판매 명령 후 AutoRetainer 작업이 종료되었습니다.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>NPC 판매 명령 후 AutoRetainer가 작업을 시작하기를 기다리는 중입니다.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>판매 상인 {0}이(가) 더 이상 근처에 없습니다.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>판매 상인 {0}(으)로 이동하는 중입니다.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>상인으로 가는 ADS 탐색이 끝나기를 기다리는 중입니다.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>NPC 판매 명령 전에 ADS 제어권 또는 관련 없는 UI가 변경되었습니다.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>판매 상인 {0}에 도착했습니다. AutoRetainer로 인계할 준비 중입니다.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream이 이미 작업 중입니다. NPC 판매 이동을 시작하지 않았습니다.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC 판매 이동을 사용할 수 없습니다: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Lifestream을 통한 ADS 판매 이동이 끝나기를 기다리는 중입니다.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>ADS 판매 이동 종료 후에도 Lifestream이 작업 중이어서 추가 이동을 보내지 않았습니다.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC 판매 탐색을 사용할 수 없습니다: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>탐색이 이미 작업 중입니다. ADS는 NPC 판매 상인에게 접근을 시작하지 않았습니다.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>장비 정리</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>판매 전에 장비 미리 보기</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>장비 판매 미리 보기</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>{1}의 흰색 이름 장비 {0}개를 판매하시겠습니까?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, 칸 {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>장비함</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>둘 다</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>판매</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>장비 판매</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>장비 이동</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>장비 정리에는 읽을 수 있는 소지품과 장비 세트 보호 정보가 필요합니다.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>조건에 맞는 흰색 이름 장비를 찾지 못했습니다.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>장비 판매 미리 보기: 아이템 {0}개.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>흰색 이름 장비를 소지품으로 옮기는 중입니다.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>현재 선택 또는 제어 상태에서는 장비 정리를 시작할 수 없습니다.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>캐릭터 또는 자동화 안전 조건이 변경되어 장비 정리를 중지했습니다.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>장비 정리 전에 기존 상점 또는 소지품 확인 창을 닫으세요.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>AutoRetainer가 소지품 작업을 제어하고 있어 장비 정리를 중지했습니다.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Lifestream이 작업 중이어서 장비 정리를 중지했습니다.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>장비 정리 안전성을 확인할 수 없었습니다: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>확인된 아이템이 변경되어 장비 정리를 중지했습니다: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>장비 정리 완료: 아이템 {0}개 처리.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>전송한 소지품 칸을 확인할 수 없었습니다.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>지원하지 않는 상점 또는 확인 상태로 인해 장비 판매를 중지했습니다.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>장비 이동 목적지의 정확한 아이템을 확인할 수 없었습니다.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>장비 정리 진행: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>전송한 정확한 작업의 완료를 확인하지 못했습니다.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>정확한 장비 작업이 끝나기를 기다리는 중입니다.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>소지품이 가득 찼습니다: {1}개 중 {0}개를 옮겼고 나머지는 보관했습니다.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>장비 이동을 위한 정확한 소지품 칸을 전송할 수 없었습니다.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>장비 판매를 위해 선택한 상점을 열 수 없었습니다.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>선택한 장비 판매 상점을 여는 중입니다.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>상점 {0}에 도착하여 장비 판매를 준비하는 중입니다.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>장비 명령: /ads gear move 또는 /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>소지품 가방 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>소지품 가방 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>소지품 가방 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>소지품 가방 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>장비함: 주무기</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>장비함: 보조무기</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>장비함: 머리</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>장비함: 몸통</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>장비함: 손</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>장비함: 다리</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>장비함: 발</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>장비함: 귀걸이</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>장비함: 목걸이</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>장비함: 팔찌</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>장비함: 반지</value>
+  </data>
 </root>

@@ -62,19 +62,20 @@ internal sealed class UiFonts : IDisposable
     private IFontHandle Create(UiFontRole role, UiLanguage language, ushort[] ranges)
         => atlas.NewDelegateFontHandle(step => step.OnPreBuild(toolkit =>
         {
+            toolkit.NewImAtlas.TexDesiredWidth = 4096;
+            toolkit.NewImAtlas.TexDesiredHeight = 4096;
             var size = AdsPresentation.AtlasHeight(role);
             var fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
             toolkit.Font = toolkit.AddFontFromFile(Path.Combine(fonts, AdsPresentation.FontFiles[(int)role]),
                 new SafeFontConfig { SizePx = size, GlyphRanges = ranges });
             toolkit.AddFontFromFile(Path.Combine(fonts, "seguisym.ttf"),
                 new SafeFontConfig { SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font });
-            foreach (var locale in new[] { UiLanguage.Japanese, UiLanguage.Korean, UiLanguage.SimplifiedChinese, UiLanguage.TraditionalChinese }
-                .OrderBy(locale => locale == language ? 0 : 1))
-                toolkit.AddDalamudAssetFont(DalamudAsset.NotoSansCjkRegular, new SafeFontConfig
-                {
-                    SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font,
-                    FontNo = locale switch { UiLanguage.Korean => 1, UiLanguage.SimplifiedChinese => 2, UiLanguage.TraditionalChinese => 3, _ => 0 },
-                });
+            toolkit.AddDalamudAssetFont(DalamudAsset.NotoSansCjkRegular, new SafeFontConfig
+            {
+                SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font,
+                // Bundled faces share glyph coverage; select the active locale's regional forms.
+                FontNo = language switch { UiLanguage.Korean => 1, UiLanguage.SimplifiedChinese => 2, UiLanguage.TraditionalChinese => 3, _ => 0 },
+            });
             toolkit.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
             toolkit.AddGameSymbol(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
         }));

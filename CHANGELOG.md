@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased - Managed CJK font atlas
+
+- Merge one bundled CJK face per font role, selecting the active language's regional forms. Set both managed atlas dimensions to 4096 on every rebuild; preserve font heights, required glyph ranges, symbol merges and host-language coverage.
+- Current compilation and guarded production callback/rebuild checks pass, together with bounded native glyph checks for the checked text. Managed-host readiness, complete displayed glyph coverage, language/scale host rebuilds and game/GPU acceptance remain unverified.
+
+## Unreleased - Native titlebar shortcuts
+
+- Add the approved Settings, Quick Controls, Start Outside, Start Inside, Resume and Stop shortcuts to Main, and Main, Settings and the same run actions to Quick Controls. Recheck current duty/activity eligibility before invoking the existing compound handlers, and show translated blocker/status feedback in title tooltips.
+- Retain every body control, including Leave, tools and companions. Reserve native title/control width before motion preparation using logical constraints and the current UI scale. Debug/x64 compilation and focused descriptor guard checks pass; native rendering and game acceptance remain separate.
+
+## Unreleased - White-name equipment cleanup
+
+- Add `/ads gear move` to move eligible Armoury equipment into ordinary inventory, retaining remaining items when bags are full. Add `/ads gear sell armoury|inventory|both` with an exact item preview, Sell/Cancel, and one saved default-on confirmation preference in preview and Settings.
+- Protect equipped items and all normalized gearset references, require white-name equipment and NPC-buyable items for selling, and revalidate the confirmed native slot before each operation. Use existing ADS vendor approach and the owned shop's exact inventory callback; stop on stale selection, safety changes or unsupported shop/confirmation state. Verify slot changes before reporting progress, and keep generic dialog automation suppressed until unresolved sale UI closes or the character changes. Focused checks and Debug/x64 compilation pass; game acceptance remains unverified.
+
+## Unreleased - NPC selling handoff
+
+- Find nearby sale vendors independently of repairs, including AutoRetainer's direct and wrapped gil-shop handlers. Reach the existing interaction distance and settle ADS-owned navigation/travel before the single AutoRetainer handoff, preserving repair behavior, local-only bounds and configured sell lists.
+- Expose the actual sale status, require observed AutoRetainer work before accepting later idle, and report unobserved work or timeout. Preserve unrelated automation and dialogs on cancellation and ownership changes; remove the global AutoRetainer reset from sale cleanup. Translate the new statuses in all sixteen catalogs. Installed-version item-sale acceptance remains unverified.
+
+## Unreleased - Community invite
+
+- Update the current About/community link and README invite to `https://discord.gg/ac6gjDvR8R`. Preserve historical and reference links.
+
+## Unreleased - LootGoblin completion sweep ownership
+
+- Let an acknowledged LootGoblin duty-start handoff select a transient final-coffer sweep without duty exit through the existing operator API. Publish a duty-matched completion result only after ADS's existing sweep checks finish; preserve standalone and explicit manual leave behavior. Keep duplicate completion events from restarting an active sweep, and clear the handoff/result at ownership and duty boundaries.
+
 ## 2026-10-06 - Actions shared-library revision
 
 - Pin the existing AethertekUI checkout to published commit 6c193cf06ac67f954c549cafc2033ac0efdd630a so fresh builds receive the Hindi shaping APIs required by this consumer. Preserve existing credentials, build/package paths and release behavior; GitHub execution remains pending.

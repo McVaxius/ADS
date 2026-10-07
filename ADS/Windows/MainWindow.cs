@@ -26,6 +26,42 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             MaximumSize = new Vector2(3200f, 2200f),
         };
         Size = new Vector2(1114f, 968f);
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Cog, Priority = 0, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.OpenConfigUi(); },
+            ShowTooltip = () => MaterialText.SetTooltip(T("Settings")),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.SlidersH, Priority = -10, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.ToggleQuickControlUi(); },
+            ShowTooltip = () => MaterialText.SetTooltip(T("ADS Controls")),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Play, Priority = -20, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Start Outside") == null) plugin.StartDutyFromOutside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Start Outside"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.SignInAlt, Priority = -30, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Start Inside") == null) plugin.StartDutyFromInside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Start Inside"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Redo, Priority = -40, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Resume") == null) plugin.ResumeDutyFromInside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Resume"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Stop, Priority = -50, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.StopOwnership(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Stop"),
+        });
     }
 
     public void Dispose()
@@ -36,7 +72,15 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     {
         PrepareWindowPlacement();
         WindowName = $"{T("AI Duty Solver")} {typeof(Plugin).Assembly.GetName().Version}###ADSMain";
+        ReserveTitleSpace(680);
         windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+    }
+
+    private void ShowDutyTitleTooltip(string action)
+    {
+        var blocker = plugin.GetDutyUiActionBlocker(action);
+        MaterialText.SetTooltip(T(action) + (blocker == null ? string.Empty : "\n" + Ui.Display(blocker))
+            + "\n" + Ui.Display(plugin.ExecutionService.LastStatus));
     }
 
     public override void Draw()

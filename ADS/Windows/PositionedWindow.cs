@@ -1,4 +1,5 @@
 using System.Numerics;
+using AethertekUI;
 using ADS.Localization;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -47,6 +48,23 @@ public abstract class PositionedWindow : Window
         PositionCondition = ImGuiCond.Always;
         pendingWindowPosition = null;
         pendingPositionConditionReset = true;
+    }
+
+    protected void ReserveTitleSpace(float minimumWidth)
+    {
+        var style = ImGui.GetStyle();
+        var fontSize = ImGui.GetFontSize();
+        var count = TitleBarButtons.Count(button => !IsClickthrough || button.AvailableClickthrough);
+        if (AllowPinning || AllowClickthrough || AllowBackgroundBlur) count++;
+        if (ShowCloseButton) count++;
+        if ((Flags & (ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.Modal)) == 0
+            && style.WindowMenuButtonPosition != ImGuiDir.None) count++;
+        var required = (MaterialText.Measure(WindowName.Split("##", 2)[0]).X
+            + count * (fontSize + style.ItemInnerSpacing.X) + style.FramePadding.X * 2 + style.ItemInnerSpacing.X)
+            / ImGui.GetIO().FontGlobalScale;
+        var bounds = SizeConstraints ?? new WindowSizeConstraints();
+        bounds.MinimumSize = new(Math.Max(minimumWidth, required), bounds.MinimumSize.Y);
+        SizeConstraints = bounds;
     }
 
     protected void FinalizePendingWindowPlacement()

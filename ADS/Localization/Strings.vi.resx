@@ -3746,4 +3746,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Độ trễ khi mất tiêu điểm (giây)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>Không thể bắt đầu bán cho NPC khi tự động hóa nhiệm vụ hoặc nhà trọ đang điều khiển ADS.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>Bán cho NPC yêu cầu nhân vật đã đăng nhập.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>Không thể bắt đầu bán cho NPC: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Đang tìm người bán NPC gần đây để bán đồ.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>Không tìm thấy người bán NPC trong {0:0}y; bán tại chỗ không di chuyển sang nơi khác.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>Không tìm thấy người bán gần đây; đi đến khu vực ngoài thành cần nơi nghỉ hoặc Aetheryte/Aethernet gần đó.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>Hết thời gian chờ công việc AutoRetainer sau lệnh bán cho NPC.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer không bắt đầu công việc có thể quan sát sau lệnh bán cho NPC.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>Tự động hóa nhiệm vụ hoặc nhà trọ đã giành quyền điều khiển trước khi bán cho NPC kết thúc.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>Đang chờ công việc AutoRetainer sau lệnh bán cho NPC kết thúc.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>Công việc AutoRetainer đã kết thúc sau lệnh bán cho NPC.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>Đang chờ AutoRetainer bắt đầu công việc sau lệnh bán cho NPC.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Người bán {0} không còn ở gần.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Đang di chuyển đến người bán {0}.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>Đang chờ điều hướng ADS đến người bán kết thúc.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>Quyền điều khiển ADS hoặc giao diện không liên quan đã thay đổi trước lệnh bán cho NPC.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Đã đến người bán {0}; đang chuẩn bị bàn giao cho AutoRetainer.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream đã có công việc đang chạy; chưa bắt đầu hành trình bán cho NPC.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>Hành trình bán cho NPC không khả dụng: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Đang chờ hành trình bán đồ của ADS qua Lifestream kết thúc.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>Lifestream vẫn bận sau khi hành trình bán đồ của ADS kết thúc; không gửi thêm hành trình.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>Điều hướng bán cho NPC không khả dụng: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>Điều hướng đã có công việc đang chạy; ADS không bắt đầu tiếp cận để bán cho NPC.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Dọn trang bị</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Xem trước trang bị trước khi bán</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Xem trước bán trang bị</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>Bán {0} trang bị tên trắng từ {1}?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, ô {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Kho vũ khí</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>Cả hai</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Bán</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>bán trang bị</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>chuyển trang bị</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>Dọn trang bị cần đọc được túi đồ và có bảo vệ bộ trang bị.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>Không tìm thấy trang bị tên trắng đủ điều kiện.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Xem trước bán trang bị: {0} món.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Đang chuyển trang bị tên trắng vào túi đồ.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>Không thể bắt đầu dọn trang bị với lựa chọn hoặc quyền điều khiển hiện tại.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>Dọn trang bị đã dừng vì nhân vật hoặc điều kiện an toàn tự động hóa thay đổi.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Đóng cửa sổ người bán hoặc xác nhận túi đồ trước khi dọn trang bị.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>Dọn trang bị đã dừng vì AutoRetainer đang điều khiển tác vụ túi đồ.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Dọn trang bị đã dừng vì Lifestream đang bận.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Không thể xác minh an toàn khi dọn trang bị: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>Dọn trang bị đã dừng vì món đã xác nhận thay đổi: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Dọn trang bị hoàn tất: đã xử lý {0} món.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>Không thể xác minh ô túi đồ đã gửi.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>Bán trang bị đã dừng ở trạng thái cửa hàng hoặc xác nhận không được hỗ trợ.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Không thể xác minh đúng món tại ô đích khi chuyển.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Tiến độ dọn trang bị: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>Không quan sát được việc hoàn tất đúng thao tác đã gửi.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Đang chờ đúng thao tác trang bị hoàn tất.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Túi đồ đầy: đã chuyển {0} trong {1} món; các món còn lại được giữ.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Không thể gửi đúng ô túi đồ để chuyển.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>Không thể mở người bán đã chọn để bán trang bị.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Đang mở người bán trang bị đã chọn.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>Đã đến người bán {0}; đang chuẩn bị bán trang bị.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Lệnh trang bị: /ads gear move hoặc /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Túi đồ 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Túi đồ 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Túi đồ 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Túi đồ 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Kho vũ khí: tay chính</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Kho vũ khí: tay phụ</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Kho vũ khí: đầu</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Kho vũ khí: thân</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Kho vũ khí: tay</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Kho vũ khí: chân</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Kho vũ khí: bàn chân</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Kho vũ khí: hoa tai</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Kho vũ khí: vòng cổ</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Kho vũ khí: vòng tay</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Kho vũ khí: nhẫn</value>
+  </data>
 </root>

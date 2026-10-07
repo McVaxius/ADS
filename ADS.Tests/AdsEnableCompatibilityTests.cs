@@ -1,7 +1,10 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using ADS.Models;
 using ADS.Services;
+using ADS.Windows;
+using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 
@@ -10,6 +13,54 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class AdsEnableCompatibilityTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DutyTitleCallbacksReadCurrentGuardsAndIgnoreNonLeftClicks(bool quickControls)
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var contextService = (DutyContextService)RuntimeHelpers.GetUninitializedObject(typeof(DutyContextService));
+        typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin, contextService);
+        void SetContext(bool inside, uint territory)
+            => typeof(DutyContextService).GetField("<Current>k__BackingField", flags)!.SetValue(contextService,
+                Newtonsoft.Json.JsonConvert.DeserializeObject<DutyContextSnapshot>(
+                    $"{{\"BoundByDuty\":{inside.ToString().ToLowerInvariant()},\"TerritoryTypeId\":{territory}}}"));
+        void Click(object button, string mouseButton)
+        {
+            var type = button.GetType();
+            var callback = (Delegate)(type.GetProperty("Click")?.GetValue(button)
+                ?? type.GetField("Click")!.GetValue(button))!;
+            callback.DynamicInvoke(Enum.Parse(callback.Method.GetParameters()[0].ParameterType, mouseButton));
+        }
+        var clientStateProperty = typeof(Plugin).GetProperty("ClientState", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousClientState = clientStateProperty.GetValue(null);
+        clientStateProperty.SetValue(null, DispatchProxy.Create<IClientState, IpcProxy>());
+        try
+        {
+            SetContext(false, 0);
+            Window window = quickControls ? new QuickControlWindow(plugin) : new MainWindow(plugin);
+            var buttons = window.TitleBarButtons.OrderByDescending(button => button.Priority).ToArray();
+            Assert.Equal(6, buttons.Length);
+            foreach (var button in buttons) Click(button, "Right");
+            // Compound collaborators are absent: a rejected click cannot perform preparation,
+            // change ownership, save configuration or call a lower-level execution service.
+            Click(buttons[3], "Left");
+            Click(buttons[4], "Left");
+            Assert.Null(plugin.GetDutyUiActionBlocker("Start Outside"));
+            Assert.Contains("requires being inside", plugin.GetDutyUiActionBlocker("Start Inside"));
+            Assert.Contains("requires being inside", plugin.GetDutyUiActionBlocker("Resume"));
+            SetContext(true, 900);
+            foreach (var index in new[] { 2, 3, 4 }) Click(buttons[index], "Left");
+            Assert.Equal(AutomationTerritoryPolicy.InactiveStatus, plugin.GetDutyUiActionBlocker("Start Outside"));
+            Assert.Null(plugin.GetDutyUiActionBlocker("Stop"));
+            SetContext(true, 1);
+            Assert.Null(plugin.GetDutyUiActionBlocker("Start Inside")); // Live duty truth needs no catalog row.
+            Assert.Null(plugin.GetDutyUiActionBlocker("Resume"));
+        }
+        finally { clientStateProperty.SetValue(null, previousClientState); }
+    }
+
     [Fact]
     public void NpcSaleCharacterChangeRecordsFailureWithoutTouchingTheNewCharactersUiOrAutomation()
     {

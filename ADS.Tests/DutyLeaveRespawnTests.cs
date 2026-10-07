@@ -1,9 +1,11 @@
 using System.Reflection;
+using System.Numerics;
 using ADS.Models;
 using ADS.Services;
 using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Text.Evaluator;
 using Dalamud.Plugin.Services;
 using Lumina.Text;
@@ -13,6 +15,217 @@ namespace ADS.Tests;
 
 public sealed class DutyLeaveRespawnTests
 {
+    [Theory]
+    [InlineData("ongoing", false)]
+    [InlineData("ongoing", true)]
+    [InlineData("stop", false)]
+    [InlineData("stop", true)]
+    [InlineData("completed", false)]
+    [InlineData("completed", true)]
+    public void InDutyReturnPreservesOnlyTheStillRequestedUnfinishedOwnershipThroughLoading(
+        string boundary, bool betweenAreas51)
+    {
+        using var tempDirectory = new TempDirectory();
+        var execution = CreateExecution(tempDirectory.Path, out var objects);
+        var player = DispatchProxy.Create<IPlayerCharacter, DutyReturnPlayerProxy>();
+        var playerState = (DutyReturnPlayerProxy)(object)player;
+        objects.LocalPlayer = player;
+        var context = Context();
+        var planner = new PlannerSnapshot
+        {
+            Mode = PlannerMode.Recovery, ObjectiveKind = PlannerObjectiveKind.None,
+            Objective = "Waiting for recovery truth", Explanation = "Return recovery regression",
+            CapturedAtUtc = DateTime.UtcNow,
+        };
+        Assert.True(execution.StartDutyFromInside(context));
+        var originalMode = execution.CurrentMode;
+        playerState.Dead = true;
+        Tick(context);
+        Assert.Equal(originalMode, execution.CurrentMode);
+
+        // FrenRider owns Return. ADS retains this existing run through loading
+        // rather than receiving another Start/Resume or running a second revive flow.
+        var loading = Context(inDuty: false, transition: !betweenAreas51,
+            transition51: betweenAreas51, territory: 0, content: 0);
+        execution.ObserveDutyCompletion(loading);
+        Tick(loading);
+        Assert.Equal(originalMode, execution.CurrentMode);
+        Assert.Equal(ExecutionPhase.TransitionHold, execution.CurrentPhase);
+        if (boundary == "stop")
+            execution.Stop(context);
+        else if (boundary == "completed")
+        {
+            execution.MarkDutyCompleted(context, 1044, 831);
+            execution.CompleteDuty("Completed duty");
+        }
+        Tick(loading);
+        playerState.Dead = false;
+        execution.ObserveDutyCompletion(context);
+        Tick(context);
+        Tick(context);
+        Assert.Equal(boundary == "ongoing" ? originalMode : OwnershipMode.Observing, execution.CurrentMode);
+        Assert.Equal(boundary == "ongoing", execution.IsOwned);
+        Assert.False(execution.IsLeaveRequested);
+        Assert.DoesNotContain(execution.LastStatus, "Resumed ownership", StringComparison.Ordinal);
+
+        void Tick(DutyContextSnapshot frame)
+            => execution.Update(frame, planner, ObservationSnapshot.Empty,
+                pluginEnabled: true, considerTreasureCoffers: false, dialogAutomationStatus: string.Empty);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LootGoblinOrdinaryTreasureCompletionWaitsForDelayedCofferAndLootWithoutExiting(bool completionBeforeFirstStatusRead)
+    {
+        using var tempDirectory = new TempDirectory();
+        var execution = CreateExecution(tempDirectory.Path, out var objects);
+        var context = TreasureContext(occupied: true);
+        Assert.True(Plugin.ShouldRunDutyCompletionTreasureSweep(context, true));
+        Assert.True(execution.StartDutyFromInside(context, sweepWithoutExit: true));
+        if (completionBeforeFirstStatusRead)
+            BeginCompletion();
+        execution.ObserveDutyCompletion(context); // Pending handoff survives ordinary status observation.
+        Assert.Equal((1044u, 831u), execution.CompletionTreasureSweepWithoutExitDuty);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        if (!completionBeforeFirstStatusRead)
+            BeginCompletion();
+
+        var now = DateTime.UtcNow;
+        var exitRequests = 0;
+        void Tick(DateTime time, ObservationSnapshot? observation = null)
+            => execution.UpdateLeaveDuty(context, observation ?? ObservationSnapshot.Empty, true, () => ++exitRequests, time);
+        Tick(now);
+        Assert.True(execution.IsOwned);
+        Tick(now.AddMinutes(1)); // First clear observation begins settling after the spawn grace.
+        var coffer = new ObservedInteractable
+        {
+            Key = "delayed-final-coffer", GameObjectId = 1, DataId = 1, MapId = 1,
+            ObjectKind = ObjectKind.Treasure, Name = "Treasure Coffer", Position = Vector3.Zero,
+            LastSeenUtc = now, Classification = InteractableClass.TreasureCoffer, GhostReason = GhostReason.SeenPreviously,
+        };
+        objects.Coffer = DispatchProxy.Create<IGameObject, CofferProxy>();
+        Tick(now.AddMinutes(1).AddSeconds(1), new ObservationSnapshot
+        {
+            LiveInteractables = [coffer], LiveMonsters = [], LiveFollowTargets = [], MonsterGhosts = [], InteractableGhosts = [],
+        });
+        Assert.True(execution.IsOwned);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        Assert.Equal(DateTime.MinValue, Field<DateTime>(execution, "leaveTreasureSweepClearSinceUtc"));
+        objects.Coffer = null;
+        // Exercise the real interaction-result and distribution branches without issuing a native interact.
+        SetField(execution, "leaveTreasureInteractionSent", true);
+        SetField(execution, "nextInteractAttemptUtc", now.AddMinutes(2));
+        Tick(now.AddMinutes(1).AddSeconds(2));
+        Assert.Contains("interaction result", execution.LastStatus);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        Tick(now.AddMinutes(2));
+        var clearSince = Field<DateTime>(execution, "leaveTreasureSweepClearSinceUtc");
+        BeginCompletion(); // A duplicate event cannot restart the active grace/settlement clocks.
+        Assert.Equal(clearSince, Field<DateTime>(execution, "leaveTreasureSweepClearSinceUtc"));
+        Tick(now.AddMinutes(2).AddSeconds(3));
+        Assert.Contains("loot distribution", execution.LastStatus);
+        Assert.True(execution.IsOwned);
+        Tick(now.AddMinutes(2).AddSeconds(4));
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        Tick(now.AddMinutes(3));
+        Assert.Equal(OwnershipMode.Observing, execution.CurrentMode);
+        Assert.True(execution.CompletionTreasureSweepCompleted);
+        Assert.Equal(0, exitRequests);
+        execution.ObserveDutyCompletion(context);
+        BeginCompletion(); // Duplicate completion after release retains the matching positive result.
+        Assert.True(execution.CompletionTreasureSweepCompleted);
+        Assert.False(execution.IsOwned);
+
+        Assert.True(execution.LeaveDuty(context, false));
+        Assert.Null(execution.CompletionTreasureSweepWithoutExitDuty);
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => ++exitRequests);
+        Assert.Equal(1, exitRequests);
+
+        void BeginCompletion()
+        {
+            execution.MarkDutyCompleted(context, 1044, 831);
+            Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Ordinary treasure duty"));
+        }
+    }
+
+    [Fact]
+    public void OrdinaryStandaloneTreasureCompletionStillArmsDutyExit()
+    {
+        using var tempDirectory = new TempDirectory();
+        var execution = CreateExecution(tempDirectory.Path, out _);
+        var context = TreasureContext();
+        Assert.True(Plugin.ShouldRunDutyCompletionTreasureSweep(context, true));
+        Assert.True(execution.StartDutyFromInside(context));
+        execution.MarkDutyCompleted(context, 1044, 831);
+        Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Ordinary treasure duty"));
+        var now = DateTime.UtcNow.AddMinutes(1);
+        var exits = 0;
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => ++exits, now);
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => ++exits, now.AddSeconds(3));
+        Assert.Equal(1, exits);
+        Assert.True(execution.IsOwned);
+        Assert.Null(execution.CompletionTreasureSweepWithoutExitDuty);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+    }
+
+    [Theory]
+    [InlineData("stop")]
+    [InlineData("inside")]
+    [InlineData("outside")]
+    [InlineData("resume")]
+    [InlineData("new-duty")]
+    [InlineData("departure")]
+    [InlineData("logout")]
+    [InlineData("territory")]
+    [InlineData("content")]
+    public void LootGoblinSweepResultClearsAtOwnershipAndDutyBoundaries(string reset)
+    {
+        using var tempDirectory = new TempDirectory();
+        var execution = CreateExecution(tempDirectory.Path, out _);
+        var context = Context();
+        Assert.True(execution.StartDutyFromInside(context, true));
+        Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Treasure duty"));
+        var now = DateTime.UtcNow.AddMinutes(1);
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => Assert.Fail("Unexpected exit"), now);
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => Assert.Fail("Unexpected exit"), now.AddSeconds(3));
+        Assert.True(execution.CompletionTreasureSweepCompleted);
+        execution.ObserveDutyCompletion(Context(inDuty: false, transition: true, territory: 0, content: 0));
+        Assert.True(execution.CompletionTreasureSweepCompleted); // Temporary loading truth does not erase a result.
+        switch (reset)
+        {
+            case "stop": execution.Stop(context); break;
+            case "inside": execution.StartDutyFromInside(context); break;
+            case "outside": execution.StartDutyFromOutside(); break;
+            case "resume": execution.ResumeDutyFromInside(context); break;
+            case "new-duty": execution.ResetDutyCompletion(); break;
+            case "departure": execution.ObserveDutyCompletion(Context(inDuty: false)); break;
+            case "logout": execution.ObserveDutyCompletion(Context(loggedIn: false)); break;
+            case "territory": execution.ObserveDutyCompletion(Context(territory: 999)); break;
+            case "content": execution.ObserveDutyCompletion(Context(content: 999)); break;
+        }
+        Assert.Null(execution.CompletionTreasureSweepWithoutExitDuty);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+    }
+
+    [Fact]
+    public void CancelledOrDisabledSweepNeverReportsCompletion()
+    {
+        using var tempDirectory = new TempDirectory();
+        var execution = CreateExecution(tempDirectory.Path, out _);
+        var context = Context();
+        execution.StartDutyFromInside(context, true);
+        execution.BeginDutyCompletionTreasureSweep(context, "Treasure duty");
+        execution.Stop(context);
+        Assert.Null(execution.CompletionTreasureSweepWithoutExitDuty);
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        execution.StartDutyFromInside(context, true);
+        execution.BeginDutyCompletionTreasureSweep(context, "Treasure duty");
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => Assert.Fail("Unexpected exit"));
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        Assert.False(execution.IsOwned);
+    }
+
     [Fact]
     public void VariantCriterionCompletionRetainsOwnershipThroughLootThenReleasesWithoutLeaving()
     {
@@ -186,14 +399,82 @@ public sealed class DutyLeaveRespawnTests
     }
 
     private static DutyContextSnapshot Context(bool inDuty = true, bool loggedIn = true, bool transition = false,
-        uint territory = 1044, uint content = 831, DutyCatalogEntry? duty = null) => new()
+        uint territory = 1044, uint content = 831, DutyCatalogEntry? duty = null, bool occupied = false,
+        bool transition51 = false) => new()
     {
         PluginEnabled = true, IsLoggedIn = loggedIn, BoundByDuty = inDuty, BoundByDuty56 = false,
-        BetweenAreas = transition, BetweenAreas51 = false, Jumping = false, Jumping61 = false,
-        Occupied33 = false, OccupiedInQuestEvent = false, OccupiedInEvent = false,
+        BetweenAreas = transition, BetweenAreas51 = transition51, Jumping = false, Jumping61 = false,
+        Occupied33 = false, OccupiedInQuestEvent = false, OccupiedInEvent = occupied,
         OccupiedInCutSceneEvent = false, WatchingCutscene = false, InCombat = false, Mounted = false,
         TerritoryTypeId = territory, MapId = 1, ContentFinderConditionId = content, CurrentDuty = duty,
     };
+
+    private static ExecutionService CreateExecution(string path, out SweepObjectTableProxy table)
+    {
+        var log = DispatchProxy.Create<IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var keys = DispatchProxy.Create<IKeyState, ForceMarchLockTests.NoOpProxy>();
+        var objects = DispatchProxy.Create<IObjectTable, SweepObjectTableProxy>();
+        table = (SweepObjectTableProxy)(object)objects;
+        table.LocalPlayer = DispatchProxy.Create<IPlayerCharacter, ForceMarchLockTests.GameObjectProxy>();
+        var rules = new ObjectPriorityRuleService(log, null!, path);
+        var frontier = new DungeonFrontierService(null!, objects, log, rules, null!);
+        return new ExecutionService(null!, objects, null!, DispatchProxy.Create<ICommandManager, ForceMarchLockTests.CommandManagerProxy>(),
+            null!, frontier, null!, rules, new HyperFocusLeaseService(_ => "{}", _ => "{}", _ => "{}", () => "{}"),
+            new TreasureDoorStrafeInputService(keys, log), new CardinalHoldInputService(keys, log), new Configuration(), log);
+    }
+
+    private static DutyContextSnapshot TreasureContext(bool occupied = false)
+        => Context(occupied: occupied, duty: new DutyCatalogEntry
+        {
+            ContentFinderConditionId = 831, TerritoryTypeId = 1044, Name = "Ordinary treasure duty", EnglishName = "Ordinary treasure duty",
+            ContentTypeName = "Treasure Hunt", ExpansionName = "EW", SupportNote = "Existing maturity",
+            LevelRequired = 90, SortKey = 1, ExVersion = 4, ContentTypeRowId = 9, ContentMemberTypeRowId = 3,
+            PartySize = 8, Category = DutyCategory.TreasureDungeon, SupportLevel = DutySupportLevel.PassiveOnly,
+            ClearanceStatus = DutyClearanceStatus.NotCleared, IsPlannedTest = true, IsMainScenario = false,
+        });
+
+    private static T Field<T>(ExecutionService execution, string name)
+        => (T)typeof(ExecutionService).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(execution)!;
+    private static void SetField(ExecutionService execution, string name, object value)
+        => typeof(ExecutionService).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(execution, value);
+
+    public class SweepObjectTableProxy : DispatchProxy
+    {
+        public IPlayerCharacter? LocalPlayer { get; set; }
+        public IGameObject? Coffer { get; set; }
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+            => method?.Name switch
+            {
+                "get_LocalPlayer" => LocalPlayer,
+                "GetEnumerator" => (Coffer is null ? Array.Empty<IGameObject>() : new[] { Coffer! }).AsEnumerable().GetEnumerator(),
+                _ => method?.ReturnType.IsValueType == true ? Activator.CreateInstance(method.ReturnType) : null,
+            };
+    }
+
+    public class CofferProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+            => method?.Name switch
+            {
+                "get_GameObjectId" => 1ul,
+                "get_IsTargetable" => true,
+                "get_Position" => Vector3.Zero,
+                _ => method?.ReturnType.IsValueType == true ? Activator.CreateInstance(method.ReturnType) : null,
+            };
+    }
+
+    public class DutyReturnPlayerProxy : DispatchProxy
+    {
+        internal bool Dead;
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+            => method?.Name switch
+            {
+                "get_IsDead" => Dead,
+                "get_CurrentHp" => Dead ? 0u : 100u,
+                "get_MaxHp" => 100u,
+                _ => method?.ReturnType.IsValueType == true ? Activator.CreateInstance(method.ReturnType) : null,
+            };
+    }
 
     private sealed class ReturnEvaluator(ClientLanguage client, string macro) : ISeStringEvaluator
     {

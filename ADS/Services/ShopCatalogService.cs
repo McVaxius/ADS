@@ -1877,7 +1877,7 @@ internal sealed class LuminaShopSheetSource(IDataManager dataManager, IPluginLog
         return result;
     }
 
-    private static ShopNpcEventReference ToEventReference(Lumina.Excel.RowRef row)
+    internal static ShopNpcEventReference ToEventReference(Lumina.Excel.RowRef row)
         => row.Is<GilShop>()
             ? new ShopNpcEventReference(ShopNpcEventKind.GilShop, row.RowId)
             : row.Is<SpecialShop>()

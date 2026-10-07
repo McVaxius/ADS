@@ -301,6 +301,19 @@ internal interface IShopPurchaseRuntime
     bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount) => false;
     bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount) => false;
     void CloseOwnedShopUi();
+    bool HasAutoRetainer => false;
+    bool IsInventoryContextVisible => false;
+    bool TryCaptureGearCleanup(GearCleanupScope scope, out IReadOnlyList<GearCleanupCandidate> items, out IReadOnlySet<uint> protectedItems)
+    { items = []; protectedItems = new HashSet<uint>(); return false; }
+    bool TryReadGearCleanupSlot(InventoryType container, ushort slot, out InventoryItem item)
+    { item = default; return false; }
+    bool TryMoveGearCleanupItem(GearCleanupCandidate item, out InventoryType destination, out ushort slot, out bool full)
+    { destination = default; slot = 0; full = false; return false; }
+    GearSaleState GetGearSaleState(uint npcId, uint shopId, GearCleanupCandidate? pending) => GearSaleState.Unsupported;
+    bool TrySellGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item) => false;
+    bool TrySelectGearSaleMenu(uint npcId, IReadOnlyList<ShopMenuPathStep> path, uint previousHandler, out uint selectedHandler)
+    { selectedHandler = 0; return false; }
+    void CloseOwnedGearSaleUi(uint npcId, uint shopId) { }
 }
 
 internal sealed unsafe class DalamudShopPurchaseRuntime(
@@ -516,6 +529,180 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     public Vector3 PlayerPosition => objectTable.LocalPlayer?.Position ?? default;
     public bool HasVnavmesh => IsPluginLoaded("vnavmesh", "vnav");
     public bool HasLifestream => IsPluginLoaded("Lifestream");
+    public bool HasAutoRetainer => IsPluginLoaded("AutoRetainer");
+    public bool IsInventoryContextVisible => GameInteractionHelper.IsAddonVisible("ContextMenu");
+
+    public bool TryCaptureGearCleanup(GearCleanupScope scope, out IReadOnlyList<GearCleanupCandidate> items, out IReadOnlySet<uint> protectedItems)
+    {
+        items = [];
+        protectedItems = new HashSet<uint>();
+        var manager = InventoryManager.Instance();
+        var sheet = Plugin.DataManager.GetExcelSheet<Item>();
+        if (manager == null || sheet == null || !UtilityAutomationService.TryGetGearsetItemIds(out var protection)) return false;
+        var equipped = manager->GetInventoryContainer(InventoryType.EquippedItems);
+        if (equipped == null || !equipped->IsLoaded) return false;
+        for (var index = 0; index < equipped->Size; index++)
+        {
+            var item = equipped->GetInventorySlot(index);
+            if (item == null) return false;
+            if (item->ItemId != 0) protection.Add(DesynthPolicyService.NormalizeBaseItemId(item->ItemId));
+        }
+        var captured = new List<GearCleanupCandidate>();
+        foreach (var type in GearCleanupPolicy.Containers(scope))
+        {
+            var container = manager->GetInventoryContainer(type);
+            if (container == null || !container->IsLoaded) return false;
+            for (var index = 0; index < container->Size; index++)
+            {
+                var item = container->GetInventorySlot(index);
+                if (item == null) return false;
+                if (item->ItemId == 0) continue;
+                var id = DesynthPolicyService.NormalizeBaseItemId(item->ItemId);
+                if (!sheet.TryGetRow(id, out var row)) return false;
+                captured.Add(new(type, (ushort)index, *item, row.Name.ToString(),
+                    row.Rarity == 1 && row.EquipSlotCategory.RowId != 0, row.PriceLow > 0));
+            }
+        }
+        items = captured;
+        protectedItems = protection;
+        return true;
+    }
+
+    public bool TryReadGearCleanupSlot(InventoryType type, ushort slot, out InventoryItem item)
+    {
+        item = default;
+        var manager = InventoryManager.Instance();
+        if (manager == null) return false;
+        var container = manager->GetInventoryContainer(type);
+        if (container == null || !container->IsLoaded || slot >= container->Size) return false;
+        var current = container->GetInventorySlot(slot);
+        if (current == null) return false;
+        item = *current;
+        return true;
+    }
+
+    public bool TryMoveGearCleanupItem(GearCleanupCandidate item, out InventoryType destination, out ushort slot, out bool full)
+    {
+        destination = default;
+        slot = 0;
+        full = false;
+        var manager = InventoryManager.Instance();
+        if (manager == null || !TryReadGearCleanupSlot(item.Container, item.Slot, out var current)
+            || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+        foreach (var type in GearCleanupPolicy.Bags)
+        {
+            var container = manager->GetInventoryContainer(type);
+            if (container == null || !container->IsLoaded) return false;
+            for (var index = 0; index < container->Size; index++)
+            {
+                var target = container->GetInventorySlot(index);
+                if (target == null) return false;
+                if (target->ItemId != 0 || target->IsSymbolic) continue;
+                destination = type;
+                slot = (ushort)index;
+                // Completion is established from both slots on a later update.
+                manager->MoveItemSlot(item.Container, item.Slot, destination, slot);
+                return true;
+            }
+        }
+        full = true;
+        return false;
+    }
+
+    private bool TryGetOwnedGearShop(uint npcId, uint shopId, out ShopEventHandler* handler)
+    {
+        handler = null;
+        if (!IsLoggedIn || shopUiCharacter == 0 || CharacterId != shopUiCharacter
+            || targetManager.Target?.GameObjectId != shopUiNpc || targetManager.Target.BaseId != npcId
+            || IsBetweenAreas || HasUnexpectedConfirmation || IsSelectionMenuVisible || IsTalkVisible) return false;
+        var unitManager = RaptureAtkUnitManager.Instance();
+        if (unitManager == null) return false;
+        var addon = unitManager->GetAddonByName("Shop");
+        var proxy = ShopEventHandler.AgentProxy.Instance();
+        var agent = AgentShop.Instance();
+        if (addon == null || !addon->IsVisible || !addon->IsReady || proxy == null || agent == null
+            || proxy->Handler == null || proxy->AddonId != addon->Id || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
+            return false;
+        handler = proxy->Handler;
+        return handler->Info.EventId.Id == shopId && handler->CurrentMode == 1 && !handler->IsTradingWithRetainer;
+    }
+
+    public GearSaleState GetGearSaleState(uint npcId, uint shopId, GearCleanupCandidate? pending)
+    {
+        if (!TryGetOwnedGearShop(npcId, shopId, out var handler) || handler->WaitingForSellConfirm || handler->StartingBuy)
+            return GearSaleState.Unsupported;
+        if (pending != null && (handler->TransactionType != 2
+            || handler->TransactionItemId != DesynthPolicyService.NormalizeBaseItemId(pending.Item.ItemId)
+            || handler->TransactionItemCount != 1 || handler->SellInventoryType != pending.Container
+            || handler->SellInventorySlot != pending.Slot)) return GearSaleState.Unsupported;
+        if (!handler->StartingSell && !handler->WaitingForTransactionToFinish) return GearSaleState.Ready;
+        return pending != null ? GearSaleState.Pending : GearSaleState.Unsupported;
+    }
+
+    public bool TrySellGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item)
+    {
+        if (GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
+            || !TryGetOwnedGearShop(npcId, shopId, out var handler) || IsInventoryContextVisible
+            || !TryReadGearCleanupSlot(item.Container, item.Slot, out var current) || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+        var context = AgentInventoryContext.Instance();
+        var manager = InventoryManager.Instance();
+        if (context == null || manager == null) return false;
+        var source = manager->GetInventoryContainer(item.Container);
+        if (source == null || !source->IsLoaded || item.Slot >= source->Size) return false;
+        var sourceSlot = source->GetInventorySlot(item.Slot);
+        var proxy = ShopEventHandler.AgentProxy.Instance();
+        context->OpenForItemSlot(item.Container, item.Slot, 0, proxy->AddonId);
+        if (context->TargetInventoryId != item.Container || context->TargetInventorySlotId != item.Slot
+            || context->TargetInventorySlot == null || context->TargetInventorySlot != sourceSlot
+            || !GearCleanupPolicy.Matches(*context->TargetInventorySlot, item.Item)
+            || context->OwnerAddonId != proxy->AddonId || context->ContextCallbackInfos == null
+            || context->ContextItemCount is < 1 or > 32) return false;
+        AgentInventoryContext.ContextCallbackInfo* match = null;
+        for (var index = 0; index < context->ContextItemCount; index++)
+        {
+            var callback = &context->ContextCallbackInfos[index];
+            if (callback->Handler != &handler->InventoryContextEvent || context->IsContextItemDisabled(index)) continue;
+            if (match != null) return false;
+            match = callback;
+        }
+        if (match == null || GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
+            || !TryReadGearCleanupSlot(item.Container, item.Slot, out current) || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+        // Use the active shop's exact inventory callback and its native parameter.
+        match->Handler->HandleCallback(item.Slot, item.Container, context->TargetInventoryFlags, match->CallbackParam);
+        if (context->TargetInventoryId == item.Container && context->TargetInventorySlotId == item.Slot)
+            GameInteractionHelper.TryCloseAddon("ContextMenu", log);
+        return true;
+    }
+
+    public void CloseOwnedGearSaleUi(uint npcId, uint shopId)
+    {
+        if (TryGetOwnedGearShop(npcId, shopId, out var handler) && !handler->WaitingForSellConfirm
+            && !handler->WaitingForTransactionToFinish && !handler->StartingSell && !handler->StartingBuy)
+            CloseShopAddon("Shop");
+    }
+
+    public bool TrySelectGearSaleMenu(uint npcId, IReadOnlyList<ShopMenuPathStep> path, uint previousHandler, out uint selectedHandler)
+    {
+        selectedHandler = 0;
+        var selector = EventHandlerSelector.Instance();
+        if (shopUiCharacter == 0 || CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc
+            || selector == null || selector->Target == null || selector->Target->BaseId != npcId || selector->OptionsCount is < 1 or > 32)
+            return false;
+        var matchingSteps = new List<ShopMenuPathStep>();
+        foreach (var step in path.DistinctBy(step => step.HandlerId))
+        {
+            if (step.HandlerId == previousHandler) continue;
+            for (var index = 0; index < selector->OptionsCount; index++)
+            {
+                var handler = selector->Options[index].Handler;
+                if (handler != null && handler->Info.EventId.Id == step.HandlerId) { matchingSteps.Add(step); break; }
+            }
+        }
+        if (matchingSteps.Count != 1) return false;
+        selectedHandler = matchingSteps[0].HandlerId;
+        return TrySelectMenu(matchingSteps[0], npcId);
+    }
+
     public bool HasUnexpectedConfirmation => GameInteractionHelper.IsAddonVisible("SelectYesno")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeItemDialog")
         || GameInteractionHelper.IsAddonVisible("ShopExchangeCurrencyDialog");

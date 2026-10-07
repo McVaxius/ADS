@@ -3,6 +3,7 @@ using AethertekUI;
 using System.Numerics;
 using ADS.Services;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 
 namespace ADS.Windows;
@@ -22,6 +23,42 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         };
         Size = new Vector2(376f, 968f);
         Flags |= ImGuiWindowFlags.HorizontalScrollbar;
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Home, Priority = 0, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.OpenMainUi(); },
+            ShowTooltip = () => MaterialText.SetTooltip(Ui.T("Main")),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Cog, Priority = -10, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.OpenConfigUi(); },
+            ShowTooltip = () => MaterialText.SetTooltip(Ui.T("Settings")),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Play, Priority = -20, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Start Outside") == null) plugin.StartDutyFromOutside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Start Outside"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.SignInAlt, Priority = -30, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Start Inside") == null) plugin.StartDutyFromInside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Start Inside"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Redo, Priority = -40, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left && plugin.GetDutyUiActionBlocker("Resume") == null) plugin.ResumeDutyFromInside(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Resume"),
+        });
+        TitleBarButtons.Add(new()
+        {
+            Icon = FontAwesomeIcon.Stop, Priority = -50, IconOffset = new(2, 1),
+            Click = button => { if (button == ImGuiMouseButton.Left) plugin.StopOwnership(); },
+            ShowTooltip = () => ShowDutyTitleTooltip("Stop"),
+        });
     }
 
     public void Dispose()
@@ -32,7 +69,15 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
     {
         PrepareWindowPlacement();
         WindowName = $"{Ui.T("ADS Controls")}###ADSQuickControls";
+        ReserveTitleSpace(300);
         windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+    }
+
+    private void ShowDutyTitleTooltip(string action)
+    {
+        var blocker = plugin.GetDutyUiActionBlocker(action);
+        MaterialText.SetTooltip(Ui.T(action) + (blocker == null ? string.Empty : "\n" + Ui.Display(blocker))
+            + "\n" + Ui.Display(plugin.ExecutionService.LastStatus));
     }
 
     public override void OnClose()

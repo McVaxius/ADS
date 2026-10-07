@@ -11174,4 +11174,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>非フォーカス時の待機時間 (秒)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>コンテンツまたは宿屋の自動化がADSを制御中は、NPC売却を開始できません。</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>NPC売却にはログイン中のキャラクターが必要です。</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>NPC売却を開始できませんでした: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>売却できる近くのNPC商人を探しています。</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>{0:0}y以内にNPC商人が見つかりません。ローカル限定の売却では移動しません。</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>近くに売却できる商人が見つかりません。フィールドへの移動にはレストエリアまたは近くのエーテライト／エーテルネットが必要です。</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>NPC売却コマンド後のAutoRetainer処理の待機がタイムアウトしました。</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>NPC売却コマンド後にAutoRetainerの処理開始を確認できませんでした。</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>NPC売却完了前にコンテンツまたは宿屋の自動化が制御を引き継ぎました。</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>NPC売却コマンド後のAutoRetainer処理が終了するのを待っています。</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>NPC売却コマンド後のAutoRetainer処理が終了しました。</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>NPC売却コマンド後にAutoRetainerが処理を開始するのを待っています。</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>売却先の商人{0}は近くにいません。</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>売却先の商人{0}へ移動しています。</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>商人へのADS移動処理が終了するのを待っています。</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>NPC売却コマンド前にADSの制御権または無関係なUIが変わりました。</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>売却先の商人{0}に到着しました。AutoRetainerへの引き継ぎを準備しています。</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestreamは既に処理中です。NPC売却のための移動は開始していません。</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC売却のための移動を利用できません: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>LifestreamによるADSの売却移動が終了するのを待っています。</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>ADSの売却移動終了後もLifestreamが処理中のため、次の移動は送信していません。</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC売却のナビゲーションを利用できません: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>ナビゲーションは既に処理中です。ADSはNPC売却先への接近を開始していません。</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>装備整理</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>売却前に装備を確認する</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>装備売却の確認</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>{1}内の白色名の装備{0}個を売却しますか？</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}、スロット{2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>アーマリーチェスト</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>両方</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>売却</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>装備売却</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>装備移動</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>装備整理には読み取り可能な所持品とギアセット保護情報が必要です。</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>対象となる白色名の装備が見つかりません。</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>装備売却の確認：{0}個。</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>白色名の装備を所持品に移動しています。</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>現在の選択内容または制御状態では装備整理を開始できません。</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>キャラクターまたは自動化の安全条件が変わったため装備整理を停止しました。</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>装備整理の前に既存のショップや所持品確認画面を閉じてください。</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>AutoRetainerが所持品操作を制御しているため装備整理を停止しました。</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Lifestreamが処理中のため装備整理を停止しました。</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>装備整理の安全性を確認できませんでした：{0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>確認済みアイテムが変わったため装備整理を停止しました：{0}。</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>装備整理完了：{0}個を処理しました。</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>送信した所持品スロットを確認できませんでした。</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>未対応のショップまたは確認状態のため装備売却を停止しました。</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>装備移動先の正確なアイテムを確認できませんでした。</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>装備整理の進捗：{0}/{1}。</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>送信した正確な操作の完了を確認できませんでした。</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>正確な装備操作の完了を待っています。</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>所持品が満杯です：{1}個中{0}個を移動し、残りは保持しました。</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>装備移動の正確な所持品スロットを送信できませんでした。</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>選択したショップを装備売却用に開けませんでした。</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>選択した装備売却ショップを開いています。</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>ショップ{0}に到着し、装備売却を準備しています。</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>装備コマンド：/ads gear move または /ads gear sell armoury|inventory|both。</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>所持品バッグ 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>所持品バッグ 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>所持品バッグ 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>所持品バッグ 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>アーマリー：メインアーム</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>アーマリー：サブアーム</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>アーマリー：頭</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>アーマリー：胴</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>アーマリー：手</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>アーマリー：脚</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>アーマリー：足</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>アーマリー：耳飾り</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>アーマリー：首飾り</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>アーマリー：腕輪</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>アーマリー：指輪</value>
+  </data>
 </root>

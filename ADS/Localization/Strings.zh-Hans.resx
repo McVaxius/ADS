@@ -11174,4 +11174,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>失去焦点后的等待时间 (秒)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>副本或旅馆自动化控制 ADS 时，无法开始向 NPC 出售。</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>向 NPC 出售需要已登录的角色。</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>无法开始向 NPC 出售：{0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>正在寻找附近可出售物品的 NPC 商人。</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>{0:0}y 内未找到 NPC 商人；仅限本地出售不会前往其他地点。</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>未找到附近的出售商人；前往野外需要休息区或附近的以太之光/以太都市传送网。</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>NPC 出售命令后，等待 AutoRetainer 工作超时。</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>NPC 出售命令后，AutoRetainer 未开始可观察到的工作。</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>NPC 出售结束前，副本或旅馆自动化接管了控制权。</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>正在等待 NPC 出售命令后的 AutoRetainer 工作结束。</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>NPC 出售命令后的 AutoRetainer 工作已结束。</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>正在等待 AutoRetainer 在 NPC 出售命令后开始工作。</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>出售商人 {0} 已不在附近。</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>正在前往出售商人 {0}。</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>正在等待 ADS 前往商人的导航结束。</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>NPC 出售命令前，ADS 控制权或无关界面发生了变化。</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>已到达出售商人 {0}；正在准备交接给 AutoRetainer。</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream 已有工作在运行；未开始 NPC 出售行程。</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC 出售行程不可用：{0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>正在等待通过 Lifestream 的 ADS 出售行程结束。</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>ADS 出售行程结束后 Lifestream 仍忙碌；未发送后续行程。</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC 出售导航不可用：{0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>导航已有工作在运行；ADS 未开始接近 NPC 出售商人。</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>装备清理</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>出售前预览装备</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>装备出售预览</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>出售{1}中的{0}件白色名称装备吗？</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}，栏位{2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>兵装库</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>两者</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>出售</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>装备出售</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>装备移动</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>装备清理需要可读取的物品栏及装备套装保护信息。</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>未找到符合条件的白色名称装备。</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>装备出售预览：{0}件物品。</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>正在将白色名称装备移入物品栏。</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>当前选择或控制状态不允许开始装备清理。</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>角色或自动化安全条件发生变化，装备清理已停止。</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>清理装备前请关闭已有商店或物品栏确认界面。</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>AutoRetainer正在控制物品栏操作，装备清理已停止。</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Lifestream忙碌，装备清理已停止。</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>无法验证装备清理的安全性：{0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>已确认的物品发生变化，装备清理已停止：{0}。</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>装备清理完成：已处理{0}件物品。</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>装备清理无法验证已提交的物品栏位。</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>遇到不支持的商店或确认状态，装备出售已停止。</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>装备移动无法验证目标栏位中的确切物品。</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>装备清理进度：{0}/{1}。</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>未观察到所提交确切操作的完成。</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>正在等待确切的装备操作完成。</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>物品栏已满：已移动{0}/{1}件物品，其余物品已保留。</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>装备移动无法提交确切的物品栏位。</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>装备出售无法打开所选商店。</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>正在打开所选装备商店。</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>已抵达商店{0}，正在准备出售装备。</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>装备命令：/ads gear move 或 /ads gear sell armoury|inventory|both。</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>物品栏背包 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>物品栏背包 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>物品栏背包 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>物品栏背包 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>兵装库：主手</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>兵装库：副手</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>兵装库：头部</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>兵装库：身体</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>兵装库：手部</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>兵装库：腿部</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>兵装库：脚部</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>兵装库：耳饰</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>兵装库：项链</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>兵装库：手镯</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>兵装库：戒指</value>
+  </data>
 </root>

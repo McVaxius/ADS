@@ -3730,4 +3730,220 @@
   <data name="Auto-fade when unfocused" xml:space="preserve"><value>फ़ोकस हटने पर अपने आप हल्का करें</value></data>
   <data name="Unfocused opacity (%)" xml:space="preserve"><value>फ़ोकस हटने पर अपारदर्शिता (%)</value></data>
   <data name="Unfocused delay (seconds)" xml:space="preserve"><value>फ़ोकस हटने पर विलंब (सेकंड)</value></data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>ड्यूटी या सराय स्वचालन के ADS को नियंत्रित करने के दौरान NPC बिक्री शुरू नहीं हो सकती।</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>NPC बिक्री के लिए लॉग इन किया हुआ पात्र चाहिए।</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>NPC बिक्री शुरू नहीं हो सकी: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>बेचने के लिए पास का NPC विक्रेता खोजा जा रहा है।</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>{0:0}y के भीतर कोई NPC विक्रेता नहीं मिला; केवल स्थानीय बिक्री में यात्रा नहीं की जाती।</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>पास में कोई बिक्री विक्रेता नहीं मिला; मैदानी यात्रा के लिए सुरक्षित विश्राम क्षेत्र या पास का Aetheryte/Aethernet चाहिए।</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>NPC बिक्री आदेश के बाद AutoRetainer के काम की प्रतीक्षा की समय सीमा समाप्त हुई।</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>NPC बिक्री आदेश के बाद AutoRetainer ने कोई दिखाई देने वाला काम शुरू नहीं किया।</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>NPC बिक्री समाप्त होने से पहले ड्यूटी या सराय स्वचालन ने नियंत्रण ले लिया।</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>NPC बिक्री आदेश के बाद AutoRetainer का काम समाप्त होने की प्रतीक्षा की जा रही है।</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>NPC बिक्री आदेश के बाद AutoRetainer का काम समाप्त हो गया।</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>NPC बिक्री आदेश के बाद AutoRetainer का काम शुरू होने की प्रतीक्षा की जा रही है।</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>बिक्री विक्रेता {0} अब पास में नहीं है।</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>बिक्री विक्रेता {0} की ओर बढ़ा जा रहा है।</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>विक्रेता तक ADS का नेविगेशन समाप्त होने की प्रतीक्षा की जा रही है।</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>NPC बिक्री आदेश से पहले ADS का नियंत्रण या असंबंधित UI बदल गया।</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>बिक्री विक्रेता {0} तक पहुँच गए; AutoRetainer को सौंपने की तैयारी की जा रही है।</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream पहले से काम कर रहा है; NPC बिक्री यात्रा शुरू नहीं की गई।</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC बिक्री यात्रा उपलब्ध नहीं है: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Lifestream के माध्यम से ADS की बिक्री यात्रा समाप्त होने की प्रतीक्षा की जा रही है।</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>ADS की बिक्री यात्रा समाप्त होने के बाद भी Lifestream व्यस्त रहा; कोई और यात्रा नहीं भेजी गई।</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC बिक्री नेविगेशन उपलब्ध नहीं है: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>नेविगेशन पहले से काम कर रहा है; ADS ने NPC बिक्री के लिए पास जाना शुरू नहीं किया।</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>उपकरण की सफ़ाई</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>बेचने से पहले उपकरण का पूर्वावलोकन</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>उपकरण बिक्री का पूर्वावलोकन</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>{1} से सफेद नाम वाले {0} उपकरण बेचें?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, स्लॉट {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>शस्त्रागार</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>दोनों</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>बेचें</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>उपकरण बिक्री</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>उपकरण स्थानांतरण</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>उपकरण की सफ़ाई के लिए पढ़ने योग्य इन्वेंटरी और गियरसेट की सुरक्षा आवश्यक है।</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>सफेद नाम वाला कोई योग्य उपकरण नहीं मिला।</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>उपकरण बिक्री का पूर्वावलोकन: {0} वस्तुएँ।</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>सफेद नाम वाले उपकरण इन्वेंटरी में ले जाए जा रहे हैं।</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>वर्तमान चयन या नियंत्रण के साथ उपकरण की सफ़ाई शुरू नहीं हो सकती।</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>पात्र या स्वचालन की सुरक्षा बदलने के कारण उपकरण की सफ़ाई रुक गई।</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>उपकरण की सफ़ाई से पहले विक्रेता या इन्वेंटरी की खुली पुष्टि विंडो बंद करें।</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>AutoRetainer इन्वेंटरी का काम नियंत्रित कर रहा है, इसलिए उपकरण की सफ़ाई रुक गई।</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Lifestream व्यस्त है, इसलिए उपकरण की सफ़ाई रुक गई।</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>उपकरण की सफ़ाई की सुरक्षा सत्यापित नहीं हो सकी: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>पुष्ट की गई वस्तु बदलने के कारण उपकरण की सफ़ाई रुक गई: {0}।</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>उपकरण की सफ़ाई पूरी हुई: {0} वस्तुएँ संसाधित।</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>भेजे गए इन्वेंटरी स्लॉट की पुष्टि नहीं हो सकी।</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>असमर्थित दुकान या पुष्टि की स्थिति के कारण उपकरण बिक्री रुक गई।</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>स्थानांतरण के गंतव्य पर ठीक वही वस्तु सत्यापित नहीं हो सकी।</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>उपकरण की सफ़ाई की प्रगति: {0}/{1}।</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>भेजी गई सटीक कार्रवाई का पूरा होना नहीं देखा गया।</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>सटीक उपकरण कार्रवाई के पूरा होने की प्रतीक्षा है।</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>इन्वेंटरी भरी है: {1} में से {0} वस्तुएँ स्थानांतरित; बाकी सुरक्षित रखी गईं।</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>स्थानांतरण के लिए सटीक इन्वेंटरी स्लॉट नहीं भेजा जा सका।</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>उपकरण बिक्री के लिए चुना गया विक्रेता नहीं खोला जा सका।</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>चुना गया उपकरण विक्रेता खोला जा रहा है।</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>विक्रेता {0} तक पहुँच गए; उपकरण बिक्री की तैयारी हो रही है।</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>उपकरण के आदेश: /ads gear move या /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>इन्वेंटरी बैग 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>इन्वेंटरी बैग 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>इन्वेंटरी बैग 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>इन्वेंटरी बैग 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>शस्त्रागार: मुख्य हाथ</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>शस्त्रागार: दूसरा हाथ</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>शस्त्रागार: सिर</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>शस्त्रागार: शरीर</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>शस्त्रागार: हाथ</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>शस्त्रागार: पैर</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>शस्त्रागार: पाँव</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>शस्त्रागार: बालियाँ</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>शस्त्रागार: हार</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>शस्त्रागार: कंगन</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>शस्त्रागार: अंगूठियाँ</value>
+  </data>
 </root>

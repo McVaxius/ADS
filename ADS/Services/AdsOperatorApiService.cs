@@ -19,6 +19,7 @@ public sealed class AdsOperatorApiService
             achievementCertificatePurchases = 1,
             companyActionPurchases = 1,
             npcSelling = 1,
+            dutyCompletionSweepWithoutExit = 1,
             settings = AdsIpcValidation.KnownConfigurationSettings.OrderBy(x => x).ToArray(),
             preferredSettings = new[] { "desynthInventoryScope" },
             deprecatedSettings = new[] { "desynthCategories", "desynthProtectGearsets" },
@@ -73,7 +74,7 @@ public sealed class AdsOperatorApiService
             return action.Trim().ToLowerInvariant() switch
             {
                 "duty.start-outside" => Result(action, plugin.StartDutyFromOutside()),
-                "duty.start-inside" => Result(action, plugin.StartDutyFromInside()),
+                "duty.start-inside" => StartDutyInside(action, payload),
                 "duty.resume-inside" => Result(action, plugin.ResumeDutyFromInside()),
                 "duty.leave" => Result(action, plugin.LeaveDuty()),
                 "window.open-loot" => Result(action, Open(plugin.OpenLootUi)),
@@ -277,6 +278,16 @@ public sealed class AdsOperatorApiService
     {
         plugin.DesynthDutyLedgerStore.Clear();
         return true;
+    }
+
+    private string StartDutyInside(string action, JsonElement payload)
+    {
+        var sweepWithoutExit = payload.TryGetProperty("sweepWithoutExit", out var choice) && choice.GetBoolean();
+        var success = plugin.StartDutyFromInside(sweepWithoutExit);
+        var duty = plugin.ExecutionService.CompletionTreasureSweepWithoutExitDuty;
+        return Result(action, success, data: success && sweepWithoutExit && duty is { } identity
+            ? new { sweepWithoutExit = true, territoryTypeId = identity.Territory, contentFinderConditionId = identity.Content }
+            : null);
     }
 
     private string StartShopPurchase(string action, JsonElement payload)

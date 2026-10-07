@@ -3746,4 +3746,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Jeda saat tidak fokus (detik)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>Penjualan ke NPC tidak dapat dimulai saat otomatisasi tugas atau penginapan mengendalikan ADS.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>Penjualan ke NPC memerlukan karakter yang sudah masuk.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>Penjualan ke NPC tidak dapat dimulai: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Mencari pedagang NPC terdekat untuk menjual.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>Tidak ada pedagang NPC dalam {0:0}y; penjualan lokal tidak melakukan perjalanan.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>Tidak ada pedagang terdekat; perjalanan lapangan memerlukan sanctuary atau Aetheryte/Aethernet terdekat.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>Waktu habis saat menunggu pekerjaan AutoRetainer setelah perintah penjualan ke NPC.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer tidak memulai pekerjaan yang dapat diamati setelah perintah penjualan ke NPC.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>Otomatisasi tugas atau penginapan mengambil kendali sebelum penjualan ke NPC selesai.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>Menunggu pekerjaan AutoRetainer selesai setelah perintah penjualan ke NPC.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>Pekerjaan AutoRetainer selesai setelah perintah penjualan ke NPC.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>Menunggu AutoRetainer memulai pekerjaan setelah perintah penjualan ke NPC.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Pedagang {0} tidak lagi berada di dekat sini.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Bergerak menuju pedagang {0}.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>Menunggu navigasi ADS ke pedagang selesai.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>Kendali ADS atau antarmuka yang tidak terkait berubah sebelum perintah penjualan ke NPC.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Pedagang {0} telah dicapai; menyiapkan penyerahan ke AutoRetainer.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream sudah menjalankan pekerjaan; perjalanan penjualan ke NPC tidak dimulai.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>Perjalanan penjualan ke NPC tidak tersedia: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>Menunggu perjalanan penjualan ADS melalui Lifestream selesai.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>Lifestream tetap sibuk setelah perjalanan penjualan ADS berakhir; tidak ada perjalanan tambahan yang dikirim.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>Navigasi penjualan ke NPC tidak tersedia: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>Navigasi sudah menjalankan pekerjaan; ADS tidak memulai pendekatan untuk penjualan ke NPC.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Pembersihan perlengkapan</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Pratinjau perlengkapan sebelum dijual</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Pratinjau penjualan perlengkapan</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>Jual {0} perlengkapan bernama putih dari {1}?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, slot {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Gudang senjata</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>Keduanya</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Jual</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>penjualan perlengkapan</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>pemindahan perlengkapan</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>Pembersihan perlengkapan memerlukan inventaris yang terbaca dan perlindungan set perlengkapan.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>Tidak ditemukan perlengkapan bernama putih yang memenuhi syarat.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Pratinjau penjualan perlengkapan: {0} item.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Memindahkan perlengkapan bernama putih ke inventaris.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>Pembersihan tidak dapat dimulai dengan pilihan atau kendali saat ini.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>Pembersihan berhenti karena karakter atau keamanan otomatisasi berubah.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Tutup jendela pedagang atau konfirmasi inventaris sebelum membersihkan perlengkapan.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>Pembersihan berhenti karena AutoRetainer mengendalikan pekerjaan inventaris.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Pembersihan berhenti karena Lifestream sibuk.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Keamanan pembersihan tidak dapat diverifikasi: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>Pembersihan berhenti karena item yang dikonfirmasi berubah: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Pembersihan selesai: {0} item diproses.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>Slot inventaris yang dikirim tidak dapat diverifikasi.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>Penjualan perlengkapan berhenti pada keadaan toko atau konfirmasi yang tidak didukung.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Item persis di tujuan pemindahan tidak dapat diverifikasi.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Kemajuan pembersihan: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>Penyelesaian operasi persis yang dikirim tidak teramati.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Menunggu operasi perlengkapan yang persis selesai.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Inventaris penuh: {0} dari {1} item dipindahkan; sisanya disimpan.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Slot inventaris yang persis tidak dapat dikirim untuk pemindahan.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>Pedagang pilihan tidak dapat dibuka untuk penjualan perlengkapan.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Membuka pedagang perlengkapan pilihan.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>Pedagang {0} dicapai; menyiapkan penjualan perlengkapan.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Perintah perlengkapan: /ads gear move atau /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Tas inventaris 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Tas inventaris 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Tas inventaris 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Tas inventaris 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Gudang senjata: tangan utama</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Gudang senjata: tangan kedua</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Gudang senjata: kepala</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Gudang senjata: tubuh</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Gudang senjata: tangan</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Gudang senjata: kaki atas</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Gudang senjata: kaki bawah</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Gudang senjata: anting</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Gudang senjata: kalung</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Gudang senjata: gelang</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Gudang senjata: cincin</value>
+  </data>
 </root>

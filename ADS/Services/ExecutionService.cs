@@ -227,8 +227,11 @@ public sealed class ExecutionService
     private bool leaveDutyExitArmed;
     private bool explicitLeaveRequested;
     private bool releaseAfterCompletionSweep;
+    private (uint Territory, uint Content)? activeCompletionTreasureSweepDuty;
     private bool leaveRespawnAccepted;
     private (uint Territory, uint Content)? completedDuty;
+    public (uint Territory, uint Content)? CompletionTreasureSweepWithoutExitDuty { get; private set; }
+    public bool CompletionTreasureSweepCompleted { get; private set; }
     private string lastLoggedLeaveTreasureKey = string.Empty;
     private string lastLoggedLeavePromptKey = string.Empty;
     private DateTime lastLoggedLeavePromptAtUtc = DateTime.MinValue;
@@ -563,6 +566,7 @@ public sealed class ExecutionService
 
     public bool StartDutyFromOutside()
     {
+        ResetCompletionTreasureSweep();
         InterruptCardinalHold("outside start");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -574,15 +578,17 @@ public sealed class ExecutionService
         return true;
     }
 
-    public bool StartDutyFromInside(DutyContextSnapshot context)
+    public bool StartDutyFromInside(DutyContextSnapshot context, bool sweepWithoutExit = false)
     {
+        ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside start");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("inside start");
         ClearTreasureFollowerPostTransitSettle("inside start");
         ResetRecoveryHold();
-        if (!context.InInstancedDuty)
+        if (!context.InInstancedDuty || sweepWithoutExit
+            && (!context.IsLoggedIn || context.TerritoryTypeId == 0 || context.ContentFinderConditionId == 0))
         {
             CurrentMode = OwnershipMode.Idle;
             SetPhase(
@@ -592,6 +598,8 @@ public sealed class ExecutionService
         }
 
         CurrentMode = OwnershipMode.OwnedStartInside;
+        if (sweepWithoutExit)
+            CompletionTreasureSweepWithoutExitDuty = (context.TerritoryTypeId, context.ContentFinderConditionId);
         SetPhase(
             ExecutionPhase.WaitingForTruth,
             $"Owned inside {context.CurrentDuty?.EnglishName}. ADS now runs the staged execution phase engine for this duty. {BuildTreasureRoleStatus()}");
@@ -600,6 +608,7 @@ public sealed class ExecutionService
 
     public bool ResumeDutyFromInside(DutyContextSnapshot context)
     {
+        ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside resume");
         ClearInteractableCommitment();
         ClearCommittedForceMarchManualDestination();
@@ -638,6 +647,7 @@ public sealed class ExecutionService
         ClearCommittedForceMarchManualDestination();
         ClearBossFightCombatGhost("manual leave request");
         ClearTreasureFollowerPostTransitSettle("manual leave request");
+        ResetCompletionTreasureSweep();
         ResetLeaveState();
         explicitLeaveRequested = true;
         if (considerTreasureCoffers)
@@ -654,14 +664,34 @@ public sealed class ExecutionService
 
     internal bool IsLeaveRequested => CurrentMode == OwnershipMode.Leaving && explicitLeaveRequested;
 
-    internal void ResetDutyCompletion() => completedDuty = null;
+    internal void ResetDutyCompletion()
+    {
+        completedDuty = null;
+        ResetCompletionTreasureSweep();
+    }
+
+    private void ResetCompletionTreasureSweep()
+    {
+        CompletionTreasureSweepWithoutExitDuty = null;
+        CompletionTreasureSweepCompleted = false;
+    }
 
     internal void ObserveDutyCompletion(DutyContextSnapshot context)
     {
         // BoundByDuty and duty identity can temporarily disappear during an entrance respawn.
-        if (!context.IsLoggedIn || (!context.IsUnsafeTransition
-            && (!context.InInstancedDuty || completedDuty != (context.TerritoryTypeId, context.ContentFinderConditionId))))
+        if (!context.IsLoggedIn || !context.IsUnsafeTransition && !context.InInstancedDuty)
+        {
             ResetDutyCompletion();
+            return;
+        }
+
+        if (context.IsUnsafeTransition)
+            return;
+        var duty = (context.TerritoryTypeId, context.ContentFinderConditionId);
+        if (completedDuty != duty)
+            completedDuty = null;
+        if (CompletionTreasureSweepWithoutExitDuty is not null && CompletionTreasureSweepWithoutExitDuty != duty)
+            ResetCompletionTreasureSweep();
     }
 
     internal void MarkDutyCompleted(DutyContextSnapshot context, uint territoryId, uint contentId)
@@ -681,6 +711,12 @@ public sealed class ExecutionService
             return false;
         }
 
+        var duty = (context.TerritoryTypeId, context.ContentFinderConditionId);
+        if ((CurrentMode == OwnershipMode.Leaving && !explicitLeaveRequested
+             && activeCompletionTreasureSweepDuty == duty && leaveTreasureSweepStarted)
+            || (CompletionTreasureSweepCompleted && CompletionTreasureSweepWithoutExitDuty == duty))
+            return true;
+
         ReleaseHyperFocus("duty completion treasure sweep");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -690,7 +726,9 @@ public sealed class ExecutionService
         ResetRecoveryHold();
         ResetLeaveState();
         BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
-        releaseAfterCompletionSweep = context.CurrentDuty?.ContentTypeRowId == 30;
+        activeCompletionTreasureSweepDuty = duty;
+        releaseAfterCompletionSweep = context.CurrentDuty?.ContentTypeRowId == 30
+                                      || CompletionTreasureSweepWithoutExitDuty == duty;
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(
             ExecutionPhase.LeavingDuty,
@@ -710,6 +748,7 @@ public sealed class ExecutionService
         ClearBossFightCombatGhost("stop");
         ClearTreasureFollowerPostTransitSettle("stop");
         ResetRecoveryHold();
+        ResetCompletionTreasureSweep();
         ResetLeaveState();
         CurrentMode = string.IsNullOrWhiteSpace(idleStatus)
             ? (context.InInstancedDuty ? OwnershipMode.Observing : OwnershipMode.Idle)
@@ -788,6 +827,7 @@ public sealed class ExecutionService
             ClearCommittedForceMarchManualDestination();
             ClearBossFightCombatGhost("plugin disabled");
             ClearTreasureFollowerPostTransitSettle("plugin disabled");
+            ResetCompletionTreasureSweep();
             ResetLeaveState();
             CurrentMode = OwnershipMode.Idle;
             SetPhase(ExecutionPhase.Idle, "ADS disabled.");
@@ -5024,6 +5064,9 @@ public sealed class ExecutionService
 
         if (releaseAfterCompletionSweep)
         {
+            CompletionTreasureSweepCompleted = considerTreasureCoffers && leaveTreasureSweepStarted
+                && CompletionTreasureSweepWithoutExitDuty == (context.TerritoryTypeId, context.ContentFinderConditionId)
+                && activeCompletionTreasureSweepDuty == CompletionTreasureSweepWithoutExitDuty;
             CompleteDuty(context.CurrentDuty?.EnglishName ?? $"territory {context.TerritoryTypeId}");
             return;
         }
@@ -5249,6 +5292,7 @@ public sealed class ExecutionService
     {
         explicitLeaveRequested = false;
         releaseAfterCompletionSweep = false;
+        activeCompletionTreasureSweepDuty = null;
         leaveRespawnAccepted = false;
         nextLeaveUiAttemptUtc = DateTime.MinValue;
         leaveLootDistributionWaitUntilUtc = DateTime.MinValue;

@@ -93,6 +93,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool DesynthProtectGearsets { get; set; } = true;
     public List<string> DesynthCategories { get; set; } = ["InventoryEquipment"];
     public bool DesynthContextMenuEnabled { get; set; } = true;
+    public bool GearSaleConfirmationEnabled { get; set; } = true;
     public bool WizardHubSeen { get; set; }
     public bool DutyOperationsWizardCompleted { get; set; }
     public bool RulesDataWizardCompleted { get; set; }

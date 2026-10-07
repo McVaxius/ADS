@@ -4104,4 +4104,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Ritardo senza focus (secondi)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>La vendita ai PNG non può iniziare mentre l’automazione di contenuti o locanda controlla ADS.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>La vendita ai PNG richiede un personaggio connesso.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>La vendita ai PNG non è potuta iniziare: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Ricerca di un venditore PNG vicino per vendere.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>Nessun venditore PNG trovato entro {0:0}y; la vendita locale non effettua viaggi.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>Nessun venditore vicino trovato; il viaggio in zona richiede un santuario o un Aetheryte/Aethernet vicino.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>Tempo scaduto in attesa del lavoro di AutoRetainer dopo il comando di vendita ai PNG.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer non ha iniziato attività osservabili dopo il comando di vendita ai PNG.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>L’automazione di contenuti o locanda ha preso il controllo prima della fine della vendita ai PNG.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>In attesa che termini il lavoro di AutoRetainer dopo il comando di vendita ai PNG.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>Il lavoro di AutoRetainer è terminato dopo il comando di vendita ai PNG.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>In attesa che AutoRetainer inizi il lavoro dopo il comando di vendita ai PNG.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Il venditore {0} non è più vicino.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Spostamento verso il venditore {0}.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>In attesa che termini la navigazione ADS verso il venditore.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>Il controllo di ADS o un’interfaccia estranea è cambiato prima del comando di vendita ai PNG.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Venditore {0} raggiunto; preparazione del passaggio ad AutoRetainer.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream ha già del lavoro in corso; il viaggio di vendita ai PNG non è iniziato.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>Il viaggio di vendita ai PNG non è disponibile: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>In attesa che termini il viaggio di vendita ADS tramite Lifestream.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>Lifestream è rimasto occupato dopo la fine del viaggio di vendita ADS; nessun altro viaggio è stato inviato.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>La navigazione di vendita ai PNG non è disponibile: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>La navigazione ha già del lavoro in corso; ADS non ha iniziato l’avvicinamento per la vendita ai PNG.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Pulizia dell’equipaggiamento</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Mostra l’equipaggiamento prima della vendita</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Anteprima vendita equipaggiamento</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>Vendere {0} oggetti di equipaggiamento con nome bianco da {1}?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, slot {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Armeria</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>Entrambi</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Vendi</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>vendita equipaggiamento</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>spostamento equipaggiamento</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>La pulizia richiede un inventario leggibile e la protezione dei set di equipaggiamento.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>Nessun equipaggiamento idoneo con nome bianco trovato.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Anteprima vendita equipaggiamento: {0} oggetti.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Spostamento dell’equipaggiamento con nome bianco nell’inventario.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>La pulizia non può iniziare con la selezione o il controllo attuali.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>La pulizia si è fermata perché il personaggio o la sicurezza dell’automazione sono cambiati.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Chiudi le finestre di venditore o conferma dell’inventario prima della pulizia.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>La pulizia si è fermata perché AutoRetainer controlla le operazioni dell’inventario.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>La pulizia si è fermata perché Lifestream è occupato.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Impossibile verificare la sicurezza della pulizia: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>La pulizia si è fermata perché l’oggetto confermato è cambiato: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Pulizia completata: {0} oggetti elaborati.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>La pulizia non ha potuto verificare lo slot inviato.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>La vendita si è fermata per uno stato di negozio o conferma non supportato.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Lo spostamento non ha potuto verificare l’oggetto esatto nella destinazione.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Avanzamento della pulizia: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>La pulizia non ha osservato il completamento dell’operazione esatta inviata.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Attesa del completamento dell’operazione esatta sull’equipaggiamento.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Inventario pieno: spostati {0} oggetti su {1}; gli altri sono stati conservati.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Lo spostamento non ha potuto inviare lo slot esatto dell’inventario.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>La vendita non ha potuto aprire il venditore selezionato.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Apertura del venditore di equipaggiamento selezionato.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>Venditore {0} raggiunto; preparazione della vendita.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Comandi equipaggiamento: /ads gear move oppure /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Borsa inventario 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Borsa inventario 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Borsa inventario 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Borsa inventario 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Armeria: mano principale</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Armeria: mano secondaria</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Armeria: testa</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Armeria: corpo</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Armeria: mani</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Armeria: gambe</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Armeria: piedi</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Armeria: orecchini</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Armeria: collana</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Armeria: bracciali</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Armeria: anelli</value>
+  </data>
 </root>

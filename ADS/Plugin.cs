@@ -194,6 +194,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly VfxExplorerWindow vfxExplorerWindow;
     private readonly ReflectionWindow reflectionWindow;
     private readonly DesynthesisWindow desynthesisWindow;
+    private readonly GearSalePreviewWindow gearSalePreviewWindow;
     private readonly ShopListsWindow shopListsWindow;
     private readonly WizardWindow wizardWindow;
     private IDtrBarEntry? dtrEntry;
@@ -413,6 +414,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow = new VfxExplorerWindow(this);
         reflectionWindow = new ReflectionWindow(this);
         desynthesisWindow = new DesynthesisWindow(this);
+        gearSalePreviewWindow = new GearSalePreviewWindow(this);
         shopListsWindow = new ShopListsWindow(this);
         wizardWindow = new WizardWindow(this);
         WindowSystem.AddWindow(mainWindow);
@@ -433,6 +435,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(vfxExplorerWindow);
         WindowSystem.AddWindow(reflectionWindow);
         WindowSystem.AddWindow(desynthesisWindow);
+        WindowSystem.AddWindow(gearSalePreviewWindow);
         WindowSystem.AddWindow(shopListsWindow);
         WindowSystem.AddWindow(wizardWindow);
 
@@ -525,6 +528,7 @@ public sealed class Plugin : IDalamudPlugin
         vfxExplorerWindow.Dispose();
         reflectionWindow.Dispose();
         desynthesisWindow.Dispose();
+        gearSalePreviewWindow.Dispose();
         shopListsWindow.Dispose();
         wizardWindow.Dispose();
         Appearance.Dispose();
@@ -1115,6 +1119,23 @@ public sealed class Plugin : IDalamudPlugin
         return true;
     }
 
+    internal string? GetDutyUiActionBlocker(string action)
+    {
+        if (action == "Stop") return null;
+        var context = DutyContextService.Current;
+        if (AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+            || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(context.TerritoryTypeId))
+            return AutomationTerritoryPolicy.InactiveStatus;
+        if (!context.InInstancedDuty)
+            return action switch
+            {
+                "Start Inside" => "Start inside requires being inside instanced duty.",
+                "Resume" => "Resume requires being inside instanced duty.",
+                _ => null,
+            };
+        return null;
+    }
+
     public bool StartDutyFromOutside()
     {
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
@@ -1136,6 +1157,9 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool StartDutyFromInside()
+        => StartDutyFromInside(sweepWithoutExit: false);
+
+    internal bool StartDutyFromInside(bool sweepWithoutExit)
     {
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         if (RejectAutomationActionInExcludedTerritory("Duty start"))
@@ -1145,7 +1169,7 @@ public sealed class Plugin : IDalamudPlugin
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside start", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
-        var result = ExecutionService.StartDutyFromInside(DutyContextService.Current);
+        var result = ExecutionService.StartDutyFromInside(DutyContextService.Current, sweepWithoutExit);
         if (result)
         {
             ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.BeginOwnershipRun());
@@ -1272,6 +1296,7 @@ public sealed class Plugin : IDalamudPlugin
         BossModMultiboxFollowService.Clear("ownership stop");
         TreasureFollowerDutyExitMonitorService.Disarm("ownership stop");
         InnEntryService.Cancel("operator stop");
+        gearSalePreviewWindow?.CloseSelection();
         UtilityAutomationService.Cancel("operator stop");
         var stoppedText = stoppedInn || stoppedUtility
             ? $" Stopped manual automation: {string.Join(", ", new[]
@@ -1566,6 +1591,7 @@ public sealed class Plugin : IDalamudPlugin
     public bool CancelUtility()
     {
         var wasRunning = UtilityAutomationService.IsRunning;
+        gearSalePreviewWindow?.CloseSelection();
         RelicPurchaseTestService.Stop();
         UtilityAutomationService.Cancel("IPC/operator request");
         return wasRunning;
@@ -1755,6 +1781,15 @@ public sealed class Plugin : IDalamudPlugin
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 executionStatus = ExecutionService.LastStatus,
+                completionTreasureSweep = ExecutionService.CompletionTreasureSweepWithoutExitDuty is { } sweepDuty
+                    ? new
+                    {
+                        territoryTypeId = sweepDuty.Territory,
+                        contentFinderConditionId = sweepDuty.Content,
+                        withoutExit = true,
+                        completed = ExecutionService.CompletionTreasureSweepCompleted,
+                    }
+                    : null,
                 treasureDungeonRole = ExecutionService.TreasureDungeonRoleDisplayName,
                 treasureDungeonRoleBehavior = ExecutionService.TreasureDungeonRole.ToString(),
                 effectiveTreasureDungeonRole = DungeonFrontierService.EffectiveTreasureDungeonRole.ToString(),
@@ -3068,6 +3103,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnLogout(int type, int code)
     {
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
+        gearSalePreviewWindow?.CloseSelection();
         UtilityAutomationService.Cancel("logout");
         InnEntryService.Cancel("logout");
         ExecutionService.ResetDutyCompletion();
@@ -3389,6 +3425,13 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("shopper", StringComparison.OrdinalIgnoreCase))
         {
             OpenShopListsUi();
+            return;
+        }
+
+        if (trimmed.Equals("gear", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("gear ", StringComparison.OrdinalIgnoreCase))
+        {
+            HandleGearCleanupCommand(trimmed);
             return;
         }
 
@@ -3729,6 +3772,40 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         return true;
+    }
+
+    private void HandleGearCleanupCommand(string command)
+    {
+        if (command.Equals("gear move", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!CanStartManualUtility("equipment moving")) return;
+            gearSalePreviewWindow.CloseSelection();
+            UtilityAutomationService.StartGearMove();
+            PrintStatus(UtilityAutomationService.StatusMessage);
+            return;
+        }
+        var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 3 || !parts[1].Equals("sell", StringComparison.OrdinalIgnoreCase)
+            || !Enum.TryParse<GearCleanupScope>(parts[2], true, out var scope) || !Enum.IsDefined(scope)
+            || !parts[2].Equals(scope.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            PrintStatus("Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both.");
+            return;
+        }
+        if (!CanStartManualUtility("equipment selling")) return;
+        gearSalePreviewWindow.CloseSelection();
+        if (!UtilityAutomationService.TryPreviewGearSale(scope, out var selection))
+        { PrintStatus(UtilityAutomationService.StatusMessage); return; }
+        if (Configuration.GearSaleConfirmationEnabled) gearSalePreviewWindow.Show(selection!);
+        else StartConfirmedGearSale(selection!);
+    }
+
+    internal bool StartConfirmedGearSale(GearCleanupSelection selection)
+    {
+        if (!CanStartManualUtility("equipment selling")) return false;
+        var accepted = UtilityAutomationService.StartGearSale(selection);
+        PrintStatus(UtilityAutomationService.StatusMessage);
+        return accepted;
     }
 
     private bool RejectAutomationActionInExcludedTerritory(string actionLabel)

@@ -3746,4 +3746,220 @@
   <data name="Unfocused delay (seconds)" xml:space="preserve">
     <value>Odak kaybı gecikmesi (saniye)</value>
   </data>
+  <data name="NPC selling cannot start while duty or inn automation owns ADS." xml:space="preserve">
+    <value>Görev veya han otomasyonu ADS'yi yönetirken NPC satışı başlatılamaz.</value>
+  </data>
+  <data name="NPC selling requires a logged-in character." xml:space="preserve">
+    <value>NPC satışı için giriş yapmış bir karakter gerekir.</value>
+  </data>
+  <data name="NPC selling could not start: {0}" xml:space="preserve">
+    <value>NPC satışı başlatılamadı: {0}</value>
+  </data>
+  <data name="Looking for a nearby NPC vendor for selling." xml:space="preserve">
+    <value>Satış için yakındaki bir NPC satıcısı aranıyor.</value>
+  </data>
+  <data name="No NPC sale vendor found within {0:0}y; local-only selling does not travel." xml:space="preserve">
+    <value>{0:0}y içinde NPC satıcısı bulunamadı; yalnızca yerel satış seyahat etmez.</value>
+  </data>
+  <data name="No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet." xml:space="preserve">
+    <value>Yakında satış NPC'si bulunamadı; saha yolculuğu için bir sığınak veya yakında Aetheryte/Aethernet gerekir.</value>
+  </data>
+  <data name="Timed out waiting for AutoRetainer work after the NPC sale command." xml:space="preserve">
+    <value>NPC satış komutundan sonra AutoRetainer işi beklenirken zaman aşımı oldu.</value>
+  </data>
+  <data name="AutoRetainer did not start observable work after the NPC sale command." xml:space="preserve">
+    <value>AutoRetainer, NPC satış komutundan sonra gözlemlenebilir bir iş başlatmadı.</value>
+  </data>
+  <data name="Duty or inn automation took ownership before the NPC sale finished." xml:space="preserve">
+    <value>Görev veya han otomasyonu NPC satışı bitmeden yönetimi devraldı.</value>
+  </data>
+  <data name="Waiting for AutoRetainer work after the NPC sale command to settle." xml:space="preserve">
+    <value>NPC satış komutundan sonraki AutoRetainer işinin bitmesi bekleniyor.</value>
+  </data>
+  <data name="AutoRetainer work settled after the NPC sale command." xml:space="preserve">
+    <value>NPC satış komutundan sonraki AutoRetainer işi sona erdi.</value>
+  </data>
+  <data name="Waiting for AutoRetainer to start work after the NPC sale command." xml:space="preserve">
+    <value>NPC satış komutundan sonra AutoRetainer'ın işe başlaması bekleniyor.</value>
+  </data>
+  <data name="Sale vendor {0} is no longer nearby." xml:space="preserve">
+    <value>Satıcı {0} artık yakında değil.</value>
+  </data>
+  <data name="Moving to sale vendor {0}." xml:space="preserve">
+    <value>Satıcı {0} konumuna gidiliyor.</value>
+  </data>
+  <data name="Waiting for ADS vendor navigation to settle." xml:space="preserve">
+    <value>ADS'nin satıcıya gezinmesinin bitmesi bekleniyor.</value>
+  </data>
+  <data name="ADS ownership or unrelated UI changed before the NPC sale command." xml:space="preserve">
+    <value>NPC satış komutundan önce ADS yönetimi veya ilgisiz arayüz değişti.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing the AutoRetainer handoff." xml:space="preserve">
+    <value>Satıcı {0} konumuna ulaşıldı; AutoRetainer'a devir hazırlanıyor.</value>
+  </data>
+  <data name="Lifestream already owns work; NPC sale travel was not started." xml:space="preserve">
+    <value>Lifestream zaten çalışıyor; NPC satış yolculuğu başlatılmadı.</value>
+  </data>
+  <data name="NPC sale travel is unavailable: {0}" xml:space="preserve">
+    <value>NPC satış yolculuğu kullanılamıyor: {0}</value>
+  </data>
+  <data name="Waiting for ADS sale travel through Lifestream to finish." xml:space="preserve">
+    <value>ADS satış yolculuğunun Lifestream üzerinden bitmesi bekleniyor.</value>
+  </data>
+  <data name="Lifestream remained busy after ADS sale travel ended; no further travel was sent." xml:space="preserve">
+    <value>ADS satış yolculuğu bittikten sonra Lifestream meşgul kaldı; başka yolculuk gönderilmedi.</value>
+  </data>
+  <data name="NPC sale navigation is unavailable: {0}" xml:space="preserve">
+    <value>NPC satış gezinmesi kullanılamıyor: {0}</value>
+  </data>
+  <data name="Navigation already owns work; ADS did not start the NPC sale approach." xml:space="preserve">
+    <value>Gezinme zaten çalışıyor; ADS, NPC satışı için yaklaşmayı başlatmadı.</value>
+  </data>
+  <data name="Equipment cleanup" xml:space="preserve">
+    <value>Ekipman temizliği</value>
+  </data>
+  <data name="Preview equipment before selling" xml:space="preserve">
+    <value>Satmadan önce ekipmanı önizle</value>
+  </data>
+  <data name="Equipment sale preview" xml:space="preserve">
+    <value>Ekipman satış önizlemesi</value>
+  </data>
+  <data name="Sell {0} white-name equipment items from {1}?" xml:space="preserve">
+    <value>{1} içinden beyaz adlı {0} ekipman satılsın mı?</value>
+  </data>
+  <data name="{0} - {1}, slot {2}" xml:space="preserve">
+    <value>{0} - {1}, yuva {2}</value>
+  </data>
+  <data name="Armoury" xml:space="preserve">
+    <value>Cephanelik</value>
+  </data>
+  <data name="Both" xml:space="preserve">
+    <value>İkisi</value>
+  </data>
+  <data name="Sell" xml:space="preserve">
+    <value>Sat</value>
+  </data>
+  <data name="equipment selling" xml:space="preserve">
+    <value>ekipman satışı</value>
+  </data>
+  <data name="equipment moving" xml:space="preserve">
+    <value>ekipman taşıma</value>
+  </data>
+  <data name="Equipment cleanup requires readable inventory and gearset protection." xml:space="preserve">
+    <value>Ekipman temizliği için okunabilir envanter ve ekipman seti koruması gerekir.</value>
+  </data>
+  <data name="No eligible white-name equipment was found." xml:space="preserve">
+    <value>Uygun beyaz adlı ekipman bulunamadı.</value>
+  </data>
+  <data name="Equipment sale preview: {0} items." xml:space="preserve">
+    <value>Ekipman satış önizlemesi: {0} eşya.</value>
+  </data>
+  <data name="Moving white-name equipment into inventory." xml:space="preserve">
+    <value>Beyaz adlı ekipman envantere taşınıyor.</value>
+  </data>
+  <data name="Equipment cleanup cannot start with the current selection or ownership." xml:space="preserve">
+    <value>Geçerli seçim veya kontrol ile ekipman temizliği başlatılamaz.</value>
+  </data>
+  <data name="Equipment cleanup stopped because character or automation safety changed." xml:space="preserve">
+    <value>Karakter veya otomasyon güvenliği değiştiği için ekipman temizliği durdu.</value>
+  </data>
+  <data name="Close existing vendor or inventory confirmation UI before equipment cleanup." xml:space="preserve">
+    <value>Ekipman temizliğinden önce açık satıcı veya envanter onay pencerelerini kapatın.</value>
+  </data>
+  <data name="Equipment cleanup stopped because AutoRetainer owns inventory work." xml:space="preserve">
+    <value>AutoRetainer envanter işini yönettiği için ekipman temizliği durdu.</value>
+  </data>
+  <data name="Equipment cleanup stopped because Lifestream is busy." xml:space="preserve">
+    <value>Lifestream meşgul olduğu için ekipman temizliği durdu.</value>
+  </data>
+  <data name="Equipment cleanup safety could not be verified: {0}" xml:space="preserve">
+    <value>Ekipman temizliğinin güvenliği doğrulanamadı: {0}</value>
+  </data>
+  <data name="Equipment cleanup stopped because the confirmed item changed: {0}." xml:space="preserve">
+    <value>Onaylanan eşya değiştiği için ekipman temizliği durdu: {0}.</value>
+  </data>
+  <data name="Equipment cleanup finished: {0} items processed." xml:space="preserve">
+    <value>Ekipman temizliği tamamlandı: {0} eşya işlendi.</value>
+  </data>
+  <data name="Equipment cleanup could not verify the submitted inventory slot." xml:space="preserve">
+    <value>Gönderilen envanter yuvası doğrulanamadı.</value>
+  </data>
+  <data name="Equipment selling stopped at an unsupported shop or confirmation state." xml:space="preserve">
+    <value>Ekipman satışı desteklenmeyen mağaza veya onay durumunda durdu.</value>
+  </data>
+  <data name="Equipment move could not verify its exact destination item." xml:space="preserve">
+    <value>Taşınan ekipmanın hedefteki tam eşyası doğrulanamadı.</value>
+  </data>
+  <data name="Equipment cleanup progress: {0}/{1}." xml:space="preserve">
+    <value>Ekipman temizliği ilerlemesi: {0}/{1}.</value>
+  </data>
+  <data name="Equipment cleanup did not observe the exact submitted operation finish." xml:space="preserve">
+    <value>Gönderilen tam işlemin tamamlandığı gözlenmedi.</value>
+  </data>
+  <data name="Waiting for the exact equipment operation to finish." xml:space="preserve">
+    <value>Tam ekipman işleminin tamamlanması bekleniyor.</value>
+  </data>
+  <data name="Inventory is full: moved {0} of {1} items; remaining items were kept." xml:space="preserve">
+    <value>Envanter dolu: {1} eşyadan {0} tanesi taşındı; kalanlar korundu.</value>
+  </data>
+  <data name="Equipment move could not submit its exact inventory slot." xml:space="preserve">
+    <value>Taşıma için tam envanter yuvası gönderilemedi.</value>
+  </data>
+  <data name="Equipment selling could not open the selected vendor." xml:space="preserve">
+    <value>Ekipman satışı için seçilen satıcı açılamadı.</value>
+  </data>
+  <data name="Opening the selected equipment vendor." xml:space="preserve">
+    <value>Seçilen ekipman satıcısı açılıyor.</value>
+  </data>
+  <data name="Reached sale vendor {0}; preparing equipment selling." xml:space="preserve">
+    <value>{0} satıcısına ulaşıldı; ekipman satışı hazırlanıyor.</value>
+  </data>
+  <data name="Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both." xml:space="preserve">
+    <value>Ekipman komutları: /ads gear move veya /ads gear sell armoury|inventory|both.</value>
+  </data>
+  <data name="Inventory bag 1" xml:space="preserve">
+    <value>Envanter çantası 1</value>
+  </data>
+  <data name="Inventory bag 2" xml:space="preserve">
+    <value>Envanter çantası 2</value>
+  </data>
+  <data name="Inventory bag 3" xml:space="preserve">
+    <value>Envanter çantası 3</value>
+  </data>
+  <data name="Inventory bag 4" xml:space="preserve">
+    <value>Envanter çantası 4</value>
+  </data>
+  <data name="Armoury main hand" xml:space="preserve">
+    <value>Cephanelik: ana el</value>
+  </data>
+  <data name="Armoury off hand" xml:space="preserve">
+    <value>Cephanelik: yan el</value>
+  </data>
+  <data name="Armoury head" xml:space="preserve">
+    <value>Cephanelik: baş</value>
+  </data>
+  <data name="Armoury body" xml:space="preserve">
+    <value>Cephanelik: gövde</value>
+  </data>
+  <data name="Armoury hands" xml:space="preserve">
+    <value>Cephanelik: eller</value>
+  </data>
+  <data name="Armoury legs" xml:space="preserve">
+    <value>Cephanelik: bacaklar</value>
+  </data>
+  <data name="Armoury feet" xml:space="preserve">
+    <value>Cephanelik: ayaklar</value>
+  </data>
+  <data name="Armoury earrings" xml:space="preserve">
+    <value>Cephanelik: küpeler</value>
+  </data>
+  <data name="Armoury necklace" xml:space="preserve">
+    <value>Cephanelik: kolye</value>
+  </data>
+  <data name="Armoury bracelets" xml:space="preserve">
+    <value>Cephanelik: bilezikler</value>
+  </data>
+  <data name="Armoury rings" xml:space="preserve">
+    <value>Cephanelik: yüzükler</value>
+  </data>
 </root>
