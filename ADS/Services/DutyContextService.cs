@@ -95,6 +95,8 @@ public sealed class DutyContextService
             WatchingCutscene = condition[ConditionFlag.WatchingCutscene],
             InCombat = condition[ConditionFlag.InCombat],
             Mounted = condition[ConditionFlag.Mounted],
+            Casting = condition[ConditionFlag.Casting] || condition[ConditionFlag.Casting87],
+            Occupied39 = condition[ConditionFlag.Occupied39],
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,

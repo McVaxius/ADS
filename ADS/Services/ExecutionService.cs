@@ -14,7 +14,7 @@ using MountSheet = Lumina.Excel.Sheets.Mount;
 
 namespace ADS.Services;
 
-public sealed class ExecutionService
+public sealed partial class ExecutionService
 {
     internal Func<bool> QueryPhoenixDownRecoveryHold { get; set; } = () => false;
     public bool IsPhoenixDownRecoveryHoldActive { get; private set; }
@@ -143,6 +143,11 @@ public sealed class ExecutionService
     private uint committedInteractableMapId;
     private PlannerObjectiveKind committedInteractableObjectiveKind = PlannerObjectiveKind.None;
     private ulong lastInteractGameObjectId;
+    private bool interactionAttemptDispatched;
+    private ulong interactionCancellationGeneration;
+    private DateTime interactionDispatchSettleUntilUtc;
+    private (uint Territory, uint Content) interactionAttemptDuty;
+    private OwnershipMode interactionAttemptOwnerMode;
     private DateTime nextInteractAttemptUtc;
     private string? treasureDoorLockonBeforeRetryKey;
     private DateTime nextNavigationCommandUtc;
@@ -566,6 +571,7 @@ public sealed class ExecutionService
 
     public bool StartDutyFromOutside()
     {
+        CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("outside start");
         ClearInteractableCommitment();
@@ -580,6 +586,7 @@ public sealed class ExecutionService
 
     public bool StartDutyFromInside(DutyContextSnapshot context, bool sweepWithoutExit = false)
     {
+        CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside start");
         ClearInteractableCommitment();
@@ -608,6 +615,7 @@ public sealed class ExecutionService
 
     public bool ResumeDutyFromInside(DutyContextSnapshot context)
     {
+        CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside resume");
         ClearInteractableCommitment();
@@ -641,6 +649,7 @@ public sealed class ExecutionService
             return false;
         }
 
+        CancelInteractionPause();
         ReleaseHyperFocus("leave request");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -717,6 +726,7 @@ public sealed class ExecutionService
             || (CompletionTreasureSweepCompleted && CompletionTreasureSweepWithoutExitDuty == duty))
             return true;
 
+        CancelInteractionPause();
         ReleaseHyperFocus("duty completion treasure sweep");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -739,6 +749,7 @@ public sealed class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        CancelInteractionPause();
         IsPhoenixDownRecoveryHoldActive = false;
         ReleaseHyperFocus("stop");
         InterruptCardinalHold("stop");
@@ -762,6 +773,7 @@ public sealed class ExecutionService
 
     public void CompleteDuty(string dutyName)
     {
+        CancelInteractionPause();
         ReleaseHyperFocus("duty complete");
         ResetCardinalHolds("duty complete");
         StopMovementAssists();
@@ -790,6 +802,12 @@ public sealed class ExecutionService
         bool sessionDebugEnabled = false)
     {
         if (RefreshPhoenixDownRecoveryHold(context, pluginEnabled))
+        {
+            CancelInteractionPause();
+            return;
+        }
+        if (RefreshInteractionActionHold(context, pluginEnabled,
+                interactionAttemptDispatched && IsNativeInteractionActive(context), DateTime.UtcNow))
             return;
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateDebugRuleCommand(context, planner, pluginEnabled, sessionDebugEnabled);
@@ -943,6 +961,55 @@ public sealed class ExecutionService
         ResetLeaveState();
         CurrentMode = OwnershipMode.Idle;
         SetPhase(ExecutionPhase.Idle, "Idle.");
+    }
+
+    internal Func<bool> QueryInteractionDialog { get; set; } = () =>
+        GameInteractionHelper.IsAddonVisible("SelectYesno")
+        || GameInteractionHelper.IsAddonVisible("SelectString")
+        || GameInteractionHelper.IsAddonVisible("SelectIconString")
+        || GameInteractionHelper.IsAddonVisible("Talk");
+
+    private bool IsNativeInteractionActive(DutyContextSnapshot context)
+        => context.IsInteractionActionActive || QueryInteractionDialog();
+
+    internal void CancelInteractionPause()
+    {
+        unchecked { interactionCancellationGeneration++; }
+        interactionAttemptDispatched = false;
+        interactionDispatchSettleUntilUtc = DateTime.MinValue;
+        interactionAttemptDuty = default;
+        ReleaseInteractionVbmPause(null, allowRestore: false);
+    }
+
+    internal bool RefreshInteractionActionHold(DutyContextSnapshot context, bool pluginEnabled,
+        bool nativeInteractionActive, DateTime now)
+    {
+        if (!pluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.IsUnsafeTransition
+            || !(IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving)
+            || interactionAttemptDispatched && (interactionAttemptDuty != (context.TerritoryTypeId, context.ContentFinderConditionId)
+                || interactionAttemptOwnerMode != CurrentMode))
+        {
+            CancelInteractionPause();
+            return false;
+        }
+
+        if (!interactionAttemptDispatched)
+            return false;
+
+        // The original settle time is only a floor. An active action or dialog
+        // keeps movement and VBM paused regardless of the retry timer.
+        if (nativeInteractionActive || now < interactionDispatchSettleUntilUtc)
+        {
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.AttemptingInteractableObjective,
+                "Interaction is active; ADS is holding movement until the native action and dialog finish.");
+            return true;
+        }
+
+        interactionAttemptDispatched = false;
+        interactionDispatchSettleUntilUtc = DateTime.MinValue;
+        ReleaseInteractionVbmPause(context, allowRestore: true);
+        return false;
     }
 
     private void UpdateDebugRuleCommand(
@@ -3465,6 +3532,14 @@ public sealed class ExecutionService
 
     private void TryAdvanceInteractableObjective(DutyContextSnapshot context, ObservedInteractable observedInteractable, string prefix)
     {
+        // Check native action/dialog truth before out-of-range retry navigation.
+        if (IsNativeInteractionActive(context))
+        {
+            StopMovementAssists();
+            SetPhase(ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} Interaction is already active; ADS is retaining {observedInteractable.Name} and will not send another direct interact until it finishes.");
+            return;
+        }
         var gameObject = ResolveGameObject(observedInteractable);
         if (gameObject is null)
         {
@@ -3567,9 +3642,31 @@ public sealed class ExecutionService
             return;
         }
 
-        var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
-        if (TryInteractWithObject(gameObject))
+        var cancellationGeneration = interactionCancellationGeneration;
+        var vbmPaused = TryPauseInteractionVbm(context);
+        if (cancellationGeneration != interactionCancellationGeneration)
+            return;
+        if (!vbmPaused)
         {
+            StopMovementAssists();
+            lastInteractGameObjectId = observedInteractable.GameObjectId;
+            nextInteractAttemptUtc = now + InteractAttemptCooldown;
+            SetPhase(ExecutionPhase.AttemptingInteractableObjective,
+                $"{prefix} VBM interaction pause could not be verified; direct interaction was not sent.");
+            return;
+        }
+        var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
+        if (cancellationGeneration != interactionCancellationGeneration)
+            return;
+        var interacted = TryInteractWithObject(gameObject);
+        if (cancellationGeneration != interactionCancellationGeneration)
+            return;
+        if (interacted)
+        {
+            interactionAttemptDispatched = true;
+            interactionDispatchSettleUntilUtc = now + InteractAttemptCooldown;
+            interactionAttemptDuty = (context.TerritoryTypeId, context.ContentFinderConditionId);
+            interactionAttemptOwnerMode = CurrentMode;
             var isTreasureFollowerLoot = committedInteractableObjectiveKind == PlannerObjectiveKind.TreasureFollowerLoot
                 && observedInteractable.Classification == InteractableClass.TreasureCoffer;
             var isTreasureFollowerLootFollowThrough = isTreasureFollowerLoot
@@ -3659,6 +3756,9 @@ public sealed class ExecutionService
             return;
         }
 
+        ReleaseInteractionVbmPause(context, allowRestore: true);
+        if (cancellationGeneration != interactionCancellationGeneration)
+            return;
         nextInteractAttemptUtc = now + InteractAttemptCooldown;
         if (targetDistance > PreferredInteractArrivalRange)
         {
@@ -4305,7 +4405,7 @@ public sealed class ExecutionService
             return true;
         }
 
-        if (context.IsInteractionOccupied)
+        if (context.IsInteractionActionActive)
         {
             StopMovementAssists();
             SetPhase(
@@ -6027,11 +6127,19 @@ public sealed class ExecutionService
         }
     }
 
+    internal Func<IGameObject, bool>? DispatchInteractionOverride { get; set; }
+
     private unsafe bool TryInteractWithObject(IGameObject gameObject)
     {
         try
         {
+            var cancellationGeneration = interactionCancellationGeneration;
             targetManager.Target = gameObject;
+            if (cancellationGeneration != interactionCancellationGeneration)
+                return false;
+
+            if (DispatchInteractionOverride is { } dispatch)
+                return dispatch(gameObject);
 
             var targetSystem = TargetSystem.Instance();
             if (targetSystem == null)

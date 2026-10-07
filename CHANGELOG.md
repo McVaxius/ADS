@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - VBM interaction hold (I466)
+
+- Pause the captured VBM AI and active presets immediately before ADS interaction, retaining the exact original state for guarded restoration. Keep BMR enabled. Hold ADS movement and VBM through native interaction actions, casting and dialogs beyond the existing retry timer; discard restoration after stop, logout, transition or ownership/provider changes.
+- Publish the transient VBM interaction hold in the existing status JSON so confirmed FrenRider and MOGTOME activation paths can defer until the interaction ends. No saved settings, new endpoint, dependency or generic lease service is added. Live acceptance remains user-controlled.
+- Focused interaction, provider pause, duty context and recovery checks pass 113/113 with no failures or skips. The unchanged ADS launcher builds Debug/x64 with zero errors and two existing obsolete-distance warnings; the earlier dispatch-fixture failures are not a passing run.
+## Unreleased - Button sizing
+
+- Use local Toolbar metrics for ordinary buttons, growing from 30 pixels in Standard or 24 in Compact for the active font while retaining native labels, actions and small/dense control sizing.
+- Current Debug/x64 compilation passes. The final ordinary-wrapper native route passes 9,329 checks in sixteen scenes with 96 pointer activations, exit 0. The separate icon route retains four height-expectation failures while its caption/icon containment, IDs, activation and restoration checks pass; its expectation adds padding around the retained icon geometry beyond the existing sizing rule. No full native-matrix pass or game acceptance is claimed.
+
 ## Unreleased - Managed CJK font atlas
 
 - Merge one bundled CJK face per font role, selecting the active language's regional forms. Set both managed atlas dimensions to 4096 on every rebuild; preserve font heights, required glyph ranges, symbol merges and host-language coverage.

@@ -3946,4 +3946,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>शस्त्रागार: अंगूठियाँ</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>बातचीत जारी है; खेल की कार्रवाई और संवाद समाप्त होने तक ADS गति रोककर रखता है।</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} बातचीत के लिए VBM का विराम सत्यापित नहीं हो सका; सीधी बातचीत नहीं भेजी गई।</value></data>
 </root>

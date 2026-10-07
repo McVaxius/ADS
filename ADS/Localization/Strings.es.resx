@@ -11390,4 +11390,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Arsenal: anillos</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Hay una interacción activa; ADS detiene el movimiento hasta que terminen la acción del juego y el diálogo.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} No se pudo verificar la pausa de VBM para la interacción; no se envió la interacción directa.</value></data>
 </root>

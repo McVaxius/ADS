@@ -50,11 +50,12 @@ internal static class WindowLayout
 
     internal static bool Button(string nativeLabel, Vector2 size = default, MaterialIcon icon = MaterialIcon.None)
     {
-        size.X = MaterialLayout.FitNextItemWidth(size.X, Math.Max(size.X, ButtonMinimum(nativeLabel, icon)));
-        if (size.Y > 0) size.Y = Math.Max(size.Y, ImGui.GetFrameHeight());
-        if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0])) return ImGui.Button(nativeLabel, size);
+        using var controls = ImGui.GetStyle().FramePadding.Y == 0 || MaterialControls.Context == MaterialControlContext.Dense
+            ? default(MaterialControls.ControlScope) : MaterialControls.Push(MaterialControlContext.Toolbar);
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
-        if (size.Y > 0) size.Y = Math.Max(size.Y, ImGui.GetFrameHeight());
+        size.X = MaterialLayout.FitNextItemWidth(size.X, Math.Max(size.X, ButtonMinimum(nativeLabel, icon)));
+        size.Y = Math.Max(size.Y, Math.Max(ImGui.GetFrameHeight(), icon == MaterialIcon.None ? 0 : 20 * MaterialTheme.Metrics.Scale));
+        if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0])) return ImGui.Button(nativeLabel, size);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         var clicked = ImGui.Button(nativeLabel, size);
         ImGui.PopStyleColor();

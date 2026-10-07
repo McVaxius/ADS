@@ -3962,4 +3962,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Kho vũ khí: nhẫn</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Đang tương tác; ADS dừng di chuyển cho đến khi hành động trong trò chơi và hộp thoại kết thúc.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Không thể xác minh việc tạm dừng VBM khi tương tác; chưa gửi tương tác trực tiếp.</value></data>
 </root>

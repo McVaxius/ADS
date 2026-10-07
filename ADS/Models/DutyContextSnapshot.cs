@@ -17,6 +17,8 @@ public sealed class DutyContextSnapshot
     public required bool WatchingCutscene { get; init; }
     public required bool InCombat { get; init; }
     public required bool Mounted { get; init; }
+    public bool Casting { get; init; }
+    public bool Occupied39 { get; init; }
     public required uint TerritoryTypeId { get; init; }
     public required uint MapId { get; init; }
     public required uint ContentFinderConditionId { get; init; }
@@ -32,6 +34,9 @@ public sealed class DutyContextSnapshot
 
     public bool IsInteractionOccupied
         => OccupiedInQuestEvent || OccupiedInEvent;
+
+    public bool IsInteractionActionActive
+        => IsInteractionOccupied || Casting || Occupied39 || OccupiedInCutSceneEvent || WatchingCutscene;
 
     public bool IsTreasureRouteTransitHold
         => BetweenAreas

@@ -4320,4 +4320,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Оружейная: кольца</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Взаимодействие активно; ADS удерживает персонажа на месте до завершения игрового действия и диалога.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Не удалось подтвердить паузу VBM для взаимодействия; прямое взаимодействие не отправлено.</value></data>
 </root>

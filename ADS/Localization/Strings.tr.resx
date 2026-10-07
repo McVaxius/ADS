@@ -3962,4 +3962,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Cephanelik: yüzükler</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Etkileşim sürüyor; ADS, oyun içi eylem ve iletişim kutusu bitene kadar hareketi durdurur.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Etkileşim için VBM duraklatması doğrulanamadı; doğrudan etkileşim gönderilmedi.</value></data>
 </root>

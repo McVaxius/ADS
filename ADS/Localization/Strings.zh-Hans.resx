@@ -11390,4 +11390,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>兵装库：戒指</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>交互正在进行；ADS 将保持停止移动，直到游戏内动作和对话结束。</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} 无法验证交互期间的 VBM 暂停状态；未发送直接交互。</value></data>
 </root>

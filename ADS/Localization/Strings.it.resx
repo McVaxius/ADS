@@ -4320,4 +4320,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Armeria: anelli</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>È in corso un’interazione; ADS mantiene fermo il personaggio fino al termine dell’azione di gioco e del dialogo.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Non è stato possibile verificare la pausa di VBM per l’interazione; l’interazione diretta non è stata inviata.</value></data>
 </root>

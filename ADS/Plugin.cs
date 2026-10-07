@@ -480,6 +480,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        ExecutionService.CancelInteractionPause();
         XaSlaveSkipperService.EndOwnershipRun();
         CameraRecoveryService.Dispose();
         DebugStrafeService.Release("plugin dispose");
@@ -1780,6 +1781,8 @@ public sealed class Plugin : IDalamudPlugin
                     : null,
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
+                interactionVbmPauseActive = ExecutionService.IsInteractionVbmPauseActive,
+                interactionVbmPauseStatus = ExecutionService.InteractionVbmPauseStatus,
                 executionStatus = ExecutionService.LastStatus,
                 completionTreasureSweep = ExecutionService.CompletionTreasureSweepWithoutExitDuty is { } sweepDuty
                     ? new
@@ -1940,6 +1943,8 @@ public sealed class Plugin : IDalamudPlugin
                 objective = ObjectivePlannerService.Current.Objective,
                 explanation = ObjectivePlannerService.Current.Explanation,
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
+                interactionVbmPauseActive = ExecutionService.IsInteractionVbmPauseActive,
+                interactionVbmPauseStatus = ExecutionService.InteractionVbmPauseStatus,
                 executionStatus = ExecutionService.LastStatus,
                 treasureDungeonRole = ExecutionService.TreasureDungeonRoleDisplayName,
                 treasureDungeonRoleBehavior = ExecutionService.TreasureDungeonRole.ToString(),
@@ -3102,6 +3107,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnLogout(int type, int code)
     {
+        ExecutionService.CancelInteractionPause();
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         gearSalePreviewWindow?.CloseSelection();
         UtilityAutomationService.Cancel("logout");

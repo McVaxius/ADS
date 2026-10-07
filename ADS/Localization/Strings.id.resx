@@ -3962,4 +3962,6 @@
   <data name="Armoury rings" xml:space="preserve">
     <value>Gudang senjata: cincin</value>
   </data>
+  <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Interaksi sedang berlangsung; ADS menahan pergerakan sampai aksi dalam game dan dialog selesai.</value></data>
+  <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Jeda VBM untuk interaksi tidak dapat diverifikasi; interaksi langsung tidak dikirim.</value></data>
 </root>
