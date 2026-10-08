@@ -3964,4 +3964,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Trwa interakcja; ADS wstrzymuje ruch do zakończenia akcji w grze i dialogu.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Nie udało się zweryfikować wstrzymania VBM na czas interakcji; bezpośrednia interakcja nie została wysłana.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Podróże są wyłączone dla tego zakupu; ADS nie wykonał teleportacji.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Podróże są wyłączone dla tego zakupu; wybrany sprzedawca jest poza zasięgiem interakcji.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interakcja z pobliskim {0} bez podróży.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Podróże są wyłączone dla tego zakupu; ADS nie rozpoczął nawigacji.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Podróże są wyłączone dla tego zakupu; wybrany sprzedawca nie jest już w zasięgu interakcji.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Sprawdzanie pobliskiego alternatywnego sprzedawcy {0} bez podróży.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Podróże są wyłączone dla tego zakupu; żaden obsługiwany sprzedawca nie jest w zasięgu interakcji i nie można ponownie użyć żadnego sklepu kontrolowanego przez ADS.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Przy zakupie z określoną walutą podane allowTravel musi być wartością logiczną.</value>
+  </data>
 </root>

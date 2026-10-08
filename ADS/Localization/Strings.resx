@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Interaction is active; ADS is holding movement until the native action and dialog finish.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} VBM interaction pause could not be verified; direct interaction was not sent.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Travel is disabled for this purchase; ADS did not teleport.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Travel is disabled for this purchase; the selected vendor is not within interaction reach.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interacting with nearby {0} without travel.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Travel is disabled for this purchase; ADS did not start navigation.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Travel is disabled for this purchase; the selected vendor is no longer within interaction reach.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Checking nearby fallback {0} without travel.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Currency purchase allowTravel must be a boolean when provided.</value>
+  </data>
 </root>

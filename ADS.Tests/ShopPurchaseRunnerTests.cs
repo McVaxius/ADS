@@ -23,8 +23,206 @@ public sealed class ShopPurchaseRunnerTests
         Assert.True(ShopPurchaseRequest.TryParseCurrencyJson(json, out var request, out var currency, out var error), error);
         Assert.Equal("vmx-owned", request.OperationId);
         Assert.Equal(200, request.MaximumCurrencySpend);
+        Assert.True(request.AllowTravel);
         Assert.Equal(itemId, currency.ItemId);
         Assert.Equal(kind, ShopOfferSelector.CurrencyKindName(currency.Kind));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CurrencyRequestsPreserveExplicitTravelChoice(bool allowTravel)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        { operationId = "stock-owner", itemId = 100, quantity = 3, currencyKind = "gil", currencyItemId = 1, maximumCurrencySpend = 200L, allowTravel });
+        Assert.True(ShopPurchaseRequest.TryParseCurrencyJson(json, out var request, out _, out var error), error);
+        Assert.Equal(allowTravel, request.AllowTravel);
+        Assert.Equal("stock-owner", request.OperationId);
+        Assert.Equal(200, request.MaximumCurrencySpend);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("0")]
+    [InlineData("\"false\"")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public void CurrencyRequestsRejectMalformedTravelChoice(string travelJson)
+    {
+        var json = "{\"operationId\":\"stock-owner\",\"itemId\":100,\"quantity\":1,\"currencyKind\":\"gil\",\"currencyItemId\":1,\"maximumCurrencySpend\":200,\"allowTravel\":" + travelJson + "}";
+        Assert.False(ShopPurchaseRequest.TryParseCurrencyJson(json, out _, out _, out var error));
+        Assert.Contains("allowTravel", error);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(true)]
+    public void LegacyAndExplicitTravelRequestsRetainTeleportAndApproach(bool? allowTravel)
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [Offer(10, 100, 1, 2)])), runtime, new FakeClock());
+        var request = new ShopPurchaseRequest(100, 1);
+        if (allowTravel.HasValue) request = request with { AllowTravel = allowTravel.Value };
+        Assert.True(request.AllowTravel);
+        Assert.True(runner.Start(request));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runtime.TeleportCount);
+        Assert.Equal(1, runtime.MoveCount);
+    }
+
+    [Theory]
+    [InlineData("remote")]
+    [InlineData("distant")]
+    [InlineData("missing")]
+    [InlineData("required-approach")]
+    public void LocalOnlyRequestsFailWithoutTeleportApproachOrFloorQueries(string scenario)
+    {
+        var runtime = new FakeRuntime { HasVnavmesh = false, HasLifestream = false };
+        var offer = Offer(10, 100, 1, scenario == "remote" ? 2u : 1u);
+        if (scenario == "distant") runtime.NpcDistances[100] = 20;
+        if (scenario == "missing")
+        {
+            runtime.MissingNpcIds.Add(100);
+            offer = offer with { RequiresFloorResolution = true };
+        }
+        if (scenario == "required-approach")
+        {
+            runtime.CurrentTerritoryId = 156;
+            offer = offer with { NpcId = 1008119, TerritoryId = 156 };
+        }
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, new FakeClock());
+        var request = new ShopPurchaseRequest(100, 1) { AllowTravel = false };
+        Assert.Equal(ShopPurchaseFailureCodes.NoRoute, runner.Preview(request).FailureCode);
+        Assert.True(runner.Start(request));
+        Drive(runner);
+        Assert.Equal(ShopPurchaseFailureCodes.NoRoute, runner.Status.FailureCode);
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.AethernetTransfers);
+        Assert.Equal(0, runtime.MoveCount);
+        Assert.Equal(0, runtime.StopNavigationCount);
+        Assert.Equal(0, runtime.FloorResolveCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.SubmitCount);
+    }
+
+    [Theory]
+    [InlineData(2.5f, false)]
+    [InlineData(4.5f, true)]
+    public void LocalOnlyRequestsBuyFromVerifiedNearbyVendorWithoutTravelPlugins(float distance, bool withinReach)
+    {
+        var runtime = new FakeRuntime { HasVnavmesh = false, HasLifestream = false, ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NpcDistances[100] = distance;
+        if (withinReach) runtime.NpcWithinInteractionReach.Add(100);
+        var runner = CreateRunner(3, runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 3)
+            { AllowTravel = false, OperationId = "stock-owner", MaximumCurrencySpend = 3 }, false,
+            new ShopCurrencyIdentity(ShopCurrencyKind.Item, 500)));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal("stock-owner", runner.Status.OperationId);
+        Assert.Equal(3, runner.Status.AcquiredQuantity);
+        Assert.Equal([100u], runtime.InteractedNpcIds);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+        Assert.Equal(0, runtime.StopNavigationCount);
+    }
+
+    [Fact]
+    public void LocalOnlySelectionUsesNearbyVendorInsteadOfCheaperRemoteOffer()
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var local = Offer(10, 100, 1) with { Currencies = [new(ShopCurrencyKind.Item, 500, "Fixture Token", 2)] };
+        var remote = Offer(11, 101, 1, 2);
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [remote, local])), runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal([100u], runtime.SubmittedNpcIds);
+        Assert.Equal(9_998, runtime.GetAvailableCurrency(local.Currencies[0]));
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+    }
+
+    [Theory]
+    [InlineData("distant")]
+    [InlineData("missing")]
+    [InlineData("territory-changed")]
+    [InlineData("character-changed")]
+    public void LocalOnlyRequestsRecheckVendorAndOwnerBeforeInteraction(string scenario)
+    {
+        var runtime = new FakeRuntime();
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }));
+        runner.Update();
+        Assert.Equal("interacting", runner.Status.Phase);
+        if (scenario == "distant") runtime.NpcDistances[100] = 20;
+        if (scenario == "missing") runtime.MissingNpcIds.Add(100);
+        if (scenario == "territory-changed") runtime.CurrentTerritoryId = 2;
+        if (scenario == "character-changed") runtime.CharacterId = 2;
+        Drive(runner);
+        Assert.False(runner.Status.Succeeded);
+        Assert.Equal(scenario == "character-changed" ? ShopPurchaseFailureCodes.Cancelled : ShopPurchaseFailureCodes.NoRoute,
+            runner.Status.FailureCode);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LocalOnlyFallbackRechecksReachWithoutStartingNavigation(bool fallbackMoved)
+    {
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.NpcValidations[100] = ShopUiValidationResult.Mismatch("wrong first shop");
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [Offer(10, 100, 1), Offer(11, 101, 1)])),
+            runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }));
+        if (fallbackMoved) runtime.NpcDistances[101] = 20;
+        Drive(runner);
+        Assert.Equal(!fallbackMoved, runner.Status.Succeeded);
+        Assert.Equal(fallbackMoved ? 0 : 1, runtime.SubmitCount);
+        Assert.Equal(fallbackMoved ? new[] { 100u } : new[] { 100u, 101u }, runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LocalOnlyRequestsReuseOwnedOpenShopAndStillValidateItsExactRow(bool mismatch)
+    {
+        var runtime = new FakeRuntime { HasVnavmesh = false, ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }, true));
+        Drive(runner);
+        Assert.True(runner.Status.Succeeded);
+        Assert.True(runtime.IsAnyShopVisible);
+        runtime.MissingNpcIds.Add(100);
+        if (mismatch) runtime.Validation = ShopUiValidationResult.Mismatch("owned shop row changed");
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }, false));
+        Drive(runner);
+        Assert.Equal(!mismatch, runner.Status.Succeeded);
+        Assert.Equal(mismatch ? 1 : 2, runtime.SubmitCount);
+        if (mismatch) Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.Status.FailureCode);
+        Assert.Equal([100u], runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+    }
+
+    [Fact]
+    public void LocalOnlyRequestsCannotTakeOwnershipOfAnExistingUserShop()
+    {
+        var runtime = new FakeRuntime { ExpectedShopVisible = true };
+        var runner = CreateRunner(1, runtime, new FakeClock());
+        Assert.False(runner.Start(new ShopPurchaseRequest(100, 1) { AllowTravel = false }));
+        Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, runner.LastStartFailureCode);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(0, runtime.CloseUiCount);
+        Assert.True(runtime.IsAnyShopVisible);
     }
 
     [Theory]
@@ -44,11 +242,15 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
-    [InlineData(200, 2, 100, true)]
-    [InlineData(198, 1, 99, false)]
-    [InlineData(197, 0, 0, false)]
-    [InlineData(0, 0, 0, false)]
-    public void BulkCurrencyCapsAreCumulativeAndCheckedBeforeEveryCallback(long cap, int callbacks, int transactions, bool succeeds)
+    [InlineData(200, 2, 100, true, true)]
+    [InlineData(198, 1, 99, false, true)]
+    [InlineData(197, 0, 0, false, true)]
+    [InlineData(0, 0, 0, false, true)]
+    [InlineData(200, 2, 100, true, false)]
+    [InlineData(198, 1, 99, false, false)]
+    [InlineData(197, 0, 0, false, false)]
+    [InlineData(0, 0, 0, false, false)]
+    public void BulkCurrencyCapsAreCumulativeAndCheckedBeforeEveryCallback(long cap, int callbacks, int transactions, bool succeeds, bool allowTravel)
     {
         var clock = new FakeClock();
         var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
@@ -57,7 +259,7 @@ public sealed class ShopPurchaseRunnerTests
         { ReceiveCount = 5, Currencies = [new(ShopCurrencyKind.Item, 500, "Fixture Token", 2)] };
         var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(500, [offer])), runtime, clock);
         Assert.True(runner.Start(new ShopPurchaseRequest(100, 500)
-            { OperationId = "vmx-bulk", MaximumCurrencySpend = cap }, false, currency));
+            { OperationId = "vmx-bulk", MaximumCurrencySpend = cap, AllowTravel = allowTravel }, false, currency));
         DriveWithTime(runner, clock);
         Assert.Equal(succeeds, runner.Status.Succeeded);
         Assert.Equal(callbacks, runtime.SubmitCount);
@@ -276,16 +478,19 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void GuardedPurchaseRetainsIdentityAndChecksAuthorizationBeforeSubmitAndConfirmation(bool allowSubmit, bool allowConfirmation)
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public void GuardedPurchaseRetainsIdentityAndChecksAuthorizationBeforeSubmitAndConfirmation(bool allowSubmit, bool allowConfirmation, bool allowTravel)
     {
         var runtime = new FakeRuntime { ShowConfirmationAfterSubmit = true, AcceptOwnedConfirmation = true };
         var runner = CreatePoeticsRunner(runtime, new FakeClock());
         ShopPurchaseCheckpoint? receipt = null;
         var confirmed = 0;
-        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "owner-test" }, false, Poetics,
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "owner-test", AllowTravel = allowTravel }, false, Poetics,
             quote =>
             {
                 Assert.Equal(0, runtime.SubmitCount);
@@ -1001,10 +1206,12 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
-    [InlineData((int)ShopNavigationStopResult.StillRunning)]
-    [InlineData((int)ShopNavigationStopResult.Unverified)]
+    [InlineData((int)ShopNavigationStopResult.StillRunning, false)]
+    [InlineData((int)ShopNavigationStopResult.StillRunning, true)]
+    [InlineData((int)ShopNavigationStopResult.Unverified, false)]
+    [InlineData((int)ShopNavigationStopResult.Unverified, true)]
     public void PersistentUnstoppedNavigationTerminatesNoRouteWithoutCallbacks(
-        int stopResultValue)
+        int stopResultValue, bool releaseViaStatus)
     {
         var stopResult = (ShopNavigationStopResult)stopResultValue;
         var clock = new FakeClock();
@@ -1012,7 +1219,7 @@ public sealed class ShopPurchaseRunnerTests
         for (var index = 0; index < 4; index++)
             runtime.NavigationStopResults.Enqueue(stopResult);
         var runner = CreateRunner(1, runtime, clock);
-        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { OperationId = "retained-owner" }));
 
         runner.Update();
         runner.Update();
@@ -1032,6 +1239,41 @@ public sealed class ShopPurchaseRunnerTests
             stopResult == ShopNavigationStopResult.Unverified ? "could not verify" : "still running",
             runner.Status.FailureMessage,
             StringComparison.OrdinalIgnoreCase);
+
+        Assert.Null(runtime.NavigationRunning);
+        var terminalEvents = runtime.Events.ToArray();
+        var terminalMoveCount = runtime.MoveCount;
+        var replacement = new ShopPurchaseRequest(100, 1) { OperationId = "replacement-owner" };
+        foreach (var running in new bool?[] { null, true })
+        {
+            runtime.NavigationRunning = running;
+            runner.Update();
+            Assert.False(runner.Status.NavigationReleased);
+            Assert.False(runner.Start(replacement));
+            Assert.Equal(ShopPurchaseFailureCodes.Busy, runner.LastStartFailureCode);
+            Assert.Equal("retained-owner", runner.Status.OperationId);
+            Assert.Equal(ShopPurchaseFailureCodes.NoRoute, runner.Status.FailureCode);
+            Assert.Equal(4, runtime.StopNavigationCount);
+            Assert.Equal(terminalMoveCount, runtime.MoveCount);
+            Assert.Equal(0, runtime.SubmitCount);
+            Assert.Equal(terminalEvents, runtime.Events);
+        }
+
+        runtime.NavigationRunning = false;
+        if (releaseViaStatus)
+            Assert.True(runner.Status.NavigationReleased);
+        else
+            runner.Update();
+        // Check Start before reading Status on the Update path, so the getter cannot hide a missed release.
+        Assert.True(runner.Start(replacement));
+        Assert.Equal("replacement-owner", runner.Status.OperationId);
+        Assert.True(runner.Status.NavigationReleased);
+        Assert.Equal(4, runtime.StopNavigationCount);
+        Assert.Equal(terminalMoveCount, runtime.MoveCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.MenuSelectCount);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.Equal(terminalEvents, runtime.Events);
     }
 
     [Fact]
@@ -2242,6 +2484,7 @@ public sealed class ShopPurchaseRunnerTests
         public bool AethernetArrives { get; set; } = true;
         public int MoveCount { get; private set; }
         public int StopNavigationCount { get; private set; }
+        public bool? NavigationRunning { get; set; }
         public int CloseUiCount { get; private set; }
         public int MenuSelectCount { get; private set; }
         public int FloorResolveCount { get; private set; }
@@ -2312,6 +2555,12 @@ public sealed class ShopPurchaseRunnerTests
             return NavigationStopResults.Count == 0
                 ? ShopNavigationStopResult.Stopped
                 : NavigationStopResults.Dequeue();
+        }
+
+        public bool TryGetNavigationRunning(out bool running)
+        {
+            running = NavigationRunning.GetValueOrDefault();
+            return NavigationRunning.HasValue;
         }
 
         public bool ReadyToInteract { get; set; } = true;

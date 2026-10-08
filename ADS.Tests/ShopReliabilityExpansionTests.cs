@@ -54,11 +54,11 @@ public sealed class ShopReliabilityExpansionTests
     }
 
     [Fact]
-    public void LiveMenuResolverUsesGlobalCallbackIndexAcrossNestedPath()
+    public void LiveMenuResolverUsesSelectorSlotsAcrossNestedPath()
     {
         var firstStep = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 3, 3_276_827);
 
-        var firstAccepted = ShopMenuRouteResolver.TryResolveVisibleIndex(
+        var firstAccepted = ShopMenuRouteResolver.TryResolveSelectorIndex(
             1_001_276,
             1_001_276,
             firstStep,
@@ -72,7 +72,7 @@ public sealed class ShopReliabilityExpansionTests
             out var firstCallback,
             out var firstDiagnostic);
         var nestedStep = new ShopMenuPathStep(ShopMenuPathStepKind.TopicSelectShop, 1, 262_191);
-        var nestedAccepted = ShopMenuRouteResolver.TryResolveVisibleIndex(
+        var nestedAccepted = ShopMenuRouteResolver.TryResolveSelectorIndex(
             1_001_276,
             1_001_276,
             nestedStep,
@@ -95,30 +95,46 @@ public sealed class ShopReliabilityExpansionTests
     }
 
     [Fact]
-    public void LiveMenuResolverRejectsDuplicateHandlerTargetMismatchAndInvalidGlobalIndex()
+    public void LiveMenuResolverRejectsDuplicateHandlerTargetMismatchAndAbsentHandler()
     {
         var step = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 3, 3_276_827);
-        Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
+        Assert.False(ShopMenuRouteResolver.TryResolveSelectorIndex(
             1_001_276,
             1_001_276,
             step,
             [new(3_276_827, 0, 3), new(3_276_827, 1, 4)],
             out _,
             out _));
-        Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
+        Assert.False(ShopMenuRouteResolver.TryResolveSelectorIndex(
             1_001_276,
             1_000_238,
             step,
             [new(3_276_827, 0, 3)],
             out _,
             out _));
-        Assert.False(ShopMenuRouteResolver.TryResolveVisibleIndex(
+        Assert.False(ShopMenuRouteResolver.TryResolveSelectorIndex(
             1_001_276,
             1_001_276,
             step,
-            [new(3_276_827, 1, 3)],
+            [new(262_698, 1, 3)],
             out _,
             out _));
+    }
+
+    [Fact]
+    public void VathGilHandlerSelectionDoesNotUseBeastCurrencyMenuMetadata()
+    {
+        // The failed client inspection showed NPC 1016804 with ShopExchangeCurrency.
+        // Reordered/filtered selector options need not share addon callback indexes.
+        var gil = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 1, 262_698);
+        Assert.True(ShopMenuRouteResolver.TryResolveSelectorIndex(
+            1_016_804, 1_016_804, gil,
+            [new(262_698, 1, 1), new(1_769_999, 0, 0)],
+            out var selectorIndex, out _));
+        Assert.Equal(0, selectorIndex);
+        Assert.False(ShopMenuRouteResolver.TryResolveSelectorIndex(
+            1_016_804, 1_016_804, gil,
+            [new(1_769_999, 0, 0)], out _, out _));
     }
 
     [Fact]

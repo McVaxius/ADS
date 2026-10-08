@@ -26,6 +26,7 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
     public long? MaximumCurrencySpend { get; init; }
     public bool CompanyAction { get; init; }
     public bool ClaimAchievementCertificates { get; init; }
+    public bool AllowTravel { get; init; } = true;
     public const int MaximumQuantity = 9_999;
 
     public static bool TryCreate(uint itemId, int quantity, out ShopPurchaseRequest request, out string error)
@@ -97,6 +98,16 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (!TryParseJson(root, out request, out error)) return false;
+            var allowTravel = true;
+            if (root.TryGetProperty("allowTravel", out var travelElement))
+            {
+                if (travelElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    error = "Currency purchase allowTravel must be a boolean when provided.";
+                    return false;
+                }
+                allowTravel = travelElement.GetBoolean();
+            }
             var operationId = root.GetProperty("operationId").GetString();
             if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 ||
                 !Enum.TryParse<ShopCurrencyKind>(root.GetProperty("currencyKind").GetString()?.Trim().Replace("-", ""), true, out var kind) ||
@@ -109,7 +120,7 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
                 return false;
             }
             currency = new ShopCurrencyIdentity(kind, currencyItemId);
-            request = request with { OperationId = operationId, MaximumCurrencySpend = maximumSpend };
+            request = request with { OperationId = operationId, MaximumCurrencySpend = maximumSpend, AllowTravel = allowTravel };
             return true;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentException)
@@ -580,4 +591,5 @@ public sealed record ShopPurchaseStatusSnapshot(
     public string? OperationId { get; init; }
     public bool CompanyAction { get; init; }
     public long AchievementCertificatesClaimed { get; init; }
+    public bool NavigationReleased { get; init; } = true;
 }

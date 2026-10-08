@@ -1,8 +1,18 @@
+2026-10-08 - Gil vendor menu selection (I496)
+
+- Select the uniquely matched shop handler through EventFramework's native selector option instead of passing handler metadata to a visible menu callback. Keep character/NPC ownership, exact gil offer, price, capacity and acquisition validation. This corrects the reported Vath beast currency window when requesting the gil shop.
+- Add a focused regression for different selector-slot and global indexes; let the existing test references honor the builder's DALAMUD_HOME override. Native Account 1 retesting remains pending.
+
 2026-10-08 - GitHub Actions shared-library repair
 
 - Build against published AethertekUI main so current shared APIs are available. Retain repository-specific read-only SSH deploy keys, which do not expire, and disabled credential persistence. Publish library APIs before consumer changes.
 
 # Changelog
+
+## Unreleased - Local-only currency purchases
+
+- Add optional boolean `allowTravel` to `ADS.StartCurrencyShopPurchase`; omitted values retain existing travel behavior. Explicit `false` prohibits teleport, aethernet transfers and approach navigation while allowing a verified nearby merchant or ADS-owned held shop through the existing purchase runner.
+- Recheck local vendor reach before interaction and fallback, and retain exact currency, cumulative spend cap, ownership, live shop/row, inventory and confirmation checks. Focused source tests cover defaults, invalid flags, local-only paths and purchase guards; compilation, test execution and game acceptance remain pending.
 
 ## Unreleased - Hindi font availability and recovery
 

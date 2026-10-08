@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Hay una interacción activa; ADS detiene el movimiento hasta que terminen la acción del juego y el diálogo.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} No se pudo verificar la pausa de VBM para la interacción; no se envió la interacción directa.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Los viajes están desactivados para esta compra; ADS no realizó una teleportación.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Los viajes están desactivados para esta compra; el vendedor seleccionado no está al alcance de interacción.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interactuando con {0} cercano sin viajar.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Los viajes están desactivados para esta compra; ADS no inició la navegación.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Los viajes están desactivados para esta compra; el vendedor seleccionado ya no está al alcance de interacción.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Comprobando la alternativa cercana {0} sin viajar.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Los viajes están desactivados para esta compra; no hay vendedores compatibles al alcance de interacción ni una tienda controlada por ADS que pueda reutilizarse.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>En una compra con moneda especificada, allowTravel debe ser un booleano si se proporciona.</value>
+  </data>
 </root>

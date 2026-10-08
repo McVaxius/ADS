@@ -44,7 +44,10 @@ internal sealed class ShopPurchaseRunner
     private const float RequiredApproachDistance = 1f;
 
     private System.Numerics.Vector3? RequiredNpcApproach
-        => selected?.Offer.NpcId == 1008119 && selected.Route?.TerritoryId == 156
+        => selected == null ? null : GetRequiredNpcApproach(selected.Offer);
+
+    private static System.Numerics.Vector3? GetRequiredNpcApproach(ShopOffer offer)
+        => offer.NpcId == 1008119 && offer.TerritoryId == 156
             ? new System.Numerics.Vector3(63.283752f, 31.124842f, -735.31555f)
             : null;
 
@@ -127,7 +130,14 @@ internal sealed class ShopPurchaseRunner
 
     public bool IsRunning => status.Running;
     internal int VerifiedAcquiredQuantity { get; private set; }
-    public ShopPurchaseStatusSnapshot Status => status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction, AchievementCertificatesClaimed = achievementCertificatesClaimed };
+    public ShopPurchaseStatusSnapshot Status
+    {
+        get
+        {
+            RefreshTerminalNavigationRelease();
+            return status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction, AchievementCertificatesClaimed = achievementCertificatesClaimed, NavigationReleased = !navigationOwned };
+        }
+    }
     internal string? LastStartFailureCode => lastStartFailureCode;
     internal bool HasPurchaseSubmission => anyPurchaseCallbackSent || callbackCheckpoint != null;
 
@@ -162,7 +172,7 @@ internal sealed class ShopPurchaseRunner
             var (nextResolution, nextSelection) = ResolvePlan(purchaseRequest, requiredCurrency);
             var failureCode = nextSelection.FailureCode;
             var message = nextSelection.Message;
-            if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
+            if (purchaseRequest.AllowTravel && nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
             {
                 failureCode = ShopPurchaseFailureCodes.MissingDependency;
                 message = "The selected shop route requires the Lifestream plugin.";
@@ -268,6 +278,9 @@ internal sealed class ShopPurchaseRunner
             return RejectStart(validationError, ShopPurchaseFailureCodes.InvalidRequest);
         if (IsRunning)
             return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
+        RefreshTerminalNavigationRelease();
+        if (navigationOwned)
+            return RejectStart("Cannot start a shop purchase while another shop purchase is active.", ShopPurchaseFailureCodes.Busy);
         if (purchaseRequest.MaximumCurrencySpend is < 0 ||
             (purchaseRequest.MaximumCurrencySpend.HasValue &&
              (!requiredCurrency.HasValue || string.IsNullOrWhiteSpace(purchaseRequest.OperationId))))
@@ -279,7 +292,7 @@ internal sealed class ShopPurchaseRunner
             return RejectStart("Cannot start a shop purchase while ADS owns a duty or inn entry is active.", ShopPurchaseFailureCodes.Busy);
         if (!runtime.IsPlayerAvailable)
             return RejectStart("Shop purchasing requires a logged-in, available character who is not zoning.", ShopPurchaseFailureCodes.Busy);
-        if (!runtime.HasVnavmesh)
+        if (purchaseRequest.AllowTravel && !runtime.HasVnavmesh)
             return RejectStart("Shop purchasing requires the vnavmesh plugin.", ShopPurchaseFailureCodes.MissingDependency);
         if (purchaseRequest.CompanyAction && (purchaseRequest.Quantity > 16 || runtime.FreeCompanyId == 0 ||
             runtime.GetCompanyActionCount(purchaseRequest.ItemId) < 0))
@@ -301,7 +314,7 @@ internal sealed class ShopPurchaseRunner
             return RejectStart($"Shop catalog resolution failed: {ex.Message}", ShopPurchaseFailureCodes.UnsupportedOffer);
         }
 
-        if (nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
+        if (purchaseRequest.AllowTravel && nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
             return RejectStart("The selected shop route requires the Lifestream plugin.", ShopPurchaseFailureCodes.MissingDependency);
 
         // Deferred from the entry gate: a shop is on screen, so decide whether it is the one this
@@ -410,7 +423,12 @@ internal sealed class ShopPurchaseRunner
     public void Update()
     {
         if (!IsRunning)
+        {
+            // Terminal purchase status does not certify failed navigation cleanup. Observe release
+            // without issuing another stop, purchase, or movement request.
+            RefreshTerminalNavigationRelease();
             return;
+        }
 
         try
         {
@@ -580,6 +598,12 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
+        if (!request.AllowTravel)
+        {
+            BeginNavigation();
+            return;
+        }
+
         if (selected.Route.RequiresTeleport)
         {
             if (!runtime.HasLifestream)
@@ -654,6 +678,11 @@ internal sealed class ShopPurchaseRunner
 
     private void TryTeleportNow()
     {
+        if (!request.AllowTravel)
+        {
+            Fail(ShopPurchaseFailureCodes.NoRoute, "Travel is disabled for this purchase; ADS did not teleport.");
+            return;
+        }
         if (selected?.Route == null || phaseAttempts >= MaximumAttempts)
             return;
         phaseAttempts++;
@@ -673,6 +702,18 @@ internal sealed class ShopPurchaseRunner
 
     private void BeginNavigation()
     {
+        if (!request.AllowTravel)
+        {
+            if (selected == null || !CanInteractWithoutTravel(selected.Offer))
+                TryFallbackOrFail(ShopPurchaseFailureCodes.NoRoute,
+                    "Travel is disabled for this purchase; the selected vendor is not within interaction reach.");
+            else
+            {
+                interactionSent = false;
+                SetPhase(RunnerPhase.Interacting, $"Interacting with nearby {selected.Offer.NpcName} without travel.");
+            }
+            return;
+        }
         navigationDestination = null;
         navigationUsingLiveNpc = false;
         SetPhase(RunnerPhase.Navigating, $"Navigating to {selected!.Offer.NpcName}.");
@@ -857,6 +898,11 @@ internal sealed class ShopPurchaseRunner
 
     private void TryMoveNow(System.Numerics.Vector3? destination = null)
     {
+        if (!request.AllowTravel)
+        {
+            Fail(ShopPurchaseFailureCodes.NoRoute, "Travel is disabled for this purchase; ADS did not start navigation.");
+            return;
+        }
         if (selected?.Route == null || phaseAttempts >= MaximumAttempts)
             return;
         var target = destination ?? navigationDestination ?? selected.Route.NpcPosition;
@@ -963,6 +1009,13 @@ internal sealed class ShopPurchaseRunner
             }
 
             SetPhase(RunnerPhase.OpeningMenu, $"Opening {selected.Offer.ShopName}.");
+            return;
+        }
+
+        if (!request.AllowTravel && !CanInteractWithoutTravel(selected.Offer))
+        {
+            TryFallbackOrFail(ShopPurchaseFailureCodes.NoRoute,
+                "Travel is disabled for this purchase; the selected vendor is no longer within interaction reach.");
             return;
         }
 
@@ -1382,7 +1435,11 @@ internal sealed class ShopPurchaseRunner
             SelectedOffer = ShopOfferSelector.ToStatus(selected),
             AlternativeOffers = AlternativeStatuses(selected, selection?.Alternatives ?? []),
         };
-        if (selected.Route?.RequiresTeleport == true)
+        if (!request.AllowTravel)
+        {
+            SetPhase(RunnerPhase.Resolving, $"Checking nearby fallback {selected.Offer.NpcName} without travel.");
+        }
+        else if (selected.Route?.RequiresTeleport == true)
         {
             if (!runtime.HasLifestream)
             {
@@ -1419,9 +1476,27 @@ internal sealed class ShopPurchaseRunner
             : catalog.Resolve(purchaseRequest.ItemId, purchaseRequest.Quantity);
         if (purchaseRequest.ClaimAchievementCertificates)
             nextResolution = nextResolution with { Offers = nextResolution.Offers.Where(offer => offer.NpcId == 1008145).ToArray() };
-        return (nextResolution, ShopOfferSelector.Select(nextResolution, BuildSelectionContext(purchaseRequest.CompanyAction), requiredCurrency,
+        var candidateResolution = nextResolution;
+        if (!purchaseRequest.AllowTravel)
+        {
+            var localOffers = nextResolution.Offers.Where(offer =>
+                offer.TerritoryId == runtime.CurrentTerritoryId &&
+                (CanInteractWithoutTravel(offer) || shopUiOwned && runtime.IsExpectedShopVisible(offer.Kind))).ToArray();
+            if (localOffers.Length == 0 && nextResolution.Offers.Count > 0)
+                return (nextResolution, new ShopOfferSelectionResult(null, [], [], ShopPurchaseFailureCodes.NoRoute,
+                    "Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused."));
+            candidateResolution = nextResolution with { Offers = localOffers };
+        }
+        return (nextResolution, ShopOfferSelector.Select(candidateResolution, BuildSelectionContext(purchaseRequest.CompanyAction), requiredCurrency,
             purchaseRequest.ClaimAchievementCertificates));
     }
+
+    private bool CanInteractWithoutTravel(ShopOffer offer)
+        => offer.TerritoryId == runtime.CurrentTerritoryId
+           && runtime.TryGetNpc(offer.NpcId, out var npc)
+           && (npc.WithinInteractionReach || npc.Distance <= InteractionDistance)
+           && (GetRequiredNpcApproach(offer) is not { } approach
+               || System.Numerics.Vector3.Distance(runtime.PlayerPosition, approach) <= RequiredApproachDistance);
 
     private void Complete()
         => Finish(
@@ -1504,6 +1579,12 @@ internal sealed class ShopPurchaseRunner
             StatusMessage = message,
             LastStartError = lastStartError,
         };
+    }
+
+    private void RefreshTerminalNavigationRelease()
+    {
+        if (!IsRunning && navigationOwned && runtime.TryGetNavigationRunning(out var running) && !running)
+            navigationOwned = false;
     }
 
     private ShopNavigationStopResult? TryFinalNavigationStop()

@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>インタラクション中です。ゲーム内の動作と会話が終了するまで、ADS は移動を停止します。</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} インタラクション中の VBM 停止を確認できなかったため、直接操作は送信されませんでした。</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>この購入では移動が無効です。ADSはテレポしませんでした。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>この購入では移動が無効です。選択した販売NPCは会話可能な範囲にいません。</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>移動せずに近くの{0}と会話しています。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>この購入では移動が無効です。ADSは経路移動を開始しませんでした。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>この購入では移動が無効です。選択した販売NPCは会話可能な範囲から離れました。</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>移動せずに近くの代替販売NPC {0}を確認しています。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>この購入では移動が無効です。会話可能な範囲に対応する販売NPCがおらず、再利用できるADS所有のショップもありません。</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>通貨を指定した購入でallowTravelを指定する場合、真偽値にしてください。</value>
+  </data>
 </root>

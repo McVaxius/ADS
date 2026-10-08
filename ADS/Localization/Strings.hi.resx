@@ -3948,4 +3948,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>बातचीत जारी है; खेल की कार्रवाई और संवाद समाप्त होने तक ADS गति रोककर रखता है।</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} बातचीत के लिए VBM का विराम सत्यापित नहीं हो सका; सीधी बातचीत नहीं भेजी गई।</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>इस खरीद के लिए यात्रा बंद है; ADS ने टेलीपोर्ट नहीं किया।</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>इस खरीद के लिए यात्रा बंद है; चुना हुआ विक्रेता बातचीत की पहुँच में नहीं है।</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>बिना यात्रा के पास के {0} से बातचीत हो रही है।</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>इस खरीद के लिए यात्रा बंद है; ADS ने नेविगेशन शुरू नहीं किया।</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>इस खरीद के लिए यात्रा बंद है; चुना हुआ विक्रेता अब बातचीत की पहुँच में नहीं है।</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>बिना यात्रा के पास के वैकल्पिक विक्रेता {0} की जाँच हो रही है।</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>इस खरीद के लिए यात्रा बंद है; कोई समर्थित विक्रेता बातचीत की पहुँच में नहीं है और ADS के नियंत्रण वाली कोई दुकान दोबारा इस्तेमाल नहीं की जा सकती।</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>मुद्रा निर्दिष्ट खरीद में allowTravel दिया जाए तो वह बूलियन होना चाहिए।</value>
+  </data>
 </root>

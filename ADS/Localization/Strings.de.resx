@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Eine Interaktion ist aktiv; ADS hält die Bewegung an, bis die Spielaktion und der Dialog beendet sind.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Die VBM-Interaktionspause konnte nicht bestätigt werden; die direkte Interaktion wurde nicht gesendet.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Reisen sind für diesen Kauf deaktiviert; ADS hat nicht teleportiert.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Reisen sind für diesen Kauf deaktiviert; der gewählte Händler ist nicht in Interaktionsreichweite.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interaktion mit {0} in der Nähe ohne Reise.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Reisen sind für diesen Kauf deaktiviert; ADS hat keine Navigation gestartet.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Reisen sind für diesen Kauf deaktiviert; der gewählte Händler ist nicht mehr in Interaktionsreichweite.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Prüfen des alternativen Händlers {0} in der Nähe ohne Reise.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Reisen sind für diesen Kauf deaktiviert; kein unterstützter Händler ist in Interaktionsreichweite und kein ADS zugeordneter Laden kann wiederverwendet werden.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Bei Käufen mit Währungsangabe muss allowTravel, falls angegeben, ein boolescher Wert sein.</value>
+  </data>
 </root>

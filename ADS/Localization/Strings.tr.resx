@@ -3964,4 +3964,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Etkileşim sürüyor; ADS, oyun içi eylem ve iletişim kutusu bitene kadar hareketi durdurur.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Etkileşim için VBM duraklatması doğrulanamadı; doğrudan etkileşim gönderilmedi.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Bu alışveriş için seyahat kapalı; ADS ışınlanmadı.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Bu alışveriş için seyahat kapalı; seçilen satıcı etkileşim mesafesinde değil.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Seyahat etmeden yakındaki {0} ile etkileşime geçiliyor.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Bu alışveriş için seyahat kapalı; ADS navigasyonu başlatmadı.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Bu alışveriş için seyahat kapalı; seçilen satıcı artık etkileşim mesafesinde değil.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Seyahat etmeden yakındaki alternatif satıcı {0} kontrol ediliyor.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Bu alışveriş için seyahat kapalı; etkileşim mesafesinde desteklenen bir satıcı yok ve ADS&apos;nin denetimindeki bir dükkân yeniden kullanılamıyor.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Para birimi belirtilen alışverişte allowTravel verilirse bir boolean değer olmalıdır.</value>
+  </data>
 </root>

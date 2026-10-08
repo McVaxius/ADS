@@ -4322,4 +4322,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Взаимодействие активно; ADS удерживает персонажа на месте до завершения игрового действия и диалога.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Не удалось подтвердить паузу VBM для взаимодействия; прямое взаимодействие не отправлено.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Перемещение для этой покупки отключено; ADS не выполнял телепортацию.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Перемещение для этой покупки отключено; выбранный продавец находится вне радиуса взаимодействия.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Взаимодействие с ближайшим {0} без перемещения.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Перемещение для этой покупки отключено; ADS не запускал навигацию.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Перемещение для этой покупки отключено; выбранный продавец больше не находится в радиусе взаимодействия.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Проверка ближайшего альтернативного продавца {0} без перемещения.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Перемещение для этой покупки отключено; в радиусе взаимодействия нет поддерживаемого продавца и нет магазина под управлением ADS, который можно использовать повторно.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>При покупке с указанной валютой параметр allowTravel, если он передан, должен иметь логическое значение.</value>
+  </data>
 </root>

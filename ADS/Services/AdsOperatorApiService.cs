@@ -16,6 +16,7 @@ public sealed class AdsOperatorApiService
         {
             schemaVersion = 1,
             guardedShopPurchases = 1,
+            shopPurchaseTravelPolicy = 1,
             achievementCertificatePurchases = 1,
             companyActionPurchases = 1,
             npcSelling = 1,

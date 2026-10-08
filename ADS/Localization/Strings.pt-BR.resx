@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Uma interação está em andamento; ADS mantém o movimento parado até a ação do jogo e o diálogo terminarem.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Não foi possível verificar a pausa de VBM para a interação; a interação direta não foi enviada.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Os deslocamentos estão desativados para esta compra; ADS não realizou teleporte.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Os deslocamentos estão desativados para esta compra; o vendedor selecionado está fora do alcance de interação.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interagindo com {0} nas proximidades sem deslocamento.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Os deslocamentos estão desativados para esta compra; ADS não iniciou a navegação.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Os deslocamentos estão desativados para esta compra; o vendedor selecionado não está mais no alcance de interação.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Verificando o vendedor alternativo {0} nas proximidades sem deslocamento.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Os deslocamentos estão desativados para esta compra; nenhum vendedor compatível está no alcance de interação e nenhuma loja controlada pelo ADS pode ser reutilizada.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Em compras com moeda especificada, allowTravel deve ser um booleano quando informado.</value>
+  </data>
 </root>

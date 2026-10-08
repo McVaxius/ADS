@@ -3964,4 +3964,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>Đang tương tác; ADS dừng di chuyển cho đến khi hành động trong trò chơi và hộp thoại kết thúc.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Không thể xác minh việc tạm dừng VBM khi tương tác; chưa gửi tương tác trực tiếp.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Di chuyển bị tắt cho lần mua này; ADS không dịch chuyển tức thời.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Di chuyển bị tắt cho lần mua này; người bán đã chọn không nằm trong tầm tương tác.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Đang tương tác với {0} ở gần mà không di chuyển.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Di chuyển bị tắt cho lần mua này; ADS không bắt đầu điều hướng.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Di chuyển bị tắt cho lần mua này; người bán đã chọn không còn trong tầm tương tác.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Đang kiểm tra người bán thay thế {0} ở gần mà không di chuyển.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Di chuyển bị tắt cho lần mua này; không có người bán được hỗ trợ trong tầm tương tác và không có cửa hàng do ADS quản lý có thể dùng lại.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Khi mua với loại tiền được chỉ định, allowTravel phải là giá trị boolean nếu được cung cấp.</value>
+  </data>
 </root>

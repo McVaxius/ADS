@@ -289,6 +289,7 @@ internal interface IShopPurchaseRuntime
     bool PrepareNavigation(Vector3 destination) => true;
     bool TryMove(Vector3 destination, string label);
     ShopNavigationStopResult TryStopNavigation();
+    bool TryGetNavigationRunning(out bool running) { running = false; return false; }
     bool TryGetNpc(uint npcId, out ShopRuntimeNpc npc);
     bool TryInteractNpc(uint npcId);
     bool PrepareInteraction() => true;
@@ -965,13 +966,13 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             log.Debug(ex, "[ADS][Shop] vnavmesh Path.Stop IPC was unavailable; trying the compatibility command.");
         }
 
-        if (ipcStopInvoked && TryGetNavigationRunning(out var runningAfterIpc))
+        if (ipcStopInvoked && TryGetNavigationRunning(out var runningAfterIpc, reportFailure: true))
             return runningAfterIpc
                 ? ShopNavigationStopResult.StillRunning
                 : ShopNavigationStopResult.Stopped;
 
         GameInteractionHelper.TrySendChatCommand(commandManager, "/vnav stop", log);
-        return TryGetNavigationRunning(out var runningAfterFallback)
+        return TryGetNavigationRunning(out var runningAfterFallback, reportFailure: true)
             ? runningAfterFallback
                 ? ShopNavigationStopResult.StillRunning
                 : ShopNavigationStopResult.Stopped
@@ -1111,7 +1112,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         try
         {
             var selector = EventHandlerSelector.Instance();
-            if (selector == null || selector->Target == null || selector->OptionsCount is < 1 or > 32)
+            var events = EventFramework.Instance();
+            if (!IsSelectionMenuVisible || events == null || shopUiCharacter == 0 || CharacterId != shopUiCharacter
+                || targetManager.Target?.GameObjectId != shopUiNpc
+                || selector == null || selector->Target == null || selector->OptionsCount is < 1 or > 32)
                 return false;
 
             var options = new ShopRuntimeMenuOption[selector->OptionsCount];
@@ -1124,7 +1128,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                     option.LocalIndex);
             }
 
-            if (!ShopMenuRouteResolver.TryResolveVisibleIndex(
+            if (!ShopMenuRouteResolver.TryResolveSelectorIndex(
                     npcId,
                     selector->Target->BaseId,
                     step,
@@ -1137,7 +1141,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             }
 
             log.Debug("[ADS][Shop] {Diagnostic}", resolutionDiagnostic);
-            return TrySelectMenu(liveIndex);
+            // The selector's array slot is the native API contract. GlobalIndex
+            // is handler metadata, not a SelectString/SelectIconString row.
+            events->InteractWithHandlerFromSelector(liveIndex);
+            return true;
         }
         catch (Exception ex)
         {
@@ -1509,7 +1516,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             token.DiagnosticDetails);
     }
 
-    private bool TryGetNavigationRunning(out bool running)
+    public bool TryGetNavigationRunning(out bool running)
+        => TryGetNavigationRunning(out running, reportFailure: false);
+
+    private bool TryGetNavigationRunning(out bool running, bool reportFailure)
     {
         try
         {
@@ -1522,7 +1532,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         catch (Exception ex)
         {
             running = true;
-            log.Debug(ex, "[ADS][Shop] vnavmesh movement or pathfinding state was unavailable; navigation stop is unverified.");
+            if (reportFailure)
+                log.Debug(ex, "[ADS][Shop] vnavmesh movement or pathfinding state was unavailable; navigation stop is unverified.");
             return false;
         }
     }

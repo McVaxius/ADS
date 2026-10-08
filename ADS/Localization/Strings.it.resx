@@ -4322,4 +4322,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>È in corso un’interazione; ADS mantiene fermo il personaggio fino al termine dell’azione di gioco e del dialogo.</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} Non è stato possibile verificare la pausa di VBM per l’interazione; l’interazione diretta non è stata inviata.</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>Gli spostamenti sono disabilitati per questo acquisto; ADS non ha effettuato il teletrasporto.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>Gli spostamenti sono disabilitati per questo acquisto; il venditore selezionato è fuori dalla portata di interazione.</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>Interazione con {0} nelle vicinanze senza spostamenti.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>Gli spostamenti sono disabilitati per questo acquisto; ADS non ha avviato la navigazione.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>Gli spostamenti sono disabilitati per questo acquisto; il venditore selezionato non è più a portata di interazione.</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>Verifica del venditore alternativo {0} nelle vicinanze senza spostamenti.</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>Gli spostamenti sono disabilitati per questo acquisto; nessun venditore supportato è a portata di interazione e nessun negozio controllato da ADS può essere riutilizzato.</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>Per un acquisto con valuta specificata, allowTravel deve essere un booleano se fornito.</value>
+  </data>
 </root>

@@ -17,7 +17,8 @@
     <ProjectReference Include="..\ADS\ADS.csproj" />
     <ProjectReference Include="..\..\FrenRider\FrenRider\FrenRider.csproj" />
     <Reference Include="Dalamud;Lumina;Lumina.Excel;FFXIVClientStructs">
-      <HintPath>$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
+      <HintPath Condition="'$(DALAMUD_HOME)' == ''">$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
+      <HintPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)/%(Identity).dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

@@ -11392,4 +11392,28 @@
   </data>
   <data name="Interaction is active; ADS is holding movement until the native action and dialog finish." xml:space="preserve"><value>交互正在进行；ADS 将保持停止移动，直到游戏内动作和对话结束。</value></data>
   <data name="{0} VBM interaction pause could not be verified; direct interaction was not sent." xml:space="preserve"><value>{0} 无法验证交互期间的 VBM 暂停状态；未发送直接交互。</value></data>
+  <data name="Travel is disabled for this purchase; ADS did not teleport." xml:space="preserve">
+    <value>本次购买已禁用移动；ADS未进行传送。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is not within interaction reach." xml:space="preserve">
+    <value>本次购买已禁用移动；所选商人不在交互范围内。</value>
+  </data>
+  <data name="Interacting with nearby {0} without travel." xml:space="preserve">
+    <value>正在与附近的{0}交互，不进行移动。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; ADS did not start navigation." xml:space="preserve">
+    <value>本次购买已禁用移动；ADS未启动导航。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; the selected vendor is no longer within interaction reach." xml:space="preserve">
+    <value>本次购买已禁用移动；所选商人已离开交互范围。</value>
+  </data>
+  <data name="Checking nearby fallback {0} without travel." xml:space="preserve">
+    <value>正在检查附近的备选商人{0}，不进行移动。</value>
+  </data>
+  <data name="Travel is disabled for this purchase; no supported vendor is within interaction reach and no ADS-owned shop can be reused." xml:space="preserve">
+    <value>本次购买已禁用移动；交互范围内没有受支持的商人，也没有可复用的ADS所属商店。</value>
+  </data>
+  <data name="Currency purchase allowTravel must be a boolean when provided." xml:space="preserve">
+    <value>指定货币的购买请求中，提供allowTravel时必须使用布尔值。</value>
+  </data>
 </root>

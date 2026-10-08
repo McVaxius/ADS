@@ -466,7 +466,7 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
-        Log.Information("[ADS][Shop] startup build=guarded-vendor-20260929-34; culture-invariant confirmation numbers");
+        Log.Information("[ADS][Shop] startup build=I496-gil-menu-01; native handler selector; culture-invariant confirmation numbers");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -1489,7 +1489,7 @@ public sealed class Plugin : IDalamudPlugin
         if (!ShopPurchaseRequest.TryParseCurrencyJson(requestJson, out var request, out var currency, out var error))
             return RejectShopPurchaseStart(error);
         return StartShopPurchaseCore(request.ItemId, request.Quantity, currency, null, null,
-            operationId: request.OperationId, maximumCurrencySpend: request.MaximumCurrencySpend);
+            operationId: request.OperationId, maximumCurrencySpend: request.MaximumCurrencySpend, allowTravel: request.AllowTravel);
     }
 
     public bool StartCompanyActionPurchase(string operationId, uint actionId, int quantity)
@@ -1517,7 +1517,7 @@ public sealed class Plugin : IDalamudPlugin
     private bool StartShopPurchaseCore(uint itemId, int quantity, ShopCurrencyIdentity? currency,
         Action<ShopPurchaseCheckpoint>? beforeSubmit, Action<ShopPurchaseCheckpoint>? verified,
         Func<ShopPurchaseCheckpoint, bool>? confirmationGuard = null, string? operationId = null, bool companyAction = false,
-        bool claimAchievementCertificates = false, long? maximumCurrencySpend = null)
+        bool claimAchievementCertificates = false, long? maximumCurrencySpend = null, bool allowTravel = true)
     {
         if (RejectAutomationActionInExcludedTerritory("Shop purchase"))
             return currency.HasValue ? RejectShopPurchaseStart(AutomationTerritoryPolicy.InactiveStatus) : false;
@@ -1525,7 +1525,8 @@ public sealed class Plugin : IDalamudPlugin
         if (!ShopPurchaseRequest.TryCreate(itemId, quantity, out var request, out var error))
             return RejectShopPurchaseStart(error);
         request = request with { OperationId = operationId, CompanyAction = companyAction,
-            ClaimAchievementCertificates = claimAchievementCertificates, MaximumCurrencySpend = maximumCurrencySpend };
+            ClaimAchievementCertificates = claimAchievementCertificates, MaximumCurrencySpend = maximumCurrencySpend,
+            AllowTravel = allowTravel };
         if (ExecutionService.IsOwned)
             return RejectShopPurchaseStart("Cannot start shop purchasing while ADS owns active duty execution.");
         if (InnEntryService.IsRunning)

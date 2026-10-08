@@ -2,6 +2,8 @@
 
 Existing ADS IPC endpoints remain available.
 
+`ADS.GetCapabilitiesJson()` reports `shopPurchaseTravelPolicy:1` when the currency-purchase request honours `allowTravel`. Callers requiring the no-travel boundary must check this capability before sending a request; older ADS versions ignore the new field.
+
 ## Endpoints
 
 - `ADS.StartDutyFromOutside() -> bool`
@@ -18,6 +20,7 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartDesynth(string mode) -> bool`
 - `ADS.StartShopPurchase(uint itemId, int quantity) -> bool`
 - `ADS.StartGilShopPurchase(string operationId, uint itemId, int quantity) -> bool`
+- `ADS.StartCurrencyShopPurchase(string requestJson) -> bool`
 - `ADS.StartCompanyActionPurchase(string operationId, uint actionId, int quantity) -> bool`
 - `ADS.StartNpcSale(string operationId, bool localOnly) -> bool`
 - `ADS.GetNpcSaleStatusJson() -> string`
@@ -58,6 +61,14 @@ Existing ADS IPC endpoints remain available.
 `ADS.StartShopPurchase` accepts a positive decimal `uint` item ID and a quantity from `1` through `9999`. `true` means ADS accepted the run; it does not mean the purchase completed. Quantity is the exact number of additional item units. `ADS.CancelUtility` cancels an active purchase and preserves verified partial acquisition truth.
 
 `ADS.StartGilShopPurchase` requests the same additional quantity using only gil offers, with a nonempty caller operation ID (at most 128 characters). It closes its owned shop after completion. Read that ID in purchase status and use `ADS.CancelShopPurchase` to cancel only the owned purchase. A rejected start does not replace the previously accepted operation.
+
+`ADS.StartCurrencyShopPurchase` requests `1` through `9999` additional item units with a nonempty `operationId` (at most 128 characters), `itemId`, `quantity`, exact `currencyKind`/`currencyItemId`, and nonnegative `maximumCurrencySpend`. The spend cap applies cumulatively across callbacks. Use `Gil`/`1` for gil, `FreeCompanyCredit`/`0` for FC credits, and the exact nonzero currency item ID for other catalog currencies. Accepted runs use the existing operation-specific status and cancellation.
+
+Optional boolean `allowTravel` defaults to `true` when omitted, preserving existing travel behavior. Set it to `false` to prohibit teleport, aethernet transfers and approach navigation. ADS selects only supported merchants already within verified interaction reach in the current territory, or reuses its own held open shop after exact live shop/row validation. It rechecks vendor reach before interaction and for identical-cost fallbacks; an unavailable local route fails with `no-route`. Local-only purchases do not require vnavmesh or Lifestream. Existing ownership, currency, inventory, spend-cap and confirmation checks still apply; an existing user-owned shop is rejected. Nonboolean `allowTravel` values reject the request.
+
+```json
+{"operationId":"stock-owner","itemId":4868,"quantity":3,"currencyKind":"Gil","currencyItemId":1,"maximumCurrencySpend":200,"allowTravel":false}
+```
 
 `ADS.StartCompanyActionPurchase` requests 1–16 additional purchasable `CompanyAction` entries with company credits. The caller must first expose readable FC action inventory. ADS owns the quartermaster route, exchange, confirmation, inventory refresh and cleanup. Each callback buys one action and requires matching action-count and credit deltas before another callback. Status sets `companyAction: true`; its `itemId` is the CompanyAction row ID, not an inventory item ID. The same operation-specific cancellation applies. Character or FC changes cancel the request. Capability: `companyActionPurchases: 1`. Native FC purchase validation remains pending.
 
