@@ -59,7 +59,8 @@ public abstract class PositionedWindow : Window
         if (ShowCloseButton) count++;
         if ((Flags & (ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.Modal)) == 0
             && style.WindowMenuButtonPosition != ImGuiDir.None) count++;
-        var required = (MaterialText.Measure(WindowName.Split("##", 2)[0]).X
+        var imageWidth = this is MainWindow or QuickControlWindow ? fontSize + style.ItemInnerSpacing.X : 0;
+        var required = (MaterialText.Measure(WindowName.Split("##", 2)[0]).X + imageWidth
             + count * (fontSize + style.ItemInnerSpacing.X) + style.FramePadding.X * 2 + style.ItemInnerSpacing.X)
             / ImGui.GetIO().FontGlobalScale;
         var bounds = SizeConstraints ?? new WindowSizeConstraints();

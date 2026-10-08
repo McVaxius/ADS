@@ -285,6 +285,18 @@ internal static class WindowLayout
     internal static void TableHeader(string nativeLabel)
         => MaterialText.TableHeader(nativeLabel);
 
+    internal static void PaintTitleWithImage(Dalamud.Interface.Windowing.Window owner)
+    {
+        var window = ImGuiP.FindWindowByName(owner.WindowName);
+        if (window.IsNull) return;
+        var count = owner.TitleBarButtons.Count(button => !owner.IsClickthrough || button.AvailableClickthrough);
+        if (owner.AllowPinning || owner.AllowClickthrough || owner.AllowBackgroundBlur) count++;
+        var extraRightWidth = count * (ImGuiP.CalcFontSize(window) + ImGui.GetStyle().ItemInnerSpacing.X);
+        var texture = AdsPresentation.OriginalIcon;
+        MaterialWindowHeader.PaintTitle(window, owner.WindowName.Split("##", 2)[0], texture?.Handle ?? default,
+            texture is null ? Vector2.Zero : new Vector2(texture.Width, texture.Height), extraRightWidth, owner.ShowCloseButton);
+    }
+
     internal static void Title(string nativeLabel, MaterialTextRenderer renderer)
     {
         var caption = nativeLabel.Split("##", 2)[0];

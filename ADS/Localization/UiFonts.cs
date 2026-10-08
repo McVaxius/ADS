@@ -17,6 +17,7 @@ internal sealed class UiFonts : IDisposable
     private int generation;
     private int checkedGeneration = -1;
     internal Exception? LoadException { get; private set; }
+    internal bool HindiMenuAvailable { get; private set; } = true;
     internal bool Ready => handles.Length > 0 && handles.All(h => h.Available && h.LoadException is null);
 
     internal UiFonts(IUiBuilder uiBuilder)
@@ -39,20 +40,27 @@ internal sealed class UiFonts : IDisposable
                 handles = AdsPresentation.FontSizes.Select((_, index) => Create((UiFontRole)index, language, ranges)).ToArray();
             foreach (var handle in handles) handle.ImFontChanged += FontChanged;
         }
-        LoadException ??= handles.FirstOrDefault(handle => handle.LoadException is not null)?.LoadException;
-        if (!Ready || LoadException is not null) return false;
-        if (checkedGeneration == generation) return true;
+        var nativeError = handles.FirstOrDefault(handle => handle.LoadException is not null)?.LoadException;
+        if (!Ready || nativeError is not null) { LoadException = nativeError ?? LoadException; return false; }
+        var fontGeneration = Volatile.Read(ref generation);
+        if (checkedGeneration == fontGeneration) return LoadException is null;
+        LoadException = null;
         try
         {
             foreach (var size in AdsPresentation.FontSizes)
                 shapingRenderer.CheckGlyphs(required, size * Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
-            CheckGlyphs(); checkedGeneration = generation; return true;
+            CheckGlyphs();
+            HindiMenuAvailable = true;
+            foreach (var size in AdsPresentation.FontSizes)
+                HindiMenuAvailable &= shapingRenderer.TryCheckGlyphs([Ui.LanguageLabels[(int)UiLanguage.Hindi]],
+                    size * Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale, out _);
+            checkedGeneration = fontGeneration; return true;
         }
-        catch (Exception error) { LoadException = error; return false; }
+        catch (Exception error) { LoadException = error; checkedGeneration = fontGeneration; return false; }
     }
 
     internal static string[] RequiredText(UiLanguage language)
-        => Values(language).Concat(Values(UiLanguage.English)).Concat(Ui.LanguageLabels)
+        => Values(language).Concat(Values(UiLanguage.English)).Concat(Ui.LanguageLabels.Where((_, index) => (UiLanguage)index != UiLanguage.Hindi))
             .Append("♥♡●").Append(Ui.CultureFor(language).NumberFormat.NumberGroupSeparator).Distinct().ToArray();
 
     private static IEnumerable<string> Values(UiLanguage language)

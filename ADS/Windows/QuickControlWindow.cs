@@ -73,6 +73,12 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
     }
 
+    public override void PostDraw()
+    {
+        base.PostDraw();
+        WindowLayout.PaintTitleWithImage(this);
+    }
+
     private void ShowDutyTitleTooltip(string action)
     {
         var blocker = plugin.GetDutyUiActionBlocker(action);

@@ -9,6 +9,17 @@ internal enum UiFontRole { Body, BodyStrong, Title, PluginName, Counter, Action,
 
 internal static class AdsPresentation
 {
+    // Dalamud owns the shared texture through render submission; callers borrow its wrapper.
+    internal static Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? OriginalIcon
+        => Plugin.TextureProvider.GetFromManifestResource(typeof(Plugin).Assembly, "ADS.images.icon.png").GetWrapOrDefault();
+
+    internal static void DrawPluginIcon(ImDrawListPtr drawList, Vector2 min, Vector2 max)
+    {
+        var texture = OriginalIcon;
+        if (texture is not null)
+            MaterialCanvas.DrawImage(drawList, texture.Handle, new Vector2(texture.Width, texture.Height), min, max);
+    }
+
     // Approved ADS-review-v2 and ADS-compact-review-v1, measured in logical pixels.
     internal const uint ReferenceAccent = 0x0067FF;
     internal static readonly float[] FontSizes = [14, 16, 32, 20, 18, 16, 30, 12, 14];

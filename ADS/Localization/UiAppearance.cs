@@ -45,7 +45,11 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                 if (ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize))
                 {
                     fontStatusDecorations.Paint();
-                    MaterialText.TextWrapped(Ui.T(plugin.Fonts.LoadException is null ? "Loading UI fonts..." : "UI fonts failed to load. See the plugin log."));
+                    var failed = plugin.Fonts.LoadException is not null;
+                    ImGui.TextWrapped(Ui.Language == UiLanguage.Hindi && failed ? "Hindi UI fonts are unavailable. Use English to continue."
+                        : failed ? "UI fonts failed to load. See the plugin log." : "Loading UI fonts...");
+                    if (Ui.Language == UiLanguage.Hindi && failed && ImGui.Button("Use English"))
+                        plugin.SetUiLanguage(UiLanguage.English);
                 }
             }
             finally
@@ -73,7 +77,8 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         foreach (var window in plugin.WindowSystem.Windows)
             if (window.IsOpen)
             {
-                WindowLayout.Title(window.WindowName, shapedText.Renderer);
+                if (window is not MainWindow and not QuickControlWindow)
+                    WindowLayout.Title(window.WindowName, shapedText.Renderer);
                 ApplyWindowOpacity(window.WindowName);
             }
     }
@@ -110,20 +115,28 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         DrawLanguage();
     }
 
+    internal IEnumerable<string> LanguageMenuLabels
+        => Ui.LanguageLabels.Select((_, index) => LanguageMenuLabel(index));
+
+    private string LanguageMenuLabel(int index)
+        => (UiLanguage)index == UiLanguage.Hindi && !plugin.Fonts.HindiMenuAvailable ? "Hindi (unavailable)" : Ui.LanguageLabels[index];
+
     private bool DrawLanguage()
     {
         using var picker = plugin.Fonts.PushPicker(Ui.Language);
         var scale = ImGuiHelpers.GlobalScale;
-        var width = Math.Max(130 * scale, Ui.LanguageLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2);
+        var width = Math.Max(130 * scale, LanguageMenuLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2);
         ImGui.SetNextItemWidth(MaterialLayout.FitNextItemWidth(width, width));
         var changed = false;
-        if (MaterialText.BeginCombo("##ADSUiLanguage", Ui.LanguageLabels[(int)Ui.Language]))
+        if (MaterialText.BeginCombo("##ADSUiLanguage", LanguageMenuLabel((int)Ui.Language)))
         {
             try {
             for (var index = 0; index < Ui.LanguageLabels.Length; index++)
             {
                 var language = (UiLanguage)index;
-                if (MaterialText.Selectable($"{Ui.LanguageLabels[index]}##ADSUiLanguage{index}", language == Ui.Language))
+                var unavailable = language == UiLanguage.Hindi && !plugin.Fonts.HindiMenuAvailable;
+                if (MaterialText.Selectable($"{Ui.LanguageLabels[index]}##ADSUiLanguage{index}", language == Ui.Language,
+                    flags: unavailable ? ImGuiSelectableFlags.Disabled : ImGuiSelectableFlags.None, display: LanguageMenuLabel(index)))
                 {
                     plugin.SetUiLanguage(language);
                     changed = language != Ui.Language;

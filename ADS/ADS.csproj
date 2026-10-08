@@ -6,9 +6,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.0.2</Version>
-    <FileVersion>1.0.0.2</FileVersion>
-    <AssemblyVersion>1.0.0.2</AssemblyVersion>
+    <Version>1.0.0.3</Version>
+    <FileVersion>1.0.0.3</FileVersion>
+    <AssemblyVersion>1.0.0.3</AssemblyVersion>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <RootNamespace>ADS</RootNamespace>
@@ -19,6 +19,7 @@
     <EmbeddedResource Update="Localization\Strings*.resx" WithCulture="false" LogicalName="ADS.Localization.%(Filename).resources" />
     <None Include="ADS.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="images\icon.png" LogicalName="ADS.images.icon.png" />
     <None Include="Tools\hldbg_tex_export.py" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Resources\shop-npc-placements.json" />
   </ItemGroup>

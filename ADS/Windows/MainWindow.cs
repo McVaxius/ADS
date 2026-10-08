@@ -76,6 +76,12 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
     }
 
+    public override void PostDraw()
+    {
+        base.PostDraw();
+        WindowLayout.PaintTitleWithImage(this);
+    }
+
     private void ShowDutyTitleTooltip(string action)
     {
         var blocker = plugin.GetDutyUiActionBlocker(action);
@@ -105,7 +111,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var compactWidth = plugin.Configuration.UiCompactVisibleOnMainWindow
             ? ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + MaterialText.Measure("C").X : 0;
         var languageWidth = plugin.Configuration.UiLanguageVisibleOnMainWindow
-            ? Math.Max(130 * scale, Ui.LanguageLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2) : 0;
+            ? Math.Max(130 * scale, plugin.Appearance.LanguageMenuLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2) : 0;
         var toolbarWidth = compactWidth + languageWidth + MaterialText.Measure(T("Support on Ko-fi")).X + 76 * scale
             + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + MaterialText.Measure(T("Transparency")).X
             + ImGui.GetStyle().ItemSpacing.X * 3;
@@ -122,7 +128,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(0);
             var origin = ImGui.GetCursorScreenPos();
             var side = 52 * scale;
-            MaterialIcons.Draw(MaterialIcon.Settings, origin, side, MaterialTheme.Current.Colors.Primary);
+            AdsPresentation.DrawPluginIcon(ImGui.GetWindowDrawList(), origin, origin + new Vector2(side));
             ImGui.Dummy(new Vector2(side, side));
             ImGui.SameLine(0, 26 * scale);
             ImGui.BeginGroup();
