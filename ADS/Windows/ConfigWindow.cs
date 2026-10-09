@@ -41,8 +41,8 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
 
         bool tabsVisible;
-        using(MaterialText.PushLineHeight(new[] { "General", "Automation", "Data & Rules", "Advanced", "About" }.Select(label => Ui.T(label)).ToArray()))
-            tabsVisible = ImGui.BeginTabBar("ADSSettingsTabs");
+        using(MaterialText.PushLineHeight(new[] { "General", "Automation", "Data & Rules", "Advanced", "Window appearance", "About" }.Select(label => Ui.T(label)).ToArray()))
+            tabsVisible = ImGui.BeginTabBar("ADSSettingsTabs", ImGuiTabBarFlags.FittingPolicyScroll);
         if (tabsVisible)
         {
             if (WindowLayout.BeginTabItem(Ui.L("General")))
@@ -69,6 +69,12 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
                 ImGui.EndTabItem();
             }
 
+            if (WindowLayout.BeginTabItem(Ui.L("Window appearance"), ImGuiTabItemFlags.NoPushId))
+            {
+                ImGui.PushID(Ui.L("General"));
+                try { plugin.Appearance.DrawWindowAppearanceSettings(); }
+                finally { ImGui.PopID(); ImGui.EndTabItem(); }
+            }
             if (WindowLayout.BeginTabItem(Ui.L("About")))
             {
                 DrawAbout();
@@ -84,8 +90,6 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawGeneral(ref bool changed)
     {
-        plugin.Appearance.DrawWindowAppearanceSettings();
-        ImGui.Spacing();
         MaterialText.Text(Ui.T("Startup"));
         var pluginEnabled = plugin.Configuration.PluginEnabled;
         if (WindowLayout.Checkbox("Plugin enabled", ref pluginEnabled))

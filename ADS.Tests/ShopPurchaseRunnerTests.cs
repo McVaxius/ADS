@@ -539,6 +539,21 @@ public sealed class ShopPurchaseRunnerTests
         Assert.True(utility.ShopPurchaseStatus.Succeeded);
     }
 
+    [Theory]
+    [InlineData(1, 1016804, 0, 0, true)]
+    [InlineData(1, 0, 1016804, 0, true)]
+    [InlineData(1, 0, 0, 1016804, true)]
+    [InlineData(1, 0, 1016805, 0, false)]
+    [InlineData(1, 0, 0, 1016805, false)]
+    [InlineData(1, 0, 0, 0, false)]
+    [InlineData(2, 1016804, 1016804, 1016804, false)]
+    public void VendorCleanupTracksNativeInteractionWhenOrdinaryTargetIsCleared(ulong character,
+        ulong targetNpc, ulong shopNpc, ulong selectorNpc, bool owns)
+    {
+        Assert.Equal(owns, DalamudShopPurchaseRuntime.MatchesShopCleanupOwner(
+            1, character, 1016804, targetNpc, shopNpc, selectorNpc));
+    }
+
     [Fact]
     public void FiniteOrderCreditsOnlyVerifiedPurchasesAcrossCurrencyLimitedPassesAndReload()
     {

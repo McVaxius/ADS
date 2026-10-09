@@ -1416,10 +1416,43 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public void CloseOwnedShopUi()
     {
-        if (shopUiCharacter != 0 && (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc))
+        if (!OwnsShopCleanupUi())
             return;
         ownedUiCleanupUntil = shopUiCharacter == 0 ? default : DateTime.UtcNow.AddSeconds(10);
         CloseShopUiOnce();
+    }
+
+    internal static bool MatchesShopCleanupOwner(ulong ownerCharacter, ulong currentCharacter, ulong ownerNpc,
+        ulong targetNpc, ulong shopNpc, ulong selectorNpc)
+        => ownerCharacter != 0 && currentCharacter == ownerCharacter && ownerNpc != 0
+            && (targetNpc == ownerNpc || shopNpc == ownerNpc || selectorNpc == ownerNpc);
+
+    private bool OwnsShopCleanupUi()
+    {
+        if (shopUiCharacter == 0) return true;
+        if (CharacterId != shopUiCharacter || IsBetweenAreas) return false;
+        ulong nativeShopNpc = 0, nativeSelectorNpc = 0;
+        if (GameInteractionHelper.IsAddonVisible("Shop"))
+        {
+            var proxy = ShopEventHandler.AgentProxy.Instance();
+            var agent = AgentShop.Instance();
+            if (proxy != null && agent != null && proxy->Handler != null
+                && agent->EventReceiver == (AtkModuleInterface.AtkEventInterface*)proxy)
+            {
+                var npc = proxy->Handler->EventHandler.EventGameObject;
+                if (npc != null) nativeShopNpc = (ulong)npc->GetGameObjectId();
+            }
+        }
+        if (IsSelectionMenuVisible)
+        {
+            var selector = EventHandlerSelector.Instance();
+            if (selector != null && selector->Target != null)
+                nativeSelectorNpc = (ulong)selector->Target->GetGameObjectId();
+        }
+        // Entering a shop can clear the ordinary target. The active native NPC
+        // interaction still proves ownership of the shop and its returning menu.
+        return MatchesShopCleanupOwner(shopUiCharacter, CharacterId, shopUiNpc,
+            targetManager.Target?.GameObjectId ?? 0, nativeShopNpc, nativeSelectorNpc);
     }
 
     private void CloseShopUiOnce()
@@ -1453,7 +1486,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     internal void ContinueRelicUiCleanup()
     {
-        if (shopUiCharacter != 0 && (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc))
+        if (!OwnsShopCleanupUi())
             return;
         // Closing an exchange can return to its parent menu on a later frame.
         // The opt-in test owns a ten-second cleanup phase, including after reload.
@@ -1464,7 +1497,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     public void UpdateOwnedShopCleanup()
     {
         if (ownedUiCleanupUntil == default) return;
-        if (CharacterId != shopUiCharacter || targetManager.Target?.GameObjectId != shopUiNpc || IsBetweenAreas)
+        // Keep ownership during the empty frame between a closing shop and its
+        // parent menu. Visible replacement UI must still prove the original NPC.
+        if (CharacterId != shopUiCharacter || IsBetweenAreas
+            || (IsAnyShopVisible || IsSelectionMenuVisible || IsTalkVisible) && !OwnsShopCleanupUi())
         { ownedUiCleanupUntil = default; return; }
         if (DateTime.UtcNow >= ownedUiCleanupUntil)
         {
@@ -1484,6 +1520,26 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(name);
         if (addon == null || !addon->IsVisible)
             return;
+        if (name == "Shop")
+        {
+            var agent = AgentShop.Instance();
+            var proxy = ShopEventHandler.AgentProxy.Instance();
+            if (!addon->IsReady || agent == null || proxy == null || proxy->Handler == null
+                || proxy->AddonId != addon->Id || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
+                return;
+            var handler = proxy->Handler;
+            if (handler->StartingBuy || handler->StartingSell || handler->WaitingForSellConfirm
+                || handler->WaitingForTransactionToFinish || HasUnexpectedConfirmation)
+                return;
+            // Regular gil shops finish their NPC event through the handler and
+            // agent, as in VERMAXION. An addon callback alone can leave it active.
+            handler->CancelInteraction();
+            AtkValue result = default, cancel = default;
+            cancel.SetInt(-1);
+            agent->ReceiveEvent(&result, &cancel, 1, 0);
+            log.Debug("[ADS][Shop] Dispatched native gil shop cancellation.");
+            return;
+        }
         // Send the shop's cancel response; Close(true) can leave its NPC event active.
         GameInteractionHelper.TryFireAddonCallback(name, true, -1);
         log.Debug("[ADS][Shop] Dispatched shop cancel callback for {Addon}.", name);

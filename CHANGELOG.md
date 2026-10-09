@@ -1,7 +1,16 @@
+2026-10-08 - Dedicated Window appearance settings (I505)
+
+- Move colour, language, compact mode and transparency controls into their own settings tab or sidebar page. Retain the existing controls, native IDs, saved preferences and actions; keep normal settings visible without an appearance block above them. Versions and client configuration are unchanged. Local build checks and game visual acceptance are recorded separately in the selected task checkpoint.
+
+2026-10-08 - Gil vendor exit after purchases (I496)
+
+- Finish regular gil shops through their native shop handler and agent, then close the returning owned NPC menu through the existing bounded cleanup. Wait for native transactions and confirmations to settle before closing.
+- Retain cleanup ownership through the active native shop/selector NPC when the ordinary target is cleared; reject another character or unrelated interaction. Account 1 purchase of two Mimett Gourds for 696 gil is live confirmed; the user has accepted Chocobo purchasing and vendor cleanup as working.
+
 2026-10-08 - Gil vendor menu selection (I496)
 
 - Select the uniquely matched shop handler through EventFramework's native selector option instead of passing handler metadata to a visible menu callback. Keep character/NPC ownership, exact gil offer, price, capacity and acquisition validation. This corrects the reported Vath beast currency window when requesting the gil shop.
-- Add a focused regression for different selector-slot and global indexes; let the existing test references honor the builder's DALAMUD_HOME override. Native Account 1 retesting remains pending.
+- Add a focused regression for different selector-slot and global indexes; let the existing test references honor the builder's DALAMUD_HOME override. Account 1 gil purchases are live confirmed and user accepted.
 
 2026-10-08 - GitHub Actions shared-library repair
 

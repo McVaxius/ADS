@@ -466,7 +466,7 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
-        Log.Information("[ADS][Shop] startup build=I496-gil-menu-01; native handler selector; culture-invariant confirmation numbers");
+        Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
