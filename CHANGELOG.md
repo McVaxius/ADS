@@ -1,5 +1,6 @@
 2026-10-09 - Separate XA Slave log-tools shortcut (I512)
 
+
 - Add Open XA Slave log tools beside the existing manual support exporter when XA Slave is loaded. The new action opens Utility > XA Mods only; preserve the Copy / ZIP button, its handler and cap warning. No automatic cleanup, provider loading or settings changes.
 
 2026-10-09 - Manual AutoDuty mini controls (I511)
