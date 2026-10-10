@@ -11,6 +11,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 {
     private readonly Plugin plugin;
     private readonly ObjectRuleCheckoutState checkoutState;
+    private readonly AethertekUI.Dalamud.MaterialSupportLog supportLog = new();
 
     public ConfigWindow(Plugin plugin)
         : base("ADS Settings###ADSSettings")
@@ -22,7 +23,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(520f, 420f),
             MaximumSize = new Vector2(2200f, 1600f),
         };
-        Size = new Vector2(760f, 640f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(640f, 480f) : new Vector2(760f, 640f);
         Flags |= ImGuiWindowFlags.HorizontalScrollbar;
     }
 
@@ -151,6 +152,18 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawAutomation(ref bool changed)
     {
+        var disableAutoDuty = plugin.Configuration.DisableAutoDutyOnStart;
+        if (WindowLayout.Checkbox("Disable AutoDuty on ADS start", ref disableAutoDuty))
+        {
+            plugin.Configuration.DisableAutoDutyOnStart = disableAutoDuty;
+            changed = true;
+        }
+        if (AdsPresentation.Compact)
+        {
+            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Off by default. Leave AutoDuty loaded so you can choose which plugin runs each duty."));
+        }
+        else MaterialText.TextWrapped(Ui.T("Off by default. Leave AutoDuty loaded so you can choose which plugin runs each duty."));
+        ImGui.Spacing();
         MaterialText.Text(Ui.T("Equipment cleanup"));
         var gearSaleConfirmation = plugin.Configuration.GearSaleConfirmationEnabled;
         if (WindowLayout.Checkbox("Preview equipment before selling", ref gearSaleConfirmation))
@@ -318,6 +331,9 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     private void DrawAbout()
     {
+        supportLog.Draw(Plugin.PluginInterface, text => Ui.T(text), plugin.OpenPath,
+            ex => Plugin.Log.Warning(ex, "[ADS] Manual support log export failed."), Plugin.CommandManager);
+        ImGui.Spacing();
         MaterialText.Text(Ui.T("{0} v{1}", PluginInfo.DisplayName, PluginInfo.GetVersion()));
         MaterialText.TextWrapped(Ui.Display(PluginInfo.Summary));
         ImGui.Spacing();

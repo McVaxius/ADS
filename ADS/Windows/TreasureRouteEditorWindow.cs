@@ -33,7 +33,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(980f, 520f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1500f, 860f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(1080f, 620f) : new Vector2(1500f, 860f);
     }
 
     public void Dispose()

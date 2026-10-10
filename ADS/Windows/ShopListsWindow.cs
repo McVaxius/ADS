@@ -45,7 +45,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(920f, 620f),
             MaximumSize = new Vector2(1800f, 1300f),
         };
-        Size = new Vector2(1280f, 820f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(980f, 620f) : new Vector2(1280f, 820f);
     }
 
     public void Dispose()
@@ -268,28 +268,28 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
         MaterialText.Text(Ui.T("Add row"));
         ImGui.SetNextItemWidth(120f);
-        WindowLayout.InputInt(Ui.L("Item ID"), ref newItemId);
+        WindowLayout.InputInt(WindowLayout.InputLabel("Item ID"), ref newItemId);
         ImGui.SameLine();
         ImGui.SetNextItemWidth(95f);
         if (store.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
         {
-            WindowLayout.InputInt(Ui.L("Target quantity"), ref newRefillToAtLeast);
+            WindowLayout.InputInt(WindowLayout.InputLabel("Target quantity"), ref newRefillToAtLeast);
             newTriggerBelow = newRefillToAtLeast;
             newRepeatable = false;
         }
         else
         {
-            WindowLayout.InputInt(Ui.L("If owned <"), ref newTriggerBelow);
+            WindowLayout.InputInt(WindowLayout.InputLabel("If owned <"), ref newTriggerBelow);
             ImGui.SameLine();
             ImGui.SetNextItemWidth(95f);
-            WindowLayout.InputInt(Ui.L("Refill to >="), ref newRefillToAtLeast);
+            WindowLayout.InputInt(WindowLayout.InputLabel("Refill to >="), ref newRefillToAtLeast);
             ImGui.SameLine();
             WindowLayout.Checkbox("Repeatable", ref newRepeatable);
         }
         ImGui.SameLine();
         var scopes = new[] { "Inventory only", "Inventory + XA Database retainers" };
         ImGui.SetNextItemWidth(255f);
-        WindowLayout.Combo(Ui.L("Item ownership"), ref newOwnershipScopeIndex,scopes.Select(Ui.Display).ToArray(), scopes.Length);
+        WindowLayout.Combo(WindowLayout.InputLabel("Item ownership", WindowLayout.ComboMinimum(scopes.Select(Ui.Display))), ref newOwnershipScopeIndex,scopes.Select(Ui.Display).ToArray(), scopes.Length);
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Add / update item")))
             AddOrUpdateItem((uint)Math.Max(0, newItemId));
@@ -413,17 +413,21 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.TargetedRefill)
             MaterialText.TextWrapped(Ui.T("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items."));
 
+        var scopeNames = new[] { "Inventory", "Inventory + retainers" }.Select(Ui.Display).ToArray();
+        var ruleWidth = MathF.Ceiling(Math.Max(WindowLayout.ComboMinimum(scopeNames),
+            WindowLayout.TextMinimum(64) + ImGui.GetStyle().ItemInnerSpacing.X +
+            Math.Max(MaterialText.Measure(Ui.Display("If owned <")).X, MaterialText.Measure(Ui.Display("Refill to >=")).X)));
         if (!ImGui.BeginTable(
                 "ADSShopListPreview",
                 8,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY
                 | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp,
-                new Vector2(-1f, -1f)))
+                new Vector2(-1f, Math.Max(ImGui.GetContentRegionAvail().Y - 1f, 200f * MaterialTheme.Metrics.Scale))))
         {
             return;
         }
         ImGui.TableSetupColumn(Ui.L("Item / row"), ImGuiTableColumnFlags.WidthStretch, 1.1f);
-        ImGui.TableSetupColumn(Ui.L("Rule"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
+        ImGui.TableSetupColumn(Ui.L("Rule"), ImGuiTableColumnFlags.WidthFixed, ruleWidth);
         ImGui.TableSetupColumn(Ui.L("Owned"), ImGuiTableColumnFlags.WidthFixed, 95f);
         ImGui.TableSetupColumn(Ui.L("Retainer locations"), ImGuiTableColumnFlags.WidthStretch, 1.6f);
         ImGui.TableSetupColumn(Ui.L("Would buy"), ImGuiTableColumnFlags.WidthFixed, 70f);
@@ -449,7 +453,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             ImGui.SetNextItemWidth(70f);
             if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
             {
-                WindowLayout.InputInt(Ui.L("Target"), ref edit.RefillToAtLeast);
+                WindowLayout.InputInt(WindowLayout.InputLabel("Target"), ref edit.RefillToAtLeast);
                 edit.TriggerBelow = edit.RefillToAtLeast;
                 edit.Repeatable = false;
                 var credited = plugin.ShopListService.PresetStore.GetOrderProgress(
@@ -458,14 +462,13 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
             else
             {
-                WindowLayout.InputInt(Ui.L("If owned <##Trigger"), ref edit.TriggerBelow);
+                WindowLayout.InputInt(WindowLayout.InputLabel("If owned <##Trigger"), ref edit.TriggerBelow);
                 ImGui.SetNextItemWidth(70f);
-                WindowLayout.InputInt(Ui.L("Refill to >=##Refill"), ref edit.RefillToAtLeast);
+                WindowLayout.InputInt(WindowLayout.InputLabel("Refill to >=##Refill"), ref edit.RefillToAtLeast);
                 WindowLayout.Checkbox("Repeatable", ref edit.Repeatable);
             }
-            var scopeNames = new[] { "Inventory", "Inventory + retainers" };
-            ImGui.SetNextItemWidth(155f);
-            WindowLayout.Combo("##Scope", ref edit.OwnershipScopeIndex,scopeNames.Select(Ui.Display).ToArray(), scopeNames.Length);
+            ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(scopeNames));
+            WindowLayout.Combo("##Scope", ref edit.OwnershipScopeIndex,scopeNames, scopeNames.Length);
             if (WindowLayout.SmallButton(Ui.L("Save row")))
             {
                 var succeeded = plugin.ShopListService.UpdateItem(
@@ -493,7 +496,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(5);
             if (row.SelectedOffer == null)
             {
-                MaterialText.TextDisabled(Ui.T("None needed / available"));
+                using var disabledText = new MaterialStyleScope();
+                disabledText.Color(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+                MaterialText.TextWrapped(Ui.T("None needed / available"));
             }
             else
             {

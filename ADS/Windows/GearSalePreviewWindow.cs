@@ -15,7 +15,7 @@ public sealed class GearSalePreviewWindow(Plugin plugin) : PositionedWindow("Equ
     public void Show(GearCleanupSelection value)
     {
         selection = value;
-        Size = new Vector2(660, 500);
+        Size = plugin.Configuration.UiCompact ? new Vector2(620f, 480f) : new Vector2(660, 500);
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(420, 300), MaximumSize = new Vector2(1400, 1200) };
         IsOpen = true;
     }

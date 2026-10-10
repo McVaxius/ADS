@@ -65,10 +65,10 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         using var palette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale, MaterialStyleMode.ColorsOnly);
         using var style = new MaterialStyleScope();
         var scale = ImGuiHelpers.GlobalScale;
-        style.Style(ImGuiStyleVar.WindowPadding, new Vector2(plugin.Configuration.UiCompact ? 16 : 20) * scale);
-        style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(plugin.Configuration.UiCompact ? 8 : 12, plugin.Configuration.UiCompact ? 6 : 10) * scale);
-        style.Style(ImGuiStyleVar.FramePadding, new Vector2(plugin.Configuration.UiCompact ? 10 : 14, plugin.Configuration.UiCompact ? 4 : 7) * scale);
-        style.Style(ImGuiStyleVar.CellPadding, new Vector2(plugin.Configuration.UiCompact ? 6 : 10, plugin.Configuration.UiCompact ? 4 : 8) * scale);
+        style.Style(ImGuiStyleVar.WindowPadding, new Vector2(plugin.Configuration.UiCompact ? 8 : 20) * scale);
+        style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(plugin.Configuration.UiCompact ? 6 : 12, plugin.Configuration.UiCompact ? 4 : 10) * scale);
+        style.Style(ImGuiStyleVar.FramePadding, new Vector2(plugin.Configuration.UiCompact ? 6 : 14, plugin.Configuration.UiCompact ? 2 : 7) * scale);
+        style.Style(ImGuiStyleVar.CellPadding, new Vector2(plugin.Configuration.UiCompact ? 4 : 10, plugin.Configuration.UiCompact ? 2 : 8) * scale);
         style.Style(ImGuiStyleVar.FrameRounding, 4 * scale);
         style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
         using var body = plugin.Fonts.Push(UiFontRole.Body);

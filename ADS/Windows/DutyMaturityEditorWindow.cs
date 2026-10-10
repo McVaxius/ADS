@@ -30,7 +30,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(960f, 560f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1440f, 860f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(1080f, 620f) : new Vector2(1440f, 860f);
     }
 
     public void Dispose()

@@ -22,7 +22,7 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(860f, 420f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1280f, 840f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(960f, 620f) : new Vector2(1280f, 840f);
     }
 
     public void Dispose()

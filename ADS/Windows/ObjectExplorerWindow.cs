@@ -35,7 +35,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(720f, 420f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1320f, 920f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(980f, 620f) : new Vector2(1320f, 920f);
     }
 
     public void Dispose()

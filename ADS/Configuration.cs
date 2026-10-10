@@ -35,6 +35,7 @@ public sealed class Configuration : IPluginConfiguration
     }
     public bool OpenMainWindowOnLoad { get; set; } = false;
     public bool OpenQuickControlsOnLoad { get; set; } = false;
+    public bool DisableAutoDutyOnStart { get; set; } = false;
     public bool DtrBarEnabled { get; set; } = true;
     public int DtrBarMode { get; set; } = 1;
     public string DtrIconEnabled { get; set; } = DefaultDtrIconEnabled;

@@ -10,6 +10,11 @@ namespace ADS.Windows;
 public sealed class RuleGuideWindow : PositionedWindow, IDisposable
 {
     public RuleGuideWindow()
+        : this(false)
+    {
+    }
+
+    public RuleGuideWindow(bool compact)
         : base("ADS Rule Guide###ADSRuleGuide")
     {
         SizeConstraints = new WindowSizeConstraints
@@ -17,7 +22,7 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(760f, 520f),
             MaximumSize = new Vector2(1800f, 1800f),
         };
-        Size = new Vector2(1050f, 850f);
+        Size = compact ? new Vector2(840f, 620f) : new Vector2(1050f, 850f);
     }
 
     public void Dispose()

@@ -25,7 +25,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(680f, 420f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1114f, 968f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(840f, 620f) : new Vector2(1114f, 968f);
         TitleBarButtons.Add(new()
         {
             Icon = FontAwesomeIcon.Cog, Priority = 0, IconOffset = new(2, 1),
@@ -127,16 +127,23 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
             var origin = ImGui.GetCursorScreenPos();
-            var side = 52 * scale;
+            var side = (AdsPresentation.Compact ? 28 : 52) * scale;
             AdsPresentation.DrawPluginIcon(ImGui.GetWindowDrawList(), origin, origin + new Vector2(side));
             ImGui.Dummy(new Vector2(side, side));
-            ImGui.SameLine(0, 26 * scale);
+            ImGui.SameLine(0, (AdsPresentation.Compact ? 8 : 26) * scale);
             ImGui.BeginGroup();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 12 * scale);
+            if (!AdsPresentation.Compact) ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 10 * scale);
             using (plugin.Fonts.Push(AdsPresentation.Compact ? UiFontRole.CompactTitle : UiFontRole.Title))
                 MaterialText.TextWrapped(T("AI Duty Solver"));
-            ImGui.SetCursorScreenPos(new Vector2(ImGui.GetCursorScreenPos().X, Math.Max(origin.Y + 30 * scale, ImGui.GetItemRectMax().Y)));
-            MaterialText.TextColored(MaterialTheme.Current.Colors.OnSurfaceVariant, T("Automate your duties with confidence."));
+            if (AdsPresentation.Compact)
+            {
+                if (ImGui.IsItemHovered()) MaterialText.SetTooltip(T("Automate your duties with confidence."));
+            }
+            else
+            {
+                ImGui.SetCursorScreenPos(new Vector2(ImGui.GetCursorScreenPos().X, Math.Max(origin.Y + 30 * scale, ImGui.GetItemRectMax().Y)));
+                MaterialText.TextColored(MaterialTheme.Current.Colors.OnSurfaceVariant, T("Automate your duties with confidence."));
+            }
             ImGui.EndGroup();
             if (stacked) ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(stacked ? 0 : 1);
@@ -167,24 +174,38 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var context = plugin.DutyContextService.Current;
         var execution = plugin.ExecutionService;
         var planner = plugin.ObjectivePlannerService.Current;
-        var columns = ImGui.GetContentRegionAvail().X >= 760f * ImGuiHelpers.GlobalScale ? 4 : 2;
+        var summaries = new[]
+        {
+            (MaterialIcon.Document, T("DUTY"), GetCurrentDutyLabel(context)),
+            (MaterialIcon.Group, T("OWNERSHIP"), Display(execution.CurrentMode.ToString())),
+            (MaterialIcon.Settings, T("EXECUTION PHASE"), Display(execution.CurrentPhase.ToString())),
+            (MaterialIcon.Cube, T("OBJECT NAME"), string.IsNullOrWhiteSpace(planner.TargetName) ? T("None") : planner.TargetName),
+        };
+        var columns = ImGui.GetContentRegionAvail().X >= (AdsPresentation.Compact ? 600f : 760f) * ImGuiHelpers.GlobalScale ? 4 : 2;
+        if (AdsPresentation.Compact)
+        {
+            var widest = summaries.Max(summary =>
+            {
+                float captionWidth, valueWidth;
+                using (plugin.Fonts.Push(UiFontRole.Caption)) captionWidth = MaterialText.Measure(summary.Item2).X;
+                using (plugin.Fonts.Push(UiFontRole.BodyStrong)) valueWidth = MaterialText.Measure(summary.Item3).X;
+                return captionWidth + MathF.Min(valueWidth, 200 * MaterialTheme.Metrics.Scale) + 54 * MaterialTheme.Metrics.Scale;
+            });
+            while (columns > 1 && ImGui.GetContentRegionAvail().X / columns < widest) columns /= 2;
+        }
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(7, 0) * ImGuiHelpers.GlobalScale);
         if (!ImGui.BeginTable("ADSPrimaryState", columns, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.PopStyleVar();
             return;
         }
-        ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(0);
-        AdsPresentation.Summary(plugin.Fonts.Push, MaterialIcon.Document, T("DUTY"), GetCurrentDutyLabel(context));
-        ImGui.TableSetColumnIndex(1);
-        AdsPresentation.Summary(plugin.Fonts.Push, MaterialIcon.Group, T("OWNERSHIP"), Display(execution.CurrentMode.ToString()));
-        if (columns == 2)
-            ImGui.TableNextRow();
-        ImGui.TableSetColumnIndex(columns == 2 ? 0 : 2);
-        AdsPresentation.Summary(plugin.Fonts.Push, MaterialIcon.Settings, T("EXECUTION PHASE"), Display(execution.CurrentPhase.ToString()));
-        ImGui.TableSetColumnIndex(columns == 2 ? 1 : 3);
-        AdsPresentation.Summary(plugin.Fonts.Push, MaterialIcon.Cube, T("OBJECT NAME"), string.IsNullOrWhiteSpace(planner.TargetName) ? T("None") : planner.TargetName);
+        for (var index = 0; index < summaries.Length; index++)
+        {
+            if (index % columns == 0) ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(index % columns);
+            var (icon, caption, value) = summaries[index];
+            AdsPresentation.Summary(plugin.Fonts.Push, icon, caption, value);
+        }
         ImGui.EndTable();
         ImGui.PopStyleVar();
     }
@@ -193,7 +214,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     {
         var framePadding = ImGui.GetStyle().FramePadding;
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding,
-            new Vector2(framePadding.X, (AdsPresentation.Compact ? 10 : 12) * MaterialTheme.Metrics.Scale));
+            new Vector2(framePadding.X, (AdsPresentation.Compact ? 3 : 12) * MaterialTheme.Metrics.Scale));
         bool visible;
         using(MaterialText.PushLineHeight(new[] { "Overview", "Duties", "Tools", "Diagnostics" }.Select(label => T(label)).ToArray()))
             visible = ImGui.BeginTabBar("ADSMainTabs");
@@ -230,7 +251,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
     private static void DrawScrollableTabContent(string id, Action draw)
     {
-        if (AdsPresentation.Compact) ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8 * MaterialTheme.Metrics.Scale);
+        if (AdsPresentation.Compact) ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 2 * MaterialTheme.Metrics.Scale);
         using var childStyle = new MaterialStyleScope();
         childStyle.Style(ImGuiStyleVar.WindowPadding, new Vector2(2) * MaterialTheme.Metrics.Scale);
         if (ImGui.BeginChild(id, Vector2.Zero, false, ImGuiWindowFlags.HorizontalScrollbar | ImGuiWindowFlags.AlwaysUseWindowPadding))
@@ -251,7 +272,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ? DutyCategoryDisplayCatalog.Get(currentDuty.Category)
             : null;
         var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? T("Unknown");
-        var columns = ImGui.GetContentRegionAvail().X >= 880f * ImGuiHelpers.GlobalScale ? 2 : 1;
+        var columns = ImGui.GetContentRegionAvail().X >= (AdsPresentation.Compact ? 640f : 880f) * ImGuiHelpers.GlobalScale ? 2 : 1;
         if (!ImGui.BeginTable("ADSOverviewCards", columns, ImGuiTableFlags.SizingStretchSame))
             return;
         ImGui.TableNextRow();

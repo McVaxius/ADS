@@ -22,7 +22,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(560f, 440f),
             MaximumSize = new Vector2(1800f, 1400f),
         };
-        Size = new Vector2(760f, 620f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(640f, 520f) : new Vector2(760f, 620f);
     }
 
     public void Dispose()

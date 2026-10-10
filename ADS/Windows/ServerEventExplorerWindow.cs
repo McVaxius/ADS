@@ -36,7 +36,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(1050f, 480f),
             MaximumSize = new Vector2(3400f, 2200f),
         };
-        Size = new Vector2(1500f, 900f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(1120f, 620f) : new Vector2(1500f, 900f);
     }
 
     public void Dispose()

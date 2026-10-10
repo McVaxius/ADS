@@ -57,7 +57,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(560f, 500f),
             MaximumSize = new Vector2(1400f, 1200f),
         };
-        Size = new Vector2(720f, 760f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(640f, 620f) : new Vector2(720f, 760f);
     }
 
     public void Dispose()

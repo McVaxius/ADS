@@ -405,7 +405,7 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow = new LootWindow(this);
         lazyLootWarningWindow = new LazyLootWarningWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
-        ruleGuideWindow = new RuleGuideWindow();
+        ruleGuideWindow = new RuleGuideWindow(Configuration.UiCompact);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         dutyMaturityEditorWindow = new DutyMaturityEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
@@ -467,6 +467,7 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
         Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
+        Log.Information("[ADS][UI] build=devhub-I506-I509-I511-I512-20261009-03; manual support log export; separate XA Slave log UI shortcut; optional AutoDuty disable defaults off; manual AutoDuty mini controls");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -1182,8 +1183,10 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
-    private static void DisableAutoDutyForDutyStart()
+    private void DisableAutoDutyForDutyStart()
     {
+        if (!Configuration.DisableAutoDutyOnStart)
+            return;
         if (!GameInteractionHelper.TrySendChatCommand(CommandManager, "/xldisableplugin AutoDuty", Log))
             Log.Warning("[ADS] Failed to dispatch automatic AutoDuty disable command; continuing duty start.");
     }

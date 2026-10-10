@@ -23,7 +23,7 @@ public sealed class HigherLowerWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(720f, 520f),
             MaximumSize = new Vector2(2400f, 1600f),
         };
-        Size = new Vector2(980f, 760f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(840f, 620f) : new Vector2(980f, 760f);
     }
 
     public void Dispose()

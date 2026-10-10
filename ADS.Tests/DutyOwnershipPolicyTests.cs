@@ -4,6 +4,20 @@ namespace ADS.Tests;
 
 public sealed class DutyOwnershipPolicyTests
 {
+    [Fact]
+    public void OlderSettingsKeepAutoDutyLoadedAndExplicitOptInRoundTrips()
+    {
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            "{\"OpenQuickControlsOnLoad\":true}")!;
+        Assert.False(restored.DisableAutoDutyOnStart);
+        Assert.True(restored.OpenQuickControlsOnLoad);
+        restored.DisableAutoDutyOnStart = true;
+        var roundTrip = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(restored))!;
+        Assert.True(roundTrip.DisableAutoDutyOnStart);
+        Assert.True(roundTrip.OpenQuickControlsOnLoad);
+    }
+
     public static TheoryData<OwnershipMode, bool> InsideDutyCases => new()
     {
         { OwnershipMode.Idle, false },

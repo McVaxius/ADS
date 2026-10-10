@@ -48,13 +48,26 @@ internal static class WindowLayout
         => MaterialText.Measure(nativeLabel.Split("##", 2)[0]).X + 2 * ImGui.GetStyle().FramePadding.X +
            (icon == MaterialIcon.None ? 0 : 28 * MaterialTheme.Metrics.Scale);
 
-    internal static bool Button(string nativeLabel, Vector2 size = default, MaterialIcon icon = MaterialIcon.None)
+    internal static unsafe bool Button(string nativeLabel, Vector2 size = default, MaterialIcon icon = MaterialIcon.None)
     {
         using var controls = ImGui.GetStyle().FramePadding.Y == 0 || MaterialControls.Context == MaterialControlContext.Dense
             ? default(MaterialControls.ControlScope) : MaterialControls.Push(MaterialControlContext.Toolbar);
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         size.X = MaterialLayout.FitNextItemWidth(size.X, Math.Max(size.X, ButtonMinimum(nativeLabel, icon)));
-        size.Y = Math.Max(size.Y, Math.Max(ImGui.GetFrameHeight(), icon == MaterialIcon.None ? 0 : 20 * MaterialTheme.Metrics.Scale));
+        var caption = nativeLabel.Split("##", 2)[0];
+        var inkOverflow = 0f;
+        if (!MaterialText.RequiresShaping(caption))
+        {
+            var font = ImGui.GetFont(); var fontSize = ImGui.GetFontSize(); var fontScale = fontSize / font.FontSize;
+            foreach (var character in caption)
+            {
+                var glyph = ImGui.FindGlyphNoFallback(font, character);
+                if (glyph.Handle != null)
+                    inkOverflow = Math.Max(inkOverflow, Math.Max(-glyph.Handle->Y0 * fontScale, glyph.Handle->Y1 * fontScale - fontSize));
+            }
+        }
+        // Native centered text clips descenders that extend beyond the font's line box.
+        size.Y = MathF.Ceiling(Math.Max(size.Y, Math.Max(ImGui.GetFrameHeight() + 2 * inkOverflow, icon == MaterialIcon.None ? 0 : 20 * MaterialTheme.Metrics.Scale)));
         if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0])) return ImGui.Button(nativeLabel, size);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         var clicked = ImGui.Button(nativeLabel, size);
@@ -76,7 +89,7 @@ internal static class WindowLayout
     internal static bool Header(string nativeLabel, MaterialIcon icon, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.None)
     {
         using var style = new MaterialStyleScope();
-        style.Style(ImGuiStyleVar.FramePadding, new Vector2(10, AdsPresentation.Compact ? 10 : 12) * MaterialTheme.Metrics.Scale);
+        style.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact ? 3 : 12) * MaterialTheme.Metrics.Scale);
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);var open = ImGui.CollapsingHeader(nativeLabel, flags);ImGui.PopStyleColor();
         var min = ImGui.GetItemRectMin();var max = ImGui.GetItemRectMax();var scale = MaterialTheme.Metrics.Scale;
@@ -96,7 +109,7 @@ internal static class WindowLayout
     {
         var scale = MaterialTheme.Metrics.Scale;
         using var padding = new MaterialStyleScope();
-        padding.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 34 : 42, AdsPresentation.Compact ? 10 : 12) * scale);
+        padding.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 22 : 42, AdsPresentation.Compact ? 3 : 12) * scale);
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.SetNextItemWidth(MaterialText.Measure(nativeLabel, true).X + 2 * ImGui.GetStyle().FramePadding.X);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
@@ -140,7 +153,7 @@ internal static class WindowLayout
 
     internal static bool SmallButton(string nativeLabel)
     {
-        if (!MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0])) return ImGui.SmallButton(nativeLabel);
+        MaterialLayout.FitNextItemWidth(0, ButtonMinimum(nativeLabel));
         using var padding = new MaterialStyleScope();
         padding.Style(ImGuiStyleVar.FramePadding, new Vector2(ImGui.GetStyle().FramePadding.X, 0));
         return Button(nativeLabel);

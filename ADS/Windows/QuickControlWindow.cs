@@ -21,7 +21,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(300f, 420f),
             MaximumSize = new Vector2(1200f, 1600f),
         };
-        Size = new Vector2(376f, 968f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(376f, 620f) : new Vector2(376f, 968f);
         Flags |= ImGuiWindowFlags.HorizontalScrollbar;
         TitleBarButtons.Add(new()
         {
@@ -158,8 +158,8 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
     {
         using var shortcutFont = plugin.Fonts.Push(UiFontRole.Caption);
         using var shortcutStyle = new MaterialStyleScope();
-        shortcutStyle.Style(ImGuiStyleVar.FramePadding, new Vector2(10, 7) * MaterialTheme.Metrics.Scale);
-        shortcutStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(4, 4) * MaterialTheme.Metrics.Scale);
+        shortcutStyle.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact ? 2 : 7) * MaterialTheme.Metrics.Scale);
+        shortcutStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(4, AdsPresentation.Compact ? 2 : 4) * MaterialTheme.Metrics.Scale);
         shortcutStyle.Style(ImGuiStyleVar.ItemSpacing, new Vector2(8, 0) * MaterialTheme.Metrics.Scale);
         var columns = ToolColumns();
         if (!ImGui.BeginTable("ADSQuickToolShortcuts", columns, ImGuiTableFlags.SizingStretchSame)) return;
@@ -186,6 +186,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             return;
         DrawCompanionControls("QSTcomp", QstCompanionWarningService.InternalName, columns);
         DrawCompanionControls("HealBot", "Coppelia", columns);
+        DrawCompanionControls("AutoDuty", "AutoDuty", columns);
         ImGui.EndTable();
         if (WindowLayout.Button(Ui.L("Reset RSR Healing"), ShortcutSize, MaterialIcon.Refresh))
             plugin.ResetRsrHealing();
@@ -193,12 +194,13 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             MaterialText.SetTooltip(Ui.T("Set RSR to Off and restore Coppelia's eleven healing defaults. Works without HealBot loaded."));
     }
 
-    private static Vector2 ShortcutSize => new(-1f, (AdsPresentation.Compact ? 38 : 46) * MaterialTheme.Metrics.Scale);
+    private static Vector2 ShortcutSize => new(-1f, (AdsPresentation.Compact ? 26 : 46) * MaterialTheme.Metrics.Scale);
 
     private static int ToolColumns()
     {
         var labels = new[] { Ui.L("Loot"), Ui.L("Rules"), Ui.L("Objects"), Ui.L("Dialogs"), Ui.L("Update"), Ui.L("Shop Lists"),
-            Ui.L("Enable {0}", "QSTcomp"), Ui.L("Disable {0}", "QSTcomp"), Ui.L("Enable {0}", "HealBot"), Ui.L("Disable {0}", "HealBot") };
+            Ui.L("Enable {0}", "QSTcomp"), Ui.L("Disable {0}", "QSTcomp"), Ui.L("Enable {0}", "HealBot"), Ui.L("Disable {0}", "HealBot"),
+            Ui.L("Enable {0}", "AutoDuty"), Ui.L("Disable {0}", "AutoDuty") };
         var width = labels.Max(label => WindowLayout.ButtonMinimum(label, MaterialIcon.Play)) + ImGui.GetStyle().CellPadding.X * 2;
         return Math.Clamp((int)(ImGui.GetContentRegionAvail().X / width), 1, 2);
     }

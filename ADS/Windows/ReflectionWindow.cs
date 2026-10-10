@@ -20,7 +20,7 @@ public sealed class ReflectionWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(520f, 360f),
             MaximumSize = new Vector2(1800f, 1400f),
         };
-        Size = new Vector2(760f, 560f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(640f, 480f) : new Vector2(760f, 560f);
     }
 
     public void Dispose()

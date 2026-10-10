@@ -77,6 +77,12 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 | Rules Editors | Executable inherited object-rule presets, protected `DEFAULT` shards, searchable multi-context filtering/revert/promotion, responsive compact editing, dialog presets, partial imports, bulk editing, and duty deep-links |
 | Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
+`/ads rules` keeps preset selection, draft actions, filters and selection controls
+above the rule grid, whose editor rows meet at their dividers and retain inline controls.
+Expand **Advanced**, then choose Preset management, Sharing, Draft editing,
+PR-ready checkout or Guided Setup. Each tab shows only its related tools.
+Edits still require **Save**; the row **X** uses the same draft deletion and **Undo** flow.
+
 ## Documentation
 
 - [Operator Guide](GUIDE.md)
@@ -89,6 +95,19 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 
 ## Support
 
+Settings > About has **Copy / ZIP Dalamud log**. It snapshots this client's
+`dalamud.log` into the plugin's `support-logs` folder and opens that folder.
+Share the ZIP manually and remove old exports when no longer needed. A log at
+or above 100 MiB may have stopped recording recent activity; ADS warns before
+exporting it, so it may be unsuitable for diagnosing the current issue.
+
+Settings > Automation > **Disable AutoDuty on ADS start** defaults off. Leave
+it off to keep AutoDuty loaded and choose which plugin executes each duty.
+Use the manual **Enable AutoDuty** and **Disable AutoDuty** buttons in `/ads mini`
+when you want to change its loaded state. These actions do not change that preference.
+
 - [Discord](https://discord.gg/ac6gjDvR8R)
 - [Repository](https://github.com/McVaxius/ADS)
 - [Ko-fi](https://ko-fi.com/mcvaxius)
+
+When XA Slave is loaded, **Open XA Slave log tools** opens its **Utility > XA Mods** panel, which contains Dalamud Log Cleaner. The existing **Copy / ZIP Dalamud log** action remains separate. Opening the panel does not run cleanup or change XA Slave settings.

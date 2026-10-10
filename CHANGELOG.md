@@ -1,3 +1,24 @@
+2026-10-09 - Separate XA Slave log-tools shortcut (I512)
+
+- Add Open XA Slave log tools beside the existing manual support exporter when XA Slave is loaded. The new action opens Utility > XA Mods only; preserve the Copy / ZIP button, its handler and cap warning. No automatic cleanup, provider loading or settings changes.
+
+2026-10-09 - Manual AutoDuty mini controls (I511)
+
+- Add Enable AutoDuty and Disable AutoDuty to /ads mini through the existing companion-plugin actions. Include both translated labels in responsive width budgeting; keep the separate automatic-disable preference off by default.
+
+2026-10-09 - Manual support log export and optional AutoDuty disabling (I506/I509)
+
+- Keep AutoDuty loaded on ADS start by default. Add an explicit Automation preference for users who want ADS to disable it.
+- Add a manual support log ZIP action in Settings > About using the current client's log and a shared-reader snapshot. Warn before exporting a log at or above the 100 MiB cap; open the output folder and leave sharing and cleanup manual.
+
+- Prepare the whole-ADS compact pilot with smaller independent spacing, single-line run actions, inline summaries and compact first-use editor sizes. Retain rule selection, deletion, preset and sharing controls in compact mode; context/checkout controls expand under Advanced so rows remain visible. The frozen first column gains a red row-delete action with the existing Undo and explicit Save behavior. Native rendering and user visual acceptance remain separate.
+- Wrap small toolbar actions and shop-list row editors when their complete labels no longer fit, retaining their native identities and purchase controls.
+- Fit compact status columns to translated values and reserve button height for complete glyph ink, including descenders outside the font line box.
+- Keep populated Shop List preview rows reachable when the controls above them exceed the window height; reserve a usable scrolling table height and fit each retained row editor label.
+- Reorganize the Rules Editor around a compact action bar, aligned context/scope/search filters and a larger rule grid. Advanced separates preset management, sharing, draft editing, checkout and guidance into tabs that show one group at a time. Restore the established rule-row spacing and inline help/copy/paste buttons; fit dropdown values and classification help at the current density and text scale. Retain the compact toolbar, original control IDs, explicit Save and undo-aware row deletion.
+- Reduce the Rules grid's horizontal cell inset to one scaled pixel so row editors sit close to their column dividers, retaining the approved row height and toolbar/Advanced layout.
+- Remove vertical cell padding from the Rules grid so successive editor rows meet at the row dividers. Retain editor padding, text height, inline actions and the approved toolbar/Advanced tabs.
+
 2026-10-08 - Dedicated Window appearance settings (I505)
 
 - Move colour, language, compact mode and transparency controls into their own settings tab or sidebar page. Retain the existing controls, native IDs, saved preferences and actions; keep normal settings visible without an appearance block above them. Versions and client configuration are unchanged. Local build checks and game visual acceptance are recorded separately in the selected task checkpoint.

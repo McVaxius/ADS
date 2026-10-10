@@ -30,7 +30,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(980f, 520f),
             MaximumSize = new Vector2(3600f, 2200f),
         };
-        Size = new Vector2(1580f, 920f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(1080f, 620f) : new Vector2(1580f, 920f);
     }
 
     public void Dispose()

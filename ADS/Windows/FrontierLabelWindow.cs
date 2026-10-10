@@ -21,7 +21,7 @@ public sealed class FrontierLabelWindow : PositionedWindow, IDisposable
             MinimumSize = new Vector2(720f, 420f),
             MaximumSize = new Vector2(3200f, 2200f),
         };
-        Size = new Vector2(1100f, 820f);
+        Size = plugin.Configuration.UiCompact ? new Vector2(860f, 620f) : new Vector2(1100f, 820f);
     }
 
     public void Dispose()

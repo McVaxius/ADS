@@ -22,13 +22,13 @@ internal static class AdsPresentation
 
     // Approved ADS-review-v2 and ADS-compact-review-v1, measured in logical pixels.
     internal const uint ReferenceAccent = 0x0067FF;
-    internal static readonly float[] FontSizes = [14, 16, 32, 20, 18, 16, 30, 12, 14];
+    internal static readonly float[] FontSizes = [14, 16, 32, 20, 18, 16, 18, 12, 14];
     internal static readonly string[] FontFiles = ["segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisb.ttf", "seguisb.ttf", "seguisb.ttf", "segoeuib.ttf", "segoeui.ttf", "seguisb.ttf"];
     internal static float AtlasHeight(UiFontRole role) => FontSizes[(int)role] * 4 / 3;
     internal static bool Compact => MaterialTheme.Current.Density == MaterialDensity.Compact;
-    internal static float HeaderHeight => Compact ? 62 : 68;
-    internal static float Gap => Compact ? 10 : 14;
-    internal static float ControlHeight => Compact ? 54 : 66;
+    internal static float HeaderHeight => Compact ? 32 : 68;
+    internal static float Gap => Compact ? 6 : 14;
+    internal static float ControlHeight => Compact ? 28 : 66;
     internal static Vector4 Rgb(uint rgb) => new(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f, 1);
 
     internal static MaterialTheme Theme(uint accent)
@@ -76,13 +76,13 @@ internal static class AdsPresentation
 
     internal static void Panel(System.Action draw, uint originalIdRoot, float minimumHeight = 0)
         => Surface(draw, originalIdRoot, minimumHeight,
-            new Vector2(Compact ? 14 : 20, Compact ? 12 : 16), false);
+            new Vector2(Compact ? 8 : 20, Compact ? 6 : 16), false);
 
     internal static void Inset(System.Action draw, uint originalIdRoot)
         => Inset(draw, originalIdRoot, 0);
 
     internal static void Inset(System.Action draw, uint originalIdRoot, float minimumHeight)
-        => Surface(draw, originalIdRoot, minimumHeight, new Vector2(12, 8), true);
+        => Surface(draw, originalIdRoot, minimumHeight, Compact ? new Vector2(6, 4) : new Vector2(12, 8), true);
 
     internal static void ToolPanel(System.Action draw, uint originalIdRoot)
         => Surface(draw, originalIdRoot, 0, new Vector2(6), true);
@@ -151,7 +151,7 @@ internal static class AdsPresentation
         {
             using (pushFont(UiFontRole.BodyStrong)) MaterialText.TextWrapped(headline);
             using (pushFont(UiFontRole.Body)) MaterialText.TextWrapped(status);
-        }, ImGui.GetID(""), Compact ? 54 : 64, new Vector2(12, Compact ? 6 : 8), true);
+        }, ImGui.GetID(""), Compact ? 40 : 64, new Vector2(Compact ? 6 : 12, Compact ? 4 : 8), true);
     }
 
     internal static bool Action(UiFonts fonts, string label, string caption, string id, Vector4? fill = null)
@@ -161,6 +161,7 @@ internal static class AdsPresentation
     {
         float titleWidth;float captionWidth;
         using (pushFont(Compact ? UiFontRole.CompactAction : UiFontRole.Action)) titleWidth = MaterialText.Measure(label).X;
+        if (Compact) return titleWidth + 42 * MaterialTheme.Metrics.Scale;
         using (pushFont(UiFontRole.Caption)) captionWidth = MaterialText.Measure(caption).X;
         return Math.Max(titleWidth, captionWidth) + (Compact ? 66 : 72) * MaterialTheme.Metrics.Scale;
     }
@@ -169,7 +170,7 @@ internal static class AdsPresentation
         => ActionCore(pushFont, label, caption, id, fill, ControlHeight);
 
     internal static bool QuickAction(UiFonts fonts, string label, string caption, string id, Vector4? fill = null)
-        => ActionCore(fonts.Push, label, caption, id, fill, Compact ? 50 : 60);
+        => ActionCore(fonts.Push, label, caption, id, fill, Compact ? 28 : 60);
 
     private static bool ActionCore(Func<UiFontRole, IDisposable> pushFont, string label, string caption, string id, Vector4? fill, float height)
     {
@@ -182,6 +183,26 @@ internal static class AdsPresentation
         style.Color(ImGuiCol.Border, colors.OutlineVariant);
         style.Style(ImGuiStyleVar.FrameBorderSize, 1 * scale);
         var width = MaterialLayout.FitNextItemWidth(-1f, ActionMinimum(pushFont, label, caption));
+        if (Compact)
+        {
+            using var font = pushFont(UiFontRole.CompactAction);
+            var text = MaterialText.Measure(label);
+            var clickedCompact = ImGui.Button("###" + id, new Vector2(width, Math.Max(height * scale, text.Y + 8 * scale)));
+            var start = ImGui.GetItemRectMin(); var end = ImGui.GetItemRectMax();
+            var foregroundCompact = fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
+            var iconCompact = id switch { "Start Outside" or "Start Inside" => MaterialIcon.Play, "Resume" => MaterialIcon.Refresh,
+                "Leave" => MaterialIcon.DoorExit, "Stop" => MaterialIcon.Stop, _ => MaterialIcon.Wrench };
+            var drawing = ImGui.GetWindowDrawList();
+            drawing.PushClipRect(start, end, true);
+            try
+            {
+                MaterialIcons.Draw(iconCompact, start + new Vector2(8 * scale, (end.Y - start.Y - 18 * scale) * .5f), 18 * scale, foregroundCompact);
+                MaterialText.AddText(drawing, new(start.X + 32 * scale, start.Y + (end.Y - start.Y - text.Y) * .5f), MaterialCanvas.Color(foregroundCompact), label);
+            }
+            finally { drawing.PopClipRect(); }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) MaterialText.SetTooltip(label + "\n" + caption);
+            return clickedCompact;
+        }
         var verticalShift = (ControlHeight - height) * scale * .5f;
         var titleTop = (Compact ? 10 : 14) * scale - verticalShift;
         var captionTop = (Compact ? 30 : 38) * scale - verticalShift;
@@ -234,7 +255,7 @@ internal static class AdsPresentation
     internal static void Summary(Func<UiFontRole, IDisposable>? pushFont, MaterialIcon icon, string caption, string value)
     {
         var scale = MaterialTheme.Metrics.Scale;
-        var size = (Compact ? 30 : 34) * scale;
+        var size = (Compact ? 18 : 34) * scale;
         using var style = new MaterialStyleScope();
         style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(0, 2) * scale);
         Surface(() =>
@@ -242,23 +263,28 @@ internal static class AdsPresentation
             var min = ImGui.GetCursorScreenPos();
             MaterialIcons.Draw(icon, min + new Vector2(0, 2 * scale), size, MaterialTheme.Current.Colors.OnSurfaceVariant);
             ImGui.Dummy(new Vector2(size));
-            ImGui.SameLine(0, 14 * scale);
+            ImGui.SameLine(0, (Compact ? 6 : 14) * scale);
             ImGui.BeginGroup();
             using (pushFont?.Invoke(UiFontRole.Caption))
                 MaterialText.TextColored(MaterialTheme.Current.Colors.OnSurfaceVariant, caption);
+            float captionWidth, valueWidth;
+            using (pushFont?.Invoke(UiFontRole.Caption)) captionWidth = MaterialText.Measure(caption).X;
+            using (pushFont?.Invoke(UiFontRole.BodyStrong)) valueWidth = MaterialText.Measure(value).X;
+            if (Compact && captionWidth + valueWidth + 4 * scale <= ImGui.GetContentRegionAvail().X)
+                ImGui.SameLine(0, 4 * scale);
             using (pushFont?.Invoke(UiFontRole.BodyStrong))
                 MaterialText.TextWrapped(value);
             ImGui.EndGroup();
-        }, ImGui.GetID(""), Compact ? 56 : 68, new Vector2(12, Compact ? 8 : 10), true);
+        }, ImGui.GetID(""), Compact ? 30 : 68, new Vector2(Compact ? 6 : 12, Compact ? 4 : 10), true);
     }
 
     internal static void Heading(Func<UiFontRole, IDisposable> pushFont, MaterialIcon icon, string title, string description)
     {
         using var style = new MaterialStyleScope();
         style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(0, 2) * MaterialTheme.Metrics.Scale);
-        var scale = MaterialTheme.Metrics.Scale;var size = 32 * scale;var min = ImGui.GetCursorScreenPos();
+        var scale = MaterialTheme.Metrics.Scale;var size = (Compact ? 20 : 32) * scale;var min = ImGui.GetCursorScreenPos();
         ImGui.BeginGroup();MaterialIcons.Draw(icon, min, size, MaterialTheme.Current.Colors.OnSurfaceVariant);
-        ImGui.Dummy(new Vector2(size));ImGui.SameLine(0, (Compact ? 20 : 16) * scale);ImGui.BeginGroup();
+        ImGui.Dummy(new Vector2(size));ImGui.SameLine(0, (Compact ? 6 : 16) * scale);ImGui.BeginGroup();
         using (pushFont(UiFontRole.BodyStrong)) MaterialText.Text(title);
         ImGui.PushStyleColor(ImGuiCol.Text, MaterialTheme.Current.Colors.OnSurfaceVariant);
         MaterialText.TextWrapped(description);ImGui.PopStyleColor();ImGui.EndGroup();ImGui.EndGroup();
@@ -270,9 +296,9 @@ internal static class AdsPresentation
     internal static void NoOwnershipWarning(Func<UiFontRole, IDisposable>? pushFont, string text)
     {
         using var font = pushFont?.Invoke(UiFontRole.BodyStrong);
-        var scale = MaterialTheme.Metrics.Scale;var size = (Compact ? 38 : 44) * scale;var gap = 16 * scale;
+        var scale = MaterialTheme.Metrics.Scale;var size = (Compact ? 20 : 44) * scale;var gap = (Compact ? 6 : 16) * scale;
         var width = size + gap + MaterialText.Measure(text).X;
-        ImGui.Dummy(new Vector2(0, (Compact ? 38 : 48) * scale));
+        ImGui.Dummy(new Vector2(0, (Compact ? 4 : 48) * scale));
         var min = ImGui.GetCursorScreenPos() + new Vector2(Math.Max(0, (ImGui.GetContentRegionAvail().X - width) * .5f), 0);
         ImGui.SetCursorScreenPos(min);var color = MaterialTheme.Current.Colors.OnSurfaceVariant;
         ImGui.GetWindowDrawList().AddCircle(min + new Vector2(size * .5f), size * .46f, MaterialCanvas.Color(color), 32, 2 * scale);
