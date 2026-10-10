@@ -294,13 +294,15 @@ public sealed class LootAutomationService
             var categoryEnabled = IsCategoryEnabled(category);
             var inventoryCount = GetInventoryCount(itemId);
             var alreadyRegistered = IsAlreadyRegistered(itemId, registrationItemIds);
-            var owned = inventoryCount > 0 || alreadyRegistered;
-            var ownershipKnown = owned || TryResolveItemOwnership(itemId, out owned, out _);
-            var missing = ownershipKnown && !owned;
+            var ownership = inventoryCount > 0 || alreadyRegistered ? AethertekUI.Dalamud.XaItemOwnershipState.Owned
+                : ResolveItemOwnership(itemId, requiresRegistration: true, out _);
+            var owned = ownership == AethertekUI.Dalamud.XaItemOwnershipState.Owned;
+            var ownershipKnown = ownership != AethertekUI.Dalamud.XaItemOwnershipState.Unknown;
+            var missing = ownership == AethertekUI.Dalamud.XaItemOwnershipState.Missing;
+            desired = MissingDesired(desired, categoryEnabled && configuration.LootRegistrableNeedingEnabled, ownership);
 
             if (categoryEnabled && missing && configuration.LootRegistrableNeedingEnabled)
             {
-                desired = RollResult.Needed;
                 overrideReason = "need-missing";
             }
             else if (!categoryEnabled)
@@ -328,9 +330,10 @@ public sealed class LootAutomationService
 
         if (configuration.LootGlamourNeedingEnabled && item.EquipSlotCategory.RowId != 0)
         {
-            if (TryResolveItemOwnership(itemId, out var owned, out glamourReason) && !owned)
+            var ownership = ResolveItemOwnership(itemId, requiresRegistration: false, out glamourReason);
+            desired = MissingDesired(desired, configuration.LootGlamourNeedingEnabled, ownership);
+            if (ownership == AethertekUI.Dalamud.XaItemOwnershipState.Missing)
             {
-                desired = RollResult.Needed;
                 overrideReason = "need-missing-glamour";
             }
         }
@@ -359,36 +362,43 @@ public sealed class LootAutomationService
         return new RollDecision(final, reason);
     }
 
-    private bool TryResolveItemOwnership(uint itemId, out bool owned, out string reason)
+    internal static RollResult MissingDesired(RollResult configured, bool enabled, AethertekUI.Dalamud.XaItemOwnershipState ownership)
+        => enabled && ownership == AethertekUI.Dalamud.XaItemOwnershipState.Missing ? RollResult.Needed : configured;
+
+    private AethertekUI.Dalamud.XaItemOwnershipState ResolveItemOwnership(uint itemId, bool requiresRegistration, out string reason)
     {
-        owned = GetInventoryCount(itemId) > 0 || IsItemActionUnlocked(itemId);
-        if (owned) { reason = "owned(native inventory/registration)"; return true; }
+        var inventory = ReadInventoryCount(itemId);
+        var registered = ReadItemActionUnlocked(itemId);
+        var nativeOwned = inventory > 0 || registered == true;
+        if (nativeOwned) { reason = "owned(native inventory/registration)"; return AethertekUI.Dalamud.XaItemOwnershipState.Owned; }
         try
         {
-            owned = AethertekUI.Dalamud.XaItemOwnership.Query(searchCurrentCharacterItemsJson,
-                searchCharacterStorageItemsJson, new[] { itemId }, currentContentId(), DateTimeOffset.UtcNow).Contains(itemId);
-            if (owned)
+            var storage = AethertekUI.Dalamud.XaItemOwnership.QueryStates(searchCurrentCharacterItemsJson,
+                searchCharacterStorageItemsJson, new[] { itemId }, currentContentId(), DateTimeOffset.UtcNow).GetValueOrDefault(itemId);
+            var ownership = AethertekUI.Dalamud.XaItemOwnership.Resolve(nativeOwned,
+                inventory == 0 && (!requiresRegistration || registered == false), storage);
+            if (ownership != AethertekUI.Dalamud.XaItemOwnershipState.Unknown)
             {
-                reason = "owned(current-character XA Database storage)";
-                return true;
+                reason = ownership == AethertekUI.Dalamud.XaItemOwnershipState.Owned
+                    ? "owned(current-character XA Database storage)" : "missing(confirmed native and storage absence)";
+                return ownership;
             }
-            return PreserveBaseForGlamour(itemId, "complete storage absence is not available", out owned, out reason);
+            return PreserveBaseForGlamour(itemId, "complete storage absence is not available", out reason);
         }
         catch (Exception ex)
         {
-            return PreserveBaseForGlamour(itemId, $"IPC failure ({ex.GetType().Name})", out owned, out reason);
+            return PreserveBaseForGlamour(itemId, $"IPC failure ({ex.GetType().Name})", out reason);
         }
     }
 
-    private bool PreserveBaseForGlamour(uint itemId, string detail, out bool owned, out string reason)
+    private AethertekUI.Dalamud.XaItemOwnershipState PreserveBaseForGlamour(uint itemId, string detail, out string reason)
     {
-        owned = false;
         reason = $"unavailable({detail})";
         LogLootDiagnostic(
             "xa-database-glamour",
             $"XA Database glamour ownership is unavailable for item {itemId.ToString(CultureInfo.InvariantCulture)}: {detail}; preserving configured loot mode.",
             warning: true);
-        return false;
+        return AethertekUI.Dalamud.XaItemOwnershipState.Unknown;
     }
 
     private bool TryClassifyRegistrable(
@@ -567,7 +577,7 @@ public sealed class LootAutomationService
             _ => RollResult.Passed,
         };
 
-    private static RollResult ResultMerge(params RollResult[] results)
+    internal static RollResult ResultMerge(params RollResult[] results)
         => results.Max() switch
         {
             RollResult.Needed => RollResult.Needed,
@@ -575,30 +585,35 @@ public sealed class LootAutomationService
             _ => RollResult.Passed,
         };
 
-    private unsafe int GetInventoryCount(uint itemId)
+    private int GetInventoryCount(uint itemId) => ReadInventoryCount(itemId).GetValueOrDefault();
+
+    private static unsafe int? ReadInventoryCount(uint itemId)
     {
         try
         {
             var inventory = InventoryManager.Instance();
-            return inventory == null ? 0 : inventory->GetInventoryItemCount(itemId);
+            return inventory == null ? null : inventory->GetInventoryItemCount(itemId);
         }
         catch
         {
-            return 0;
+            return null;
         }
     }
 
-    private static unsafe bool IsItemActionUnlocked(uint itemId)
+    private static bool IsItemActionUnlocked(uint itemId) => ReadItemActionUnlocked(itemId) == true;
+
+    private static unsafe bool? ReadItemActionUnlocked(uint itemId)
     {
         try
         {
             var exdItem = ExdModule.GetItemRowById(itemId);
             var uiState = UIState.Instance();
-            return exdItem != null && uiState != null && uiState->IsItemActionUnlocked(exdItem) is 1;
+            return exdItem == null || uiState == null ? null : uiState->IsItemActionUnlocked(exdItem) switch
+            { 1 => true, 2 => false, _ => (bool?)null };
         }
         catch
         {
-            return false;
+            return null;
         }
     }
 

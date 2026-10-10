@@ -1,3 +1,8 @@
+2026-10-10 - Explicit missing-item loot policy (I519)
+
+- Apply missing collectible/glamour overrides only to confirmed Missing evidence, then retain native live-roll caps. Unknown ownership preserves the configured mode; native lookup failures stay unknown.
+- Keep supported XADB responses positive-only until complete storage absence is supplied. Empty storage never requests a missing-item override.
+
 2026-10-10 - Compact defaults (I521)
 
 - Apply Compact mode and hide main Compact/Transparency controls once. Appearance settings can restore the controls and change density; subsequent loads preserve those choices, unrelated preferences and unknown saved settings.
