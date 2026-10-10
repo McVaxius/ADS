@@ -4,6 +4,37 @@ namespace ADS.Tests;
 
 public sealed class WizardCatalogTests
 {
+    [Fact]
+    public void CompactDefaultsMigrateOnceThroughNativeJsonAndPreserveLaterOverrides()
+    {
+        var storage = typeof(Dalamud.Plugin.IDalamudPluginInterface).Assembly.GetType("Dalamud.Configuration.PluginConfigurations", true)!;
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var serialize = storage.GetMethod("SerializeConfig", flags)!;
+        var deserialize = storage.GetMethod("DeserializeConfig", flags)!;
+        var config = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            """{"Version":24,"UiCompact":false,"UiCompactVisibleOnMainWindow":true,"UiTransparencyVisibleOnMainWindow":true,"UiWindowOpacityPercent":73,"EnableBmraiVbmInRegularDuties":false,"FutureSetting":{"value":[1,"unchanged"]}}""")!;
+        Assert.True(Plugin.ApplyConfigurationMigrations(config));
+        Assert.True(config.UiCompact);
+        Assert.False(config.UiCompactVisibleOnMainWindow);
+        Assert.False(config.UiTransparencyVisibleOnMainWindow);
+        Assert.True(config.UiCompactDefaultsApplied);
+        config.UiCompact = false;
+        config.UiCompactVisibleOnMainWindow = config.UiTransparencyVisibleOnMainWindow = true;
+        for (var reload = 0; reload < 2; reload++)
+        {
+            var saved = (string)serialize.Invoke(null, [config])!;
+            config = (Configuration)deserialize.Invoke(null, [saved])!;
+            Assert.False(config.ApplyCompactDefaults());
+            Plugin.ApplyConfigurationMigrations(config); // Other existing normalizers are independent of the appearance marker.
+            Assert.False(config.UiCompact);
+            Assert.True(config.UiCompactVisibleOnMainWindow);
+            Assert.True(config.UiTransparencyVisibleOnMainWindow);
+            Assert.Equal(73, config.UiWindowOpacityPercent);
+            Assert.False(config.EnableBmraiVbmInRegularDuties);
+            Assert.Equal("unchanged", config.AdditionalSettings!["FutureSetting"]["value"]![1]!.ToObject<string>());
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

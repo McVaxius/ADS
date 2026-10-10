@@ -326,6 +326,8 @@ public sealed class Plugin : IDalamudPlugin
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
+        var searchCharacterStorageItemsJson = PluginInterface
+            .GetIpcSubscriber<string, string>("XA.Database.SearchCharacterStorageItemsJson");
         ShopListService = new ShopListService(
             ShopListPresetStore,
             DataManager,
@@ -337,6 +339,8 @@ public sealed class Plugin : IDalamudPlugin
             CommandManager,
             SigScanner,
             searchCurrentCharacterItemsJson.InvokeFunc,
+            searchCharacterStorageItemsJson.InvokeFunc,
+            () => ClientState.IsLoggedIn && PlayerState.IsLoaded ? PlayerState.ContentId : 0,
             Configuration,
             Log);
         TreasureFollowerDutyExitMonitorService = new TreasureFollowerDutyExitMonitorService(CommandManager, Log);
@@ -3923,6 +3927,7 @@ public sealed class Plugin : IDalamudPlugin
     internal static bool ApplyConfigurationMigrations(Configuration configuration)
     {
         var changed = configuration.NormalizePluginEnabled();
+        changed |= configuration.ApplyCompactDefaults();
         if (configuration.Version < 1)
         {
             configuration.Version = 1;

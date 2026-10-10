@@ -1,3 +1,11 @@
+2026-10-10 - Compact defaults (I521)
+
+- Apply Compact mode and hide main Compact/Transparency controls once. Appearance settings can restore the controls and change density; subsequent loads preserve those choices, unrelated preferences and unknown saved settings.
+
+2026-10-10 - Current-character XADB loot ownership (I519)
+
+- Accept supported XADB item responses and recorded armoire/dresser data for current-character ownership. Preserve configured loot behavior when storage absence is unproven, including empty or partial responses.
+
 2026-10-09 - Separate XA Slave log-tools shortcut (I512)
 
 

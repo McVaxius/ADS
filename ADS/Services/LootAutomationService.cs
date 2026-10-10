@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using ADS.Models;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
@@ -23,6 +22,8 @@ public sealed class LootAutomationService
     private readonly ICommandManager commandManager;
     private readonly ISigScanner sigScanner;
     private readonly Func<string, string> searchCurrentCharacterItemsJson;
+    private readonly Func<string, string> searchCharacterStorageItemsJson;
+    private readonly Func<ulong> currentContentId;
     private readonly Configuration configuration;
     private readonly IPluginLog log;
     private readonly Dictionary<uint, uint[]> fadedCopyResultCache = [];
@@ -44,6 +45,8 @@ public sealed class LootAutomationService
         ICommandManager commandManager,
         ISigScanner sigScanner,
         Func<string, string> searchCurrentCharacterItemsJson,
+        Func<string, string> searchCharacterStorageItemsJson,
+        Func<ulong> currentContentId,
         Configuration configuration,
         IPluginLog log)
     {
@@ -51,6 +54,8 @@ public sealed class LootAutomationService
         this.commandManager = commandManager;
         this.sigScanner = sigScanner;
         this.searchCurrentCharacterItemsJson = searchCurrentCharacterItemsJson;
+        this.searchCharacterStorageItemsJson = searchCharacterStorageItemsJson;
+        this.currentContentId = currentContentId;
         this.configuration = configuration;
         this.log = log;
     }
@@ -290,7 +295,8 @@ public sealed class LootAutomationService
             var inventoryCount = GetInventoryCount(itemId);
             var alreadyRegistered = IsAlreadyRegistered(itemId, registrationItemIds);
             var owned = inventoryCount > 0 || alreadyRegistered;
-            var missing = !owned;
+            var ownershipKnown = owned || TryResolveItemOwnership(itemId, out owned, out _);
+            var missing = ownershipKnown && !owned;
 
             if (categoryEnabled && missing && configuration.LootRegistrableNeedingEnabled)
             {
@@ -305,20 +311,24 @@ public sealed class LootAutomationService
             {
                 overrideReason = "none(need-missing-disabled)";
             }
-            else
+            else if (owned)
             {
                 overrideReason = "none(owned)";
+            }
+            else
+            {
+                overrideReason = "none(ownership-unknown)";
             }
 
             registrableReason =
                 $"{categoryLabel}, categoryEnabled={categoryEnabled}, " +
                 $"inventory={inventoryCount.ToString(CultureInfo.InvariantCulture)}, " +
-                $"registered={alreadyRegistered}, owned={owned}, missing={missing}";
+                $"registered={alreadyRegistered}, ownershipKnown={ownershipKnown}, owned={owned}, missing={missing}";
         }
 
         if (configuration.LootGlamourNeedingEnabled && item.EquipSlotCategory.RowId != 0)
         {
-            if (TryResolveGlamourOwnership(itemId, out var owned, out glamourReason) && !owned)
+            if (TryResolveItemOwnership(itemId, out var owned, out glamourReason) && !owned)
             {
                 desired = RollResult.Needed;
                 overrideReason = "need-missing-glamour";
@@ -349,63 +359,20 @@ public sealed class LootAutomationService
         return new RollDecision(final, reason);
     }
 
-    private bool TryResolveGlamourOwnership(uint itemId, out bool owned, out string reason)
+    private bool TryResolveItemOwnership(uint itemId, out bool owned, out string reason)
     {
-        owned = false;
-        var request = JsonSerializer.Serialize(new
-        {
-            version = 1,
-            itemIds = new[] { itemId },
-            includeZeroQuantity = false,
-        });
-
+        owned = GetInventoryCount(itemId) > 0 || IsItemActionUnlocked(itemId);
+        if (owned) { reason = "owned(native inventory/registration)"; return true; }
         try
         {
-            var response = searchCurrentCharacterItemsJson(request);
-            if (string.IsNullOrWhiteSpace(response))
-                return PreserveBaseForGlamour(itemId, "empty response", out owned, out reason);
-
-            using var document = JsonDocument.Parse(response);
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-                return PreserveBaseForGlamour(itemId, "response root is not an object", out owned, out reason);
-            if (!root.TryGetProperty("version", out var version)
-                || !version.TryGetInt32(out var versionValue)
-                || versionValue != 1)
+            owned = AethertekUI.Dalamud.XaItemOwnership.Query(searchCurrentCharacterItemsJson,
+                searchCharacterStorageItemsJson, new[] { itemId }, currentContentId(), DateTimeOffset.UtcNow).Contains(itemId);
+            if (owned)
             {
-                return PreserveBaseForGlamour(itemId, "response version is missing or unsupported", out owned, out reason);
-            }
-
-            if (!root.TryGetProperty("ready", out var ready) || ready.ValueKind != JsonValueKind.True)
-                return PreserveBaseForGlamour(itemId, "response is not ready", out owned, out reason);
-            if (!root.TryGetProperty("rows", out var rows) || rows.ValueKind != JsonValueKind.Array)
-                return PreserveBaseForGlamour(itemId, "rows are missing or invalid", out owned, out reason);
-
-            foreach (var row in rows.EnumerateArray())
-            {
-                if (row.ValueKind != JsonValueKind.Object
-                    || !row.TryGetProperty("itemId", out var rowItemId)
-                    || !rowItemId.TryGetUInt32(out var rowItemIdValue))
-                {
-                    return PreserveBaseForGlamour(itemId, "row itemId is missing or invalid", out owned, out reason);
-                }
-
-                if (rowItemIdValue != itemId)
-                    continue;
-                if (!row.TryGetProperty("quantity", out var quantity)
-                    || !quantity.TryGetInt64(out var quantityValue)
-                    || quantityValue <= 0)
-                {
-                    return PreserveBaseForGlamour(itemId, "matching row quantity is not positive", out owned, out reason);
-                }
-
-                owned = true;
-                reason = $"owned(quantity={quantityValue.ToString(CultureInfo.InvariantCulture)})";
+                reason = "owned(current-character XA Database storage)";
                 return true;
             }
-
-            reason = "missing(no matching row)";
-            return true;
+            return PreserveBaseForGlamour(itemId, "complete storage absence is not available", out owned, out reason);
         }
         catch (Exception ex)
         {

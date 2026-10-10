@@ -6,6 +6,8 @@ ADS is observer-first. Entering a duty does not automatically grant ADS ownershi
 
 ## Appearance and language
 
+The first load of this update applies Compact mode once and hides Main's Compact and Transparency controls. Settings > Window appearance keeps density, transparency and each main-control visibility choice available; later loads preserve changes made there.
+
 Hindi uses installed shaping fonts. The source now leaves other languages usable when the Hindi menu caption is unavailable, showing a disabled ASCII `Hindi (unavailable)` option. Required text for a selected Hindi UI still requires full validation; on failure, the readable status offers **Use English**, saving English only after an explicit press. Native verification and Linux/Wine acceptance remain pending for this change.
 
 Use Settings for shared colour, language, compact spacing and window transparency/fade; the optional Main selectors change the same saved preferences. Main branding and Main/Quick Controls titles use the packaged ADS icon, keeping its colours and proportions when the title is collapsed. Duty automation remains in Guided Setup and the existing Start, Resume and Stop actions; appearance choices do not change duty ownership or rules.
@@ -24,7 +26,7 @@ ADS can resolve deterministic NPC vendor offers and NPC placements from local ga
 
 ## Loot Automation
 
-Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot and requests Need only when no owned row is returned. Live Greed/Pass availability still caps the result; unavailable or incomplete XA Database responses retain the selected base mode.
+Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot. Native inventory/registration and valid XADB inventory, retainer, armoire and glamour-dresser rows establish ownership. Empty, stale or incomplete storage responses retain the selected base mode: the current item API cannot certify complete storage absence. Live Greed/Pass availability still caps the result. XADB storage must be recorded and refreshed for the current character.
 
 ## Installation
 

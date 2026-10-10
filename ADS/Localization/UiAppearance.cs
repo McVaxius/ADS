@@ -174,6 +174,9 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var compactVisible = plugin.Configuration.UiCompactVisibleOnMainWindow;
         if (WindowLayout.Checkbox("Compact visible on main window", ref compactVisible))
         { plugin.Configuration.UiCompactVisibleOnMainWindow = compactVisible; plugin.SaveConfiguration(); }
+        var transparencyVisible = plugin.Configuration.UiTransparencyVisibleOnMainWindow;
+        if (WindowLayout.Checkbox("Transparency visible on main window", ref transparencyVisible))
+        { plugin.Configuration.UiTransparencyVisibleOnMainWindow = transparencyVisible; plugin.SaveConfiguration(); }
         var languageVisible = plugin.Configuration.UiLanguageVisibleOnMainWindow;
         if (WindowLayout.Checkbox("Language visible on main window", ref languageVisible))
         { plugin.Configuration.UiLanguageVisibleOnMainWindow = languageVisible; plugin.SaveConfiguration(); }
