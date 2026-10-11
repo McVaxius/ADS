@@ -1,3 +1,7 @@
+2026-10-11 - Culture-safe coordinate copy (I538)
+
+- Copy Object Explorer row XYZ coordinates with invariant decimal points so comma-decimal system locales retain three usable coordinate fields. Preserve localized display and existing map flag copy formatting.
+
 2026-10-11 - Titlebar status and Object Explorer map flags
 
 - Add a one-shot red map flag action to the Object Explorer map toolbar. Use the displayed zoom/pan transform for placement and cancel on Escape, right-click, window close, hidden map, or zone changes.

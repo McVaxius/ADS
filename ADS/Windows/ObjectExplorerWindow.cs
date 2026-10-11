@@ -401,7 +401,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             }
 
             if (ImGui.TableSetColumnIndex(12) && IconAction(Ui.L("XYZ##ADSObjectCopy{0}", row.GameObjectId), MaterialIcon.Copy, "Copy the object's XYZ coordinates."))
-                ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
+                ImGui.SetClipboardText(string.Create(CultureInfo.InvariantCulture, $"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}"));
 
             if (whitelistAvailable && row.ObjectKind == nameof(ObjectKind.Pc))
             {
