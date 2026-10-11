@@ -79,7 +79,6 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     public override void PostDraw()
     {
         base.PostDraw();
-        WindowLayout.PaintTitleWithImage(this);
     }
 
     private void ShowDutyTitleTooltip(string action)

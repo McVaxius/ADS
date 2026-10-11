@@ -4039,4 +4039,16 @@
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Nhấp lại để lần lượt chọn các dấu chồng nhau.</value></data>
   <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Kéo thanh phân cách để đổi kích thước bản đồ; nhấp đúp để đặt lại.</value></data>
+  <data name="Show titlebar status" xml:space="preserve"><value>Hiện trạng thái trên thanh tiêu đề</value></data>
+  <data name="Detailed titlebar status" xml:space="preserve"><value>Trạng thái chi tiết trên thanh tiêu đề</value></data>
+  <data name="{0} objects" xml:space="preserve"><value>{0} đối tượng</value></data>
+  <data name="Selected: {0}" xml:space="preserve"><value>Đã chọn: {0}</value></data>
+  <data name="Place a map flag with one map click." xml:space="preserve"><value>Đặt cờ bằng một lần nhấp trên bản đồ.</value></data>
+  <data name="Click the map once to place a flag. Escape or right-click cancels." xml:space="preserve"><value>Nhấp bản đồ một lần để đặt cờ. Escape hoặc nhấp chuột phải để hủy.</value></data>
+  <data name="Titlebar.Running" xml:space="preserve"><value>Đang chạy</value></data>
+  <data name="Blocked" xml:space="preserve"><value>Bị chặn</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Đã dừng</value></data>
+  <data name="Moving" xml:space="preserve"><value>Đang di chuyển</value></data>
+  <data name="Titlebar.Waiting" xml:space="preserve"><value>Đang chờ</value></data>
+  <data name="Interacting" xml:space="preserve"><value>Đang tương tác</value></data>
 </root>

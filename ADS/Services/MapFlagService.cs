@@ -121,6 +121,9 @@ public sealed class MapFlagService
     }
 
     public unsafe bool TryPlaceFlag(uint territoryId, Vector3 worldPosition, string objectName, out string status)
+        => TryPlaceFlag(territoryId, 0, worldPosition, objectName, out status);
+
+    internal unsafe bool TryPlaceFlag(uint territoryId, uint renderedMapId, Vector3 worldPosition, string objectName, out string status)
     {
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
         {
@@ -154,7 +157,14 @@ public sealed class MapFlagService
                 return false;
             }
 
-            var mapId = clientState.MapId != 0 ? clientState.MapId : territory.Map.RowId;
+            var mapId = renderedMapId != 0 ? renderedMapId : clientState.MapId != 0 ? clientState.MapId : territory.Map.RowId;
+            if (renderedMapId != 0 && (clientState.MapId != 0 && clientState.MapId != renderedMapId
+                || !dataManager.GetExcelSheet<LuminaMap>().TryGetRow(renderedMapId, out var renderedMap)
+                || renderedMap.TerritoryType.RowId != territoryId))
+            {
+                status = "Map unavailable.";
+                return false;
+            }
             if (mapId == 0)
             {
                 status = $"Skipped map flag for {objectName}: no active map id was available.";

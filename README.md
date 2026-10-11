@@ -12,6 +12,8 @@ Hindi uses installed shaping fonts. The source now leaves other languages usable
 
 Use Settings for shared colour, language, compact spacing and window transparency/fade; titlebar appearance actions change the same saved preferences. Main branding and Main/Quick Controls titles use the packaged ADS icon, keeping its colours and proportions when the title is collapsed. Duty automation remains in Guided Setup and the existing Start, Resume and Stop actions; appearance choices do not change duty ownership or rules.
 
+Titlebars use the packaged icon and a single live status line. **Show titlebar status** and **Detailed titlebar status** in Window appearance default on; turn details off to keep concise state and progress, or hide the status entirely. Hover the title for full details. Object Explorer shows its object count and selected name.
+
 Titled windows expose language, compact spacing, transparency and colour actions in their titlebars, including while collapsed. Settings retains the full editors and saved main-control visibility choices. Full and compact layouts retain the same actions and saved choices. Sixteen language choices retain Brazilian Portuguese and Traditional Chinese and include Vietnamese, Indonesian, Polish, Turkish and Hindi. Embedded catalogues cover authored controls, ownership, execution, planner statuses and displayed service diagnostics. Commands, schema identifiers, editable data, external game/plugin names and exception details keep their original values. Managed font preparation includes the selected catalogue, English and non-Hindi native language names; Hindi menu coverage is checked separately. Hindi uses the shared shaped-text renderer across retained controls, editors, tabs and expanded/collapsed window titles; game, GPU, managed-font and IME acceptance remains separate from the offline checks.
 
 Debug x64 compilation, exact embedded-resource/status checks and native selector interaction are verified. The new choices preserve existing language ordinals, control IDs and saved nonlanguage preferences at both densities and scales 1 and 1.5. Per-language offline role-font verification within the diagnostic memory limit, native-client managed-font readiness and full-window visual acceptance remain open.
@@ -98,6 +100,12 @@ clear stale selection. Drag the divider between the map and table to resize the
 map; double-click the divider to restore its original width. The width lasts
 for this plugin session and leaves enough room for the table. Marker drawing
 and clicks follow the resized canvas.
+
+The red flag button arms one map click to place a flag using the current pan and
+zoom. Click it again or elsewhere, press Escape or right-click to cancel. Closing, collapsing or hiding
+the map, changing territory/map or entering a transition also cancels placement.
+The click consumes the action even when placement is refused; it does not infer
+world height or start movement.
 
 The **… / Columns** picker controls the informational columns and optional DNav
 action for this load. **Diagnostics** contains the full territory/map/layer,

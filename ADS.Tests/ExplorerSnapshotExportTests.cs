@@ -9,6 +9,27 @@ namespace ADS.Tests;
 public sealed class ExplorerSnapshotExportTests
 {
     [Fact]
+    public void MapFlagClickInvertsTheRenderedMapAtDifferentZoomsAndOffsets()
+    {
+        foreach (var side in new[] { 240f, 480f, 1920f })
+        foreach (var scale in new ushort[] { 50, 100, 200 })
+        {
+            var position = new Vector3(-100, 900, 50);
+            Assert.True(TryMapUv(position, scale, 70, -20, out var uv));
+            var imageMin = new Vector2(-300, 100);
+            Assert.True(TryMapWorldPosition(imageMin + uv * side, imageMin, side, scale, 70, -20, out var world));
+            Assert.Equal(position.X, world.X, 3);
+            Assert.Equal(position.Z, world.Z, 3);
+            Assert.Equal(0, world.Y); // Map flags do not infer a world height.
+            Assert.False(TryMapWorldPosition(imageMin - Vector2.One, imageMin, side, scale, 70, -20, out _));
+        }
+        foreach (var invalid in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+            Assert.False(TryMapWorldPosition(Vector2.One, Vector2.Zero, invalid, 100, 0, 0, out _));
+        Assert.False(TryMapWorldPosition(Vector2.One, Vector2.Zero, 240, 0, 0, 0, out _));
+        Assert.False(TryMapWorldPosition(new(float.NaN), Vector2.Zero, 240, 100, 0, 0, out _));
+    }
+
+    [Fact]
     public void MapDividerPreservesDefaultAndSessionWidthWhileProtectingTableAtBothScales()
     {
         foreach (var scale in new[] { 1f, 1.5f })

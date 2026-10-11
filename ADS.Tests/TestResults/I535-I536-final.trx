@@ -1,0 +1,82 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="28b8a750-d4e9-4764-9e9e-df548b2b23ac" name="david@XEP 2026-10-11 13:58:12" runUser="XEP\david" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-11T13:58:12.3049637-04:00" queuing="2026-10-11T13:58:12.3049642-04:00" start="2026-10-11T13:57:32.6439698-04:00" finish="2026-10-11T13:58:14.2655155-04:00" />
+  <TestSettings name="default" id="8a2afb56-9e9a-4c3b-98c0-a22872731b09">
+    <Deployment runDeploymentRoot="david_XEP_2026-10-11_13_58_12" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="1d74d821-915e-474a-af23-6d01e0557f53" testId="7e35afe9-fc02-c84d-7052-cee302ed11dc" testName="ADS.Tests.ExplorerSnapshotExportTests.DnavRepliesRequireCompleteVersionedTruthAndPreserveRefusalReasons" computerName="XEP" duration="00:00:00.0089670" startTime="2026-10-11T13:58:13.7034838-04:00" endTime="2026-10-11T13:58:13.7120669-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1d74d821-915e-474a-af23-6d01e0557f53" />
+    <UnitTestResult executionId="7987f242-1715-4592-81a0-6ef30103ac16" testId="b97d45c4-b80e-c799-6b7d-f742d959d283" testName="ADS.Tests.ExplorerSnapshotExportTests.JsonlDiskLoggingDefaultsOff" computerName="XEP" duration="00:00:00.0005724" startTime="2026-10-11T13:58:13.7142771-04:00" endTime="2026-10-11T13:58:13.7145193-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7987f242-1715-4592-81a0-6ef30103ac16" />
+    <UnitTestResult executionId="f2519fa7-36a3-4472-a8dd-1648b1837f81" testId="c0275520-9a36-50c7-3df8-48e74199716d" testName="ADS.Tests.ExplorerSnapshotExportTests.MapDividerPreservesDefaultAndSessionWidthWhileProtectingTableAtBothScales" computerName="XEP" duration="00:00:00.0018508" startTime="2026-10-11T13:58:12.2613017-04:00" endTime="2026-10-11T13:58:12.2614967-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f2519fa7-36a3-4472-a8dd-1648b1837f81" />
+    <UnitTestResult executionId="ff3d9f9f-db98-438c-ab2a-b99ba7ed1f1f" testId="22cf7a5f-7001-4640-1b05-64d67101565e" testName="ADS.Tests.WizardCatalogTests.CompactDefaultsMigrateOnceThroughNativeJsonAndPreserveLaterOverrides" computerName="XEP" duration="00:00:03.9191413" startTime="2026-10-11T13:58:08.5658732-04:00" endTime="2026-10-11T13:58:12.3134332-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ff3d9f9f-db98-438c-ab2a-b99ba7ed1f1f" />
+    <UnitTestResult executionId="8dce96f1-472d-4041-beb8-6a0c4d0bcf77" testId="608d8f9a-87da-0be3-c2f7-bb8aa187a5f5" testName="ADS.Tests.ExplorerSnapshotExportTests.SnapshotDocumentIncludesObjectTableAndUnfilteredServerEvents" computerName="XEP" duration="00:00:01.1304559" startTime="2026-10-11T13:58:12.5724051-04:00" endTime="2026-10-11T13:58:13.7024512-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8dce96f1-472d-4041-beb8-6a0c4d0bcf77" />
+    <UnitTestResult executionId="caa5a068-1402-4a04-9460-c6deba4c6d76" testId="15edd379-c1f8-1624-48cd-d00966d1d93a" testName="ADS.Tests.ExplorerSnapshotExportTests.FrameworkHitchProfilerDefaultsOffForNewAndPreExistingConfigurations" computerName="XEP" duration="00:00:00.3494372" startTime="2026-10-11T13:58:12.2661754-04:00" endTime="2026-10-11T13:58:12.5717425-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="caa5a068-1402-4a04-9460-c6deba4c6d76" />
+    <UnitTestResult executionId="d772296a-ef02-47d3-8e82-f8b4672cd11e" testId="7046d430-47e4-654d-0961-59ae3e3a57bf" testName="ADS.Tests.ExplorerSnapshotExportTests.ObjectExplorerSortingKeepsPrioritiesMissingValuesAndLiveDistancesConsistent" computerName="XEP" duration="00:00:03.7757404" startTime="2026-10-11T13:58:08.5586848-04:00" endTime="2026-10-11T13:58:12.1865443-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d772296a-ef02-47d3-8e82-f8b4672cd11e" />
+    <UnitTestResult executionId="5a4068c2-f843-4573-b96b-cf26973db0ce" testId="d908cd17-bf32-f83b-b211-da30b3f5eefa" testName="ADS.Tests.ExplorerSnapshotExportTests.MapTransformsAndMarkerSelectionUseFreshIdentityWithoutActions" computerName="XEP" duration="00:00:00.0880160" startTime="2026-10-11T13:58:13.7153315-04:00" endTime="2026-10-11T13:58:13.8008393-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5a4068c2-f843-4573-b96b-cf26973db0ce" />
+    <UnitTestResult executionId="29246db0-c3b2-43a5-b702-770f09015515" testId="de622719-e0d4-0260-65e2-c26521b0cff5" testName="ADS.Tests.ExplorerSnapshotExportTests.MapFlagClickInvertsTheRenderedMapAtDifferentZoomsAndOffsets" computerName="XEP" duration="00:00:00.0316817" startTime="2026-10-11T13:58:12.2567623-04:00" endTime="2026-10-11T13:58:12.2572131-04:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="29246db0-c3b2-43a5-b702-770f09015515" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.MapTransformsAndMarkerSelectionUseFreshIdentityWithoutActions" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="d908cd17-bf32-f83b-b211-da30b3f5eefa">
+      <Execution id="5a4068c2-f843-4573-b96b-cf26973db0ce" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="MapTransformsAndMarkerSelectionUseFreshIdentityWithoutActions" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.WizardCatalogTests.CompactDefaultsMigrateOnceThroughNativeJsonAndPreserveLaterOverrides" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="22cf7a5f-7001-4640-1b05-64d67101565e">
+      <Execution id="ff3d9f9f-db98-438c-ab2a-b99ba7ed1f1f" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.WizardCatalogTests" name="CompactDefaultsMigrateOnceThroughNativeJsonAndPreserveLaterOverrides" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.JsonlDiskLoggingDefaultsOff" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="b97d45c4-b80e-c799-6b7d-f742d959d283">
+      <Execution id="7987f242-1715-4592-81a0-6ef30103ac16" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="JsonlDiskLoggingDefaultsOff" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.ObjectExplorerSortingKeepsPrioritiesMissingValuesAndLiveDistancesConsistent" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="7046d430-47e4-654d-0961-59ae3e3a57bf">
+      <Execution id="d772296a-ef02-47d3-8e82-f8b4672cd11e" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="ObjectExplorerSortingKeepsPrioritiesMissingValuesAndLiveDistancesConsistent" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.FrameworkHitchProfilerDefaultsOffForNewAndPreExistingConfigurations" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="15edd379-c1f8-1624-48cd-d00966d1d93a">
+      <Execution id="caa5a068-1402-4a04-9460-c6deba4c6d76" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="FrameworkHitchProfilerDefaultsOffForNewAndPreExistingConfigurations" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.MapDividerPreservesDefaultAndSessionWidthWhileProtectingTableAtBothScales" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="c0275520-9a36-50c7-3df8-48e74199716d">
+      <Execution id="f2519fa7-36a3-4472-a8dd-1648b1837f81" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="MapDividerPreservesDefaultAndSessionWidthWhileProtectingTableAtBothScales" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.DnavRepliesRequireCompleteVersionedTruthAndPreserveRefusalReasons" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="7e35afe9-fc02-c84d-7052-cee302ed11dc">
+      <Execution id="1d74d821-915e-474a-af23-6d01e0557f53" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="DnavRepliesRequireCompleteVersionedTruthAndPreserveRefusalReasons" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.MapFlagClickInvertsTheRenderedMapAtDifferentZoomsAndOffsets" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="de622719-e0d4-0260-65e2-c26521b0cff5">
+      <Execution id="29246db0-c3b2-43a5-b702-770f09015515" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="MapFlagClickInvertsTheRenderedMapAtDifferentZoomsAndOffsets" />
+    </UnitTest>
+    <UnitTest name="ADS.Tests.ExplorerSnapshotExportTests.SnapshotDocumentIncludesObjectTableAndUnfilteredServerEvents" storage="z:\ads\ads.tests\bin\x64\debug\net10.0-windows\ads.tests.dll" id="608d8f9a-87da-0be3-c2f7-bb8aa187a5f5">
+      <Execution id="8dce96f1-472d-4041-beb8-6a0c4d0bcf77" />
+      <TestMethod codeBase="Z:\ADS\ADS.Tests\bin\x64\Debug\net10.0-windows\ADS.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ADS.Tests.ExplorerSnapshotExportTests" name="SnapshotDocumentIncludesObjectTableAndUnfilteredServerEvents" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="7e35afe9-fc02-c84d-7052-cee302ed11dc" executionId="1d74d821-915e-474a-af23-6d01e0557f53" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b97d45c4-b80e-c799-6b7d-f742d959d283" executionId="7987f242-1715-4592-81a0-6ef30103ac16" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c0275520-9a36-50c7-3df8-48e74199716d" executionId="f2519fa7-36a3-4472-a8dd-1648b1837f81" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="22cf7a5f-7001-4640-1b05-64d67101565e" executionId="ff3d9f9f-db98-438c-ab2a-b99ba7ed1f1f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="608d8f9a-87da-0be3-c2f7-bb8aa187a5f5" executionId="8dce96f1-472d-4041-beb8-6a0c4d0bcf77" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="15edd379-c1f8-1624-48cd-d00966d1d93a" executionId="caa5a068-1402-4a04-9460-c6deba4c6d76" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7046d430-47e4-654d-0961-59ae3e3a57bf" executionId="d772296a-ef02-47d3-8e82-f8b4672cd11e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d908cd17-bf32-f83b-b211-da30b3f5eefa" executionId="5a4068c2-f843-4573-b96b-cf26973db0ce" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="de622719-e0d4-0260-65e2-c26521b0cff5" executionId="29246db0-c3b2-43a5-b702-770f09015515" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="9" executed="9" passed="9" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.03] xUnit.net VSTest Adapter v3.1.1+bf6400fd51 (64-bit .NET 10.0.5)&#xD;
+[xUnit.net 00:00:15.94]   Discovering: ADS.Tests&#xD;
+[xUnit.net 00:00:18.56]   Discovered:  ADS.Tests&#xD;
+[xUnit.net 00:00:18.84]   Starting:    ADS.Tests&#xD;
+[xUnit.net 00:00:24.43]   Finished:    ADS.Tests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

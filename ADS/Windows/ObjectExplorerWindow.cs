@@ -40,6 +40,16 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private Vector2 mapCenter = new(.5f);
     private float? preferredMapWidth;
     private float mapResizeStartWidth;
+    private bool flagPlacementArmed;
+    internal MaterialTitlebarStatus TitlebarStatus
+    {
+        get
+        {
+            var count = Ui.T("{0} objects", Plugin.ObjectTable.Count());
+            var summary = selectedObject is { } selected ? count + " · " + Ui.T("Selected: {0}", selected.Name) : count;
+            return new(plugin.Configuration.UiDetailedTitlebarStatus ? summary : count, count, summary);
+        }
+    }
     private string selectionStatus = "Click a marker or row to pin it.";
     private ulong? rulePopupObjectId;
 
@@ -57,6 +67,16 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     public void Dispose()
     {
+        flagPlacementArmed = false;
+    }
+
+    public override void OnClose() => flagPlacementArmed = false;
+
+    public override unsafe void PostDraw()
+    {
+        base.PostDraw();
+        var window = ImGuiP.FindWindowByName(WindowName);
+        if (window.Handle != null && window.Collapsed) flagPlacementArmed = false;
     }
 
     private void ClearFilters()
@@ -85,9 +105,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         spacing.Style(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 4 * MaterialTheme.Metrics.Scale));
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         var context = plugin.DutyContextService.Current;
+        if (context.IsUnsafeTransition || ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+            flagPlacementArmed = false;
         var mapId = context.CurrentMapId ?? 0;
         if (viewedTerritory != context.TerritoryTypeId || viewedMap != mapId || localPlayer is null)
         {
+            flagPlacementArmed = false;
             selectedObject = null;
             scrollToSelection = false;
             centerSelection = false;
@@ -99,6 +122,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             viewedMap = mapId;
         }
         DrawFilters(localPlayer);
+        if (!showMap) flagPlacementArmed = false;
         ImGui.SameLine();
         DrawExportControls();
         ImGui.SameLine();
@@ -134,6 +158,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         var bodyHeight = Math.Max(160 * MaterialTheme.Metrics.Scale, available.Y - footerHeight);
         // The original table stays in its window's ID scope; only the new map owns a child.
         var mapVisible = showMap && available.X >= 1120 * MaterialTheme.Metrics.Scale;
+        if (!mapVisible) flagPlacementArmed = false;
         if (mapVisible)
         {
             var scale = MaterialTheme.Metrics.Scale;
@@ -464,6 +489,38 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         return float.IsFinite(uv.X) && float.IsFinite(uv.Y);
     }
 
+    internal static bool TryMapWorldPosition(Vector2 point, Vector2 imageMin, float imageSide,
+        ushort sizeFactor, short offsetX, short offsetY, out Vector3 position)
+    {
+        position = default;
+        if (sizeFactor == 0 || !float.IsFinite(imageSide) || imageSide <= 0) return false;
+        var uv = (point - imageMin) / imageSide;
+        if (!float.IsFinite(uv.X) || !float.IsFinite(uv.Y) || uv.X < 0 || uv.Y < 0 || uv.X > 1 || uv.Y > 1) return false;
+        var world = (uv - new Vector2(.5f)) * (2048f * 100f / sizeFactor) - new Vector2(offsetX, offsetY);
+        position = new(world.X, 0, world.Y);
+        return float.IsFinite(position.X) && float.IsFinite(position.Z);
+    }
+
+    private void DrawMapFlagButton(bool available)
+    {
+        var height = ImGui.GetFrameHeight();
+        ImGui.BeginDisabled(!available);
+        if (ImGui.Button("###ADSExplorerPlaceMapFlag", new Vector2(height))) flagPlacementArmed = !flagPlacementArmed;
+        ImGui.EndDisabled();
+        var origin = ImGui.GetItemRectMin();
+        var list = ImGui.GetWindowDrawList();
+        var ink = ImGui.GetColorU32(MaterialTheme.Current.Colors.Error);
+        list.AddLine(origin + new Vector2(.3f, .18f) * height, origin + new Vector2(.3f, .84f) * height,
+            ink, Math.Max(1, MaterialTheme.Metrics.Scale));
+        list.AddTriangleFilled(origin + new Vector2(.3f, .18f) * height, origin + new Vector2(.78f, .33f) * height,
+            origin + new Vector2(.3f, .48f) * height, ink);
+        if (flagPlacementArmed) list.AddRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), ink);
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            MaterialText.SetTooltip(Ui.T(flagPlacementArmed
+                ? "Click the map once to place a flag. Escape or right-click cancels."
+                : "Place a map flag with one map click."));
+    }
+
     internal static ObjectExplorerRow? PickMapMarker(IReadOnlyList<(ObjectExplorerRow Row, Vector2 Point)> markers,
         Vector2 mouse, float radius, ObjectExplorerRow? selected)
     {
@@ -481,10 +538,11 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     private void DrawMap(DutyContextSnapshot context, IGameObject player, IReadOnlyList<ObjectExplorerRow> rows, Vector2 size)
     {
+        var wasArmed = flagPlacementArmed;
         var visible = ImGui.BeginChild("ADSExplorerMap", size, true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         try
         {
-            if (!visible) return;
+            if (!visible) { flagPlacementArmed = false; return; }
             Map map;
             Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? texture;
             try
@@ -492,12 +550,14 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
                 if (context.CurrentMapId is not { } id || !Plugin.DataManager.GetExcelSheet<Map>(Ui.SheetLanguage).TryGetRow(id, out map)
                     || map.SizeFactor == 0)
                 {
+                    flagPlacementArmed = false;
                     MaterialText.TextWrapped(Ui.T("Map unavailable."));
                     return;
                 }
                 var signature = map.Id.ToString();
                 if (string.IsNullOrWhiteSpace(signature))
                 {
+                    flagPlacementArmed = false;
                     MaterialText.TextWrapped(Ui.T("Map unavailable."));
                     return;
                 }
@@ -505,11 +565,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             }
             catch
             {
+                flagPlacementArmed = false;
                 MaterialText.TextWrapped(Ui.T("Map unavailable."));
                 return;
             }
             var title = map.PlaceName.ValueNullable?.Name.ToString() ?? Ui.T("Map");
-            var inlineControls = MaterialText.Measure(title).X + 3 * (ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X) <= ImGui.GetContentRegionAvail().X;
+            var inlineControls = MaterialText.Measure(title).X + 4 * (ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X) <= ImGui.GetContentRegionAvail().X;
             MaterialText.TextWrapped(title);
             if (inlineControls) ImGui.SameLine();
             if (IconAction(Ui.L("Zoom in"), MaterialIcon.Plus, "Zoom in")) mapZoom = Math.Min(8, mapZoom * 1.25f);
@@ -519,9 +580,12 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             if (IconAction(Ui.L("Center on player"), MaterialIcon.Target, "Center on player")
                 && TryMapUv(player.Position, map.SizeFactor, map.OffsetX, map.OffsetY, out var playerUv))
                 mapCenter = Vector2.Clamp(playerUv, Vector2.Zero, Vector2.One);
+            ImGui.SameLine();
+            DrawMapFlagButton(texture != null && !context.IsUnsafeTransition);
 
             if (texture is null)
             {
+                flagPlacementArmed = false;
                 MaterialText.TextWrapped(Ui.T("Map texture is loading or unavailable."));
                 return;
             }
@@ -548,7 +612,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
                 mapCenter = selectedUv;
                 centerSelection = false;
             }
-            if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) mapCenter -= ImGui.GetIO().MouseDelta / side;
+            if (!flagPlacementArmed && ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) mapCenter -= ImGui.GetIO().MouseDelta / side;
             mapCenter = Vector2.Clamp(mapCenter, Vector2.Zero, Vector2.One);
             var imageMin = center - mapCenter * side;
             var drawing = ImGui.GetWindowDrawList();
@@ -586,8 +650,18 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
             if (hovered)
             {
                 var hits = markers.Where(marker => Vector2.DistanceSquared(marker.Point, mouse) <= MathF.Pow(10 * MaterialTheme.Metrics.Scale, 2)).ToList();
-                if (canvasClicked && ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).LengthSquared() < 16
-                    && PickMapMarker(markers, mouse, 10 * MaterialTheme.Metrics.Scale, selectedObject) is { } picked) SelectObject(picked);
+                if (canvasClicked && ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).LengthSquared() < 16)
+                {
+                    if (flagPlacementArmed)
+                    {
+                        flagPlacementArmed = false; // Consume before dispatch, including a refused placement.
+                        if (!context.IsUnsafeTransition && TryMapWorldPosition(mouse, imageMin, side,
+                            map.SizeFactor, map.OffsetX, map.OffsetY, out var position))
+                            plugin.TryPlaceObjectFlag(Ui.T("Map"), position, map.RowId);
+                    }
+                    else if (PickMapMarker(markers, mouse, 10 * MaterialTheme.Metrics.Scale, selectedObject) is { } picked)
+                        SelectObject(picked);
+                }
                 if (hits.Count > 0)
                 {
                     ImGui.BeginTooltip();
@@ -603,6 +677,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
                     finally { ImGui.EndTooltip(); }
                 }
             }
+            if (wasArmed && flagPlacementArmed && ImGui.IsMouseReleased(ImGuiMouseButton.Left) && !hovered)
+                flagPlacementArmed = false;
             MaterialText.TextWrapped(legend);
         }
         finally { ImGui.EndChild(); }

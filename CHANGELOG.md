@@ -1,3 +1,8 @@
+2026-10-11 - Titlebar status and Object Explorer map flags
+
+- Add a one-shot red map flag action to the Object Explorer map toolbar. Use the displayed zoom/pan transform for placement and cancel on Escape, right-click, window close, hidden map, or zone changes.
+- Show current operational status in native window titles, with separate saved Appearance switches for visibility and detailed wording. Object Explorer shows object count and selected name; settings and auxiliary titles use the packaged plugin icon.
+
 2026-10-11 - Appearance titlebar shortcuts (I532)
 
 - Move Main's language, compact and transparency shortcuts into the native titlebar and add a colour palette shortcut. Other titled windows expose the same actions; retained Appearance settings and main-control visibility choices use the existing save path.

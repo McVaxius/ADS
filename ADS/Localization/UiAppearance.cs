@@ -80,10 +80,46 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         foreach (var window in plugin.WindowSystem.Windows)
             if (window.IsOpen)
             {
-                if (window is not MainWindow and not QuickControlWindow)
-                    WindowLayout.TitleWithButtons(window, shapedText.Renderer);
+                if (window is Dalamud.Interface.Windowing.Window owner)
+                    WindowLayout.PaintTitleWithImageAndStatus(owner,
+                        plugin.Configuration.UiShowTitlebarStatus ? TitlebarStatus(owner) : null);
                 ApplyWindowOpacity(window.WindowName);
             }
+    }
+
+    private MaterialTitlebarStatus TitlebarStatus(Dalamud.Interface.Windowing.Window owner)
+    {
+        if (owner is ObjectExplorerWindow explorer) return explorer.TitlebarStatus;
+        var execution = plugin.ExecutionService;
+        var state = Ui.T(execution.CurrentMode switch
+        {
+            ADS.Models.OwnershipMode.Failed => "Blocked",
+            ADS.Models.OwnershipMode.Idle => "Stopped",
+            ADS.Models.OwnershipMode.Observing => "Observing",
+            ADS.Models.OwnershipMode.Leaving => "Leaving",
+            _ => "Titlebar.Running",
+        });
+        var phase = Ui.T(execution.CurrentPhase switch
+        {
+            ADS.Models.ExecutionPhase.Idle or ADS.Models.ExecutionPhase.ObservingOnly => "Idle",
+            ADS.Models.ExecutionPhase.Failure => "Blocked",
+            ADS.Models.ExecutionPhase.LeavingDuty => "Leaving",
+            ADS.Models.ExecutionPhase.CombatHold or ADS.Models.ExecutionPhase.MountedDutyCombat => "Combat",
+            ADS.Models.ExecutionPhase.NavigatingToMonsterObjective or ADS.Models.ExecutionPhase.NavigatingToInteractableObjective
+                or ADS.Models.ExecutionPhase.ApproachingInteractableObjective or ADS.Models.ExecutionPhase.NavigatingToRecoveryObjective
+                or ADS.Models.ExecutionPhase.NavigatingToFrontierObjective or ADS.Models.ExecutionPhase.NavigatingToFollowObjective
+                or ADS.Models.ExecutionPhase.NavigatingToMapXzDestination or ADS.Models.ExecutionPhase.NavigatingToXyzDestination => "Moving",
+            ADS.Models.ExecutionPhase.AttemptingInteractableObjective => "Interacting",
+            _ => "Titlebar.Waiting",
+        });
+        var duty = plugin.DutyContextService.Current.CurrentDuty is { } currentDuty ? Ui.DutyName(currentDuty) : null;
+        var concise = string.Join(" · ", new[] { state, duty, phase }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var detail = Ui.Display(execution.LastStatus);
+        return new(plugin.Configuration.UiDetailedTitlebarStatus ? concise + " · " + detail : concise,
+            concise, concise + "\n" + detail, execution.CurrentMode == ADS.Models.OwnershipMode.Failed
+                || execution.CurrentPhase == ADS.Models.ExecutionPhase.Failure ? MaterialTheme.Current.Colors.Error
+                : execution.CurrentMode is ADS.Models.OwnershipMode.Idle or ADS.Models.OwnershipMode.Observing
+                    ? MaterialTheme.Current.Colors.OnSurfaceVariant : MaterialTheme.Current.Colors.Primary);
     }
 
     internal void DrawCompactToggle()
@@ -174,6 +210,12 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         ImGui.SameLine();
         MaterialText.Text(Ui.T("Compact mode"));
         DrawSelector(false);
+        var showStatus = plugin.Configuration.UiShowTitlebarStatus;
+        if (WindowLayout.Checkbox("Show titlebar status", ref showStatus))
+        { plugin.Configuration.UiShowTitlebarStatus = showStatus; plugin.SaveConfiguration(); }
+        var detailedStatus = plugin.Configuration.UiDetailedTitlebarStatus;
+        if (WindowLayout.Checkbox("Detailed titlebar status", ref detailedStatus))
+        { plugin.Configuration.UiDetailedTitlebarStatus = detailedStatus; plugin.SaveConfiguration(); }
         var compactVisible = plugin.Configuration.UiCompactVisibleOnMainWindow;
         if (WindowLayout.Checkbox("Compact visible on main window", ref compactVisible))
         { plugin.Configuration.UiCompactVisibleOnMainWindow = compactVisible; plugin.SaveConfiguration(); }

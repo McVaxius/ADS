@@ -11467,4 +11467,16 @@
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 高差 {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>再次點擊可循環選取重疊的標記。</value></data>
   <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>拖曳分隔線調整地圖大小；按兩下恢復預設。</value></data>
+  <data name="Show titlebar status" xml:space="preserve"><value>顯示標題列狀態</value></data>
+  <data name="Detailed titlebar status" xml:space="preserve"><value>詳細標題列狀態</value></data>
+  <data name="{0} objects" xml:space="preserve"><value>{0} 個物件</value></data>
+  <data name="Selected: {0}" xml:space="preserve"><value>已選取：{0}</value></data>
+  <data name="Place a map flag with one map click." xml:space="preserve"><value>點擊地圖一次放置旗標。</value></data>
+  <data name="Click the map once to place a flag. Escape or right-click cancels." xml:space="preserve"><value>點擊地圖一次放置旗標。按 Escape 或右鍵取消。</value></data>
+  <data name="Titlebar.Running" xml:space="preserve"><value>執行中</value></data>
+  <data name="Blocked" xml:space="preserve"><value>受阻</value></data>
+  <data name="Stopped" xml:space="preserve"><value>已停止</value></data>
+  <data name="Moving" xml:space="preserve"><value>移動中</value></data>
+  <data name="Titlebar.Waiting" xml:space="preserve"><value>等待中</value></data>
+  <data name="Interacting" xml:space="preserve"><value>互動中</value></data>
 </root>

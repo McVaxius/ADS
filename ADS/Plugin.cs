@@ -1107,12 +1107,21 @@ public sealed class Plugin : IDalamudPlugin
             HigherLowerServerEventTraceService.GetRowsSnapshot());
 
     public bool TryPlaceObjectFlag(string objectName, System.Numerics.Vector3 worldPosition)
+        => TryPlaceObjectFlag(objectName, worldPosition, null);
+
+    internal bool TryPlaceObjectFlag(string objectName, System.Numerics.Vector3 worldPosition, uint? renderedMapId)
     {
-        var territoryId = DutyContextService.Current.TerritoryTypeId != 0
-            ? DutyContextService.Current.TerritoryTypeId
+        var context = DutyContextService.Current;
+        if (renderedMapId.HasValue && (context.IsUnsafeTransition || context.CurrentMapId != renderedMapId))
+        {
+            objectExplorerStatus = "Map unavailable.";
+            return false;
+        }
+        var territoryId = context.TerritoryTypeId != 0
+            ? context.TerritoryTypeId
             : ClientState.TerritoryType;
 
-        var result = MapFlagService.TryPlaceFlag(territoryId, worldPosition, objectName, out var status);
+        var result = MapFlagService.TryPlaceFlag(territoryId, renderedMapId ?? 0, worldPosition, objectName, out var status);
         if (result)
         {
             var queryAvailable = MapFlagService.TryQueryFlagDestination(out var destination, out var destinationStatus);

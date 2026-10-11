@@ -11467,4 +11467,16 @@
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Erneut klicken, um überlappende Markierungen durchzugehen.</value></data>
   <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Ziehe die Trennlinie, um die Kartengröße zu ändern; Doppelklick setzt sie zurück.</value></data>
+  <data name="Show titlebar status" xml:space="preserve"><value>Status in der Titelleiste anzeigen</value></data>
+  <data name="Detailed titlebar status" xml:space="preserve"><value>Ausführlicher Titelleistenstatus</value></data>
+  <data name="{0} objects" xml:space="preserve"><value>{0} Objekte</value></data>
+  <data name="Selected: {0}" xml:space="preserve"><value>Ausgewählt: {0}</value></data>
+  <data name="Place a map flag with one map click." xml:space="preserve"><value>Mit einem Kartenklick eine Flagge setzen.</value></data>
+  <data name="Click the map once to place a flag. Escape or right-click cancels." xml:space="preserve"><value>Einmal auf die Karte klicken, um eine Flagge zu setzen. Escape oder Rechtsklick bricht ab.</value></data>
+  <data name="Titlebar.Running" xml:space="preserve"><value>Läuft</value></data>
+  <data name="Blocked" xml:space="preserve"><value>Blockiert</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Gestoppt</value></data>
+  <data name="Moving" xml:space="preserve"><value>In Bewegung</value></data>
+  <data name="Titlebar.Waiting" xml:space="preserve"><value>Wartet</value></data>
+  <data name="Interacting" xml:space="preserve"><value>Interagiert</value></data>
 </root>

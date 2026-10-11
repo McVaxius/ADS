@@ -299,6 +299,9 @@ internal static class WindowLayout
         => MaterialText.TableHeader(nativeLabel);
 
     internal static void PaintTitleWithImage(Dalamud.Interface.Windowing.Window owner)
+        => PaintTitleWithImageAndStatus(owner, null);
+
+    internal static void PaintTitleWithImageAndStatus(Dalamud.Interface.Windowing.Window owner, MaterialTitlebarStatus? status)
     {
         var window = ImGuiP.FindWindowByName(owner.WindowName);
         if (window.IsNull) return;
@@ -306,8 +309,12 @@ internal static class WindowLayout
         if (owner.AllowPinning || owner.AllowClickthrough || owner.AllowBackgroundBlur) count++;
         var extraRightWidth = count * (ImGuiP.CalcFontSize(window) + ImGui.GetStyle().ItemInnerSpacing.X);
         var texture = AdsPresentation.OriginalIcon;
-        MaterialWindowHeader.PaintTitle(window, owner.WindowName.Split("##", 2)[0], texture?.Handle ?? default,
-            texture is null ? Vector2.Zero : new Vector2(texture.Width, texture.Height), extraRightWidth, owner.ShowCloseButton);
+        var size = texture is null ? Vector2.Zero : new Vector2(texture.Width, texture.Height);
+        if (status is { } summary)
+            MaterialWindowHeader.PaintTitleWithStatus(window, owner.WindowName.Split("##", 2)[0], texture?.Handle ?? default,
+                size, summary, extraRightWidth, owner.ShowCloseButton);
+        else MaterialWindowHeader.PaintTitle(window, owner.WindowName.Split("##", 2)[0], texture?.Handle ?? default,
+            size, extraRightWidth, owner.ShowCloseButton);
     }
 
     internal static void Title(string nativeLabel, MaterialTextRenderer renderer)

@@ -13,12 +13,15 @@ public sealed class WizardCatalogTests
         var deserialize = storage.GetMethod("DeserializeConfig", flags)!;
         var config = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
             """{"Version":24,"UiCompact":false,"UiCompactVisibleOnMainWindow":true,"UiTransparencyVisibleOnMainWindow":true,"UiWindowOpacityPercent":73,"EnableBmraiVbmInRegularDuties":false,"FutureSetting":{"value":[1,"unchanged"]}}""")!;
+        Assert.True(config.UiShowTitlebarStatus);
+        Assert.True(config.UiDetailedTitlebarStatus);
         Assert.True(Plugin.ApplyConfigurationMigrations(config));
         Assert.True(config.UiCompact);
         Assert.False(config.UiCompactVisibleOnMainWindow);
         Assert.False(config.UiTransparencyVisibleOnMainWindow);
         Assert.True(config.UiCompactDefaultsApplied);
         config.UiCompact = false;
+        config.UiShowTitlebarStatus = config.UiDetailedTitlebarStatus = false;
         config.UiCompactVisibleOnMainWindow = config.UiTransparencyVisibleOnMainWindow = true;
         for (var reload = 0; reload < 2; reload++)
         {
@@ -27,6 +30,8 @@ public sealed class WizardCatalogTests
             Assert.False(config.ApplyCompactDefaults());
             Plugin.ApplyConfigurationMigrations(config); // Other existing normalizers are independent of the appearance marker.
             Assert.False(config.UiCompact);
+            Assert.False(config.UiShowTitlebarStatus);
+            Assert.False(config.UiDetailedTitlebarStatus);
             Assert.True(config.UiCompactVisibleOnMainWindow);
             Assert.True(config.UiTransparencyVisibleOnMainWindow);
             Assert.Equal(73, config.UiWindowOpacityPercent);

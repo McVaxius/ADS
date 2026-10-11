@@ -11467,4 +11467,16 @@
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 높이 차 {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>다시 클릭하면 겹친 마커를 차례로 선택합니다.</value></data>
   <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>구분선을 드래그하여 지도 크기를 조절하고, 두 번 클릭하여 초기화하세요.</value></data>
+  <data name="Show titlebar status" xml:space="preserve"><value>제목 표시줄에 상태 표시</value></data>
+  <data name="Detailed titlebar status" xml:space="preserve"><value>제목 표시줄에 자세한 상태 표시</value></data>
+  <data name="{0} objects" xml:space="preserve"><value>오브젝트 {0}개</value></data>
+  <data name="Selected: {0}" xml:space="preserve"><value>선택: {0}</value></data>
+  <data name="Place a map flag with one map click." xml:space="preserve"><value>지도를 한 번 클릭하여 깃발을 놓습니다.</value></data>
+  <data name="Click the map once to place a flag. Escape or right-click cancels." xml:space="preserve"><value>지도를 한 번 클릭하여 깃발을 놓습니다. Escape 또는 오른쪽 클릭으로 취소합니다.</value></data>
+  <data name="Titlebar.Running" xml:space="preserve"><value>실행 중</value></data>
+  <data name="Blocked" xml:space="preserve"><value>진행 불가</value></data>
+  <data name="Stopped" xml:space="preserve"><value>정지</value></data>
+  <data name="Moving" xml:space="preserve"><value>이동 중</value></data>
+  <data name="Titlebar.Waiting" xml:space="preserve"><value>대기 중</value></data>
+  <data name="Interacting" xml:space="preserve"><value>상호작용 중</value></data>
 </root>
