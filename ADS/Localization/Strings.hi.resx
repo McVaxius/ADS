@@ -829,7 +829,7 @@
   <data name="Entity id: 0x{0:X8}" xml:space="preserve"><value>एंटिटी ID: 0x{0:X8}</value></data>
   <data name="Entry XYZ" xml:space="preserve"><value>प्रवेश XYZ</value></data>
   <data name="Entry point missing." xml:space="preserve"><value>प्रवेश बिंदु अनुपस्थित।</value></data>
-  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>मौजूदा पात्र की XA Database इन्वेंट्री में न मौजूद पहनने योग्य गियर, Need माँगता है, फिर लाइव Greed/Pass सीमा मानता है।</value></data>
+  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>मौजूदा पात्र के पास पहनने योग्य उपकरण की साथ रखी या XA Database में दर्ज प्रति न हो तो Need माँगता है, फिर सक्रिय Greed/Pass सीमा मानता है। इन्वेंट्री, आर्मरी, सैडलबैग, रिटेनर, आर्मोयर और ग्लैमर ड्रेसर में दर्ज प्रतियाँ स्वामित्व में गिनी जाती हैं। भंडार रिकॉर्ड स्वयं अपडेट करें; दर्ज प्रति न होने पर वस्तु नहीं है, भंडार IPC अनुपलब्ध होने पर भी।</value></data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve"><value>पहनने वाला गियर पहले ही पूरी तरह मरम्मत है; मरम्मत करने वाले तक पहुँच गए।</value></data>
   <data name="Error: {0}" xml:space="preserve"><value>त्रुटि: {0}</value></data>
   <data name="Evaluated candidate {0}/{1}: shop={2}, npc={3}, " xml:space="preserve"><value>उम्मीदवार {0}/{1} जाँचा: दुकान={2}, npc={3}, </value></data>
@@ -3984,4 +3984,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>XA Slave का Utility &gt; XA Mods पैनल खोलता है, जिसमें Dalamud Log Cleaner है।</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>XA Slave के लॉग उपकरण नहीं खोले जा सके।</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>मुख्य विंडो में पारदर्शिता दिखाएँ</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>ध्वज XYZ</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>X/Z कॉपी करें</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>ध्वज के XYZ कॉपी करने के लिए क्लिक करें।</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>ध्वज की ऊँचाई निर्धारित नहीं है।</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>केवल ध्वज के X/Z कॉपी करें; ऊँचाई शामिल नहीं है।</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>DNav टेलीपोर्ट दिखाएँ</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>केवल मैन्युअल टेलीपोर्ट। DNav की तैयारी, क्षेत्र, फ़िल्टर और साझा कूलडाउन की जाँच लागू रहती है।</value></data>
+  <data name="Teleport" xml:space="preserve"><value>टेलीपोर्ट</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>DNav से इस ऑब्जेक्ट तक टेलीपोर्ट करें।</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>संगत DhogNav टेलीपोर्ट IPC उपलब्ध नहीं है।</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>ऑब्जेक्ट या क्षेत्र बदल गया है। एक्सप्लोरर रीफ़्रेश करें।</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>DhogNav टेलीपोर्ट स्थिति उपलब्ध नहीं है।</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>DhogNav टेलीपोर्ट परिणाम की पुष्टि नहीं हुई। अगला अनुरोध करने से पहले अपनी स्थिति जाँचें।</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>DhogNav टेलीपोर्ट: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>DhogNav टेलीपोर्ट पूरा हुआ।</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav उपलब्ध नहीं है।</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>गंतव्य निर्देशांक अमान्य हैं।</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>खिलाड़ी अनुपलब्ध, लोडिंग, अमान्य स्थिति, अलग क्षेत्र या PvP।</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>साझा टेलीपोर्ट कूलडाउन सक्रिय है।</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>टेलीपोर्ट रद्द: तैयारी या प्रतिबंध बदल गए हैं।</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>अंदर चुना नहीं है (ड्यूटी के भीतर)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>ड्यूटी के बाहर डिबग चालू और बाहर चुना होना चाहिए</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>वर्तमान ज़ोन रोक सूची में है</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>खिलाड़ी बचाव: चुने दायरे में अनुमति सूची से बाहर {0} खिलाड़ी</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>पिन करने के लिए मार्कर या पंक्ति पर क्लिक करें।</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>चुनी गई वस्तु गायब हो गई या फ़िल्टर से छिप गई।</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>नक्शा {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>चयनित: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>कॉलम</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>संकीर्ण विंडो में नक्शा छिप जाता है। खींचकर दृश्य बदलें और स्क्रॉल से ज़ूम करें। चयन से कोई कार्रवाई शुरू नहीं होती।</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>ज़ूम इन</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>ज़ूम आउट</value></data>
+  <data name="Center on player" xml:space="preserve"><value>खिलाड़ी को केंद्र में रखें</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>नक्शा उपलब्ध नहीं है।</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>नक्शे की छवि लोड हो रही है या उपलब्ध नहीं है।</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>पात्र · वस्तु · ख़ज़ाना · आप</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ऊँचाई अंतर {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>एक-दूसरे पर मौजूद मार्करों को बारी-बारी चुनने के लिए फिर क्लिक करें।</value></data>
 </root>

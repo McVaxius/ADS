@@ -2488,7 +2488,7 @@
     <value>缺少入口点。</value>
   </data>
   <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve">
-    <value>当前角色的 XA 数据库库存请求需要可装备的装备，然后遵守实时贪婪/通行证上限。</value>
+    <value>当前角色随身物品与XA Database记录中均无该装备时，请求需求，再遵守当前的贪婪／放弃上限。背包、兵装库、陆行鸟鞍囊、雇员、收藏柜及投影台中已记录的物品均算已拥有。请自行更新储物记录；没有已记录的物品就算缺少，即使储物IPC不可用。</value>
   </data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve">
     <value>装备的装备已经完全修复；到达修理工那里。</value>
@@ -11428,4 +11428,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>打开XA Slave的Utility &gt; XA Mods面板，其中包含Dalamud Log Cleaner。</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>无法打开XA Slave日志工具。</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>在主窗口显示透明度</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>标记XYZ</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>复制X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>点击复制标记的XYZ坐标。</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>标记高度尚未确定。</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>仅复制标记的X/Z坐标，不包含高度。</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>显示DNav传送</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>仅限手动传送。仍遵守DNav的就绪状态、区域、筛选和共享冷却限制。</value></data>
+  <data name="Teleport" xml:space="preserve"><value>传送</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>通过DNav传送到此对象。</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>兼容的DhogNav传送IPC不可用。</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>对象或区域已改变。请刷新浏览器。</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>DhogNav传送状态不可用。</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>DhogNav传送结果尚未确认。再次请求前请检查当前位置。</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>DhogNav传送：{0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>DhogNav传送已完成。</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav不可用。</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>目标坐标无效。</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>玩家不可用、加载中、位置无效、区域不同或处于PvP。</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>共享传送冷却尚未结束。</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>传送已取消：就绪状态或限制已改变。</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>未勾选副本内（当前位于副本内）</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>副本外需要启用 Debug 并勾选副本外</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>当前区域在黑名单中</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>玩家回避：选定范围内有 {0} 名未列入白名单的玩家</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>点击标记或行以置顶。</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>所选对象已消失或被筛选隐藏。</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>地图 {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>已选：{0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>列</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>窗口较窄时隐藏地图。拖动平移，滚轮缩放。选择不会触发任何操作。</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>放大</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>缩小</value></data>
+  <data name="Center on player" xml:space="preserve"><value>以玩家为中心</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>地图不可用。</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>地图纹理正在加载或不可用。</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>角色 · 对象 · 宝箱 · 自己</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 高差 {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>再次点击可循环选择重叠的标记。</value></data>
 </root>

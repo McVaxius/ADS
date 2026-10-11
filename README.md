@@ -26,7 +26,7 @@ ADS can resolve deterministic NPC vendor offers and NPC placements from local ga
 
 ## Loot Automation
 
-Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot. Native inventory/registration and valid XADB inventory, retainer, armoire and glamour-dresser rows establish ownership. Empty, stale or incomplete storage responses retain the selected base mode: the current item API cannot certify complete storage absence. Live Greed/Pass availability still caps the result. XADB storage must be recorded and refreshed for the current character.
+Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot. Ownership includes all four inventory bags, equipped items, the Armoury Chest, both left and right normal/premium chocobo saddlebags, retainers, armoire and glamour dresser. Live NQ/HQ copies and registration establish ownership; XADB supplies recorded copies for these locations when they are not loaded. An item without a native or recorded copy is treated as missing, including unrecorded or unavailable storage. Recorded copies remain owned regardless of snapshot age; users must open storage and refresh XADB to update its contents. Live Greed/Pass availability still caps the result, and the option remains manual to enable.
 
 ## Installation
 
@@ -84,6 +84,32 @@ above the rule grid, whose editor rows meet at their dividers and retain inline 
 Expand **Advanced**, then choose Preset management, Sharing, Draft editing,
 PR-ready checkout or Guided Setup. Each tab shows only its related tools.
 Edits still require **Save**; the row **X** uses the same draft deletion and **Undo** flow.
+
+## Object Explorer
+
+`/ads obj` shares its filters between the live object table and an optional game
+map. Click a marker or name to highlight and pin its row; selection alone does
+not target, move, flag or teleport. Repeated marker clicks cycle overlapping
+objects. Drag the map to pan, scroll or use +/− to zoom, and use the target icon
+to center on your character. The map hides at narrow widths. Missing map data
+stays visibly unavailable; off-layer evidence and height differences remain in
+marker details. Object replacement, disappearance, filtering and map changes
+clear stale selection.
+
+The **… / Columns** picker controls the informational columns and optional DNav
+action for this load. **Diagnostics** contains the full territory/map/layer,
+frontier, flag and export details. Map, selection, zoom, disclosure and column
+choices are session-only. All original row actions remain as icons with tooltips.
+
+`/ads obj` shows current flag world coordinates. Click resolved XYZ to copy all
+three coordinates; **Copy X/Z** is a separate button usable without a resolved
+height. Cleared, changed or unavailable flags cannot supply old XYZ.
+
+With compatible DNav loaded, **Columns > Show DNav teleport** exposes a manual row action.
+It starts hidden each plugin load and respects DNav's current territory, readiness,
+Inside/Outside, blacklist, player filters and shared cooldown. Refusal reasons are
+shown on disabled actions and in action status. No DNav mode is enabled; an
+unconfirmed reply is never automatically retried.
 
 ## Documentation
 

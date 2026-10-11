@@ -154,6 +154,26 @@ internal sealed class MapFlagMonitorPolicy
         return BuildDetectedStatus(observedFlag.Value, destinationStatus, playerPosition, resolvedDestination);
     }
 
+    public bool TryGetCoordinates(MapFlagObservation current, uint territoryId, out Vector2 worldXZ, out Vector3? worldXYZ)
+    {
+        worldXZ = default;
+        worldXYZ = null;
+        if (current.Kind != MapFlagObservationKind.Present || current.Snapshot is not { } snapshot
+            || territoryId == 0 || snapshot.TerritoryId != territoryId
+            || !float.IsFinite(snapshot.WorldX) || !float.IsFinite(snapshot.WorldZ))
+        {
+            ResetDestination();
+            return false;
+        }
+
+        worldXZ = new Vector2(snapshot.WorldX, snapshot.WorldZ);
+        if (observedFlag is { } observed && observed.IsSameFlag(snapshot) && IsFinite(resolvedDestination))
+            worldXYZ = resolvedDestination;
+        else if (observedFlag is not { } previous || !previous.IsSameFlag(snapshot))
+            ResetDestination();
+        return true;
+    }
+
     public static string BuildDetectedStatus(
         MapFlagSnapshot snapshot,
         string destinationStatus,

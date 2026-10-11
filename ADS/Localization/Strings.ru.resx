@@ -3697,7 +3697,7 @@
   <data name="Duty maturity config was missing, so ADS seeded a built-in empty fallback until the botologyupdates cache refresh succeeds." xml:space="preserve"><value>Настройка зрелости заданий отсутствовала; ADS создал пустой встроенный резервный вариант до успешного обновления кеша botologyupdates.</value></data>
   <data name="Empty overrides suppress all inherited rules in those contexts. Disabling rows usually preserves authoring intent better." xml:space="preserve"><value>Пустые переопределения подавляют все унаследованные правила контекстов. Отключение строк обычно лучше сохраняет замысел.</value></data>
   <data name="Enable ADS, choose outside/inside/resume ownership, and recover safely with Stop or Leave." xml:space="preserve"><value>Включите ADS, выберите управление снаружи/внутри/продолжение и безопасно восстанавливайтесь через Остановку или Выход.</value></data>
-  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Снаряжение, отсутствующее в инвентаре XA Database текущего персонажа, запрашивает Need, затем соблюдает текущий предел Greed/Pass.</value></data>
+  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Снаряжение без копии при себе или в записях XA Database текущего персонажа запрашивает Need, затем соблюдает текущий предел Greed/Pass. Записанные копии в инвентаре, арсенале, седельных сумках, у слуг, в шкафе и комоде для проекций считаются владением. Обновляйте записи хранилищ самостоятельно; если записанной копии нет, предмет считается отсутствующим даже при недоступном IPC хранилищ.</value></data>
   <data name="Exact highlighting unavailable because the clean active-preset draft and current runtime rows are no longer aligned." xml:space="preserve"><value>Точное выделение недоступно: неизменённый черновик активного пресета и текущие строки выполнения больше не согласованы.</value></data>
   <data name="Exact highlighting unavailable because the planner snapshot and current active runtime rules are no longer aligned." xml:space="preserve"><value>Точное выделение недоступно: снимок планировщика и текущие активные правила выполнения больше не согласованы.</value></data>
   <data name="Example added as an editable preset. Review targets, then Test preset before Run Shop List." xml:space="preserve"><value>Пример добавлен как редактируемый пресет. Проверьте цели и пресет перед Выполнением списка покупок.</value></data>
@@ -4358,4 +4358,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Открывает панель Utility &gt; XA Mods в XA Slave, содержащую Dalamud Log Cleaner.</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>Не удалось открыть инструменты журналов XA Slave.</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>Показывать прозрачность в главном окне</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>XYZ метки</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>Копировать X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>Нажмите, чтобы скопировать XYZ метки.</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>Высота метки не определена.</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>Копировать только X/Z метки, без высоты.</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>Показать телепорт DNav</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>Только ручной телепорт. Проверки готовности, территории, фильтров и общей задержки DNav сохраняются.</value></data>
+  <data name="Teleport" xml:space="preserve"><value>Телепорт</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>Телепортироваться к этому объекту через DNav.</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>Совместимый IPC телепорта DhogNav недоступен.</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>Объект или территория изменились. Обновите обозреватель.</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>Состояние телепорта DhogNav недоступно.</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>Результат телепорта DhogNav не подтверждён. Проверьте положение перед новым запросом.</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>Телепорт DhogNav: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>Телепорт DhogNav выполнен.</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav недоступен.</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>Недопустимые координаты назначения.</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>Игрок недоступен, идёт загрузка, неверное положение, другая территория или PvP.</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>Действует общая задержка телепорта.</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>Телепорт отменён: готовность или ограничения изменились.</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>Внутри задания выключено (в задании)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>вне задания нужны Debug и Вне задания</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>текущая зона в чёрном списке</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>Избегать игроков: {0} игроков вне белого списка в области</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>Нажмите на метку или строку, чтобы закрепить её.</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>Выбранный объект исчез или скрыт фильтром.</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>Карта {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>Выбрано: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>Столбцы</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>В узком окне карта скрыта. Перетаскивайте для перемещения, прокручивайте для масштаба. Выделение не запускает действия.</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>Приблизить</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>Отдалить</value></data>
+  <data name="Center on player" xml:space="preserve"><value>Центрировать на игроке</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>Карта недоступна.</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>Текстура карты загружается или недоступна.</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Персонаж · Объект · Сундук · Вы</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Нажмите ещё раз для перебора перекрывающихся меток.</value></data>
 </root>

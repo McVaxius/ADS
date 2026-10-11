@@ -1,11 +1,13 @@
 using AethertekUI;
 using ADS.Localization;
+using System.Globalization;
 using System.Numerics;
 using ADS.Models;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface.Windowing;
+using Lumina.Excel.Sheets;
 using NativeCharacter = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
 
 namespace ADS.Windows;
@@ -24,6 +26,19 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private bool targetableOnly;
     private bool sameMapOnly;
     private bool compact;
+    private bool showTeleport;
+    private bool showMap = true;
+    private bool showDiagnostics;
+    private readonly bool[] visibleColumns = Enumerable.Repeat(true, 8).ToArray();
+    private static readonly string[] columnLabels = ["Name", "Kind", "Lv.", "f.Lv", "Element", "Dist", "Y", "Rules"];
+    private ObjectExplorerRow? selectedObject;
+    private bool scrollToSelection;
+    private bool centerSelection;
+    private uint viewedTerritory;
+    private uint viewedMap;
+    private float mapZoom = 1;
+    private Vector2 mapCenter = new(.5f);
+    private string selectionStatus = "Click a marker or row to pin it.";
     private ulong? rulePopupObjectId;
 
     public ObjectExplorerWindow(Plugin plugin)
@@ -64,54 +79,131 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
-        DrawExportControls();
-        MaterialText.TextWrapped(Ui.T("Action status: {0}", Ui.Display(plugin.ObjectExplorerStatus)));
-
+        using var spacing = new MaterialStyleScope();
+        spacing.Style(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 4 * MaterialTheme.Metrics.Scale));
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
         var context = plugin.DutyContextService.Current;
-        if (!compact)
-            MaterialText.Text(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
-        MaterialText.Text(Ui.T("Current map ID: {0}", (localPlayer is null ? "Unavailable" : context.CurrentMapId?.ToString() ?? "Unavailable")));
+        var mapId = context.CurrentMapId ?? 0;
+        if (viewedTerritory != context.TerritoryTypeId || viewedMap != mapId || localPlayer is null)
+        {
+            selectedObject = null;
+            scrollToSelection = false;
+            centerSelection = false;
+            rulePopupObjectId = null;
+            selectionStatus = "Click a marker or row to pin it.";
+            mapCenter = new(.5f);
+            mapZoom = 1;
+            viewedTerritory = context.TerritoryTypeId;
+            viewedMap = mapId;
+        }
+        DrawFilters(localPlayer);
+        ImGui.SameLine();
+        DrawExportControls();
+        ImGui.SameLine();
+        if (WindowLayout.SmallButton(Ui.L("Diagnostics"))) showDiagnostics = !showDiagnostics;
+        if (showDiagnostics) DrawDiagnostics(context, localPlayer);
+        MaterialText.Text(Ui.T("Map {0} · {1}", mapId == 0 ? Ui.T("Unavailable") : mapId.ToString(),
+            Ui.Display(plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown")));
         if (localPlayer is null)
         {
-            rulePopupObjectId = null;
-            if (!compact)
-            {
-                MaterialText.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
-                MaterialText.Text(Ui.T("No local player is available."));
-            }
+            MaterialText.Text(Ui.T("No local player is available."));
             return;
         }
+        DrawFlagCoordinates();
 
-        var activeLayer = plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown";
-        var nearestFrontierLabel = plugin.DungeonFrontierService.CurrentLabelMarkers
-            .OrderBy(x => Vector3.Distance(localPlayer.Position, x.WorldPosition))
-            .FirstOrDefault();
-
-        if (!compact)
+        var rows = BuildRows(context, localPlayer).Where(MatchesFilter).ToList();
+        if (selectedObject is { } selected)
         {
-            MaterialText.Text(Ui.T("Live Loaded Objects"));
-            MaterialText.TextWrapped(Ui.T("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence."));
-            MaterialText.Text(Ui.T("Layer / Sub-area: {0}", activeLayer));
-            MaterialText.Text(Ui.T("Nearest frontier label: {0}", (nearestFrontierLabel is null ? "None" : $"{nearestFrontierLabel.Name} ({Vector3.Distance(localPlayer.Position, nearestFrontierLabel.WorldPosition):0.0}y)")));
-            MaterialText.TextWrapped(Ui.T("Frontier target: {0}", plugin.DungeonFrontierService.CurrentTarget?.Name ?? "None"));
-            MaterialText.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
+            selectedObject = rows.Find(row => SameObject(row, selected));
+            if (selectedObject is null)
+            {
+                selectionStatus = "The selected object disappeared or was filtered out.";
+                scrollToSelection = false;
+            }
         }
+        var available = ImGui.GetContentRegionAvail();
+        var footerText = (selectedObject is { } selection
+            ? Ui.T("Selected: {0} · {1:0.0}y", selection.Name, selection.Distance)
+            : Ui.T(selectionStatus)) + "   " + Ui.T("Objects shown: {0}", rows.Count);
+        var actionStatus = Ui.T("Action status: {0}", Ui.Display(plugin.ObjectExplorerStatus));
+        var footerTextWidth = Math.Max(1, available.X - (selectedObject is null ? 0 : ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X));
+        var footerHeight = Math.Max(ImGui.GetFrameHeight(), MaterialText.Measure(footerText, wrapWidth: footerTextWidth).Y)
+            + MaterialText.Measure(actionStatus, wrapWidth: Math.Max(1, available.X)).Y + ImGui.GetStyle().ItemSpacing.Y * 2;
+        var bodyHeight = Math.Max(160 * MaterialTheme.Metrics.Scale, available.Y - footerHeight);
+        // The original table stays in its window's ID scope; only the new map owns a child.
+        var mapVisible = showMap && available.X >= 1120 * MaterialTheme.Metrics.Scale;
+        if (mapVisible)
+        {
+            DrawMap(context, localPlayer, rows, new Vector2(Math.Min(420 * MaterialTheme.Metrics.Scale, available.X * .32f), bodyHeight));
+            ImGui.SameLine();
+        }
+        DrawObjectTable(context, rows, new Vector2(Math.Max(1, ImGui.GetContentRegionAvail().X), bodyHeight));
+        if (selectedObject is not null)
+        {
+            if (IconAction(Ui.L("Clear selection"), MaterialIcon.Close, "Clear selection"))
+            {
+                selectedObject = null;
+                selectionStatus = "Click a marker or row to pin it.";
+            }
+            ImGui.SameLine();
+        }
+        MaterialText.TextWrapped(footerText);
+        MaterialText.TextWrapped(actionStatus);
+    }
 
-        MaterialText.Text(Ui.T("Search"));
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(-1f);
+    private void DrawFilters(IGameObject? localPlayer)
+    {
+        using var controls = MaterialControls.Push(MaterialControlContext.Dense);
+        var scale = MaterialTheme.Metrics.Scale;
+        var kindOptions = objectKindFilters.Select(Ui.Display).ToArray();
+        var kindWidth = MaterialText.Measure(Ui.T("Kind")).X;
+        var kindComboWidth = Math.Max(120 * scale, WindowLayout.ComboMinimum(kindOptions));
+        var mapWidth = MaterialText.Measure(Ui.T("Map")).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X;
+        var reserved = kindWidth + kindComboWidth + WindowLayout.ButtonMinimum(Ui.L("Clear filters"))
+            + mapWidth + ImGui.GetFrameHeight() + 5 * ImGui.GetStyle().ItemSpacing.X;
+        ImGui.SetNextItemWidth(Math.Max(120 * scale, ImGui.GetContentRegionAvail().X - reserved));
         WindowLayout.InputTextWithHint("##ADSObjectTextFilter", Ui.T("name / base id / object kind; | for OR"), ref textFilter, 128);
+        ImGui.SameLine();
+        MaterialLayout.FitNextItemWidth(0, kindWidth + ImGui.GetStyle().ItemSpacing.X + kindComboWidth);
         MaterialText.Text(Ui.T("Kind"));
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(180f);
-        WindowLayout.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, objectKindFilters.Select(Ui.Display).ToArray(), objectKindFilters.Length);
+        ImGui.SetNextItemWidth(kindComboWidth);
+        WindowLayout.Combo("##ADSObjectKindFilter", ref objectKindFilterIndex, kindOptions, kindOptions.Length);
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Clear filters")))
             ClearFilters();
-
+        ImGui.SameLine();
+        WindowLayout.Checkbox("Map", ref showMap);
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action."));
+        ImGui.SameLine();
+        MaterialLayout.FitNextItemWidth(0, ImGui.GetFrameHeight());
+        if (IconAction(Ui.L("Columns"), MaterialIcon.More, "Columns")) ImGui.OpenPopup("ADSExplorerColumns");
+        var originalIdRoot = ImGui.GetID(string.Empty);
+        if (ImGui.BeginPopup("ADSExplorerColumns"))
+        {
+            try
+            {
+                for (var index = 0; index < visibleColumns.Length; index++)
+                {
+                    if (index == 0) ImGui.BeginDisabled();
+                    WindowLayout.Checkbox(columnLabels[index], ref visibleColumns[index]);
+                    if (index == 0) ImGui.EndDisabled();
+                }
+                ImGuiP.PushOverrideID(originalIdRoot);
+                try
+                {
+                    ImGui.BeginDisabled(!plugin.DhogNavTeleportAvailable);
+                    try { WindowLayout.Checkbox("Show DNav teleport", ref showTeleport); }
+                    finally { ImGui.EndDisabled(); }
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                        MaterialText.SetTooltip(Ui.T("Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply."));
+                }
+                finally { ImGui.PopID(); }
+            }
+            finally { ImGui.EndPopup(); }
+        }
         if (WindowLayout.Checkbox("Filter by Lv.", ref levelFilterEnabled) && levelFilterEnabled && levelFilter <= 0)
-            levelFilter = localPlayer.Level;
+            levelFilter = localPlayer is ICharacter character ? character.Level : 1;
 
         ImGui.SameLine();
         ImGui.BeginDisabled(!levelFilterEnabled);
@@ -120,10 +212,13 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         if (levelFilterEnabled)
             levelFilter = Math.Max(1, levelFilter);
         ImGui.SameLine();
+        MaterialLayout.FitNextItemWidth(0, MaterialText.Measure(Ui.T("Exact")).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
         WindowLayout.RadioButton(Ui.L("Exact##ADSObjectLevelFilter"), ref levelFilterMode, 0);
         ImGui.SameLine();
+        MaterialLayout.FitNextItemWidth(0, MaterialText.Measure(Ui.T("<=")).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
         WindowLayout.RadioButton(Ui.L("<=##ADSObjectLevelFilter"), ref levelFilterMode, 1);
         ImGui.SameLine();
+        MaterialLayout.FitNextItemWidth(0, MaterialText.Measure(Ui.T(">=")).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
         WindowLayout.RadioButton(Ui.L(">=##ADSObjectLevelFilter"), ref levelFilterMode, 2);
         ImGui.EndDisabled();
         ImGui.SameLine();
@@ -147,107 +242,368 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
         if (ImGui.IsItemHovered())
             MaterialText.SetTooltip(Ui.T("When enabled, RULE seeds object XYZ coordinates plus a 6y radius. BaseId remains 0; observed BaseId is kept in Notes."));
+    }
 
-        var rows = BuildRows(context, localPlayer)
-            .Where(MatchesFilter)
-            .ToList();
-
-        if (!compact)
-            MaterialText.Text(Ui.T("Objects shown: {0}", rows.Count));
+    private void DrawObjectTable(DutyContextSnapshot context, List<ObjectExplorerRow> rows, Vector2 size)
+    {
+        var teleportAvailable = plugin.DhogNavTeleportAvailable;
         var whitelistAvailable = plugin.DhogNavWhitelistAvailable;
-        if (!ImGui.BeginTable("ADSObjectExplorerTable", 14, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings | ImGuiTableFlags.Sortable | ImGuiTableFlags.SortMulti, new Vector2(-1f, -1f)))
+        using var controls = MaterialTable.PushControls(context: compact ? MaterialControlContext.Dense : MaterialControlContext.Toolbar);
+        using var tightRows = MaterialTable.PushTightRows();
+        if (!ImGui.BeginTable("ADSObjectExplorerTable", 15, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Resizable | ImGuiTableFlags.NoSavedSettings | ImGuiTableFlags.Sortable | ImGuiTableFlags.SortMulti, size))
             return;
-
-        ImGui.TableSetupColumn(Ui.L("Name"));
-        ImGui.TableSetupColumn(Ui.L("Kind"));
-        ImGui.TableSetupColumn(Ui.L("Lv."));
-        ImGui.TableSetupColumn(Ui.L("f.Lv"));
-        ImGui.TableSetupColumn(Ui.L("Element"));
-        ImGui.TableSetupColumn(Ui.L("Dist"), ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortAscending);
-        ImGui.TableSetupColumn(Ui.L("Y"));
-        ImGui.TableSetupColumn(Ui.L("Rules"));
-        ImGui.TableSetupColumn(Ui.L("moveto"), ImGuiTableColumnFlags.NoSort);
-        ImGui.TableSetupColumn(Ui.L("flyto"), ImGuiTableColumnFlags.NoSort);
-        ImGui.TableSetupColumn(Ui.L("FLAG"), ImGuiTableColumnFlags.NoSort);
-        ImGui.TableSetupColumn(Ui.L("RULE"), ImGuiTableColumnFlags.NoSort);
-        ImGui.TableSetupColumn(Ui.L("Copy XYZ"), ImGuiTableColumnFlags.NoSort);
-        ImGui.TableSetupColumn(Ui.L("DhogNav"), ImGuiTableColumnFlags.NoSort | (whitelistAvailable ? ImGuiTableColumnFlags.None : ImGuiTableColumnFlags.Disabled));
+        try
+        {
+        for (var index = 0; index < columnLabels.Length; index++)
+        {
+            var flags = !visibleColumns[index] ? ImGuiTableColumnFlags.Disabled : ImGuiTableColumnFlags.None;
+            if (index == 5) flags |= ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortAscending;
+            ImGui.TableSetupColumn(Ui.L(columnLabels[index]), flags, index == 0 ? 170 * MaterialTheme.Metrics.Scale : 0);
+        }
+        var actionWidth = ImGui.GetFrameHeight() + ImGui.GetStyle().CellPadding.X * 2;
+        const ImGuiTableColumnFlags actionFlags = ImGuiTableColumnFlags.NoSort | ImGuiTableColumnFlags.NoHeaderWidth;
+        ImGui.TableSetupColumn(Ui.L("moveto"), actionFlags, actionWidth);
+        ImGui.TableSetupColumn(Ui.L("flyto"), actionFlags, actionWidth);
+        ImGui.TableSetupColumn(Ui.L("FLAG"), actionFlags, actionWidth);
+        ImGui.TableSetupColumn(Ui.L("RULE"), actionFlags, actionWidth);
+        ImGui.TableSetupColumn(Ui.L("Copy XYZ"), actionFlags, actionWidth);
+        ImGui.TableSetupColumn(Ui.L("DhogNav"), actionFlags | (whitelistAvailable ? ImGuiTableColumnFlags.None : ImGuiTableColumnFlags.Disabled), actionWidth);
+        ImGui.TableSetupColumn(Ui.L("Teleport"), actionFlags | (teleportAvailable && showTeleport ? ImGuiTableColumnFlags.None : ImGuiTableColumnFlags.Disabled), actionWidth);
         ImGui.TableSetupScrollFreeze(1, 1);
         DrawHeaderRow();
         SortTableRows(rows);
+        if (selectedObject is { } pinnedSelection)
+        {
+            var selectedIndex = rows.FindIndex(row => SameObject(row, pinnedSelection));
+            if (selectedIndex > 0)
+            {
+                var pinned = rows[selectedIndex];
+                rows.RemoveAt(selectedIndex);
+                rows.Insert(0, pinned);
+            }
+        }
+        if (scrollToSelection && selectedObject is not null)
+        {
+            // The selection is pinned first. Request the table's top even when
+            // its previously scrolled rows clip the selected name this frame.
+            ImGui.SetScrollY(0);
+            scrollToSelection = false;
+        }
 
         foreach (var row in rows)
         {
             ImGui.TableNextRow();
-            ImGui.TableSetColumnIndex(0);
-            MaterialText.Text(row.Name);
+            if (ImGui.TableSetColumnIndex(0))
+            {
+            var selected = selectedObject is { } pin && SameObject(row, pin);
+            if (selected) ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg1, ImGui.GetColorU32(ImGuiCol.Header));
+            if (MaterialText.Selectable(row.Name + "###ADSExplorerSelect" + row.GameObjectId, selected,
+                    ImGuiSelectableFlags.None, new Vector2(0, ImGui.GetFrameHeight()))) SelectObject(row, centerMap: true);
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(1);
+            }
+            if (ImGui.TableSetColumnIndex(1))
+            {
             MaterialText.Text(row.ObjectKind);
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(2);
+            }
+            if (ImGui.TableSetColumnIndex(2))
+            {
             MaterialText.Text(row.Level?.ToString() ?? "—");
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(3);
+            }
+            if (ImGui.TableSetColumnIndex(3))
+            {
             MaterialText.Text(row.ForayLevel?.ToString() ?? "—");
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(4);
+            }
+            if (ImGui.TableSetColumnIndex(4))
+            {
             MaterialText.Text(FormatForayElement(row.ForayElement));
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(5);
+            }
+            if (ImGui.TableSetColumnIndex(5))
+            {
             MaterialText.Text(row.Distance.ToString("0.00"));
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(6);
+            }
+            if (ImGui.TableSetColumnIndex(6))
+            {
             MaterialText.Text(row.VerticalDelta.ToString("0.00"));
             DrawRowTooltip(row);
-
-            ImGui.TableSetColumnIndex(7);
+            }
+            if (ImGui.TableSetColumnIndex(7))
+            {
             MaterialText.Text(row.MatchingRules.Count.ToString());
             DrawRuleTooltip(row);
+            }
 
-            ImGui.TableSetColumnIndex(8);
-            if (WindowLayout.SmallButton(Ui.L("moveto##ADSObjectMove{0}", row.GameObjectId)))
+            if (ImGui.TableSetColumnIndex(8) && IconAction(Ui.L("moveto##ADSObjectMove{0}", row.GameObjectId), MaterialIcon.Person, "Move to the object's position."))
                 plugin.TryExplorerNavigation(row.Position, useFly: false);
 
-            ImGui.TableSetColumnIndex(9);
-            if (WindowLayout.SmallButton(Ui.L("flyto##ADSObjectFly{0}", row.GameObjectId)))
+            if (ImGui.TableSetColumnIndex(9) && IconAction(Ui.L("flyto##ADSObjectFly{0}", row.GameObjectId), MaterialIcon.Send, "Fly to the object's position."))
                 plugin.TryExplorerNavigation(row.Position, useFly: true);
 
-            ImGui.TableSetColumnIndex(10);
-            if (WindowLayout.SmallButton(Ui.L("FLAG##ADSObjectFlag{0}", row.GameObjectId)))
+            if (ImGui.TableSetColumnIndex(10) && IconAction(Ui.L("FLAG##ADSObjectFlag{0}", row.GameObjectId), MaterialIcon.MapPin, "Place a map flag at the object."))
                 plugin.TryPlaceObjectFlag(row.Name, row.Position);
 
-            ImGui.TableSetColumnIndex(11);
-            if (WindowLayout.SmallButton(Ui.L("RULE##ADSObjectRule{0}", row.GameObjectId)))
+            if (ImGui.TableSetColumnIndex(11) && IconAction(Ui.L("RULE##ADSObjectRule{0}", row.GameObjectId), MaterialIcon.Document, "Seed an object rule; choose its class."))
             {
                 rulePopupObjectId = row.GameObjectId;
                 ImGui.OpenPopup($"ADSObjectRulePopup##{row.GameObjectId}");
             }
 
-            ImGui.TableSetColumnIndex(12);
-            if (WindowLayout.SmallButton(Ui.L("XYZ##ADSObjectCopy{0}", row.GameObjectId)))
+            if (ImGui.TableSetColumnIndex(12) && IconAction(Ui.L("XYZ##ADSObjectCopy{0}", row.GameObjectId), MaterialIcon.Copy, "Copy the object's XYZ coordinates."))
                 ImGui.SetClipboardText($"{row.Position.X:0.00}, {row.Position.Y:0.00}, {row.Position.Z:0.00}");
 
             if (whitelistAvailable && row.ObjectKind == nameof(ObjectKind.Pc))
             {
-                ImGui.TableSetColumnIndex(13);
-                if (WindowLayout.SmallButton(Ui.L("Whitelist##ADSObjectWhitelist{0}", row.GameObjectId)))
+                if (ImGui.TableSetColumnIndex(13) && IconAction(Ui.L("Whitelist##ADSObjectWhitelist{0}", row.GameObjectId), MaterialIcon.Star,
+                        "Add this player and their home server to DhogNav's whitelist. DhogNav must be loaded; parasite mode may be off. Finish or cancel any whitelist edit first."))
                     plugin.TryWhitelistExplorerPlayer(row.GameObjectId);
-                if (ImGui.IsItemHovered())
-                    MaterialText.SetTooltip(Ui.T("Add this player and their home server to DhogNav's whitelist. DhogNav must be loaded; parasite mode may be off. Finish or cancel any whitelist edit first."));
+            }
+
+            if (teleportAvailable && showTeleport && ImGui.TableSetColumnIndex(14))
+            {
+                var territory = context.TerritoryTypeId;
+                var reason = plugin.GetExplorerTeleportBlockReason(row, territory);
+                ImGui.BeginDisabled(reason != null);
+                if (IconAction(Ui.L("Teleport##ADSObjectTeleport{0}", row.GameObjectId), MaterialIcon.Location, "Teleport to this object through DNav.", tooltipEnabled: false))
+                    plugin.TryTeleportExplorerObject(row, territory);
+                ImGui.EndDisabled();
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    MaterialText.SetTooltip(reason == null
+                        ? Ui.T("Teleport to this object through DNav.")
+                        : string.Join("; ", reason.Split("; ").Select(Ui.Display)));
             }
         }
 
         if (rulePopupObjectId is { } objectId)
             DrawRulePopup(objectId, rows.Find(row => row.GameObjectId == objectId));
 
-        ImGui.EndTable();
+        }
+        finally { ImGui.EndTable(); }
+    }
+
+    private void DrawDiagnostics(DutyContextSnapshot context, IGameObject? localPlayer)
+    {
+        MaterialText.Text(Ui.T("Territory / Map / CFC: {0} / {1} / {2}", context.TerritoryTypeId, context.MapId, context.ContentFinderConditionId));
+        MaterialText.Text(Ui.T("Current map ID: {0}", localPlayer is null ? Ui.T("Unavailable") : context.CurrentMapId?.ToString() ?? Ui.T("Unavailable")));
+        MaterialText.Text(Ui.T("Live Loaded Objects"));
+        MaterialText.TextWrapped(Ui.T("Operator-first object table. Rules column shows all rule hits before live layer filtering. Same-map-only is best-effort: ADS hides rows that only match off-layer scoped rules and keeps rows with no map-layer evidence."));
+        MaterialText.Text(Ui.T("Layer / Sub-area: {0}", Ui.Display(plugin.ObjectPriorityRuleService.GetActiveLayerName(context) ?? "Unknown")));
+        var nearest = localPlayer is null ? null : plugin.DungeonFrontierService.CurrentLabelMarkers
+            .OrderBy(marker => Vector3.Distance(localPlayer.Position, marker.WorldPosition)).FirstOrDefault();
+        MaterialText.Text(Ui.T("Nearest frontier label: {0}", nearest is null ? Ui.T("None")
+            : $"{nearest.Name} ({Vector3.Distance(localPlayer!.Position, nearest.WorldPosition):0.0}y)"));
+        MaterialText.TextWrapped(Ui.T("Frontier target: {0}", plugin.DungeonFrontierService.CurrentTarget?.Name ?? Ui.T("None")));
+        MaterialText.TextWrapped(Ui.T("Flag status: {0}", Ui.Display(plugin.ObjectExplorerMapFlagStatus)));
+        MaterialText.TextWrapped(Ui.T("Export status: {0}", Ui.Display(plugin.ExplorerSnapshotExportService.Status)));
+    }
+
+    // Native button identity remains the original translated wrapper's ### suffix.
+    private static bool IconAction(string nativeLabel, MaterialIcon icon, string tooltip, bool tooltipEnabled = true)
+    {
+        var idStart = nativeLabel.IndexOf("###", StringComparison.Ordinal);
+        var id = idStart >= 0 ? nativeLabel[idStart..] : nativeLabel;
+        var height = ImGui.GetFrameHeight();
+        var clicked = ImGui.Button(id, new Vector2(height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var iconSize = Math.Min(18 * MaterialTheme.Metrics.Scale, height - 2 * MaterialTheme.Metrics.Scale);
+        if (icon == MaterialIcon.None)
+            ImGui.GetWindowDrawList().AddLine(min + new Vector2(height * .25f, height * .5f), min + new Vector2(height * .75f, height * .5f),
+                ImGui.GetColorU32(ImGuiCol.Text), Math.Max(1, MaterialTheme.Metrics.Scale));
+        else MaterialIcons.Draw(icon, min + (max - min - new Vector2(iconSize)) * .5f, iconSize,
+                ImGui.GetStyle().Colors[(int)ImGuiCol.Text], ImGui.GetStyle().Alpha);
+        if (tooltipEnabled && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            MaterialText.SetTooltip(Ui.T(tooltip));
+        return clicked;
+    }
+
+    private void SelectObject(ObjectExplorerRow row, bool centerMap = false)
+    {
+        selectedObject = row;
+        scrollToSelection = true;
+        centerSelection = centerMap;
+        selectionStatus = "Click a marker or row to pin it.";
+    }
+
+    internal static bool SameObject(ObjectExplorerRow left, ObjectExplorerRow right)
+        => left.GameObjectId == right.GameObjectId && left.GameObjectAddress == right.GameObjectAddress
+            && left.BaseId == right.BaseId && left.ObjectKind == right.ObjectKind;
+
+    internal static bool TryMapUv(Vector3 position, ushort sizeFactor, short offsetX, short offsetY, out Vector2 uv)
+    {
+        uv = default;
+        if (sizeFactor == 0 || !float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z)) return false;
+        // Sheet offsets are world units; the map is a square 2048-unit canvas.
+        uv = new Vector2(.5f) + new Vector2(position.X + offsetX, position.Z + offsetY) * (sizeFactor / 100f / 2048f);
+        return float.IsFinite(uv.X) && float.IsFinite(uv.Y);
+    }
+
+    internal static ObjectExplorerRow? PickMapMarker(IReadOnlyList<(ObjectExplorerRow Row, Vector2 Point)> markers,
+        Vector2 mouse, float radius, ObjectExplorerRow? selected)
+    {
+        // Stable order lets repeated clicks cycle all overlapping markers.
+        var candidates = markers.Where(marker => Vector2.DistanceSquared(marker.Point, mouse) <= radius * radius)
+            .OrderBy(marker => Vector2.DistanceSquared(marker.Point, mouse)).ThenBy(marker => marker.Row.GameObjectId).ToList();
+        if (candidates.Count == 0) return null;
+        var current = selected is null ? -1 : candidates.FindIndex(marker => SameObject(marker.Row, selected));
+        return candidates[(current + 1) % candidates.Count].Row;
+    }
+
+    private void DrawMap(DutyContextSnapshot context, IGameObject player, IReadOnlyList<ObjectExplorerRow> rows, Vector2 size)
+    {
+        var visible = ImGui.BeginChild("ADSExplorerMap", size, true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        try
+        {
+            if (!visible) return;
+            Map map;
+            Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? texture;
+            try
+            {
+                if (context.CurrentMapId is not { } id || !Plugin.DataManager.GetExcelSheet<Map>(Ui.SheetLanguage).TryGetRow(id, out map)
+                    || map.SizeFactor == 0)
+                {
+                    MaterialText.TextWrapped(Ui.T("Map unavailable."));
+                    return;
+                }
+                var signature = map.Id.ToString();
+                if (string.IsNullOrWhiteSpace(signature))
+                {
+                    MaterialText.TextWrapped(Ui.T("Map unavailable."));
+                    return;
+                }
+                texture = Plugin.TextureProvider.GetFromGame($"ui/map/{signature}/{signature.Replace("/", string.Empty, StringComparison.Ordinal)}_m.tex").GetWrapOrDefault();
+            }
+            catch
+            {
+                MaterialText.TextWrapped(Ui.T("Map unavailable."));
+                return;
+            }
+            var title = map.PlaceName.ValueNullable?.Name.ToString() ?? Ui.T("Map");
+            var inlineControls = MaterialText.Measure(title).X + 3 * (ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X) <= ImGui.GetContentRegionAvail().X;
+            MaterialText.TextWrapped(title);
+            if (inlineControls) ImGui.SameLine();
+            if (IconAction(Ui.L("Zoom in"), MaterialIcon.Plus, "Zoom in")) mapZoom = Math.Min(8, mapZoom * 1.25f);
+            ImGui.SameLine();
+            if (IconAction(Ui.L("Zoom out"), MaterialIcon.None, "Zoom out")) mapZoom = Math.Max(1, mapZoom / 1.25f);
+            ImGui.SameLine();
+            if (IconAction(Ui.L("Center on player"), MaterialIcon.Target, "Center on player")
+                && TryMapUv(player.Position, map.SizeFactor, map.OffsetX, map.OffsetY, out var playerUv))
+                mapCenter = Vector2.Clamp(playerUv, Vector2.Zero, Vector2.One);
+
+            if (texture is null)
+            {
+                MaterialText.TextWrapped(Ui.T("Map texture is loading or unavailable."));
+                return;
+            }
+            var legend = Ui.T("Character · Object · Treasure · You");
+            var legendHeight = MaterialText.Measure(legend, wrapWidth: Math.Max(1, ImGui.GetContentRegionAvail().X)).Y + ImGui.GetStyle().ItemSpacing.Y;
+            var canvasSize = new Vector2(Math.Max(1, ImGui.GetContentRegionAvail().X), Math.Max(1, ImGui.GetContentRegionAvail().Y - legendHeight));
+            var min = ImGui.GetCursorScreenPos();
+            var max = min + canvasSize;
+            var center = min + canvasSize * .5f;
+            var canvasClicked = ImGui.InvisibleButton("ADSExplorerMapCanvas", canvasSize);
+            var hovered = ImGui.IsItemHovered();
+            var mouse = ImGui.GetMousePos();
+            var baseSide = Math.Min(canvasSize.X, canvasSize.Y);
+            if (hovered && ImGui.GetIO().MouseWheel != 0)
+            {
+                var next = Math.Clamp(mapZoom * MathF.Pow(1.2f, ImGui.GetIO().MouseWheel), 1, 8);
+                mapCenter += (mouse - center) * (1 / (baseSide * mapZoom) - 1 / (baseSide * next));
+                mapZoom = next;
+            }
+            var side = baseSide * mapZoom;
+            if (centerSelection && selectedObject is { } selectedRow
+                && TryMapUv(selectedRow.Position, map.SizeFactor, map.OffsetX, map.OffsetY, out var selectedUv))
+            {
+                mapCenter = selectedUv;
+                centerSelection = false;
+            }
+            if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) mapCenter -= ImGui.GetIO().MouseDelta / side;
+            mapCenter = Vector2.Clamp(mapCenter, Vector2.Zero, Vector2.One);
+            var imageMin = center - mapCenter * side;
+            var drawing = ImGui.GetWindowDrawList();
+            var markers = new List<(ObjectExplorerRow Row, Vector2 Point)>();
+            drawing.PushClipRect(min, max, true);
+            try
+            {
+                drawing.AddImage(texture.Handle, imageMin, imageMin + new Vector2(side), Vector2.Zero, Vector2.One, ImGui.GetColorU32(Vector4.One));
+                foreach (var row in rows)
+                {
+                    if (!TryMapUv(row.Position, map.SizeFactor, map.OffsetX, map.OffsetY, out var uv) || uv.X < 0 || uv.Y < 0 || uv.X > 1 || uv.Y > 1) continue;
+                    var point = imageMin + uv * side;
+                    if (point.X < min.X || point.Y < min.Y || point.X > max.X || point.Y > max.Y) continue;
+                    markers.Add((row, point));
+                    var color = row.ObjectKind == nameof(ObjectKind.Treasure) ? ImGui.GetColorU32(ImGuiCol.PlotHistogram)
+                        : row.ObjectKind is nameof(ObjectKind.BattleNpc) or nameof(ObjectKind.Pc) ? ImGui.GetColorU32(ImGuiCol.CheckMark)
+                        : ImGui.GetColorU32(ImGuiCol.TextDisabled);
+                    drawing.AddCircleFilled(point, 5 * MaterialTheme.Metrics.Scale, color, 12);
+                    drawing.AddCircle(point, 5 * MaterialTheme.Metrics.Scale, ImGui.GetColorU32(ImGuiCol.WindowBg), 12, MaterialTheme.Metrics.Scale);
+                    if (!row.MatchesCurrentLayer) drawing.AddCircle(point, 7 * MaterialTheme.Metrics.Scale, ImGui.GetColorU32(ImGuiCol.TextDisabled), 12, MaterialTheme.Metrics.Scale);
+                    if (selectedObject is { } selected && SameObject(row, selected))
+                        drawing.AddCircle(point, 9 * MaterialTheme.Metrics.Scale, ImGui.GetColorU32(ImGuiCol.PlotHistogram), 20, 2 * MaterialTheme.Metrics.Scale);
+                }
+                if (TryMapUv(player.Position, map.SizeFactor, map.OffsetX, map.OffsetY, out var uvPlayer) && float.IsFinite(player.Rotation))
+                {
+                    var point = imageMin + uvPlayer * side;
+                    var direction = new Vector2(MathF.Sin(player.Rotation), MathF.Cos(player.Rotation));
+                    var normal = new Vector2(-direction.Y, direction.X);
+                    var radius = 8 * MaterialTheme.Metrics.Scale;
+                    drawing.AddTriangleFilled(point + direction * radius, point - direction * radius * .7f + normal * radius * .6f,
+                        point - direction * radius * .7f - normal * radius * .6f, ImGui.GetColorU32(ImGuiCol.Text));
+                }
+            }
+            finally { drawing.PopClipRect(); }
+            if (hovered)
+            {
+                var hits = markers.Where(marker => Vector2.DistanceSquared(marker.Point, mouse) <= MathF.Pow(10 * MaterialTheme.Metrics.Scale, 2)).ToList();
+                if (canvasClicked && ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).LengthSquared() < 16
+                    && PickMapMarker(markers, mouse, 10 * MaterialTheme.Metrics.Scale, selectedObject) is { } picked) SelectObject(picked);
+                if (hits.Count > 0)
+                {
+                    ImGui.BeginTooltip();
+                    try
+                    {
+                        foreach (var hit in hits.Take(8))
+                        {
+                            MaterialText.Text(Ui.T("{0} · {1:0.0}y · ΔY {2:0.0}", hit.Row.Name, hit.Row.Distance, hit.Row.Position.Y - player.Position.Y));
+                            if (!hit.Row.MatchesCurrentLayer) MaterialText.Text(Ui.T("Matches current layer: {0}", Ui.T("NO")));
+                        }
+                        if (hits.Count > 1) MaterialText.Text(Ui.T("Click again to cycle overlapping markers."));
+                    }
+                    finally { ImGui.EndTooltip(); }
+                }
+            }
+            MaterialText.TextWrapped(legend);
+        }
+        finally { ImGui.EndChild(); }
+    }
+
+    private void DrawFlagCoordinates()
+    {
+        if (!plugin.TryGetExplorerFlagCoordinates(out var worldXZ, out var worldXYZ))
+            return;
+
+        MaterialText.Text(Ui.T("Flag XYZ"));
+        ImGui.SameLine();
+        var coordinates = worldXYZ is { } xyz
+            ? string.Create(CultureInfo.InvariantCulture, $"{xyz.X:R}, {xyz.Y:R}, {xyz.Z:R}")
+            : string.Create(CultureInfo.InvariantCulture, $"{worldXZ.X:R}, ?, {worldXZ.Y:R}");
+        ImGui.BeginDisabled(!worldXYZ.HasValue);
+        if (MaterialText.Selectable(coordinates + "##ADSFlagXYZ", false, ImGuiSelectableFlags.None,
+                new Vector2(MaterialText.Measure(coordinates).X + ImGui.GetStyle().FramePadding.X * 2, 0)))
+            ImGui.SetClipboardText(coordinates);
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            MaterialText.SetTooltip(Ui.T(worldXYZ.HasValue ? "Click to copy flag XYZ." : "Flag height is not resolved."));
+
+        ImGui.SameLine();
+        if (WindowLayout.SmallButton(Ui.L("Copy X/Z##ADSFlagXZ")))
+            ImGui.SetClipboardText(string.Create(CultureInfo.InvariantCulture, $"{worldXZ.X:R}, {worldXZ.Y:R}"));
+        if (ImGui.IsItemHovered())
+            MaterialText.SetTooltip(Ui.T("Copy flag X/Z only; no height is included."));
     }
 
     private static void DrawHeaderRow()
@@ -263,20 +619,31 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         DrawHeaderCell(5, "Dist", "3D distance from you, in yalms.", sortHelp);
         DrawHeaderCell(6, "Y", "Absolute height difference, in yalms.", sortHelp);
         DrawHeaderCell(7, "Rules", "Rule matches before layer filtering.", sortHelp);
-        DrawHeaderCell(8, "moveto", "Move to the object's position.", actionHelp);
-        DrawHeaderCell(9, "flyto", "Fly to the object's position.", actionHelp);
-        DrawHeaderCell(10, "FLAG", "Place a map flag at the object.", actionHelp);
-        DrawHeaderCell(11, "RULE", "Seed an object rule; choose its class.", actionHelp);
-        DrawHeaderCell(12, "Copy XYZ", "Copy the object's XYZ coordinates.", actionHelp);
-        DrawHeaderCell(13, "DhogNav", "Add the player to DhogNav's whitelist.", actionHelp);
+        DrawHeaderCell(8, "moveto", "Move to the object's position.", actionHelp, MaterialIcon.Person);
+        DrawHeaderCell(9, "flyto", "Fly to the object's position.", actionHelp, MaterialIcon.Send);
+        DrawHeaderCell(10, "FLAG", "Place a map flag at the object.", actionHelp, MaterialIcon.MapPin);
+        DrawHeaderCell(11, "RULE", "Seed an object rule; choose its class.", actionHelp, MaterialIcon.Document);
+        DrawHeaderCell(12, "Copy XYZ", "Copy the object's XYZ coordinates.", actionHelp, MaterialIcon.Copy);
+        DrawHeaderCell(13, "DhogNav", "Add the player to DhogNav's whitelist.", actionHelp, MaterialIcon.Star);
+        DrawHeaderCell(14, "Teleport", "Teleport to this object through DNav.", actionHelp, MaterialIcon.Location);
     }
 
-    private static void DrawHeaderCell(int column, string label, string purpose, string interaction)
+    private static void DrawHeaderCell(int column, string label, string purpose, string interaction, MaterialIcon icon = MaterialIcon.None)
     {
         if (!ImGui.TableSetColumnIndex(column))
             return;
 
-        WindowLayout.TableHeader(Ui.L(label));
+        if (icon != MaterialIcon.None) ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
+        try { WindowLayout.TableHeader(Ui.L(label)); }
+        finally { if (icon != MaterialIcon.None) ImGui.PopStyleColor(); }
+        if (icon != MaterialIcon.None)
+        {
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+            var size = Math.Min(18 * MaterialTheme.Metrics.Scale, max.Y - min.Y);
+            MaterialIcons.Draw(icon, min + (max - min - new Vector2(size)) * .5f, size,
+                ImGui.GetStyle().Colors[(int)ImGuiCol.Text], ImGui.GetStyle().Alpha);
+        }
         if (!ImGui.IsItemHovered())
             return;
 
@@ -284,7 +651,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         try {
         ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28f);
         try {
-        MaterialText.Text(Ui.T("{0}\n{1}", purpose, interaction));
+        MaterialText.Text(Ui.T("{0}\n{1}", Ui.T(purpose), Ui.T(interaction)));
 
         } finally { ImGui.PopTextWrapPos(); }
 
@@ -385,8 +752,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         WindowLayout.Checkbox("Compact", ref compact);
 
-        if (!compact)
-            MaterialText.TextWrapped(Ui.T("Export status: {0}", Ui.Display(plugin.ExplorerSnapshotExportService.Status)));
     }
 
     private IEnumerable<ObjectExplorerRow> BuildRows(DutyContextSnapshot context, IGameObject localPlayer)
@@ -432,7 +797,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
                 IsTargetable: gameObject.IsTargetable,
                 MatchesCurrentLayer: matchesCurrentLayer,
                 Position: gameObject.Position,
-                MatchingRules: matchingRules);
+                MatchingRules: matchingRules,
+                GameObjectAddress: gameObject.Address);
         }
     }
 
@@ -608,5 +974,6 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         bool IsTargetable,
         bool MatchesCurrentLayer,
         Vector3 Position,
-        IReadOnlyList<ObjectPriorityRule> MatchingRules);
+        IReadOnlyList<ObjectPriorityRule> MatchingRules,
+        nint GameObjectAddress = 0);
 }

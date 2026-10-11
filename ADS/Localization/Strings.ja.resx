@@ -2488,7 +2488,7 @@
     <value>エントリーポイントがありません。</value>
   </data>
   <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve">
-    <value>現在のキャラクターの XA データベース インベントリ リクエストに装備可能なギアがありません。必要な場合は、ライブ グリード/パスの上限に従います。</value>
+    <value>現在のキャラクターの手持ちにもXA Databaseの記録にもない装備はNEEDを要求し、その後、現在のGREED／PASS上限に従います。所持品・アーマリーチェスト・チョコボかばん・リテイナー・愛蔵品キャビネット・ミラージュドレッサーに記録された品は所持済みとして扱います。保管記録は自分で更新してください。記録された品がなければ、保管IPCが利用できなくても未所持です。</value>
   </data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve">
     <value>装備されているギアはすでに完全に修理されています。メンダーに到着しました。</value>
@@ -11428,4 +11428,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Dalamud Log Cleanerを含むXA SlaveのUtility &gt; XA Modsパネルを開きます。</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>XA Slaveのログツールを開けませんでした。</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>メインウィンドウに透明度を表示</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>フラグのXYZ</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>X/Zをコピー</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>クリックしてフラグのXYZをコピーします。</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>フラグの高さが未確定です。</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>高さを含めずフラグのX/Zのみをコピーします。</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>DNavテレポートを表示</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>手動テレポートのみ。DNavの準備状態、エリア、フィルター、共通待機時間の制限が適用されます。</value></data>
+  <data name="Teleport" xml:space="preserve"><value>テレポート</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>DNavでこのオブジェクトへテレポートします。</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>対応するDhogNavテレポートIPCを利用できません。</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>オブジェクトまたはエリアが変わりました。一覧を更新してください。</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>DhogNavのテレポート状態を取得できません。</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>DhogNavのテレポート結果を確認できません。再要求する前に現在位置を確認してください。</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>DhogNavテレポート: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>DhogNavのテレポートが完了しました。</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNavを利用できません。</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>移動先の座標が無効です。</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>プレイヤー不在、読み込み中、無効な位置、別エリア、またはPvP中です。</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>共通テレポート待機時間中です。</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>テレポートを中止しました。準備状態または制限が変わりました。</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>コンテンツ内の許可が無効（コンテンツ内）</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>コンテンツ外はDebugとコンテンツ外の許可が必要</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>現在のエリアは禁止対象</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>プレイヤー回避：範囲内に未許可のプレイヤー{0}人</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>マーカーまたは行をクリックして固定します。</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>選択したオブジェクトが消えたか、フィルターで非表示になりました。</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>マップ {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>選択中: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>列</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>幅が狭い場合はマップを非表示にします。ドラッグで移動、スクロールでズームします。選択だけでは操作を実行しません。</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>拡大</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>縮小</value></data>
+  <data name="Center on player" xml:space="preserve"><value>プレイヤーを中央に表示</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>マップを利用できません。</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>マップ画像を読み込み中、または利用できません。</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>キャラクター · オブジェクト · 宝箱 · 自分</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 高低差 {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>もう一度クリックすると、重なったマーカーを順に選択します。</value></data>
 </root>

@@ -829,7 +829,7 @@
   <data name="Entity id: 0x{0:X8}" xml:space="preserve"><value>ID thực thể: 0x{0:X8}</value></data>
   <data name="Entry XYZ" xml:space="preserve"><value>XYZ điểm vào</value></data>
   <data name="Entry point missing." xml:space="preserve"><value>Thiếu điểm vào.</value></data>
-  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Trang bị có thể mặc còn thiếu trong hành trang XA Database của nhân vật hiện tại yêu cầu Need, rồi tuân theo giới hạn Greed/Pass hiện tại.</value></data>
+  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Trang bị có thể mặc không có bản mang theo hay bản XA Database ghi nhận cho nhân vật hiện tại yêu cầu Need, rồi tuân theo giới hạn Greed/Pass hiện tại. Bản ghi nhận trong hành trang, kho trang bị, túi yên, retainer, armoire và glamour dresser được tính là đã có. Hãy tự cập nhật dữ liệu kho; không có bản ghi nhận thì tính là còn thiếu ngay cả khi IPC kho không khả dụng.</value></data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve"><value>Trang bị đang mặc đã được sửa hoàn toàn; đã đến thợ sửa.</value></data>
   <data name="Error: {0}" xml:space="preserve"><value>Lỗi: {0}</value></data>
   <data name="Evaluated candidate {0}/{1}: shop={2}, npc={3}, " xml:space="preserve"><value>Đã đánh giá ứng viên {0}/{1}: shop={2}, npc={3}, </value></data>
@@ -4000,4 +4000,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Mở bảng Utility &gt; XA Mods của XA Slave, chứa Dalamud Log Cleaner.</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>Không thể mở công cụ nhật ký XA Slave.</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>Hiện độ trong suốt trên cửa sổ chính</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>XYZ cờ</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>Sao chép X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>Nhấp để sao chép XYZ của cờ.</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>Chưa xác định được độ cao của cờ.</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>Chỉ sao chép X/Z của cờ, không gồm độ cao.</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>Hiện dịch chuyển DNav</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>Chỉ dịch chuyển thủ công. Vẫn áp dụng kiểm tra sẵn sàng, khu vực, bộ lọc và thời gian hồi chung của DNav.</value></data>
+  <data name="Teleport" xml:space="preserve"><value>Dịch chuyển</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>Dịch chuyển đến đối tượng này qua DNav.</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>IPC dịch chuyển DhogNav tương thích không khả dụng.</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>Đối tượng hoặc khu vực đã thay đổi. Hãy làm mới trình duyệt.</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>Không có trạng thái dịch chuyển DhogNav.</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>Chưa xác nhận kết quả dịch chuyển DhogNav. Kiểm tra vị trí trước khi yêu cầu lại.</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>Dịch chuyển DhogNav: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>Đã hoàn tất dịch chuyển DhogNav.</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav không khả dụng.</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>Tọa độ đích không hợp lệ.</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>Người chơi không khả dụng, đang tải, vị trí không hợp lệ, khác khu vực hoặc PvP.</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>Đang trong thời gian hồi dịch chuyển chung.</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>Đã hủy dịch chuyển: trạng thái sẵn sàng hoặc giới hạn đã thay đổi.</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>Trong phụ bản chưa được chọn (đang trong phụ bản)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>ngoài phụ bản cần bật Debug và chọn Ngoài phụ bản</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>khu vực hiện tại bị chặn</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>Tránh người chơi: {0} người chơi không được phép trong phạm vi đã chọn</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>Nhấp dấu hoặc hàng để ghim.</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>Đối tượng đã chọn biến mất hoặc bị bộ lọc ẩn.</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>Bản đồ {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>Đã chọn: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>Cột</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>Bản đồ ẩn khi cửa sổ hẹp. Kéo để di chuyển, cuộn để thu phóng. Việc chọn không thực hiện hành động.</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>Phóng to</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>Thu nhỏ</value></data>
+  <data name="Center on player" xml:space="preserve"><value>Căn giữa theo người chơi</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>Bản đồ không khả dụng.</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>Ảnh bản đồ đang tải hoặc không khả dụng.</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Nhân vật · Đối tượng · Kho báu · Bạn</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Nhấp lại để lần lượt chọn các dấu chồng nhau.</value></data>
 </root>

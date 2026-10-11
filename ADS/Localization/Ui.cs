@@ -234,6 +234,7 @@ public static class Ui
     // Only these captured fields are generated statuses. Names, paths and diagnostics stay raw.
     private static readonly Dictionary<string, int[]> NestedStatusArguments = new(StringComparer.Ordinal)
     {
+        ["DhogNav teleport: {0}"] = [0],
         ["Another ADS utility is active: {0}"] = [0],
         ["Cancelled {0}: {1}"] = [0, 1],
         ["Shop-list preset {0}: {1}"] = [0, 1],
@@ -297,7 +298,9 @@ public static class Ui
             foreach (var index in indices) args[index] = match.Groups["p" + index].Value;
             if (NestedStatusArguments.TryGetValue(key, out var nested))
                 foreach (var index in nested)
-                    args[index] = Display(language, (string?)args[index] ?? string.Empty);
+                    args[index] = key == "DhogNav teleport: {0}"
+                        ? string.Join("; ", ((string?)args[index] ?? string.Empty).Split("; ").Select(reason => Display(language, reason)))
+                        : Display(language, (string?)args[index] ?? string.Empty);
             return T(language, key, args);
         }
         return text;

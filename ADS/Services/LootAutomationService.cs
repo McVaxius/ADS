@@ -5,6 +5,7 @@ using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.Exd;
 using Lumina.Excel.Sheets;
 
@@ -367,23 +368,24 @@ public sealed class LootAutomationService
 
     private AethertekUI.Dalamud.XaItemOwnershipState ResolveItemOwnership(uint itemId, bool requiresRegistration, out string reason)
     {
-        var inventory = ReadInventoryCount(itemId);
+        var contentId = currentContentId();
+        var inventory = ReadOwnershipCount(itemId, contentId);
         var registered = ReadItemActionUnlocked(itemId);
         var nativeOwned = inventory > 0 || registered == true;
         if (nativeOwned) { reason = "owned(native inventory/registration)"; return AethertekUI.Dalamud.XaItemOwnershipState.Owned; }
         try
         {
             var storage = AethertekUI.Dalamud.XaItemOwnership.QueryStates(searchCurrentCharacterItemsJson,
-                searchCharacterStorageItemsJson, new[] { itemId }, currentContentId(), DateTimeOffset.UtcNow).GetValueOrDefault(itemId);
+                searchCharacterStorageItemsJson, new[] { itemId }, contentId, DateTimeOffset.UtcNow).GetValueOrDefault(itemId);
             var ownership = AethertekUI.Dalamud.XaItemOwnership.Resolve(nativeOwned,
                 inventory == 0 && (!requiresRegistration || registered == false), storage);
             if (ownership != AethertekUI.Dalamud.XaItemOwnershipState.Unknown)
             {
                 reason = ownership == AethertekUI.Dalamud.XaItemOwnershipState.Owned
-                    ? "owned(current-character XA Database storage)" : "missing(confirmed native and storage absence)";
+                    ? "owned(current-character XA Database storage)" : "missing(no native or recorded storage copy)";
                 return ownership;
             }
-            return PreserveBaseForGlamour(itemId, "complete storage absence is not available", out reason);
+            return PreserveBaseForGlamour(itemId, "current character identity is unavailable", out reason);
         }
         catch (Exception ex)
         {
@@ -593,6 +595,54 @@ public sealed class LootAutomationService
         {
             var inventory = InventoryManager.Instance();
             return inventory == null ? null : inventory->GetInventoryItemCount(itemId);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static unsafe int? ReadOwnershipCount(uint itemId, ulong contentId)
+    {
+        try
+        {
+            var inventory = InventoryManager.Instance();
+            if (inventory == null)
+                return null;
+
+            // Include equipped and Armoury copies of either quality. Keep the
+            // unique-item live cap's carried-inventory check separate above.
+            var count = inventory->GetInventoryItemCount(itemId, false, true, true)
+                + inventory->GetInventoryItemCount(itemId, true, true, true);
+            var order = ItemOrderModule.Instance();
+            if (contentId == 0 || order == null || order->CharacterContentId != contentId)
+                return count;
+
+            var firstPremium = inventory->GetInventoryContainer(InventoryType.PremiumSaddleBag1);
+            var secondPremium = inventory->GetInventoryContainer(InventoryType.PremiumSaddleBag2);
+            // Premium IsLoaded is unreliable; use the same read readiness as XADB.
+            var premiumReadable = (GameInteractionHelper.IsAddonVisible("InventoryBuddy")
+                    || GameInteractionHelper.IsAddonVisible("InventoryBuddy2"))
+                && order->PremiumSaddleBagSorter != null && order->PremiumSaddleBagSorter->Items.LongCount == 70
+                && firstPremium != null && secondPremium != null
+                && firstPremium->Items != null && secondPremium->Items != null
+                && firstPremium->Size == 35 && secondPremium->Size == 35;
+            foreach (var type in new[] { InventoryType.SaddleBag1, InventoryType.SaddleBag2,
+                         InventoryType.PremiumSaddleBag1, InventoryType.PremiumSaddleBag2 })
+            {
+                var container = inventory->GetInventoryContainer(type);
+                var premium = type is InventoryType.PremiumSaddleBag1 or InventoryType.PremiumSaddleBag2;
+                if (container == null || container->Items == null
+                    || (premium ? !premiumReadable : !container->IsLoaded))
+                    continue;
+                for (var index = 0; index < container->Size; index++)
+                {
+                    var slot = container->GetInventorySlot(index);
+                    if (slot != null && !slot->IsSymbolic && NormalizeItemId(slot->ItemId) == itemId)
+                        count += (int)slot->Quantity;
+                }
+            }
+            return count;
         }
         catch
         {

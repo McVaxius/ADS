@@ -471,7 +471,8 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
         Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
-        Log.Information("[ADS][UI] build=devhub-I506-I509-I511-I512-20261009-03; manual support log export; separate XA Slave log UI shortcut; optional AutoDuty disable defaults off; manual AutoDuty mini controls");
+        Log.Information("[ADS][UI] build=devhub-I525-I526-I527-20261010-01; approved Object Explorer map/table; independent selection; truthful flag copying; guarded manual DNav; retained support export and AutoDuty controls");
+        Log.Information("[ADS][Loot] build=devhub-all-storage-20261011-02; equipment and both saddlebag sides checked live; recorded retainers, armoire and glamour dresser included");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -992,6 +993,112 @@ public sealed class Plugin : IDalamudPlugin
 
     public string ObjectExplorerMapFlagStatus
         => mapFlagMonitorPolicy.BuildCurrentStatus(ObjectTable.LocalPlayer?.Position);
+
+    public bool DhogNavTeleportAvailable
+    {
+        get
+        {
+            try
+            {
+                return PluginInterface.GetIpcSubscriber<uint, System.Numerics.Vector3, string>("DhogNav.Teleport.GetStatus.v1").HasFunction
+                    && PluginInterface.GetIpcSubscriber<uint, System.Numerics.Vector3, string>("DhogNav.Teleport.Request.v1").HasFunction;
+            }
+            catch (Exception) { return false; }
+        }
+    }
+
+    internal string? GetExplorerTeleportBlockReason(ObjectExplorerWindow.ObjectExplorerRow row, uint territory)
+    {
+        if (!DhogNavTeleportAvailable)
+            return "Compatible DhogNav teleport IPC is unavailable.";
+        if (!TryResolveExplorerTeleportDestination(row, territory, out var position))
+            return "Object or territory changed. Refresh the explorer.";
+        try
+        {
+            var json = PluginInterface.GetIpcSubscriber<uint, System.Numerics.Vector3, string>("DhogNav.Teleport.GetStatus.v1")
+                .InvokeFunc(territory, position);
+            return TryReadExplorerTeleportReply(json, execute: false, out var reason) ? null : reason;
+        }
+        catch (Exception) { return "DhogNav teleport status is unavailable."; }
+    }
+
+    internal bool TryTeleportExplorerObject(ObjectExplorerWindow.ObjectExplorerRow row, uint territory)
+    {
+        var reason = GetExplorerTeleportBlockReason(row, territory);
+        if (reason != null)
+        {
+            objectExplorerStatus = $"DhogNav teleport: {reason}";
+            return false;
+        }
+
+        // Resolve again after the status call. The provider also refreshes all action-time guards.
+        if (!TryResolveExplorerTeleportDestination(row, territory, out var position))
+        {
+            objectExplorerStatus = "DhogNav teleport: Object or territory changed. Refresh the explorer.";
+            return false;
+        }
+        try
+        {
+            var json = PluginInterface.GetIpcSubscriber<uint, System.Numerics.Vector3, string>("DhogNav.Teleport.Request.v1")
+                .InvokeFunc(territory, position);
+            var completed = TryReadExplorerTeleportReply(json, execute: true, out reason);
+            objectExplorerStatus = completed ? "DhogNav teleport completed." : $"DhogNav teleport: {reason}";
+            return completed;
+        }
+        catch (Exception)
+        {
+            // A lost reply may follow a successful move. Never retry an uncertain request.
+            objectExplorerStatus = "DhogNav teleport result is unconfirmed. Check your position before another request.";
+            return false;
+        }
+    }
+
+    private static bool TryResolveExplorerTeleportDestination(ObjectExplorerWindow.ObjectExplorerRow row, uint territory,
+        out System.Numerics.Vector3 position)
+    {
+        position = default;
+        if (!ClientState.IsLoggedIn || ObjectTable.LocalPlayer is null || territory == 0 || ClientState.TerritoryType != territory
+            || row.GameObjectAddress == nint.Zero
+            || ObjectTable.SearchById(row.GameObjectId) is not { } current
+            || current.Address != row.GameObjectAddress || current.BaseId != row.BaseId
+            || current.ObjectKind.ToString() != row.ObjectKind)
+            return false;
+        position = current.Position;
+        return float.IsFinite(position.X) && float.IsFinite(position.Y) && float.IsFinite(position.Z);
+    }
+
+    internal static bool TryReadExplorerTeleportReply(string json, bool execute, out string reason)
+    {
+        reason = execute
+            ? "DhogNav teleport result is unconfirmed. Check your position before another request."
+            : "DhogNav teleport status is unavailable.";
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var reply = document.RootElement;
+            if (reply.ValueKind != JsonValueKind.Object
+                || !reply.TryGetProperty("version", out var version) || !version.TryGetInt32(out var number) || number != 1
+                || !reply.TryGetProperty("allowed", out var allowed) || allowed.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || !reply.TryGetProperty("executed", out var executed) || executed.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || !reply.TryGetProperty("reason", out var detail) || detail.ValueKind != JsonValueKind.String)
+                return false;
+            if (allowed.GetBoolean() && executed.GetBoolean() == execute && string.IsNullOrEmpty(detail.GetString()))
+            {
+                reason = string.Empty;
+                return true;
+            }
+            if (!allowed.GetBoolean() && !executed.GetBoolean() && !string.IsNullOrWhiteSpace(detail.GetString()))
+                reason = detail.GetString()!;
+            return false;
+        }
+        catch (Exception error) when (error is JsonException or ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    internal bool TryGetExplorerFlagCoordinates(out System.Numerics.Vector2 worldXZ, out System.Numerics.Vector3? worldXYZ)
+        => mapFlagMonitorPolicy.TryGetCoordinates(MapFlagService.ReadCurrentFlag(), ClientState.TerritoryType, out worldXZ, out worldXYZ);
 
     public ExplorerSnapshotExportResult ExportExplorerSnapshot()
         => ExplorerSnapshotExportService.Export(

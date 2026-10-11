@@ -1,3 +1,25 @@
+2026-10-11 - Include all personal storage in loot ownership
+
+- Include live NQ/HQ equipped and Armoury copies, plus the left and right normal/premium chocobo saddlebags, when deciding collectible and glamour ownership. XADB inventory rows cover all these recorded locations; retainers, armoire and glamour dresser also remain included. Keep native unique-item and roll-state limits unchanged.
+
+2026-10-11 - Use recorded storage for missing loot
+
+- Missing collectible/glamour overrides use native ownership plus the current character's recorded inventory, armoury, saddlebags, retainers, armoire and glamour dresser. No recorded copy counts as missing, including unrecorded storage; older recorded copies remain owned until refreshed. Preserve manual enablement and native live-roll limits.
+
+2026-10-10 - Object Explorer map and tight table (I525)
+
+- Add the approved optional game map beside the table, with shared filters, linked selection and a pinned row. Use the current map sheet's scale/offsets and original game texture; pan, zoom and center without starting a game action. Cycle overlapping markers and clear selection when its object, map or filters change.
+- Hide the map at narrow widths, replace row actions with compact icons and translated tooltips, and expose session-only column choices. Keep all diagnostics under Diagnostics, retain flag XYZ/separate X/Z copying and every original action, and leave DNav teleport hidden until explicitly exposed. Preserve versions and saved settings.
+- Measure the filter toolbar and complete Kind previews from current translated controls; let Kind, Columns and level comparisons wrap when their row is full. Keep hidden action captions from widening their icon columns.
+
+2026-10-10 - Optional manual DNav teleport (I526)
+
+- Add a hidden-by-default Object Explorer teleport column when compatible DNav status/request IPC is loaded. Resolve the live object again on click, keep DNav's filters and shared cooldown, show refusals, and never retry an unconfirmed result or enable a movement mode.
+
+2026-10-10 - Flag coordinate copying (I527)
+
+- Show the current flag's world coordinates in Object Explorer, including Compact mode. Click resolved XYZ to copy it for a rule; use the separate Copy X/Z button when only horizontal coordinates are needed. Keep unresolved height explicit and prevent old, cleared or unavailable flags from supplying stale XYZ.
+
 2026-10-10 - Explicit missing-item loot policy (I519)
 
 - Apply missing collectible/glamour overrides only to confirmed Missing evidence, then retain native live-roll caps. Unknown ownership preserves the configured mode; native lookup failures stay unknown.

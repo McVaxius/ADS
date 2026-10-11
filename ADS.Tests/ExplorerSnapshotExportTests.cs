@@ -9,6 +9,55 @@ namespace ADS.Tests;
 public sealed class ExplorerSnapshotExportTests
 {
     [Fact]
+    public void MapTransformsAndMarkerSelectionUseFreshIdentityWithoutActions()
+    {
+        Assert.True(TryMapUv(new Vector3(-100, 999, 50), 200, 100, -50, out var center));
+        Assert.Equal(new Vector2(.5f), center);
+        Assert.True(TryMapUv(new Vector3(1024, 0, -1024), 50, 0, 0, out var offset));
+        Assert.Equal(new Vector2(.75f, .25f), offset);
+        Assert.False(TryMapUv(Vector3.Zero, 0, 0, 0, out _));
+        foreach (var invalid in new[] { new Vector3(float.NaN, 0, 0), new Vector3(0, float.PositiveInfinity, 0), new Vector3(0, 0, float.NegativeInfinity) })
+            Assert.False(TryMapUv(invalid, 100, 0, 0, out _));
+
+        var first = new ObjectExplorerRow("First", "EventObj", null, null, null, 1, 0, 10, 20, true, true,
+            Vector3.Zero, [], GameObjectAddress: 100);
+        var second = first with { Name = "Second", GameObjectId = 21, GameObjectAddress = 101 };
+        (ObjectExplorerRow Row, Vector2 Point)[] markers = [(second, Vector2.One), (first, Vector2.One)];
+        Assert.Same(first, PickMapMarker(markers, Vector2.One, 5, null));
+        Assert.Same(second, PickMapMarker(markers, Vector2.One, 5, first));
+        Assert.Same(first, PickMapMarker(markers, Vector2.One, 5, second));
+        Assert.Null(PickMapMarker(markers, new Vector2(100), 5, first));
+        Assert.True(SameObject(first, first with { Position = Vector3.One, Distance = 2 }));
+        foreach (var replacement in new[] { first with { GameObjectAddress = 102 }, first with { BaseId = 11 }, first with { ObjectKind = "BattleNpc" } })
+        {
+            Assert.False(SameObject(first, replacement));
+            Assert.Same(first, PickMapMarker(markers, Vector2.One, 5, replacement));
+        }
+    }
+
+    [Fact]
+    public void DnavRepliesRequireCompleteVersionedTruthAndPreserveRefusalReasons()
+    {
+        const string preview = """{"version":1,"allowed":true,"executed":false,"reason":""}""";
+        const string acquired = """{"version":1,"allowed":true,"executed":true,"reason":""}""";
+        Assert.True(Plugin.TryReadExplorerTeleportReply(preview, false, out _));
+        Assert.False(Plugin.TryReadExplorerTeleportReply(preview, true, out var uncertain));
+        Assert.Contains("unconfirmed", uncertain);
+        Assert.True(Plugin.TryReadExplorerTeleportReply(acquired, true, out _));
+        Assert.False(Plugin.TryReadExplorerTeleportReply(acquired, false, out _));
+        const string refused = """{"version":1,"allowed":false,"executed":false,"reason":"current zone is blacklisted"}""";
+        Assert.False(Plugin.TryReadExplorerTeleportReply(refused, true, out var reason));
+        Assert.Equal("current zone is blacklisted", reason);
+        foreach (var invalid in new[] { "", "null", "[]", "{}", "broken", preview.Replace("1", "2"),
+            preview.Replace("\"executed\":false,", ""), preview.Replace("true", "\"true\""),
+            preview.Replace("\"reason\":\"\"", "\"reason\":null"), acquired.Replace("true", "false") })
+        {
+            Assert.False(Plugin.TryReadExplorerTeleportReply(invalid, false, out _));
+            Assert.False(Plugin.TryReadExplorerTeleportReply(invalid, true, out _));
+        }
+    }
+
+    [Fact]
     public void ObjectExplorerSortingKeepsPrioritiesMissingValuesAndLiveDistancesConsistent()
     {
         var sample = new ObjectExplorerRow(

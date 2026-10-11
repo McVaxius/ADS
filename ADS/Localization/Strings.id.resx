@@ -829,7 +829,7 @@
   <data name="Entity id: 0x{0:X8}" xml:space="preserve"><value>ID entitas: 0x{0:X8}</value></data>
   <data name="Entry XYZ" xml:space="preserve"><value>XYZ pintu masuk</value></data>
   <data name="Entry point missing." xml:space="preserve"><value>Titik masuk tidak ada.</value></data>
-  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Perlengkapan yang dapat dipakai dan belum ada dalam inventaris XA Database karakter saat ini meminta Need, lalu mengikuti batas Greed/Pass aktif.</value></data>
+  <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve"><value>Perlengkapan yang dapat dipakai tanpa salinan yang dibawa atau tercatat di XA Database untuk karakter saat ini meminta Need, lalu mengikuti batas Greed/Pass aktif. Salinan tercatat di inventaris, armoury, saddlebag, retainer, armoire dan glamour dresser dihitung sebagai dimiliki. Perbarui catatan penyimpanan sendiri; tanpa salinan tercatat berarti belum dimiliki, bahkan saat IPC penyimpanan tidak tersedia.</value></data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve"><value>Perlengkapan terpakai sudah diperbaiki sepenuhnya; telah mencapai tukang reparasi.</value></data>
   <data name="Error: {0}" xml:space="preserve"><value>Kesalahan: {0}</value></data>
   <data name="Evaluated candidate {0}/{1}: shop={2}, npc={3}, " xml:space="preserve"><value>Kandidat {0}/{1} dievaluasi: shop={2}, npc={3}, </value></data>
@@ -4000,4 +4000,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Membuka panel Utility &gt; XA Mods XA Slave yang berisi Dalamud Log Cleaner.</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>Alat log XA Slave tidak dapat dibuka.</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>Tampilkan transparansi di jendela utama</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>XYZ penanda</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>Salin X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>Klik untuk menyalin XYZ penanda.</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>Ketinggian penanda belum ditentukan.</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>Salin hanya X/Z penanda, tanpa ketinggian.</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>Tampilkan teleport DNav</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>Hanya teleport manual. Pemeriksaan kesiapan, wilayah, filter, dan jeda bersama DNav tetap berlaku.</value></data>
+  <data name="Teleport" xml:space="preserve"><value>Teleport</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>Teleport ke objek ini melalui DNav.</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>IPC teleport DhogNav yang kompatibel tidak tersedia.</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>Objek atau wilayah berubah. Segarkan penjelajah.</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>Status teleport DhogNav tidak tersedia.</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>Hasil teleport DhogNav belum dikonfirmasi. Periksa posisi sebelum meminta lagi.</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>Teleport DhogNav: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>Teleport DhogNav selesai.</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav tidak tersedia.</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>Koordinat tujuan tidak valid.</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>Pemain tidak tersedia, sedang memuat, posisi tidak valid, wilayah berbeda, atau PvP.</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>Jeda teleport bersama masih aktif.</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>Teleport dibatalkan: kesiapan atau batasan berubah.</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>Di dalam duty tidak dicentang (sedang dalam duty)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>di luar duty memerlukan Debug aktif dan Di luar duty dicentang</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>zona saat ini diblokir</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>Hindari pemain: {0} pemain tidak diizinkan dalam cakupan terpilih</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>Klik penanda atau baris untuk menyematkannya.</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>Objek terpilih hilang atau disembunyikan oleh filter.</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>Peta {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>Terpilih: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>Kolom</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>Peta disembunyikan pada jendela sempit. Seret untuk menggeser dan gulir untuk memperbesar. Memilih tidak menjalankan tindakan.</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>Perbesar</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>Perkecil</value></data>
+  <data name="Center on player" xml:space="preserve"><value>Pusatkan pada pemain</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>Peta tidak tersedia.</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>Tekstur peta sedang dimuat atau tidak tersedia.</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Karakter · Objek · Harta · Anda</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Klik lagi untuk memilih penanda yang bertumpuk secara bergantian.</value></data>
 </root>

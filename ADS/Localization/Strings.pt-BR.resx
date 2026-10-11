@@ -2488,7 +2488,7 @@
     <value>Ponto de entrada ausente.</value>
   </data>
   <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve">
-    <value>O equipamento equipável ausente nas solicitações de inventário do banco de dados XA do personagem atual é Necessário e, em seguida, obedece ao limite ativo de Ganância/Passe.</value>
+    <value>Equipamentos sem cópia carregada ou registrada na XA Database para o personagem atual solicitam Need e depois respeitam o limite ativo de Greed/Pass. Cópias registradas no inventário, arsenal, alforjes, retainers, armoire e glamour dresser contam como possuídas. Atualize você os registros de armazenamento; sem cópia registrada, o item está faltando mesmo quando o IPC de armazenamento está indisponível.</value>
   </data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve">
     <value>O equipamento equipado já está totalmente reparado; chegou ao consertador.</value>
@@ -11428,4 +11428,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Abre o painel Utility &gt; XA Mods do XA Slave, que contém o Dalamud Log Cleaner.</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>Não foi possível abrir as ferramentas de log do XA Slave.</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>Mostrar transparência na janela principal</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>XYZ da bandeira</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>Copiar X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>Clique para copiar as XYZ da bandeira.</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>A altura da bandeira não foi determinada.</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>Copia somente as X/Z da bandeira, sem altura.</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>Mostrar teleporte DNav</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>Somente teleporte manual. As verificações de disponibilidade, território, filtros e recarga compartilhada do DNav continuam válidas.</value></data>
+  <data name="Teleport" xml:space="preserve"><value>Teleportar</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>Teleportar até este objeto pelo DNav.</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>A IPC compatível de teleporte DhogNav está indisponível.</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>O objeto ou território mudou. Atualize o explorador.</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>O estado do teleporte DhogNav está indisponível.</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>O resultado do teleporte DhogNav não foi confirmado. Confira sua posição antes de outra solicitação.</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>Teleporte DhogNav: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>Teleporte DhogNav concluído.</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav está indisponível.</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>As coordenadas de destino são inválidas.</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>Jogador indisponível, carregamento, posição inválida, território diferente ou PvP.</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>A recarga compartilhada do teleporte está ativa.</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>Teleporte cancelado: a disponibilidade ou as restrições mudaram.</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>Dentro de instâncias desmarcado (dentro de uma instância)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>fora de instâncias exige Debug ligado e Fora de instâncias marcado</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>a zona atual está bloqueada</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>Evitar jogadores: {0} jogador(es) não permitido(s) no escopo selecionado</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>Clique em um marcador ou linha para fixá-lo.</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>O objeto selecionado desapareceu ou foi ocultado pelos filtros.</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>Mapa {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>Selecionado: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>Colunas</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>O mapa fica oculto em janelas estreitas. Arraste para mover e role para ampliar. A seleção nunca inicia uma ação.</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>Ampliar</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>Reduzir</value></data>
+  <data name="Center on player" xml:space="preserve"><value>Centralizar no jogador</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>Mapa indisponível.</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>A textura do mapa está carregando ou indisponível.</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Personagem · Objeto · Tesouro · Você</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Clique novamente para alternar entre marcadores sobrepostos.</value></data>
 </root>

@@ -2488,7 +2488,7 @@
     <value>Entry point missing.</value>
   </data>
   <data name="Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap." xml:space="preserve">
-    <value>Equippable gear missing from the current character's XA Database inventory requests Need, then obeys the live Greed/Pass cap.</value>
+    <value>Equippable gear with no carried copy or recorded XA Database copy for the current character requests Need, then obeys the live Greed/Pass cap. Recorded inventory, armoury, saddlebags, retainer, armoire and glamour dresser copies count as owned. Refresh storage records yourself; no recorded copy counts as missing even when storage IPC is unavailable.</value>
   </data>
   <data name="Equipped gear is already fully repaired; reached the mender." xml:space="preserve">
     <value>Equipped gear is already fully repaired; reached the mender.</value>
@@ -11428,4 +11428,42 @@
   <data name="Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner." xml:space="preserve"><value>Opens XA Slave's Utility &gt; XA Mods panel, which contains Dalamud Log Cleaner.</value></data>
   <data name="XA Slave log tools could not be opened." xml:space="preserve"><value>XA Slave log tools could not be opened.</value></data>
   <data name="Transparency visible on main window" xml:space="preserve"><value>Transparency visible on main window</value></data>
+  <data name="Flag XYZ" xml:space="preserve"><value>Flag XYZ</value></data>
+  <data name="Copy X/Z" xml:space="preserve"><value>Copy X/Z</value></data>
+  <data name="Click to copy flag XYZ." xml:space="preserve"><value>Click to copy flag XYZ.</value></data>
+  <data name="Flag height is not resolved." xml:space="preserve"><value>Flag height is not resolved.</value></data>
+  <data name="Copy flag X/Z only; no height is included." xml:space="preserve"><value>Copy flag X/Z only; no height is included.</value></data>
+  <data name="Show DNav teleport" xml:space="preserve"><value>Show DNav teleport</value></data>
+  <data name="Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply." xml:space="preserve"><value>Manual teleport only. DNav readiness, territory, filters and shared cooldown still apply.</value></data>
+  <data name="Teleport" xml:space="preserve"><value>Teleport</value></data>
+  <data name="Teleport to this object through DNav." xml:space="preserve"><value>Teleport to this object through DNav.</value></data>
+  <data name="Compatible DhogNav teleport IPC is unavailable." xml:space="preserve"><value>Compatible DhogNav teleport IPC is unavailable.</value></data>
+  <data name="Object or territory changed. Refresh the explorer." xml:space="preserve"><value>Object or territory changed. Refresh the explorer.</value></data>
+  <data name="DhogNav teleport status is unavailable." xml:space="preserve"><value>DhogNav teleport status is unavailable.</value></data>
+  <data name="DhogNav teleport result is unconfirmed. Check your position before another request." xml:space="preserve"><value>DhogNav teleport result is unconfirmed. Check your position before another request.</value></data>
+  <data name="DhogNav teleport: {0}" xml:space="preserve"><value>DhogNav teleport: {0}</value></data>
+  <data name="DhogNav teleport completed." xml:space="preserve"><value>DhogNav teleport completed.</value></data>
+  <data name="DhogNav is unavailable." xml:space="preserve"><value>DhogNav is unavailable.</value></data>
+  <data name="Destination coordinates are invalid." xml:space="preserve"><value>Destination coordinates are invalid.</value></data>
+  <data name="Player unavailable, loading, invalid position, different territory, or PvP." xml:space="preserve"><value>Player unavailable, loading, invalid position, different territory, or PvP.</value></data>
+  <data name="The shared teleport cooldown is active." xml:space="preserve"><value>The shared teleport cooldown is active.</value></data>
+  <data name="Teleport cancelled: readiness or restrictions changed." xml:space="preserve"><value>Teleport cancelled: readiness or restrictions changed.</value></data>
+  <data name="Inside is unchecked (inside a duty)" xml:space="preserve"><value>Inside is unchecked (inside a duty)</value></data>
+  <data name="outside duties requires Debug on and Outside checked" xml:space="preserve"><value>outside duties requires Debug on and Outside checked</value></data>
+  <data name="current zone is blacklisted" xml:space="preserve"><value>current zone is blacklisted</value></data>
+  <data name="Avoid players: {0} unlisted player(s) in the selected scope" xml:space="preserve"><value>Avoid players: {0} unlisted player(s) in the selected scope</value></data>
+  <data name="Click a marker or row to pin it." xml:space="preserve"><value>Click a marker or row to pin it.</value></data>
+  <data name="The selected object disappeared or was filtered out." xml:space="preserve"><value>The selected object disappeared or was filtered out.</value></data>
+  <data name="Map {0} · {1}" xml:space="preserve"><value>Map {0} · {1}</value></data>
+  <data name="Selected: {0} · {1:0.0}y" xml:space="preserve"><value>Selected: {0} · {1:0.0}y</value></data>
+  <data name="Columns" xml:space="preserve"><value>Columns</value></data>
+  <data name="The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action." xml:space="preserve"><value>The map hides at narrow widths. Drag to pan; scroll to zoom. Selection never starts an action.</value></data>
+  <data name="Zoom in" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="Zoom out" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="Center on player" xml:space="preserve"><value>Center on player</value></data>
+  <data name="Map unavailable." xml:space="preserve"><value>Map unavailable.</value></data>
+  <data name="Map texture is loading or unavailable." xml:space="preserve"><value>Map texture is loading or unavailable.</value></data>
+  <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Character · Object · Treasure · You</value></data>
+  <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
+  <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Click again to cycle overlapping markers.</value></data>
 </root>

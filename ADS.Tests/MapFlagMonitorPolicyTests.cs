@@ -184,6 +184,54 @@ public sealed class MapFlagMonitorPolicyTests
         Assert.Equal("Map flag cleared.", policy.BuildCurrentStatus(Vector3.Zero));
     }
 
+    [Fact]
+    public void CurrentCoordinatesKeepHorizontalCopyAvailableWithoutInventingHeight()
+    {
+        var policy = new MapFlagMonitorPolicy();
+        var flag = Flag();
+        Assert.True(policy.TryGetCoordinates(Present(flag), 10, out var horizontal, out var destination));
+        Assert.Equal(new Vector2(100, -30), horizontal);
+        Assert.Null(destination);
+
+        policy.Observe(Present(flag), Start);
+        policy.RecordQueryResult(MapFlagDestinationQueryResult.Resolved, new Vector3(100, 12.5f, -30), "resolved", Start);
+        Assert.True(policy.TryGetCoordinates(Present(flag), 10, out horizontal, out destination));
+        Assert.Equal(new Vector3(100, 12.5f, -30), destination);
+
+        Assert.True(policy.TryGetCoordinates(Present(Flag(101)), 10, out horizontal, out destination));
+        Assert.Equal(new Vector2(101, -30), horizontal);
+        Assert.Null(destination);
+        Assert.True(policy.TryGetCoordinates(Present(flag with { MapId = 21 }), 10, out _, out destination));
+        Assert.Null(destination);
+    }
+
+    [Fact]
+    public void CopyCoordinatesRejectUnavailableClearedForeignAndInvalidFlags()
+    {
+        var policy = new MapFlagMonitorPolicy();
+        policy.RecordBaseline(Flag(), MapFlagDestinationQueryResult.Resolved, new Vector3(100, 12.5f, -30), "resolved", Start);
+        foreach (var observation in new[]
+        {
+            MapFlagObservation.Cleared(),
+            MapFlagObservation.Unavailable(MapFlagUnavailableReason.Transition),
+            MapFlagObservation.Unavailable(MapFlagUnavailableReason.AgentMapUnavailable),
+            Present(Flag() with { TerritoryId = 11 }),
+            Present(Flag(float.NaN)),
+            Present(Flag() with { WorldZ = float.PositiveInfinity }),
+        })
+        {
+            policy.RecordBaseline(Flag(), MapFlagDestinationQueryResult.Resolved, new Vector3(100, 12.5f, -30), "resolved", Start);
+            Assert.False(policy.TryGetCoordinates(observation, 10, out _, out var destination));
+            Assert.Null(destination);
+            Assert.True(policy.TryGetCoordinates(Present(Flag()), 10, out _, out destination));
+            Assert.Null(destination);
+        }
+        Assert.False(policy.TryGetCoordinates(Present(Flag()), 0, out _, out _));
+        policy.RecordQueryResult(MapFlagDestinationQueryResult.Resolved, new Vector3(100, float.NaN, -30), "invalid", Start);
+        Assert.True(policy.TryGetCoordinates(Present(Flag()), 10, out _, out var invalidDestination));
+        Assert.Null(invalidDestination);
+    }
+
     private static MapFlagObservation Present(MapFlagSnapshot snapshot)
         => MapFlagObservation.Present(snapshot);
 
