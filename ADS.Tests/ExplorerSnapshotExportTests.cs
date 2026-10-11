@@ -9,6 +9,23 @@ namespace ADS.Tests;
 public sealed class ExplorerSnapshotExportTests
 {
     [Fact]
+    public void MapDividerPreservesDefaultAndSessionWidthWhileProtectingTableAtBothScales()
+    {
+        foreach (var scale in new[] { 1f, 1.5f })
+        {
+            var gap = 22 * scale;
+            Assert.Equal(420 * scale, MapPaneWidth(1600 * scale, scale, gap, null));
+            Assert.Equal(358.4f * scale, MapPaneWidth(1120 * scale, scale, gap, null), 3);
+            Assert.Equal(600 * scale, MapPaneWidth(1600 * scale, scale, gap, 600));
+            Assert.Equal(240 * scale, MapPaneWidth(1600 * scale, scale, gap, 0));
+            Assert.Equal(878 * scale, MapPaneWidth(1600 * scale, scale, gap, 5000));
+            Assert.Equal(398 * scale, MapPaneWidth(1120 * scale, scale, gap, 600));
+            Assert.Equal(600 * scale, MapPaneWidth(1600 * scale, scale, gap, 600));
+            Assert.Equal(420 * scale, MapPaneWidth(1600 * scale, scale, gap, null));
+        }
+    }
+
+    [Fact]
     public void MapTransformsAndMarkerSelectionUseFreshIdentityWithoutActions()
     {
         Assert.True(TryMapUv(new Vector3(-100, 999, 50), 200, 100, -50, out var center));

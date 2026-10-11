@@ -4022,4 +4022,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>पात्र · वस्तु · ख़ज़ाना · आप</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ऊँचाई अंतर {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>एक-दूसरे पर मौजूद मार्करों को बारी-बारी चुनने के लिए फिर क्लिक करें।</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>नक्शे का आकार बदलने के लिए विभाजक खींचें; रीसेट करने के लिए डबल-क्लिक करें।</value></data>
 </root>

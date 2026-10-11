@@ -11466,4 +11466,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>角色 · 物件 · 寶箱 · 自己</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 高差 {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>再次點擊可循環選取重疊的標記。</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>拖曳分隔線調整地圖大小；按兩下恢復預設。</value></data>
 </root>

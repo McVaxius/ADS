@@ -4396,4 +4396,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Персонаж · Объект · Сундук · Вы</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Нажмите ещё раз для перебора перекрывающихся меток.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Перетащите разделитель, чтобы изменить размер карты; двойной щелчок сбрасывает размер.</value></data>
 </root>

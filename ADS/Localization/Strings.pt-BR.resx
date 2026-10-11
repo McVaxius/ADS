@@ -11466,4 +11466,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Personagem · Objeto · Tesouro · Você</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Clique novamente para alternar entre marcadores sobrepostos.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Arraste o divisor para redimensionar o mapa; clique duas vezes para redefinir.</value></data>
 </root>

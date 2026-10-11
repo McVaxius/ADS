@@ -4038,4 +4038,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Karakter · Objek · Harta · Anda</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Klik lagi untuk memilih penanda yang bertumpuk secara bergantian.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Seret pembatas untuk mengubah ukuran peta; klik dua kali untuk mengatur ulang.</value></data>
 </root>

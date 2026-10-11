@@ -4038,4 +4038,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Postać · Obiekt · Skarb · Ty</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Kliknij ponownie, aby przełączać nakładające się znaczniki.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Przeciągnij separator, aby zmienić rozmiar mapy; kliknij dwukrotnie, aby zresetować.</value></data>
 </root>

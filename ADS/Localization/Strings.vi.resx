@@ -4038,4 +4038,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Nhân vật · Đối tượng · Kho báu · Bạn</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Nhấp lại để lần lượt chọn các dấu chồng nhau.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Kéo thanh phân cách để đổi kích thước bản đồ; nhấp đúp để đặt lại.</value></data>
 </root>

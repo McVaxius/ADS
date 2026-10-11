@@ -4038,4 +4038,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>Karakter · Nesne · Hazine · Siz</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · ΔY {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>Üst üste gelen işaretçiler arasında geçmek için yeniden tıklayın.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>Haritanın boyutunu değiştirmek için ayırıcıyı sürükleyin; sıfırlamak için çift tıklayın.</value></data>
 </root>

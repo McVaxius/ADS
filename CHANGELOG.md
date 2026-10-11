@@ -1,3 +1,8 @@
+2026-10-11 - Resize the Object Explorer map
+
+- Drag the divider between the map and table to change the map width; double-click it to restore the original width. Retain the choice for this plugin session, preserve a usable table width and use the resized canvas for map drawing and marker clicks.
+- Keep the existing initial map width and narrow-window behavior. Add the divider tooltip in every interface language.
+
 2026-10-11 - Include all personal storage in loot ownership
 
 - Include live NQ/HQ equipped and Armoury copies, plus the left and right normal/premium chocobo saddlebags, when deciding collectible and glamour ownership. XADB inventory rows cover all these recorded locations; retainers, armoire and glamour dresser also remain included. Keep native unique-item and roll-state limits unchanged.

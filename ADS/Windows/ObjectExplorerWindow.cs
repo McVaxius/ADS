@@ -38,6 +38,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     private uint viewedMap;
     private float mapZoom = 1;
     private Vector2 mapCenter = new(.5f);
+    private float? preferredMapWidth;
+    private float mapResizeStartWidth;
     private string selectionStatus = "Click a marker or row to pin it.";
     private ulong? rulePopupObjectId;
 
@@ -134,8 +136,29 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         var mapVisible = showMap && available.X >= 1120 * MaterialTheme.Metrics.Scale;
         if (mapVisible)
         {
-            DrawMap(context, localPlayer, rows, new Vector2(Math.Min(420 * MaterialTheme.Metrics.Scale, available.X * .32f), bodyHeight));
-            ImGui.SameLine();
+            var scale = MaterialTheme.Metrics.Scale;
+            var dividerWidth = 6 * scale;
+            var gap = ImGui.GetStyle().ItemSpacing.X;
+            var origin = ImGui.GetCursorScreenPos();
+            var mapWidth = MapPaneWidth(available.X, scale, dividerWidth + gap * 2, preferredMapWidth);
+            ImGui.SetCursorScreenPos(origin + new Vector2(mapWidth + gap, 0));
+            ImGui.InvisibleButton("ADSExplorerMapDivider", new Vector2(dividerWidth, bodyHeight));
+            var hovered = ImGui.IsItemHovered();
+            var active = ImGui.IsItemActive();
+            if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) preferredMapWidth = null;
+            if (ImGui.IsItemActivated())
+                mapResizeStartWidth = MapPaneWidth(available.X, scale, dividerWidth + gap * 2, preferredMapWidth) / scale;
+            if (active && ImGui.IsMouseDragging(ImGuiMouseButton.Left))
+                preferredMapWidth = Math.Max(240, mapResizeStartWidth + ImGui.GetMouseDragDelta(ImGuiMouseButton.Left).X / scale);
+            if (hovered || active) ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEw);
+            if (hovered) MaterialText.SetTooltip(Ui.T("Drag the divider to resize the map; double-click to reset."));
+            mapWidth = MapPaneWidth(available.X, scale, dividerWidth + gap * 2, preferredMapWidth);
+            var divider = origin + new Vector2(mapWidth + gap + dividerWidth * .5f, 0);
+            ImGui.GetWindowDrawList().AddLine(divider, divider + new Vector2(0, bodyHeight),
+                ImGui.GetColorU32(active ? ImGuiCol.SeparatorActive : hovered ? ImGuiCol.SeparatorHovered : ImGuiCol.Separator), scale);
+            ImGui.SetCursorScreenPos(origin);
+            DrawMap(context, localPlayer, rows, new Vector2(mapWidth, bodyHeight));
+            ImGui.SameLine(0, dividerWidth + gap * 2);
         }
         DrawObjectTable(context, rows, new Vector2(Math.Max(1, ImGui.GetContentRegionAvail().X), bodyHeight));
         if (selectedObject is not null)
@@ -451,6 +474,10 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         var current = selected is null ? -1 : candidates.FindIndex(marker => SameObject(marker.Row, selected));
         return candidates[(current + 1) % candidates.Count].Row;
     }
+
+    internal static float MapPaneWidth(float availableWidth, float scale, float dividerSpace, float? preferredLogicalWidth)
+        => Math.Clamp(preferredLogicalWidth.HasValue ? preferredLogicalWidth.Value * scale : Math.Min(420 * scale, availableWidth * .32f),
+            240 * scale, Math.Max(240 * scale, availableWidth - 700 * scale - dividerSpace));
 
     private void DrawMap(DutyContextSnapshot context, IGameObject player, IReadOnlyList<ObjectExplorerRow> rows, Vector2 size)
     {

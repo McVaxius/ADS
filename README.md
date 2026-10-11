@@ -94,7 +94,10 @@ objects. Drag the map to pan, scroll or use +/− to zoom, and use the target ic
 to center on your character. The map hides at narrow widths. Missing map data
 stays visibly unavailable; off-layer evidence and height differences remain in
 marker details. Object replacement, disappearance, filtering and map changes
-clear stale selection.
+clear stale selection. Drag the divider between the map and table to resize the
+map; double-click the divider to restore its original width. The width lasts
+for this plugin session and leaves enough room for the table. Marker drawing
+and clicks follow the resized canvas.
 
 The **… / Columns** picker controls the informational columns and optional DNav
 action for this load. **Diagnostics** contains the full territory/map/layer,

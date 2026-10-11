@@ -11466,4 +11466,5 @@
   <data name="Character · Object · Treasure · You" xml:space="preserve"><value>캐릭터 · 객체 · 보물 · 나</value></data>
   <data name="{0} · {1:0.0}y · ΔY {2:0.0}" xml:space="preserve"><value>{0} · {1:0.0}y · 높이 차 {2:0.0}</value></data>
   <data name="Click again to cycle overlapping markers." xml:space="preserve"><value>다시 클릭하면 겹친 마커를 차례로 선택합니다.</value></data>
+  <data name="Drag the divider to resize the map; double-click to reset." xml:space="preserve"><value>구분선을 드래그하여 지도 크기를 조절하고, 두 번 클릭하여 초기화하세요.</value></data>
 </root>

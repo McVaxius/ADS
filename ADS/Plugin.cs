@@ -471,7 +471,7 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
         Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
-        Log.Information("[ADS][UI] build=devhub-I525-I526-I527-20261010-01; approved Object Explorer map/table; independent selection; truthful flag copying; guarded manual DNav; retained support export and AutoDuty controls");
+        Log.Information("[ADS][UI] build=devhub-explorer-map-resize-20261011-02; approved Object Explorer map/table; session map divider and reset; independent selection; truthful flag copying; guarded manual DNav; retained support export and AutoDuty controls");
         Log.Information("[ADS][Loot] build=devhub-all-storage-20261011-02; equipment and both saddlebag sides checked live; recorded retainers, armoire and glamour dresser included");
 
         if (Configuration.OpenMainWindowOnLoad)
