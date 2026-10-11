@@ -108,15 +108,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         var scale = ImGuiHelpers.GlobalScale;
         using var headerStyle = new MaterialStyleScope();
         headerStyle.Style(ImGuiStyleVar.CellPadding, Vector2.Zero);
-        var compactWidth = plugin.Configuration.UiCompactVisibleOnMainWindow
-            ? ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + MaterialText.Measure("C").X : 0;
-        var languageWidth = plugin.Configuration.UiLanguageVisibleOnMainWindow
-            ? Math.Max(130 * scale, plugin.Appearance.LanguageMenuLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2) : 0;
-        var transparencyWidth = plugin.Configuration.UiTransparencyVisibleOnMainWindow
-            ? ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + MaterialText.Measure(T("Transparency")).X : 0;
-        var toolbarWidth = compactWidth + languageWidth + MaterialText.Measure(T("Support on Ko-fi")).X + 76 * scale
-            + transparencyWidth
-            + ImGui.GetStyle().ItemSpacing.X * 3;
+        var toolbarWidth = MaterialText.Measure(T("Support on Ko-fi")).X + 76 * scale;
         var stacked = ImGui.GetContentRegionAvail().X < toolbarWidth + 400 * scale;
         if (!ImGui.BeginTable("ADSHeader", stacked ? 1 : 2, ImGuiTableFlags.SizingStretchProp)) return;
         try
@@ -149,28 +141,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.EndGroup();
             if (stacked) ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(stacked ? 0 : 1);
-            void Next(float nextWidth)
-            {
-                if (ImGui.GetItemRectMax().X + ImGui.GetStyle().ItemSpacing.X + nextWidth
-                    <= ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X) ImGui.SameLine();
-            }
-            if (plugin.Configuration.UiCompactVisibleOnMainWindow)
-            {
-                plugin.Appearance.DrawCompactToggle();
-            }
-            if (plugin.Configuration.UiTransparencyVisibleOnMainWindow)
-            {
-                if (plugin.Configuration.UiCompactVisibleOnMainWindow) Next(transparencyWidth);
-                plugin.Appearance.DrawTransparencyToggle();
-            }
-            if (plugin.Configuration.UiCompactVisibleOnMainWindow || plugin.Configuration.UiTransparencyVisibleOnMainWindow)
-                Next(MaterialText.Measure(T("Support on Ko-fi")).X + 76 * scale);
             if (WindowLayout.Button(L("Support on Ko-fi"), icon: MaterialIcon.Heart)) plugin.OpenUrl(PluginInfo.SupportUrl);
-            if (plugin.Configuration.UiLanguageVisibleOnMainWindow)
-            {
-                Next(languageWidth);
-                plugin.Appearance.DrawLanguageSelector();
-            }
         }
         finally { ImGui.EndTable(); }
     }

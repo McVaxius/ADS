@@ -311,6 +311,13 @@ internal static class WindowLayout
     }
 
     internal static void Title(string nativeLabel, MaterialTextRenderer renderer)
+        => PaintTranslatedTitle(nativeLabel, renderer, null);
+
+    internal static void TitleWithButtons(Dalamud.Interface.Windowing.IWindow owner, MaterialTextRenderer renderer)
+        => PaintTranslatedTitle(owner.WindowName, renderer, owner as Dalamud.Interface.Windowing.Window);
+
+    private static void PaintTranslatedTitle(string nativeLabel, MaterialTextRenderer renderer,
+        Dalamud.Interface.Windowing.Window? owner)
     {
         var caption = nativeLabel.Split("##", 2)[0];
         if (!MaterialText.RequiresShaping(caption)) return;
@@ -328,6 +335,12 @@ internal static class WindowLayout
         if (window.HasCloseButton) right += fontSize + style.ItemInnerSpacing.X;
         if (collapse && style.WindowMenuButtonPosition == ImGuiDir.Right)
             right += fontSize + style.ItemInnerSpacing.X;
+        if (owner is not null)
+        {
+            var count = owner.TitleBarButtons.Count(button => !owner.IsClickthrough || button.AvailableClickthrough);
+            if (owner.AllowPinning || owner.AllowClickthrough || owner.AllowBackgroundBlur) count++;
+            right += count * (fontSize + style.ItemInnerSpacing.X);
+        }
         var min = window.Pos + new Vector2(left, 0);
         var max = window.Pos + new Vector2(Math.Max(left, window.Size.X - right), titleHeight);
         var size = renderer.GetLayout(caption, fontSize).Size;

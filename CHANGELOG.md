@@ -1,3 +1,8 @@
+2026-10-11 - Appearance titlebar shortcuts (I532)
+
+- Move Main's language, compact and transparency shortcuts into the native titlebar and add a colour palette shortcut. Other titled windows expose the same actions; retained Appearance settings and main-control visibility choices use the existing save path.
+- Preserve existing title actions, window identities, geometry, complete-window opacity and release version. Popup ownership and collapsed-window actions remain subject to native and game verification.
+
 2026-10-11 - Resize the Object Explorer map
 
 - Drag the divider between the map and table to change the map width; double-click it to restore the original width. Retain the choice for this plugin session, preserve a usable table width and use the resized canvas for map drawing and marker clicks.

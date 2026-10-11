@@ -10,6 +10,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 {
     private AethertekUI.Dalamud.MaterialTextHost? shapedText;
     private MaterialTheme? theme;
+    private readonly Dictionary<Dalamud.Interface.Windowing.Window, AethertekUI.Dalamud.MaterialAppearanceTitleBar> appearanceTitleBars = new();
     private readonly MaterialWindowFold fontStatusFold = new();
     private readonly MaterialWindowDecorations fontStatusDecorations = new();
     private readonly Dictionary<string, MaterialWindowOpacity> windowOpacities = new();
@@ -73,12 +74,14 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
         using var body = plugin.Fonts.Push(UiFontRole.Body);
         using var chrome = MaterialWindowChrome.Push();
+        PrepareAppearanceTitleBars(plugin.WindowSystem);
         plugin.WindowSystem.Draw();
+        foreach (var titlebar in appearanceTitleBars.Values) titlebar.DrawPopups();
         foreach (var window in plugin.WindowSystem.Windows)
             if (window.IsOpen)
             {
                 if (window is not MainWindow and not QuickControlWindow)
-                    WindowLayout.Title(window.WindowName, shapedText.Renderer);
+                    WindowLayout.TitleWithButtons(window, shapedText.Renderer);
                 ApplyWindowOpacity(window.WindowName);
             }
     }
@@ -180,6 +183,40 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var languageVisible = plugin.Configuration.UiLanguageVisibleOnMainWindow;
         if (WindowLayout.Checkbox("Language visible on main window", ref languageVisible))
         { plugin.Configuration.UiLanguageVisibleOnMainWindow = languageVisible; plugin.SaveConfiguration(); }
+        DrawTransparencySettings();
+    }
+
+    private void PrepareAppearanceTitleBars(Dalamud.Interface.Windowing.WindowSystem windows)
+    {
+        foreach (var window in windows.Windows.OfType<Dalamud.Interface.Windowing.Window>())
+        {
+            if ((window.Flags & ImGuiWindowFlags.NoTitleBar) != 0) continue;
+            if (!appearanceTitleBars.ContainsKey(window))
+                appearanceTitleBars.Add(window, AethertekUI.Dalamud.MaterialAppearanceTitleBar.Register(window,
+                    () => new(Ui.T("Language"), Ui.T("Compact mode"), Ui.T("Transparency"), Ui.T("Color")),
+                    DrawLanguageSelector,
+                    () => { plugin.Configuration.UiCompact = !plugin.Configuration.UiCompact; plugin.SaveConfiguration(); },
+                    DrawTransparencySettings, DrawTitleBarColour,
+                    () => window is global::ADS.Windows.MainWindow
+                        ? new(plugin.Configuration.UiLanguageVisibleOnMainWindow, plugin.Configuration.UiCompactVisibleOnMainWindow,
+                            plugin.Configuration.UiTransparencyVisibleOnMainWindow, true)
+                        : new(true, true, true, true)));
+            appearanceTitleBars[window].RefreshVisibility();
+        }
+    }
+
+    private void DrawTitleBarColour()
+    {
+        if (!MaterialAppearanceSelector.DrawPalette("ADSUiAppearance", ref accentDraft,
+                new(Ui.T("Color"), Ui.T("Language"), Ui.T("Teal"), Ui.T("Blue"), Ui.T("Pink"), Ui.T("Custom RGB")))) return;
+        plugin.Configuration.UiAccentRgb = ((uint)Math.Clamp((int)MathF.Round(accentDraft.X * 255), 0, 255) << 16)
+            | ((uint)Math.Clamp((int)MathF.Round(accentDraft.Y * 255), 0, 255) << 8)
+            | (uint)Math.Clamp((int)MathF.Round(accentDraft.Z * 255), 0, 255);
+        plugin.SaveConfiguration();
+    }
+
+    private void DrawTransparencySettings()
+    {
         var enabled = plugin.Configuration.UiTransparencyEnabled;
         if (WindowLayout.Checkbox("Transparency", ref enabled))
         { plugin.Configuration.UiTransparencyEnabled = enabled; plugin.SaveConfiguration(); }
