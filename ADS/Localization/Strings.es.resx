@@ -1963,7 +1963,7 @@
     <value>comando de depuración</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>Sólo depuración. Habilita el tiempo de actualización por marco para identificar secciones ADS lentas; dejarlo durante el juego normal.</value>
+    <value>Solo para diagnóstico. Informa de actualizaciones del framework de ADS y del dibujo de la interfaz que tardan al menos 10 ms, como máximo una vez cada cinco segundos por categoría. Déjalo desactivado durante el juego normal.</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>La carga útil decodificada superó los {0} bytes.</value>

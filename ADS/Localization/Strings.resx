@@ -1963,7 +1963,7 @@
     <value>Debug command</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play.</value>
+    <value>Debugging only. Reports ADS framework updates and UI drawing taking at least 10 ms, at most once per five seconds for each. Leave off during normal play.</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>Decoded payload exceeded {0} bytes.</value>

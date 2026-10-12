@@ -37,7 +37,7 @@ public sealed class Plugin : IDalamudPlugin
     private static readonly TimeSpan FrameworkSlowLogCooldown = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ObjectExplorerMapFlagInspectionInterval = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan HigherLowerRecentSignalWindow = TimeSpan.FromSeconds(20);
-    private const double FrameworkSlowLogThresholdMs = 100d;
+    private const double FrameworkSlowLogThresholdMs = 10d;
 
     internal enum RemoteJsonReloadStep
     {
@@ -209,10 +209,13 @@ public sealed class Plugin : IDalamudPlugin
     private DateTime nextRemoteJsonStaleCheckUtc;
     private DateTime nextRemoteJsonReloadDeferredLogUtc = DateTime.MinValue;
     private DateTime nextFrameworkSlowLogUtc = DateTime.MinValue;
+    private DateTime nextUiSlowLogUtc = DateTime.MinValue;
     private double lastFrameworkSlowUpdateMs;
     private string lastFrameworkSlowUpdateSection = "none";
     private DateTime lastFrameworkSlowUpdateUtc = DateTime.MinValue;
     private FrameworkSlowUpdateContext? lastFrameworkSlowUpdateContext;
+    private double lastUiSlowDrawMs;
+    private DateTime lastUiSlowDrawUtc = DateTime.MinValue;
     private uint parkedAutomationExcludedTerritoryId;
 
     public Plugin()
@@ -473,6 +476,7 @@ public sealed class Plugin : IDalamudPlugin
         Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
         Log.Information("[ADS][UI] build=devhub-explorer-map-resize-20261011-02; approved Object Explorer map/table; session map divider and reset; independent selection; truthful flag copying; guarded manual DNav; retained support export and AutoDuty controls");
         Log.Information("[ADS][Loot] build=devhub-all-storage-20261011-02; equipment and both saddlebag sides checked live; recorded retainers, armoire and glamour dresser included");
+        Log.Information("[ADS][Performance] build=devhub-I544-profiler-20261011-01; opt-in framework and UI timing from 10 ms; five-second log cooldown per category");
 
         if (Configuration.OpenMainWindowOnLoad)
             OpenMainUi();
@@ -546,7 +550,17 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawUi()
     {
-        Appearance.Draw();
+        var profile = Configuration.FrameworkHitchProfilerEnabled;
+        var startedAt = profile ? Stopwatch.GetTimestamp() : 0;
+        try
+        {
+            Appearance.Draw();
+        }
+        finally
+        {
+            if (profile && Configuration.FrameworkHitchProfilerEnabled)
+                ReportUiSlowDraw(Stopwatch.GetElapsedTime(startedAt, Stopwatch.GetTimestamp()).TotalMilliseconds);
+        }
     }
 
     public void SetUiLanguage(UiLanguage language)
@@ -1903,6 +1917,12 @@ public sealed class Plugin : IDalamudPlugin
                 lastFrameworkSlowUpdateContext = Configuration.FrameworkHitchProfilerEnabled
                     ? lastFrameworkSlowUpdateContext
                     : null,
+                lastUiSlowDrawMs = !Configuration.FrameworkHitchProfilerEnabled || lastUiSlowDrawUtc == DateTime.MinValue
+                    ? null
+                    : (double?)lastUiSlowDrawMs,
+                lastUiSlowDrawUtc = !Configuration.FrameworkHitchProfilerEnabled || lastUiSlowDrawUtc == DateTime.MinValue
+                    ? null
+                    : lastUiSlowDrawUtc.ToString("O"),
                 ownershipMode = ExecutionService.CurrentMode.ToString(),
                 executionPhase = ExecutionService.CurrentPhase.ToString(),
                 interactionVbmPauseActive = ExecutionService.IsInteractionVbmPauseActive,
@@ -2674,6 +2694,8 @@ public sealed class Plugin : IDalamudPlugin
             {
                 ObjectivePlannerService.HoldPhoenixDownRecovery();
                 UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "phoenix-recovery-hold", ref slowestSection, ref slowestMs);
                 return;
             }
             pendingRemoteJsonOwnedDutyRestart?.Observe(DutyContextService.Current, ExecutionService.CurrentMode);
@@ -2954,7 +2976,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         finally
         {
-            if (frameworkHitchProfilerEnabled && !automationExcludedTerritory)
+            if (frameworkHitchProfilerEnabled)
                 ReportFrameworkSlowUpdate(
                     Stopwatch.GetElapsedTime(updateStartedAt, Stopwatch.GetTimestamp()).TotalMilliseconds,
                     slowestSection,
@@ -3155,7 +3177,7 @@ public sealed class Plugin : IDalamudPlugin
 
         nextFrameworkSlowLogUtc = now + FrameworkSlowLogCooldown;
         Log.Warning(
-            "[ADS][HITCH] framework update slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; territory={Territory}; map={Map}; betweenAreas={BetweenAreas}; betweenAreas51={BetweenAreas51}; dialogVisible={DialogVisible}; dialogRule={DialogRule}; dialogStatus={DialogStatus}; pendingHigherLowerVfx={PendingHigherLowerVfx}; trackedHigherLowerVfx={TrackedHigherLowerVfx}.",
+            "[ADS][HITCH] framework update slow elapsedMs={ElapsedMs:0.0}; slowSection={SlowSection}; slowSectionMs={SlowSectionMs:0.0}; territory={Territory}; map={Map}; betweenAreas={BetweenAreas}; betweenAreas51={BetweenAreas51}; dialogVisible={DialogVisible}; dialogRule={DialogRule}; dialogStatus={DialogStatus}; pendingHigherLowerVfx={PendingHigherLowerVfx}; trackedHigherLowerVfx={TrackedHigherLowerVfx}; enabled={Enabled}; mode={Mode}; phase={Phase}; uiWindows={UiWindows}.",
             elapsedMs,
             slowestSection,
             slowestMs,
@@ -3167,8 +3189,39 @@ public sealed class Plugin : IDalamudPlugin
             slowContext.dialogRule,
             slowContext.dialogStatus,
             slowContext.pendingHigherLowerVfxCount,
-            slowContext.trackedHigherLowerVfxCount);
+            slowContext.trackedHigherLowerVfxCount,
+            Configuration.PluginEnabled,
+            ExecutionService.CurrentMode,
+            ExecutionService.CurrentPhase,
+            DescribeOpenUiWindows());
     }
+
+    private void ReportUiSlowDraw(double elapsedMs)
+    {
+        if (elapsedMs < FrameworkSlowLogThresholdMs)
+            return;
+
+        var now = DateTime.UtcNow;
+        lastUiSlowDrawMs = elapsedMs;
+        lastUiSlowDrawUtc = now;
+        if (now < nextUiSlowLogUtc)
+            return;
+
+        nextUiSlowLogUtc = now + FrameworkSlowLogCooldown;
+        var context = DutyContextService.Current;
+        Log.Warning(
+            "[ADS][HITCH] UI draw slow elapsedMs={ElapsedMs:0.0}; territory={Territory}; map={Map}; enabled={Enabled}; mode={Mode}; phase={Phase}; uiWindows={UiWindows}.",
+            elapsedMs,
+            context.TerritoryTypeId,
+            context.MapId,
+            Configuration.PluginEnabled,
+            ExecutionService.CurrentMode,
+            ExecutionService.CurrentPhase,
+            DescribeOpenUiWindows());
+    }
+
+    private string DescribeOpenUiWindows()
+        => string.Join(",", WindowSystem.Windows.Where(window => window.IsOpen).Select(window => window.GetType().Name));
 
     private static void RecordFrameworkSection(
         long startedAt,
@@ -3187,10 +3240,13 @@ public sealed class Plugin : IDalamudPlugin
     private void ClearFrameworkHitchState()
     {
         nextFrameworkSlowLogUtc = DateTime.MinValue;
+        nextUiSlowLogUtc = DateTime.MinValue;
         lastFrameworkSlowUpdateMs = 0d;
         lastFrameworkSlowUpdateSection = "none";
         lastFrameworkSlowUpdateUtc = DateTime.MinValue;
         lastFrameworkSlowUpdateContext = null;
+        lastUiSlowDrawMs = 0d;
+        lastUiSlowDrawUtc = DateTime.MinValue;
     }
 
     private void OnChatMessage(IHandleableChatMessage message)

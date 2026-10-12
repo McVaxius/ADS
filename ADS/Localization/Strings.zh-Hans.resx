@@ -1963,7 +1963,7 @@
     <value>调试命令</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>仅调试。启用每个框架更新计时以识别缓慢的 ADS 部分；在正常游戏期间停止。</value>
+    <value>仅用于诊断。报告耗时至少 10 毫秒的 ADS 框架更新和界面绘制，每类最多每五秒报告一次。正常游戏时请关闭。</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>解码的有效负载超过 {0} 字节。</value>

@@ -654,7 +654,7 @@
   <data name="Debug Preview" xml:space="preserve"><value>Podgląd debugowania</value></data>
   <data name="Debug Strafe" xml:space="preserve"><value>Ruch boczny debugowania</value></data>
   <data name="Debug command" xml:space="preserve"><value>Polecenie debugowania</value></data>
-  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Tylko diagnostyka. Włącza pomiar czasu każdej aktualizacji frameworka, aby wykryć wolne części ADS; wyłącz podczas zwykłej gry.</value></data>
+  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Tylko diagnostyka. Zgłasza aktualizacje frameworka ADS i rysowanie interfejsu trwające co najmniej 10 ms, najwyżej raz na pięć sekund dla każdej kategorii. Wyłącz podczas zwykłej gry.</value></data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve"><value>Zdekodowane dane przekroczyły {0} bajtów.</value></data>
   <data name="Deep Dungeon" xml:space="preserve"><value>Głęboki loch</value></data>
   <data name="Deep Dungeon maturity" xml:space="preserve"><value>Dojrzałość głębokiego lochu</value></data>

@@ -1963,7 +1963,7 @@
     <value>デバッグコマンド</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>デバッグのみ。フレームワークごとの更新タイミングを有効にして、遅い ADS セクションを特定します。通常のプレイ中はオフにします。</value>
+    <value>診断専用です。10 ms 以上かかる ADS のフレームワーク更新と UI 描画を、それぞれ最大 5 秒に 1 回報告します。通常のプレイ中はオフにしてください。</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>デコードされたペイロードが {0} バイトを超えました。</value>

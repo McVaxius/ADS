@@ -140,6 +140,14 @@ Share the ZIP manually and remove old exports when no longer needed. A log at
 or above 100 MiB may have stopped recording recent activity; ADS warns before
 exporting it, so it may be unsuitable for diagnosing the current issue.
 
+For slow frames, enable **Settings > Advanced > Enable framework hitch profiler**
+briefly. This existing opt-in setting measures ADS framework work and UI drawing
+separately, reporting samples from 10 ms with at most one log entry per five
+seconds for each category. Framework entries identify the slowest section; both
+include automation state and open window types. Compare the affected activity
+with ADS idle and its windows closed, then turn profiling off and export the log.
+The profiler defaults off and does not start or stop automation.
+
 Settings > Automation > **Disable AutoDuty on ADS start** defaults off. Leave
 it off to keep AutoDuty loaded and choose which plugin executes each duty.
 Use the manual **Enable AutoDuty** and **Disable AutoDuty** buttons in `/ads mini`

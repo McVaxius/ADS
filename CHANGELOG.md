@@ -1,3 +1,8 @@
+2026-10-11 - Performance investigation coverage (I544)
+
+- Extend the existing opt-in hitch profiler to report ADS framework updates and UI drawing from 10 ms, retaining a five-second reporting interval for each. Include automation state and open window types so idle/active and UI-open/closed samples can be distinguished.
+- Preserve default-off profiling, saved settings and automation behavior. Report slow early-return updates too; these diagnostics do not establish that the reported FPS defect is fixed.
+
 2026-10-11 - Culture-safe coordinate copy (I538)
 
 - Copy Object Explorer row XYZ coordinates with invariant decimal points so comma-decimal system locales retain three usable coordinate fields. Preserve localized display and existing map flag copy formatting.

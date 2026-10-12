@@ -654,7 +654,7 @@
   <data name="Debug Preview" xml:space="preserve"><value>Hata Ayıklama Önizlemesi</value></data>
   <data name="Debug Strafe" xml:space="preserve"><value>Hata Ayıklama Yanal Hareketi</value></data>
   <data name="Debug command" xml:space="preserve"><value>Hata ayıklama komutu</value></data>
-  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Yalnızca hata ayıklama. Yavaş ADS bölümlerini bulmak için her framework güncellemesinin zaman ölçümünü etkinleştirir; normal oyunda kapalı bırakın.</value></data>
+  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Yalnızca tanılama içindir. En az 10 ms süren ADS framework güncellemelerini ve arayüz çizimini, her kategori için en fazla beş saniyede bir raporlar. Normal oyun sırasında kapalı bırakın.</value></data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve"><value>Çözümlenen yük {0} baytı aştı.</value></data>
   <data name="Deep Dungeon" xml:space="preserve"><value>Derin Zindan</value></data>
   <data name="Deep Dungeon maturity" xml:space="preserve"><value>Derin Zindan olgunluğu</value></data>

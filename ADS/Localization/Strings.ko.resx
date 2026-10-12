@@ -1963,7 +1963,7 @@
     <value>디버그 명령</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>디버깅만 가능합니다. 느린 ADS 섹션을 식별하기 위해 프레임워크별 업데이트 타이밍을 활성화합니다. 정상적인 플레이 중에는 중단하세요.</value>
+    <value>진단 전용입니다. 10ms 이상 걸리는 ADS 프레임워크 업데이트와 UI 그리기를 각각 최대 5초에 한 번 보고합니다. 일반 플레이 중에는 꺼 두세요.</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>디코딩된 페이로드가 {0} 바이트를 초과했습니다.</value>

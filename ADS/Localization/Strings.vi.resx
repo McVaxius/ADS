@@ -654,7 +654,7 @@
   <data name="Debug Preview" xml:space="preserve"><value>Xem trước gỡ lỗi</value></data>
   <data name="Debug Strafe" xml:space="preserve"><value>Di chuyển ngang gỡ lỗi</value></data>
   <data name="Debug command" xml:space="preserve"><value>Lệnh gỡ lỗi</value></data>
-  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Chỉ dùng gỡ lỗi. Bật đo thời gian mỗi lần cập nhật framework để tìm phần ADS chậm; để tắt khi chơi thông thường.</value></data>
+  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Chỉ dùng để chẩn đoán. Báo cáo các lần cập nhật framework ADS và vẽ giao diện mất ít nhất 10 ms, tối đa một lần mỗi năm giây cho từng loại. Tắt khi chơi bình thường.</value></data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve"><value>Dữ liệu đã giải mã vượt quá {0} byte.</value></data>
   <data name="Deep Dungeon" xml:space="preserve"><value>Hầm ngục sâu</value></data>
   <data name="Deep Dungeon maturity" xml:space="preserve"><value>Mức hoàn thiện hầm ngục sâu</value></data>

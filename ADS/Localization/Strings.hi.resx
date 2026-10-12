@@ -654,7 +654,7 @@
   <data name="Debug Preview" xml:space="preserve"><value>डीबग प्रीव्यू</value></data>
   <data name="Debug Strafe" xml:space="preserve"><value>डीबग स्ट्रेफ़</value></data>
   <data name="Debug command" xml:space="preserve"><value>डीबग कमांड</value></data>
-  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>केवल डीबग के लिए। धीमे ADS भाग पहचानने हेतु हर फ़्रेमवर्क अपडेट का समय मापता है; सामान्य खेल में बंद रखें।</value></data>
+  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>केवल निदान के लिए। ADS फ़्रेमवर्क अपडेट और इंटरफ़ेस रेंडरिंग में कम से कम 10 मिलीसेकंड लगने पर रिपोर्ट करता है, प्रत्येक श्रेणी में अधिकतम हर पाँच सेकंड में एक बार। सामान्य खेल में बंद रखें।</value></data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve"><value>डिकोड किया गया पेलोड {0} बाइट से अधिक था।</value></data>
   <data name="Deep Dungeon" xml:space="preserve"><value>Deep Dungeon</value></data>
   <data name="Deep Dungeon maturity" xml:space="preserve"><value>Deep Dungeon तैयारी</value></data>

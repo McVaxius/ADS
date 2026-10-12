@@ -13,6 +13,58 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class AdsEnableCompatibilityTests
 {
+    [Fact]
+    public void OptInUiProfilerCatchesReportedRangeWithoutLoggingEveryDrawAndClearsWithFrameworkState()
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var configuration = new Configuration();
+        Assert.False(configuration.FrameworkHitchProfilerEnabled);
+        typeof(Plugin).GetField("<Configuration>k__BackingField", flags)!.SetValue(plugin, configuration);
+        typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin,
+            new DutyContextService(null!, null!, null!, null!));
+        typeof(Plugin).GetField("<ExecutionService>k__BackingField", flags)!.SetValue(plugin,
+            RuntimeHelpers.GetUninitializedObject(typeof(ExecutionService)));
+        typeof(Plugin).GetField("<WindowSystem>k__BackingField", flags)!.SetValue(plugin,
+            new Dalamud.Interface.Windowing.WindowSystem("ADS profiler regression"));
+
+        var log = DispatchProxy.Create<IPluginLog, IpcProxy>();
+        var messages = ((IpcProxy)(object)log).Messages;
+        var logProperty = typeof(Plugin).GetProperty("Log", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousLog = logProperty.GetValue(null);
+        logProperty.SetValue(null, log);
+        try
+        {
+            var report = typeof(Plugin).GetMethod("ReportUiSlowDraw", flags)!;
+            var lastMs = typeof(Plugin).GetField("lastUiSlowDrawMs", flags)!;
+            var nextLog = typeof(Plugin).GetField("nextUiSlowLogUtc", flags)!;
+            report.Invoke(plugin, [9.9d]);
+            Assert.Empty(messages);
+            Assert.Equal(0d, lastMs.GetValue(plugin));
+
+            var before = DateTime.UtcNow;
+            report.Invoke(plugin, [10d]);
+            var after = DateTime.UtcNow;
+            Assert.Contains("UI draw slow", Assert.Single(messages));
+            Assert.InRange((DateTime)nextLog.GetValue(plugin)!, before.AddSeconds(5), after.AddSeconds(5));
+            report.Invoke(plugin, [15d]);
+            report.Invoke(plugin, [30d]);
+            Assert.Single(messages);
+            Assert.Equal(30d, lastMs.GetValue(plugin)); // Retain evidence during the log cooldown.
+
+            nextLog.SetValue(plugin, DateTime.MinValue);
+            report.Invoke(plugin, [15d]);
+            Assert.Equal(2, messages.Count);
+            Assert.Equal(15d, lastMs.GetValue(plugin));
+
+            typeof(Plugin).GetMethod("ClearFrameworkHitchState", flags)!.Invoke(plugin, null);
+            Assert.Equal(0d, lastMs.GetValue(plugin));
+            Assert.Equal(DateTime.MinValue, nextLog.GetValue(plugin));
+            Assert.Equal(DateTime.MinValue, typeof(Plugin).GetField("lastUiSlowDrawUtc", flags)!.GetValue(plugin));
+        }
+        finally { logProperty.SetValue(null, previousLog); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -20,6 +72,7 @@ public sealed class AdsEnableCompatibilityTests
     {
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        typeof(Plugin).GetField("<Configuration>k__BackingField", flags)!.SetValue(plugin, new Configuration());
         var contextService = (DutyContextService)RuntimeHelpers.GetUninitializedObject(typeof(DutyContextService));
         typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin, contextService);
         void SetContext(bool inside, uint territory)
@@ -193,7 +246,8 @@ public sealed class AdsEnableCompatibilityTests
                     return provider;
                 case "RegisterFunc": Callback = (Delegate)args![0]!; return null;
                 case "SavePluginConfig": ++Saves; return null;
-                case "Information": Messages.Add((string)args![0]!); return null;
+                case "Information":
+                case "Warning": Messages.Add((string)args![0]!); return null;
             }
             return method.ReturnType == typeof(void) || !method.ReturnType.IsValueType
                 ? null : Activator.CreateInstance(method.ReturnType);

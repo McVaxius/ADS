@@ -654,7 +654,7 @@
   <data name="Debug Preview" xml:space="preserve"><value>Pratinjau Debug</value></data>
   <data name="Debug Strafe" xml:space="preserve"><value>Gerak Menyamping Debug</value></data>
   <data name="Debug command" xml:space="preserve"><value>Perintah debug</value></data>
-  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Hanya untuk debug. Mengaktifkan pengukuran waktu tiap pembaruan framework untuk menemukan bagian ADS yang lambat; biarkan nonaktif saat bermain normal.</value></data>
+  <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve"><value>Hanya untuk diagnosis. Melaporkan pembaruan framework ADS dan penggambaran UI yang memerlukan setidaknya 10 ms, paling sering sekali setiap lima detik untuk masing-masing kategori. Biarkan nonaktif saat bermain normal.</value></data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve"><value>Payload yang didekode melebihi {0} byte.</value></data>
   <data name="Deep Dungeon" xml:space="preserve"><value>Dungeon Dalam</value></data>
   <data name="Deep Dungeon maturity" xml:space="preserve"><value>Kematangan Dungeon Dalam</value></data>

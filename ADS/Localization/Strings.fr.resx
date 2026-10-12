@@ -1963,7 +1963,7 @@
     <value>Commande de débogage</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>Débogage uniquement. Permet le timing de mise à jour par framework pour identifier les sections ADS lentes ; s'arrêter pendant le jeu normal.</value>
+    <value>Diagnostic uniquement. Signale les mises à jour du framework ADS et le dessin de l’interface prenant au moins 10 ms, au maximum une fois toutes les cinq secondes pour chaque catégorie. Laisser désactivé pendant le jeu normal.</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>La charge utile décodée a dépassé {0} octets.</value>

@@ -1963,7 +1963,7 @@
     <value>Debug-Befehl</value>
   </data>
   <data name="Debugging only. Enables per-framework-update timing to identify slow ADS sections; leave off during normal play." xml:space="preserve">
-    <value>Nur Debuggen. Ermöglicht das Timing pro Framework-Update, um langsame ADS-Abschnitte zu identifizieren; während des normalen Spielens ausschalten.</value>
+    <value>Nur zur Diagnose. Meldet ADS-Framework-Updates und UI-Darstellung ab 10 ms, jeweils höchstens einmal alle fünf Sekunden. Beim normalen Spielen ausgeschaltet lassen.</value>
   </data>
   <data name="Decoded payload exceeded {0} bytes." xml:space="preserve">
     <value>Die dekodierte Nutzlast überschreitet {0} Byte.</value>
