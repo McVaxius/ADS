@@ -165,6 +165,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     public bool Enabled
         => configuration.HigherLowerDiagnosticsEnabled;
 
+    public bool CanCaptureDiagnostics
+        => Enabled && TreasureDungeonData.IsSupportedDutyTerritory(clientState.TerritoryType);
+
     public bool VfxDataminingEnabled
         => configuration.HigherLowerVfxDataminingEnabled;
 
@@ -203,6 +206,16 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     public HigherLowerLiveProbe CaptureLiveProbe()
     {
+        if (!CanCaptureDiagnostics)
+        {
+            return new HigherLowerLiveProbe(
+                new HigherLowerRuntimeState(false, false, false, false, string.Empty, false, false,
+                    null, string.Empty, null, string.Empty, string.Empty, string.Empty, null, 0, false,
+                    "Higher/Lower diagnostics require an enabled setting and a treasure dungeon."),
+                [], [], [], diagnosticDirectory, CurrentLogPath, datamineDirectory,
+                CurrentDatamineSessionDirectory, VfxDataminingEnabled, cardMapPath);
+        }
+
         if (liveProbeTick == frameworkTickSequence && liveProbeCache is not null)
             return liveProbeCache;
 
@@ -281,7 +294,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         else
         {
             CloseWriter();
-            ResetRuntimeState();
+            ResetRuntimeState(clearKnownCards: false);
             log.Information($"{Prefix} diagnostics disabled.");
         }
     }
@@ -331,21 +344,35 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
     }
 
-    public void ForceDump()
+    public bool ForceDump()
     {
+        if (!CanCaptureDiagnostics)
+            return false;
+
         forceNextSnapshot = true;
         log.Information($"{Prefix} force dump queued.");
+        return true;
     }
 
-    public void ForceStateProbe()
+    public bool ForceStateProbe()
     {
+        if (!CanCaptureDiagnostics)
+            return false;
+
         forceNextStateProbe = true;
         forceNextSnapshot = true;
         log.Information($"{Prefix} focused state probe queued.");
+        return true;
     }
 
     public HigherLowerTraceResult StartTrace(double seconds)
     {
+        if (!CanCaptureDiagnostics)
+        {
+            return new HigherLowerTraceResult(false,
+                "Higher/Lower diagnostics require an enabled setting and a treasure dungeon.", CurrentLogPath, 0);
+        }
+
         if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds <= 0)
         {
             return new HigherLowerTraceResult(
@@ -398,7 +425,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
-        if (!configuration.HigherLowerDiagnosticsEnabled && !IsTraceActive(now))
+        if (!CanCaptureDiagnostics)
             return;
 
         var territoryId = row.TerritoryId != 0 ? row.TerritoryId : clientState.TerritoryType;
@@ -420,7 +447,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
         var traceActive = IsTraceActive(now);
-        if (!configuration.HigherLowerDiagnosticsEnabled && !traceActive)
+        if (!CanCaptureDiagnostics)
             return;
 
         if (traceActive)
@@ -1053,6 +1080,10 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     public HigherLowerTextureExportResult ExportCurrentTextureProbe()
     {
+        if (!CanCaptureDiagnostics)
+            return new HigherLowerTextureExportResult(false,
+                "Higher/Lower diagnostics require an enabled setting and a treasure dungeon.", string.Empty);
+
         try
         {
             nint addonPointer = gameGui.GetAddonByName(AddonName, 1);
@@ -1142,6 +1173,16 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         PlannerSnapshot planner,
         string dialogStatus)
     {
+        if (!context.IsLoggedIn || !context.InInstancedDuty || context.IsUnsafeTransition
+            || !TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId))
+        {
+            CloseWriter();
+            CloseDatamineWritersIfOpen();
+            ResetDatamineSessionGate();
+            ResetRuntimeState();
+            return;
+        }
+
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
         var traceActive = IsTraceActive(now);
@@ -1156,11 +1197,13 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
 
         var needsRuntimeProbe = configuration.HigherLowerDiagnosticsEnabled
-                                || configuration.HigherLowerVfxDataminingEnabled
-                                || forceNextSnapshot
-                                || traceActive;
+                                || configuration.HigherLowerVfxDataminingEnabled;
         if (!needsRuntimeProbe)
+        {
+            CloseWriter();
+            ResetRuntimeState(clearKnownCards: false);
             return;
+        }
 
         RuntimeProbe runtimeProbe;
         try
@@ -1178,7 +1221,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         FinishTraceIfExpired(now);
         traceActive = IsTraceActive(now);
 
-        if (!configuration.HigherLowerDiagnosticsEnabled && !forceNextSnapshot && !traceActive)
+        if (!configuration.HigherLowerDiagnosticsEnabled)
             return;
 
         if (!runtimeProbe.Runtime.Active && !forceNextSnapshot && !traceActive)
@@ -1843,7 +1886,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private static string FormatExportRect(TextureExportRect? rect)
         => rect == null ? "none" : $"u={rect.U} v={rect.V} w={rect.Width} h={rect.Height}";
 
-    private void ResetRuntimeState()
+    private void ResetRuntimeState(bool clearKnownCards = true)
     {
         lastSignature = string.Empty;
         lastAddonSignature = string.Empty;
@@ -1853,8 +1896,11 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         lastSnapshotUtc = DateTime.MinValue;
         forceNextSnapshot = false;
         forceNextStateProbe = false;
-        knownCardTag = null;
-        knownBoardTag = null;
+        if (clearKnownCards)
+        {
+            knownCardTag = null;
+            knownBoardTag = null;
+        }
         traceStartedUtc = DateTime.MinValue;
         traceUntilUtc = DateTime.MinValue;
         lastTraceSampleUtc = DateTime.MinValue;
@@ -1871,6 +1917,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private void StartLazyTraceIfAddonAppeared(bool treasureHighLowVisible)
     {
+        if (!CanCaptureDiagnostics)
+            return;
+
         var now = DateTime.UtcNow;
         FinishTraceIfExpired(now);
         if (!treasureHighLowVisible || lastAddonVisible || IsTraceActive(now))
@@ -1968,6 +2017,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private bool EnsureWriter(Snapshot snapshot)
     {
+        if (!CanCaptureDiagnostics || !TreasureDungeonData.IsSupportedDutyTerritory(snapshot.TerritoryId))
+            return false;
+
         try
         {
             Directory.CreateDirectory(diagnosticDirectory);
@@ -1999,6 +2051,9 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private bool EnsureWriter(uint territoryId)
     {
+        if (!CanCaptureDiagnostics || !TreasureDungeonData.IsSupportedDutyTerritory(territoryId))
+            return false;
+
         try
         {
             Directory.CreateDirectory(diagnosticDirectory);
@@ -2213,7 +2268,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private bool ShouldRecordDatamine()
     {
-        if (!configuration.HigherLowerVfxDataminingEnabled)
+        if (!configuration.HigherLowerVfxDataminingEnabled
+            || !TreasureDungeonData.IsSupportedDutyTerritory(clientState.TerritoryType))
         {
             CloseDatamineWritersIfOpen();
             ResetDatamineSessionGate();
@@ -2226,7 +2282,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private void UpdateDatamineSessionFromRuntime(HigherLowerRuntimeState runtime, uint territoryId)
     {
-        if (!configuration.HigherLowerVfxDataminingEnabled)
+        if (!configuration.HigherLowerVfxDataminingEnabled
+            || !TreasureDungeonData.IsSupportedDutyTerritory(territoryId))
         {
             CloseDatamineWritersIfOpen();
             ResetDatamineSessionGate();

@@ -1,3 +1,8 @@
+2026-10-13 - Scope Higher/Lower diagnostics to treasure dungeons
+
+- Capture Higher/Lower diagnostics only when enabled and inside a supported treasure dungeon. Keep live debug views, forced dumps and traces behind that gate; retain gameplay solver inputs independently.
+- Default diagnostics off for new settings and stop the old migration from enabling them. Preserve existing saved choices. VFX datamining retains its separate opt-in setting and is also limited to treasure dungeons.
+
 2026-10-11 - Performance investigation coverage (I544)
 
 - Extend the existing opt-in hitch profiler to report ADS framework updates and UI drawing from 10 ms, retaining a five-second reporting interval for each. Include automation state and open window types so idle/active and UI-open/closed samples can be distinguished.

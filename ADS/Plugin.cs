@@ -3760,15 +3760,17 @@ public sealed class Plugin : IDalamudPlugin
         if (trimmed.Equals("hldebug", StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("hldebug dump", StringComparison.OrdinalIgnoreCase))
         {
-            TreasureHighLowDiagnosticService.ForceDump();
-            PrintStatus("Higher/Lower diagnostic snapshot queued.");
+            PrintStatus(TreasureHighLowDiagnosticService.ForceDump()
+                ? "Higher/Lower diagnostic snapshot queued."
+                : "Higher/Lower diagnostics require an enabled setting and a treasure dungeon.");
             return;
         }
 
         if (trimmed.Equals("hldebug state", StringComparison.OrdinalIgnoreCase))
         {
-            TreasureHighLowDiagnosticService.ForceStateProbe();
-            PrintStatus("Higher/Lower focused state probe queued.");
+            PrintStatus(TreasureHighLowDiagnosticService.ForceStateProbe()
+                ? "Higher/Lower focused state probe queued."
+                : "Higher/Lower diagnostics require an enabled setting and a treasure dungeon.");
             return;
         }
 
@@ -4169,7 +4171,6 @@ public sealed class Plugin : IDalamudPlugin
 
         if (configuration.Version < 11)
         {
-            configuration.HigherLowerDiagnosticsEnabled = true;
             configuration.HigherLowerAutomationEnabled = true;
             configuration.Version = 11;
             changed = true;

@@ -81,6 +81,8 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 | Rules Editors | Executable inherited object-rule presets, protected `DEFAULT` shards, searchable multi-context filtering/revert/promotion, responsive compact editing, dialog presets, partial imports, bulk editing, and duty deep-links |
 | Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
+Higher/Lower diagnostics default off for new settings. Enable Diagnostics explicitly and enter a supported treasure dungeon to capture live probes, dumps, traces or addon texture exports. Existing saved choices are retained; the gameplay solver remains independent of this diagnostic setting. VFX datamining has its own opt-in switch and also operates only in treasure dungeons.
+
 `/ads rules` keeps preset selection, draft actions, filters and selection controls
 above the rule grid, whose editor rows meet at their dividers and retain inline controls.
 Expand **Advanced**, then choose Preset management, Sharing, Draft editing,

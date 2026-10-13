@@ -74,7 +74,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool ObjectRuleEditorCompactMode { get; set; }
     public bool ObjectRuleShardMigrationComplete { get; set; }
     public List<string> PendingLegacyObjectRulePresets { get; set; } = [];
-    public bool HigherLowerDiagnosticsEnabled { get; set; } = true;
+    public bool HigherLowerDiagnosticsEnabled { get; set; } = false;
     public bool HigherLowerAutomationEnabled { get; set; } = true;
     public bool HigherLowerVfxDataminingEnabled { get; set; } = false;
     public bool ReflectionToolsEnabled { get; set; } = true;
