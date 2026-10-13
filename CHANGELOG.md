@@ -1,7 +1,7 @@
 2026-10-13 - Scope Higher/Lower diagnostics to treasure dungeons
 
 - Capture Higher/Lower diagnostics only when enabled and inside a supported treasure dungeon. Keep live debug views, forced dumps and traces behind that gate; retain gameplay solver inputs independently.
-- Default diagnostics off for new settings and stop the old migration from enabling them. Preserve existing saved choices. VFX datamining retains its separate opt-in setting and is also limited to treasure dungeons.
+- Default diagnostics off for new settings and reset existing diagnostic preferences off once through configuration schema 25. Preserve later saved choices. VFX datamining retains its separate opt-in setting and is also limited to treasure dungeons.
 
 2026-10-11 - Performance investigation coverage (I544)
 

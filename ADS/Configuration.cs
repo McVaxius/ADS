@@ -9,7 +9,7 @@ public sealed class Configuration : IPluginConfiguration
     public const string DefaultDtrIconEnabled = "\uE044";
     public const string DefaultDtrIconDisabled = "\uE04C";
 
-    public int Version { get; set; } = 24;
+    public int Version { get; set; } = 25;
     public UiLanguage? UiLanguage { get; set; }
     public uint UiAccentRgb { get; set; } = Windows.AdsPresentation.ReferenceAccent;
     public bool UiCompact { get; set; } = true;

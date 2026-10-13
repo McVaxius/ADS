@@ -178,7 +178,7 @@ public sealed class ObjectRuleShardStoreTests
         };
         var roundTrip = JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(configuration))!;
 
-        Assert.Equal(24, roundTrip.Version);
+        Assert.Equal(25, roundTrip.Version);
         Assert.True(roundTrip.ObjectRuleEditorCompactMode);
         Assert.Equal(
             [ObjectRuleShardStore.GlobalFileName, "1037_rule_objects.json"],

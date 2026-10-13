@@ -125,7 +125,7 @@ public sealed class WizardCatalogTests
 
         Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
 
-        Assert.Equal(24, configuration.Version);
+        Assert.Equal(25, configuration.Version);
         Assert.True(configuration.WizardHubSeen);
         Assert.False(configuration.DutyOperationsWizardCompleted);
         Assert.False(configuration.RulesDataWizardCompleted);
@@ -136,19 +136,52 @@ public sealed class WizardCatalogTests
     }
 
     [Fact]
-    public void Schema24ContextDefaultsNormalizeWithoutVersionBump()
+    public void CurrentSchemaContextDefaultsNormalizeWithoutVersionBump()
     {
         var configuration = new Configuration
         {
-            Version = 24,
+            Version = 25,
             ObjectRuleSelectedContextFileNames = ["bad.json", "1037_rule_objects.json"],
             ObjectRuleEditorCompactMode = true,
         };
 
         Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
 
-        Assert.Equal(24, configuration.Version);
+        Assert.Equal(25, configuration.Version);
         Assert.Equal(["1037_rule_objects.json"], configuration.ObjectRuleSelectedContextFileNames);
         Assert.True(configuration.ObjectRuleEditorCompactMode);
+    }
+
+    [Fact]
+    public void HigherLowerDiagnosticsResetOffOnceAndPreserveLaterSavedChoice()
+    {
+        var configuration = new Configuration
+        {
+            Version = 24,
+            HigherLowerDiagnosticsEnabled = true,
+            HigherLowerAutomationEnabled = true,
+            HigherLowerVfxDataminingEnabled = true,
+        };
+
+        Assert.True(Plugin.ApplyConfigurationMigrations(configuration));
+        Assert.Equal(25, configuration.Version);
+        Assert.False(configuration.HigherLowerDiagnosticsEnabled);
+        Assert.True(configuration.HigherLowerAutomationEnabled);
+        Assert.True(configuration.HigherLowerVfxDataminingEnabled);
+
+        configuration.HigherLowerDiagnosticsEnabled = true;
+        Assert.False(Plugin.ApplyConfigurationMigrations(configuration));
+        Assert.True(configuration.HigherLowerDiagnosticsEnabled);
+
+        var storage = typeof(Dalamud.Plugin.IDalamudPluginInterface).Assembly.GetType("Dalamud.Configuration.PluginConfigurations", true)!;
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var saved = (string)storage.GetMethod("SerializeConfig", flags)!.Invoke(null, [configuration])!;
+        var reloaded = (Configuration)storage.GetMethod("DeserializeConfig", flags)!.Invoke(null, [saved])!;
+
+        Plugin.ApplyConfigurationMigrations(reloaded); // Other normalizers are independent of this migration.
+        Assert.Equal(25, reloaded.Version);
+        Assert.True(reloaded.HigherLowerDiagnosticsEnabled);
+        Assert.True(reloaded.HigherLowerAutomationEnabled);
+        Assert.True(reloaded.HigherLowerVfxDataminingEnabled);
     }
 }

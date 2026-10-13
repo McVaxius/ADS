@@ -4305,6 +4305,13 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (configuration.Version < 25)
+        {
+            configuration.HigherLowerDiagnosticsEnabled = false;
+            configuration.Version = 25;
+            changed = true;
+        }
+
         configuration.PendingLegacyObjectRulePresets ??= [];
         var normalizedRuleContexts = ObjectRuleEditorWindow.NormalizeSelectedContextFileNames(
             configuration.ObjectRuleSelectedContextFileNames).ToList();
