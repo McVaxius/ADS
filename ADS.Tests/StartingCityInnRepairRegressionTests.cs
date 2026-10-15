@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using System.Buffers.Binary;
 using System.Collections.Frozen;
 using System.Reflection;
@@ -18,6 +19,7 @@ using Lumina.Excel.Sheets;
 using ADS.Services;
 using ADS.Models;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using Xunit;
 
 namespace ADS.Tests;
@@ -25,6 +27,568 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class StartingCityInnRepairRegressionTests
 {
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    public unsafe void NativeGearSaleOwnershipAndCleanupDoNotDependOnTheVendorTab(int mode, bool updatingBuyback)
+    {
+        var native = new ShopEventHandler
+        {
+            CurrentMode = mode, BuybackTabActive = mode == 2, UpdatingBuybackItems = updatingBuyback,
+        };
+        native.Info.EventId.Id = 0x40001;
+        Assert.Equal(GearSaleState.Ready, DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(&native,
+            10, 0x40001, 50, 50, 10, out var diagnostic));
+        Assert.Empty(diagnostic);
+        Assert.True(DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(&native));
+        native.WaitingForTransactionToFinish = true;
+        Assert.False(DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(&native));
+        native.WaitingForTransactionToFinish = false;
+        native.WaitingForSellConfirm = true;
+        Assert.False(DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(&native));
+        native.WaitingForSellConfirm = false;
+        native.StartingSell = true;
+        Assert.False(DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(&native));
+        native.StartingSell = false;
+        native.StartingBuy = true;
+        Assert.False(DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(&native));
+        native.StartingBuy = false;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(&native,
+            10, 0x40001, 50, 51, 10, out _));
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(&native,
+            10, 0x40001, 50, 50, 11, out _));
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(&native,
+            10, 0x40002, 50, 50, 10, out _));
+        native.IsTradingWithRetainer = true;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(&native,
+            10, 0x40001, 50, 50, 10, out _));
+    }
+
+    [Fact]
+    public void GearSalePartialFailureClosesSettledBuybackAndReportsVerifiedCounts()
+    {
+        using var fixture = new NpcSaleFixture { NativeGearLifecycle = true };
+        fixture.GearItems.AddRange([GearItem(1681, InventoryType.Inventory1, 24), GearItem(1682, InventoryType.Inventory2, 25)]);
+        Assert.True(fixture.Service.StartGearSale("partial-native-flow", GearCleanupScope.Inventory, true));
+        for (var tick = 0; tick < 12 && fixture.GearSold.Count == 0; tick++) fixture.Service.Update();
+        Assert.Single(fixture.GearSold);
+        fixture.BeginNativeGearSettlement(false);
+        fixture.PublishNativeGearItemRemoval();
+        fixture.PublishNativeGearGil();
+        fixture.FinishNativeGearSettlement();
+        fixture.Service.Update();
+        Assert.Equal(1, fixture.Service.GearSaleStatus.SoldCount);
+        Assert.Equal(2, fixture.NativeGearMode);
+        fixture.GearProtection.Add(1682); // A real protection change blocks the next item.
+        fixture.Service.Update();
+        var receipt = fixture.Service.GearSaleStatus;
+        Assert.False(fixture.Service.IsRunning);
+        Assert.False(receipt.Succeeded);
+        Assert.Equal(1, receipt.SoldCount);
+        Assert.Equal(2, receipt.RequestedCount);
+        Assert.Equal(4, receipt.GilEarned);
+        Assert.Contains("Sold 1/2; 1 remaining.", receipt.StatusMessage);
+        Assert.Equal(receipt.StatusMessage, fixture.Service.StatusMessage);
+        Assert.True(receipt.Settled);
+        Assert.False(fixture.GearShopOpen);
+        Assert.Single(fixture.GearSold);
+        Assert.Single(fixture.GearItems);
+    }
+
+    [Fact]
+    public void GearSaleCancellationPreservesAnUnresolvedNativeSaleOnBuyback()
+    {
+        using var fixture = new NpcSaleFixture { NativeGearLifecycle = true };
+        fixture.GearItems.AddRange([GearItem(1681, InventoryType.Inventory1, 24), GearItem(1682, InventoryType.Inventory2, 25)]);
+        Assert.True(fixture.Service.StartGearSale("cancel-native-flow", GearCleanupScope.Inventory, true));
+        for (var tick = 0; tick < 12 && fixture.GearSold.Count == 0; tick++) fixture.Service.Update();
+        Assert.Single(fixture.GearSold);
+        fixture.BeginNativeGearSettlement(false);
+        fixture.PublishNativeGearItemRemoval();
+        Assert.Equal(2, fixture.NativeGearMode);
+        Assert.True(fixture.Service.CancelGearSale("cancel-native-flow"));
+        var receipt = fixture.Service.GearSaleStatus;
+        Assert.False(receipt.Succeeded);
+        Assert.Equal(0, receipt.SoldCount); // Item removal alone does not prove settlement.
+        Assert.Contains("Sold 0/2; 2 remaining.", receipt.StatusMessage);
+        Assert.False(receipt.Settled);
+        Assert.True(fixture.GearShopOpen);
+        Assert.Single(fixture.GearSold);
+    }
+
+    [Fact]
+    public unsafe void MovedGearComparisonIgnoresNativeObjectBytesButPreservesItemState()
+    {
+        var expected = GearItem(1681, InventoryType.ArmoryMainHand, 7).Item;
+        expected.Flags = InventoryItem.ItemFlags.HighQuality;
+        expected.Condition = 9000;
+        expected.SpiritbondOrCollectability = 500;
+        expected.CrafterContentId = 123;
+        expected.Materia[0] = 456;
+        expected.MateriaGrades[0] = 7;
+        expected.Stains[0] = 8;
+        expected.Stains[1] = 9;
+        expected.GlamourId = 789;
+        expected.EventId.Id = 12;
+        var moved = expected;
+        moved.Container = InventoryType.Inventory3;
+        moved.Slot = 19;
+        ((byte*)&moved)[0] ^= 0x40; // Native object/vtable bytes are not item identity.
+        ((byte*)&moved)[0x0F] ^= 0x20; // Padding between IsSymbolic and ItemId.
+        Assert.True(GearCleanupPolicy.Matches(moved, expected, allowMovedSlot: true));
+        Assert.False(GearCleanupPolicy.Matches(moved, expected)); // Existing source-slot contract is unchanged.
+        for (var field = 0; field < 13; field++)
+        {
+            var different = moved;
+            switch (field)
+            {
+                case 0: different.ItemId++; break;
+                case 1: different.Quantity++; break;
+                case 2: different.Flags = InventoryItem.ItemFlags.None; break;
+                case 3: different.Condition++; break;
+                case 4: different.SpiritbondOrCollectability++; break;
+                case 5: different.CrafterContentId++; break;
+                case 6: different.Materia[0]++; break;
+                case 7: different.MateriaGrades[0]++; break;
+                case 8: different.Stains[0]++; break;
+                case 9: different.Stains[1]++; break;
+                case 10: different.GlamourId++; break;
+                case 11: different.EventId.Id++; break;
+                case 12: different.IsSymbolic = true; break;
+            }
+            Assert.False(GearCleanupPolicy.Matches(different, expected, allowMovedSlot: true), $"Changed item field {field} must be rejected.");
+        }
+    }
+
+    public static IEnumerable<object[]> NativeGearMoveBatchCases()
+    {
+        foreach (var allUnprotected in new[] { false, true })
+        foreach (var receiptOrder in new[] { 0, 1, 2 })
+        foreach (var bag in GearCleanupPolicy.Bags)
+            yield return new object[] { allUnprotected, receiptOrder, bag };
+    }
+
+    [Theory]
+    [MemberData(nameof(NativeGearMoveBatchCases))]
+    public void GearMoveContinuesAcrossNativeSlotUpdateOrders(bool allUnprotected, int receiptOrder, InventoryType bag)
+    {
+        using var fixture = new NpcSaleFixture
+        {
+            GearCompleteOperations = false, GearBagContainer = bag, GearMoveChangesNativeBytes = true,
+        };
+        var selected = GearCleanupPolicy.Containers(GearCleanupScope.Armoury, allUnprotected)
+            .Select((container, index) => GearItem((uint)(2000 + index), container, (ushort)index)).ToList();
+        var colored = GearItem(9001, InventoryType.ArmoryBody, 31) with { WhiteEquipment = false };
+        if (allUnprotected) selected.Add(colored);
+        fixture.GearItems.AddRange(selected);
+        if (!allUnprotected) fixture.GearItems.Add(colored);
+        fixture.GearItems.Add(GearItem(9000, InventoryType.ArmoryHead, 30));
+        fixture.GearProtection.Add(9000);
+        Assert.True(fixture.Service.StartGearMove(allUnprotected), fixture.Service.StatusMessage);
+        for (var index = 0; index < selected.Count; index++)
+        {
+            fixture.Service.Update();
+            Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+            Assert.Equal(index + 1, fixture.GearMoved.Count);
+            Assert.Equal(selected[index], fixture.GearMoved[index]);
+            if (receiptOrder != 2)
+            {
+                if (receiptOrder == 0) fixture.PublishGearMoveSourceRemoval();
+                else fixture.PublishGearMoveDestination();
+                for (var tick = 0; tick < 3; tick++) fixture.Service.Update();
+                Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+                Assert.Equal(index + 1, fixture.GearMoved.Count); // Never replay or submit the next item early.
+            }
+            if (receiptOrder != 0) fixture.PublishGearMoveSourceRemoval();
+            if (receiptOrder != 1) fixture.PublishGearMoveDestination();
+            fixture.Service.Update();
+            Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+            Assert.Contains($"{index + 1}/{selected.Count}", fixture.Service.StatusMessage);
+        }
+        fixture.Service.Update();
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains($"{selected.Count} items processed", fixture.Service.LastSuccessMessage);
+        Assert.Equal(selected.Count, fixture.GearMoved.Count);
+        Assert.Equal(selected.Count, fixture.GearItems.Count(item => item.Container == bag));
+        Assert.Contains(fixture.GearItems, item => item.Item.ItemId == 9000 && item.Container == InventoryType.ArmoryHead);
+        if (!allUnprotected) Assert.Contains(fixture.GearItems, item => item == colored);
+        Assert.Empty(fixture.GearSold);
+        Assert.Empty(fixture.Commands);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GearMoveWaitsForDestinationThenStopsWithoutReplayingAnUnverifiedMove(bool differentItem)
+    {
+        using var fixture = new NpcSaleFixture { GearCompleteOperations = false };
+        fixture.GearItems.AddRange([GearItem(1681, InventoryType.ArmoryHead), GearItem(1682, InventoryType.ArmoryBody)]);
+        Assert.True(fixture.Service.StartGearMove());
+        fixture.Service.Update();
+        fixture.PublishGearMoveSourceRemoval();
+        if (differentItem)
+        {
+            fixture.PublishGearMoveDestination();
+            var row = fixture.GearItems.Single(item => item.Container == InventoryType.Inventory1);
+            var changed = row.Item;
+            changed.Flags = InventoryItem.ItemFlags.HighQuality;
+            fixture.GearItems[fixture.GearItems.IndexOf(row)] = row with { Item = changed };
+        }
+        fixture.Service.Update();
+        Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+        Assert.Single(fixture.GearMoved);
+        Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-2));
+        fixture.Service.Update();
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains("could not verify its exact destination item", fixture.Service.LastFailureMessage);
+        Assert.Single(fixture.GearMoved);
+        Assert.Contains(fixture.GearItems, item => item.Item.ItemId == 1682 && item.Container == InventoryType.ArmoryBody);
+    }
+
+    public static IEnumerable<object[]> NativeGearSaleBatchCases()
+    {
+        foreach (var scope in Enum.GetValues<GearCleanupScope>())
+        foreach (var confirmation in new[] { false, true })
+        foreach (var receiptOrder in new[] { 0, 1, 2 })
+            yield return new object[] { scope, confirmation, receiptOrder };
+    }
+
+    [Theory]
+    [MemberData(nameof(NativeGearSaleBatchCases))]
+    public void GearSaleProcessesAllKnownContainersThroughTheFullDelayedNativeLifecycle(GearCleanupScope scope, bool confirmation, int receiptOrder)
+    {
+        using var fixture = new NpcSaleFixture { NativeGearLifecycle = true };
+        var containers = GearCleanupPolicy.Containers(scope).ToArray();
+        var selected = containers.Select((container, index) => GearItem((uint)(2000 + index), container, (ushort)index)).ToArray();
+        fixture.GearItems.AddRange(selected);
+        fixture.GearItems.Add(GearItem(9000, containers[0], 30));
+        fixture.GearProtection.Add(9000);
+        fixture.GearItems.Add(GearItem(9001, containers[0], 31) with { WhiteEquipment = false });
+        fixture.GearItems.Add(GearItem(9002, containers[0], 32) with { NpcBuyable = false });
+        Assert.True(fixture.Service.StartGearSale("complete-native-flow", scope, true), fixture.Service.StatusMessage);
+        long earned = 0;
+        for (var index = 0; index < selected.Length; index++)
+        {
+            for (var tick = 0; tick < 12 && fixture.GearSold.Count <= index && fixture.Service.IsRunning; tick++) fixture.Service.Update();
+            Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+            Assert.Equal(index + 1, fixture.GearSold.Count);
+            Assert.Equal(selected[index], fixture.GearSold[index]);
+            for (var tick = 0; tick < 3; tick++) fixture.Service.Update(); // Native Item-sheet read still pending.
+            Assert.Equal(-1, fixture.GearQuotedPrice);
+            Assert.Equal(index, fixture.Service.GearSaleStatus.SoldCount);
+            Assert.Equal(index + 1, fixture.GearSold.Count); // Never resubmit while native work is pending.
+            fixture.BeginNativeGearSettlement(confirmation);
+            if (confirmation || receiptOrder != 2)
+            {
+                Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-2));
+                fixture.Service.Update();
+                Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+                Assert.Equal(4 + index, fixture.GearQuotedPrice);
+            }
+            if (receiptOrder == 2)
+            {
+                fixture.PublishNativeGearItemRemoval();
+                fixture.PublishNativeGearGil();
+                fixture.FinishNativeGearSettlement(); // Entire completion can happen between observations.
+            }
+            else
+            {
+                fixture.PublishNativeGearItemRemoval();
+                fixture.Service.Update();
+                Assert.Equal(index, fixture.Service.GearSaleStatus.SoldCount);
+                if (receiptOrder == 1)
+                {
+                    fixture.FinishNativeGearSettlement(); // Acknowledgement may precede the gil update.
+                    fixture.Service.Update();
+                    Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+                    Assert.Equal(index, fixture.Service.GearSaleStatus.SoldCount);
+                }
+                fixture.PublishNativeGearGil();
+                if (receiptOrder == 0)
+                {
+                    fixture.Service.Update();
+                    Assert.Equal(index, fixture.Service.GearSaleStatus.SoldCount);
+                    fixture.FinishNativeGearSettlement();
+                }
+            }
+            fixture.Service.Update();
+            earned += 4 + index;
+            Assert.Equal(2, fixture.NativeGearMode); // Buyback stays selected for all following sales and cleanup.
+            Assert.Equal(index + 1, fixture.Service.GearSaleStatus.SoldCount);
+            Assert.Equal(earned, fixture.Service.GearSaleStatus.GilEarned);
+        }
+        for (var tick = 0; tick < 4 && fixture.Service.IsRunning; tick++) fixture.Service.Update();
+        var receipt = fixture.Service.GearSaleStatus;
+        Assert.False(fixture.Service.IsRunning);
+        Assert.True(receipt.Succeeded, receipt.StatusMessage);
+        Assert.True(receipt.Settled);
+        Assert.Equal(selected.Length, receipt.RequestedCount);
+        Assert.Equal(selected.Length, fixture.GearSold.Count);
+        Assert.Equal(confirmation ? selected.Length : 0, fixture.GearConfirmations);
+        Assert.False(fixture.GearShopOpen);
+        Assert.Equal(new uint[] { 9000, 9001, 9002 }, fixture.GearItems.Select(item => item.Item.ItemId));
+    }
+
+    [Fact]
+    public unsafe void NativeGearSaleAcceptsClearedTypeOnlyWhileSettlingItsExactSubmittedSlot()
+    {
+        // Replay the actual FTP6 -04 failure snapshot: all item identity fields
+        // match, but TransactionType is already clear while completion is pending.
+        var item = GearItem(1681, InventoryType.Inventory1, slot: 24);
+        var native = new ShopEventHandler
+        {
+            TransactionType = 0, TransactionItemId = 1681, TransactionItemCount = 1,
+            SellInventoryType = InventoryType.Inventory1, SellInventorySlot = 24,
+            SellPrice = 4, WaitingForTransactionToFinish = true,
+        };
+        Assert.Equal(GearSaleState.Pending, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, null, out _));
+        native.WaitingForSellConfirm = true;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.WaitingForSellConfirm = false;
+        native.SellInventorySlot++;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.SellInventorySlot--;
+        native.SellInventoryType = InventoryType.Inventory2;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.SellInventoryType = InventoryType.Inventory1;
+        native.TransactionItemId++;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.TransactionItemId--;
+        native.TransactionItemCount = 2;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.TransactionItemCount = 1;
+        native.TransactionType = 1;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+    }
+
+    [Fact]
+    public unsafe void NativeGearSaleWaitsForItemSheetReadBeforeRequiringCommittedTransactionFields()
+    {
+        var item = GearItem(51, InventoryType.Inventory2, slot: 7);
+        var native = new ShopEventHandler { StartingSell = true };
+        // This is the actual SDK struct and classifier used by the native runtime,
+        // including zero/stale fields while its Item-sheet request is pending.
+        Assert.Equal(GearSaleState.Pending, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, null, out _));
+        native.StartingBuy = true;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.StartingBuy = false;
+        native.StartingSell = false;
+        native.WaitingForSellConfirm = true;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.TransactionType = 2;
+        native.TransactionItemId = item.Item.ItemId;
+        native.TransactionItemCount = 1;
+        native.SellInventoryType = item.Container;
+        native.SellInventorySlot = item.Slot;
+        Assert.Equal(GearSaleState.Pending, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.WaitingForSellConfirm = false;
+        native.WaitingForTransactionToFinish = true;
+        Assert.Equal(GearSaleState.Pending, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.SellInventorySlot++;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.SellInventorySlot--;
+        native.TransactionItemCount = 0;
+        Assert.Equal(GearSaleState.Unsupported, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+        native.WaitingForTransactionToFinish = false;
+        Assert.Equal(GearSaleState.Ready, DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(&native, item, out _));
+    }
+
+    [Theory]
+    [InlineData(false, 1f)]
+    [InlineData(true, 1f)]
+    [InlineData(false, 1.5f)]
+    [InlineData(true, 1.5f)]
+    public unsafe void ActualVermaxionInlineHelpKeepsFollowingSettingsAtTheirNativeRowOrigin(bool compact, float scale)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        string? path = null;
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "VERMAXION", "VERMAXION", "bin", "x64", "Debug", "VERMAXION.dll");
+            if (File.Exists(candidate)) { path = candidate; break; }
+            directory = directory.Parent;
+        }
+        Assert.NotNull(path);
+        var assembly = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(path!);
+        var wrapped = assembly.GetType("VERMAXION.UIConstants", true)!
+            .GetMethod("WrappedText", BindingFlags.Static | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<Vector4, string, bool>>();
+        var previous = ImGui.GetCurrentContext();
+        var context = ImGui.CreateContext();
+        try
+        {
+            var io = ImGui.GetIO();
+            io.IniFilename = null;
+            io.LogFilename = null;
+            io.DisplaySize = new(1200, 900);
+            io.DeltaTime = 1f / 60;
+            io.Fonts.AddFontDefault();
+            byte* pixels = null;
+            int width = 0, height = 0;
+            io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
+            io.Fonts.SetTexID(0, new ImTextureID((nint)1));
+            io.FontGlobalScale = scale;
+            var style = ImGui.GetStyle();
+            style.WindowPadding = new Vector2(compact ? 8 : 16) * scale;
+            style.ItemSpacing = new Vector2(compact ? 6 : 10, compact ? 3 : 8) * scale;
+            for (var frame = 0; frame < 2; frame++)
+            {
+                ImGui.NewFrame();
+                ImGui.SetNextWindowSize(new(1000, 700));
+                ImGui.Begin("Actual VMX settings origin", ImGuiWindowFlags.NoSavedSettings);
+                try
+                {
+                    var visible = ImGui.BeginChild("Settings subframe", new(800, 550));
+                    try
+                    {
+                        Assert.True(visible);
+                        ImGui.Indent(18 * scale);
+                        var origin = ImGui.GetCursorPosX();
+                        for (var row = 0; row < 5; row++)
+                        {
+                            ImGui.TextUnformatted("Setting " + row);
+                            ImGui.SameLine();
+                            ImGui.SetNextItemWidth(100 * scale);
+                            var value = row;
+                            ImGui.InputInt("##value" + row, ref value);
+                            ImGui.SameLine();
+                            wrapped(Vector4.One, "(?)", false);
+                            Assert.InRange(ImGui.GetCursorPosX(), origin - .01f, origin + .01f);
+                        }
+                        ImGui.Unindent(18 * scale);
+                    }
+                    finally { ImGui.EndChild(); }
+                }
+                finally { ImGui.End(); }
+                ImGui.Render();
+            }
+        }
+        finally
+        {
+            ImGui.DestroyContext(context);
+            ImGui.SetCurrentContext(previous);
+        }
+    }
+
+    [Fact]
+    public void GearSaleWaitsForNativeReadinessWithoutSubmittingTwice()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.GearItems.Add(GearItem(51, InventoryType.Inventory1));
+        Assert.True(fixture.Service.StartGearSale("readiness", GearCleanupScope.Inventory, true));
+        fixture.Service.Update();
+        fixture.GearState = GearSaleState.NotReady;
+        for (var tick = 0; tick < 4; tick++) fixture.Service.Update();
+        Assert.True(fixture.Service.IsRunning);
+        Assert.Empty(fixture.GearSold);
+        fixture.GearState = GearSaleState.Ready;
+        for (var tick = 0; tick < 4 && fixture.Service.IsRunning; tick++) fixture.Service.Update();
+        Assert.Single(fixture.GearSold);
+        var receipt = fixture.Service.GearSaleStatus;
+        Assert.Equal("readiness", receipt.OperationId);
+        Assert.True(receipt.Succeeded);
+        Assert.Equal(1, receipt.SoldCount);
+        Assert.Equal(10, receipt.GilEarned);
+        Assert.False(fixture.Service.StartGearSale("readiness", GearCleanupScope.Inventory, true));
+        Assert.Single(fixture.GearSold);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GearSaleOnlyConfirmsItsExactOwnedTransaction(bool owned)
+    {
+        using var fixture = new NpcSaleFixture { GearCompleteOperations = false, OwnsGearConfirmation = owned };
+        fixture.GearItems.Add(GearItem(52, InventoryType.Inventory1));
+        Assert.True(fixture.Service.StartGearSale("confirmation", GearCleanupScope.Inventory, true));
+        fixture.Service.Update();
+        fixture.Service.Update();
+        fixture.GearState = GearSaleState.Confirmation;
+        Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-2));
+        for (var tick = 0; tick < 4 && fixture.Service.IsRunning; tick++) fixture.Service.Update();
+        Assert.Equal(owned ? 1 : 0, fixture.GearConfirmations);
+        Assert.Single(fixture.GearSold);
+        Assert.Equal(owned, fixture.Service.GearSaleStatus.Succeeded);
+        Assert.Equal(owned ? 1 : 0, fixture.Service.GearSaleStatus.SoldCount);
+        Assert.Empty(fixture.Commands);
+    }
+
+    [Fact]
+    public void GearSaleRejectsAnUnverifiedGilResultBeforeAdvancing()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.GearItems.AddRange([GearItem(53, InventoryType.Inventory1), GearItem(54, InventoryType.Inventory2)]);
+        Assert.True(fixture.Service.StartGearSale("gil-check", GearCleanupScope.Both, true));
+        fixture.Service.Update();
+        fixture.Service.Update();
+        fixture.GearGil++;
+        fixture.Service.Update();
+        Assert.True(fixture.Service.IsRunning); // Allow the normal, bounded receipt-settlement window.
+        Assert.Single(fixture.GearSold);
+        Set(fixture.Service, "gearCleanupSettlementReadyUtc", DateTime.UtcNow.AddSeconds(-2));
+        fixture.Service.Update();
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Single(fixture.GearSold);
+        Assert.False(fixture.Service.GearSaleStatus.Succeeded);
+        Assert.Contains("gil result", fixture.Service.LastFailureMessage);
+        Assert.Contains(fixture.GearItems, item => item.Item.ItemId == 54);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MoveAllIncludesColouredEquipmentWhileProtectingSavedGearsets(bool allUnprotected)
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.GearItems.AddRange([
+            GearItem(55, InventoryType.ArmoryHead) with { WhiteEquipment = false },
+            GearItem(56, InventoryType.ArmoryBody) with { WhiteEquipment = false },
+            GearItem(57, InventoryType.ArmoryHands),
+            GearItem(60, InventoryType.ArmorySoulCrystal),
+        ]);
+        fixture.GearProtection.Add(56);
+        Assert.True(fixture.Service.StartGearMove(allUnprotected));
+        for (var tick = 0; tick < 7 && fixture.Service.IsRunning; tick++) fixture.Service.Update();
+        Assert.Equal(allUnprotected ? new uint[] { 55, 57, 60 } : new uint[] { 57 }, fixture.GearMoved.Select(item => item.Item.ItemId));
+        Assert.Contains(fixture.GearItems, item => item.Item.ItemId == 56 && item.Container == InventoryType.ArmoryBody);
+        Assert.Empty(fixture.GearSold);
+    }
+
+    [Fact]
+    public void EquipmentSaleCancellationMatchesOnlyTheCallingOperation()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.GearItems.Add(GearItem(58, InventoryType.Inventory1));
+        Assert.True(fixture.Service.StartGearSale("owner", GearCleanupScope.Inventory, true));
+        Assert.False(fixture.Service.StartGearSale("other", GearCleanupScope.Inventory, true));
+        Assert.Equal("owner", fixture.Service.GearSaleStatus.OperationId);
+        Assert.False(fixture.Service.CancelGearSale("other"));
+        Assert.True(fixture.Service.IsRunning);
+        Assert.True(fixture.Service.CancelGearSale("owner"));
+        Assert.False(fixture.Service.GearSaleStatus.Succeeded);
+        Assert.True(fixture.Service.GearSaleStatus.Done);
+        Assert.Empty(fixture.GearSold);
+        Assert.False(fixture.Service.CancelGearSale("owner"));
+    }
+
+    [Fact]
+    public void ReadOnlyGearPreviewDoesNotReplaceAnotherUtilityStatus()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.GearItems.Add(GearItem(59, InventoryType.ArmoryHead));
+        Assert.True(fixture.Service.StartGearMove());
+        var original = fixture.Service.StatusMessage;
+        Assert.False(fixture.Service.TryPreviewGearSale(GearCleanupScope.Both, out _, out var error));
+        Assert.Contains("ownership", error);
+        Assert.Equal(original, fixture.Service.StatusMessage);
+        Assert.True(fixture.Service.IsRunning);
+        Assert.Empty(fixture.GearSold);
+    }
+
     [Theory]
     [InlineData(GearCleanupScope.Armoury, 1)]
     [InlineData(GearCleanupScope.Inventory, 2)]
@@ -45,14 +609,16 @@ public sealed class StartingCityInnRepairRegressionTests
         Assert.All(selection.Items, item => Assert.Contains(item.Item.ItemId, new[] { 1u, 2u, 3u }));
     }
 
-    [Fact]
-    public void GearMovePreservesItemsAndReportsPartialCompletionWhenBagsFill()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GearMovePreservesItemsAndReportsPartialCompletionWhenBagsFill(bool allUnprotected)
     {
         using var fixture = new NpcSaleFixture { GearBagCapacity = 1 };
-        var first = GearItem(10, InventoryType.ArmoryHead) with { NpcBuyable = false };
+        var first = GearItem(10, InventoryType.ArmoryHead) with { NpcBuyable = false, WhiteEquipment = !allUnprotected };
         var second = GearItem(11, InventoryType.ArmoryBody);
         fixture.GearItems.AddRange([first, second]);
-        Assert.True(fixture.Service.StartGearMove(), fixture.Service.StatusMessage);
+        Assert.True(fixture.Service.StartGearMove(allUnprotected), fixture.Service.StatusMessage);
         fixture.Service.Update();
         Assert.Single(fixture.GearMoved);
         Assert.True(fixture.Service.IsRunning); // Dispatch alone does not establish the move.
@@ -1337,7 +1903,7 @@ public sealed class StartingCityInnRepairRegressionTests
         return -1;
     }
 
-    private sealed class NpcSaleFixture : IDisposable
+    private sealed unsafe class NpcSaleFixture : IDisposable
     {
         private readonly PropertyInfo piProperty = typeof(Plugin).GetProperty("PluginInterface", BindingFlags.Static | BindingFlags.NonPublic)!;
         private readonly PropertyInfo playerStateProperty = typeof(Plugin).GetProperty("PlayerState", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -1373,14 +1939,33 @@ public sealed class StartingCityInnRepairRegressionTests
         public bool GearSnapshotAvailable { get; set; } = true;
         public bool GearCompleteOperations { get; set; } = true;
         public int GearBagCapacity { get; set; } = 35;
+        public InventoryType GearBagContainer { get; set; } = InventoryType.Inventory1;
+        public bool GearMoveChangesNativeBytes { get; set; }
+        private ushort gearMoveDestinationSlot;
         public int GearInteractions { get; private set; }
         public bool GearUseMenu { get; set; }
         private bool gearShopVisible;
         private bool gearMenuVisible;
         public GearSaleState GearState { get; set; } = GearSaleState.Ready;
+        public long GearGil { get; set; } = 100;
+        public bool OwnsGearConfirmation { get; set; } = true;
+        public int GearConfirmations { get; private set; }
+        public bool NativeGearLifecycle { get; set; }
+        public bool GearShopOpen => gearShopVisible;
+        private ShopEventHandler nativeGearSale;
+        public int NativeGearMode => nativeGearSale.CurrentMode;
+        private GearCleanupCandidate? nativeGearItem;
+        private long nativeGearQuote = -1;
+        public long GearQuotedPrice => NativeGearLifecycle ? nativeGearQuote : 10;
+        private bool NativeGearIdle
+        {
+            get { fixed (ShopEventHandler* state = &nativeGearSale) return DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(state); }
+        }
 
         public NpcSaleFixture(string handler = "direct", bool repair = false)
         {
+            nativeGearSale.CurrentMode = 1;
+            nativeGearSale.Info.EventId.Id = 0x40001;
             var module = SaleExcelModule();
             Assert.True(module.GetRawSheet("GilShop").HasRow(0x40001), "The sale module must contain its GilShop interval.");
             Assert.True(module.GetRawSheet("PreHandler").HasRow(0x10000001), "The sale module must contain its PreHandler interval.");
@@ -1486,8 +2071,15 @@ public sealed class StartingCityInnRepairRegressionTests
                 "TryCaptureGearCleanup" => CaptureGear(args!),
                 "TryReadGearCleanupSlot" => ReadGear(args!),
                 "TryMoveGearCleanupItem" => MoveGear(args!),
-                "TrySellGearCleanupItem" => SellGear(args!),
-                "GetGearSaleState" => GearState,
+                "SubmitGearCleanupItem" => SubmitGear(args!),
+                "get_GearSaleGil" => GearGil,
+                "get_GearSaleUnitPrice" => GearQuotedPrice,
+                "get_GearSaleDiagnostic" => "Synthetic unsupported shop or confirmation state.",
+                "get_GearSaleUiSettled" => !gearShopVisible && !gearMenuVisible && BlockingUi == null
+                    && (NativeGearLifecycle ? NativeGearIdle : GearState == GearSaleState.Ready),
+                "GetGearSaleState" => NativeGearLifecycle ? ReadNativeGearSaleState(args!)
+                    : GearState == GearSaleState.Confirmation && !OwnsGearConfirmation ? GearSaleState.Unsupported : GearState,
+                "TryAcceptGearSaleConfirmation" => ConfirmGearSale(),
                 "TryInteractNpc" => OpenGearVendor(),
                 "IsExpectedShopVisible" => gearShopVisible,
                 "TrySelectGearSaleMenu" => SelectGearMenu(args!),
@@ -1500,7 +2092,7 @@ public sealed class StartingCityInnRepairRegressionTests
         private bool CaptureGear(object?[] args)
         {
             var scope = (GearCleanupScope)args[0]!;
-            args[1] = GearItems.Where(item => GearCleanupPolicy.Containers(scope).Contains(item.Container)).ToArray();
+            args[1] = GearItems.Where(item => GearCleanupPolicy.Containers(scope, allUnprotected: true).Contains(item.Container)).ToArray();
             args[2] = new HashSet<uint>(GearProtection);
             return GearSnapshotAvailable;
         }
@@ -1518,30 +2110,118 @@ public sealed class StartingCityInnRepairRegressionTests
         {
             var item = (GearCleanupCandidate)args[0]!;
             var target = Enumerable.Range(0, GearBagCapacity).FirstOrDefault(index =>
-                !GearItems.Any(row => row.Container == InventoryType.Inventory1 && row.Slot == index), -1);
-            args[1] = InventoryType.Inventory1;
+                !GearItems.Any(row => row.Container == GearBagContainer && row.Slot == index), -1);
+            args[1] = GearBagContainer;
             args[2] = (ushort)Math.Max(0, target);
             args[3] = target < 0;
             if (target < 0) return false;
+            gearMoveDestinationSlot = (ushort)target;
             GearMoved.Add(item);
             if (GearCompleteOperations)
             {
-                GearItems.RemoveAll(row => row.Container == item.Container && row.Slot == item.Slot);
-                var moved = item.Item;
-                moved.Container = InventoryType.Inventory1;
-                moved.Slot = (short)target;
-                GearItems.Add(item with { Container = InventoryType.Inventory1, Slot = (ushort)target, Item = moved });
+                PublishGearMoveSourceRemoval();
+                PublishGearMoveDestination();
             }
             return true;
         }
 
+        public void PublishGearMoveSourceRemoval()
+        {
+            var item = GearMoved[^1];
+            GearItems.RemoveAll(row => row.Container == item.Container && row.Slot == item.Slot);
+        }
+
+        public void PublishGearMoveDestination()
+        {
+            var item = GearMoved[^1];
+            var moved = item.Item;
+            moved.Container = GearBagContainer;
+            moved.Slot = (short)gearMoveDestinationSlot;
+            if (GearMoveChangesNativeBytes)
+            {
+                ((byte*)&moved)[0] ^= 0x40;
+                ((byte*)&moved)[0x0F] ^= 0x20;
+            }
+            GearItems.Add(item with { Container = GearBagContainer, Slot = gearMoveDestinationSlot, Item = moved });
+        }
+
+        private GearSaleState SubmitGear(object?[] args)
+        {
+            if (GearState == GearSaleState.NotReady) return GearSaleState.NotReady;
+            if (NativeGearLifecycle)
+            {
+                var state = ReadNativeGearSaleState(args);
+                if (state != GearSaleState.Ready) return state;
+            }
+            return SellGear(args) ? GearSaleState.Pending : GearSaleState.Unsupported;
+        }
+
         private bool SellGear(object?[] args)
         {
-            if (GearState != GearSaleState.Ready) return false;
+            if (GearState != GearSaleState.Ready || (NativeGearLifecycle && !NativeGearIdle)) return false;
             var item = (GearCleanupCandidate)args[2]!;
             GearSold.Add(item);
-            if (GearCompleteOperations) GearItems.RemoveAll(row => row.Container == item.Container && row.Slot == item.Slot);
+            if (NativeGearLifecycle)
+            {
+                nativeGearItem = item;
+                nativeGearQuote = -1;
+                nativeGearSale = new ShopEventHandler
+                {
+                    StartingSell = true, CurrentMode = nativeGearSale.CurrentMode,
+                    BuybackTabActive = nativeGearSale.BuybackTabActive,
+                };
+                nativeGearSale.Info.EventId.Id = 0x40001;
+            }
+            else if (GearCompleteOperations)
+            {
+                GearItems.RemoveAll(row => row.Container == item.Container && row.Slot == item.Slot);
+                GearGil += 10;
+            }
             return true;
+        }
+
+        private GearSaleState ReadNativeGearSaleState(object?[] args)
+        {
+            fixed (ShopEventHandler* state = &nativeGearSale)
+            {
+                var ownership = DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(state,
+                    10, 0x40001, 1, 1, 10, out _);
+                if (ownership != GearSaleState.Ready) return ownership;
+                var phase = DalamudShopPurchaseRuntime.ReadGearSaleTransactionPhase(state, args[2] as GearCleanupCandidate, out var quote);
+                if (quote > 0) nativeGearQuote = quote;
+                if (phase == GearSaleState.Pending && state->WaitingForSellConfirm)
+                    return OwnsGearConfirmation ? GearSaleState.Confirmation : GearSaleState.Unsupported;
+                return phase;
+            }
+        }
+
+        public void BeginNativeGearSettlement(bool confirmation)
+        {
+            var item = nativeGearItem!;
+            nativeGearSale = new ShopEventHandler
+            {
+                CurrentMode = nativeGearSale.CurrentMode, BuybackTabActive = nativeGearSale.BuybackTabActive,
+                TransactionType = confirmation ? 2 : 0, TransactionItemId = item.Item.ItemId,
+                TransactionItemCount = 1, SellInventoryType = item.Container, SellInventorySlot = item.Slot,
+                SellPrice = 3 + GearSold.Count, WaitingForSellConfirm = confirmation,
+                WaitingForTransactionToFinish = !confirmation,
+            };
+            nativeGearSale.Info.EventId.Id = 0x40001;
+        }
+
+        public void PublishNativeGearItemRemoval()
+        {
+            GearItems.RemoveAll(row => row.Container == nativeGearItem!.Container && row.Slot == nativeGearItem.Slot);
+            nativeGearSale.CurrentMode = 2;
+            nativeGearSale.BuybackTabActive = true;
+            nativeGearSale.UpdatingBuybackItems = true;
+        }
+        public void PublishNativeGearGil() => GearGil += nativeGearSale.SellPrice;
+        public void FinishNativeGearSettlement()
+        {
+            nativeGearSale.WaitingForTransactionToFinish = false;
+            nativeGearSale.TransactionType = 0;
+            nativeGearSale.UpdatingBuybackItems = false;
         }
 
         private bool OpenGearVendor()
@@ -1549,6 +2229,25 @@ public sealed class StartingCityInnRepairRegressionTests
             GearInteractions++;
             gearMenuVisible = GearUseMenu;
             gearShopVisible = !GearUseMenu;
+            return true;
+        }
+
+        private bool ConfirmGearSale()
+        {
+            if (!OwnsGearConfirmation || GearSold.Count == 0
+                || (NativeGearLifecycle ? !nativeGearSale.WaitingForSellConfirm : GearState != GearSaleState.Confirmation)) return false;
+            GearConfirmations++;
+            if (NativeGearLifecycle)
+            {
+                nativeGearSale.WaitingForSellConfirm = false;
+                nativeGearSale.WaitingForTransactionToFinish = true;
+                nativeGearSale.TransactionType = 0;
+                return true;
+            }
+            var item = GearSold[^1];
+            GearItems.RemoveAll(row => row.Container == item.Container && row.Slot == item.Slot);
+            GearGil += 10;
+            GearState = GearSaleState.Ready;
             return true;
         }
 
@@ -1562,7 +2261,13 @@ public sealed class StartingCityInnRepairRegressionTests
 
         private object? CloseGearVendor()
         {
-            if (GearState == GearSaleState.Ready) gearShopVisible = false;
+            if (NativeGearLifecycle)
+            {
+                fixed (ShopEventHandler* state = &nativeGearSale)
+                    if (DalamudShopPurchaseRuntime.ReadGearSaleHandlerState(state, 10, 0x40001, 1, 1, 10, out _) != GearSaleState.Ready)
+                        return null;
+            }
+            if (NativeGearLifecycle ? NativeGearIdle : GearState == GearSaleState.Ready) gearShopVisible = false;
             return null;
         }
 

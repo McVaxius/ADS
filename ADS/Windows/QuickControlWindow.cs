@@ -167,6 +167,8 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             ImGui.TableNextColumn();
             if (WindowLayout.Button(Ui.L("Loot"), ShortcutSize, MaterialIcon.Chest)) plugin.OpenLootUi();
             ImGui.TableNextColumn();
+            if (WindowLayout.Button(Ui.L("Inventory"), ShortcutSize, MaterialIcon.Backpack)) plugin.ToggleInventoryUi();
+            ImGui.TableNextColumn();
             if (WindowLayout.Button(Ui.L("Rules"), ShortcutSize, MaterialIcon.List)) plugin.OpenRuleEditorUi();
             ImGui.TableNextColumn();
             if (WindowLayout.Button(Ui.L("Objects"), ShortcutSize, MaterialIcon.Cube)) plugin.OpenObjectExplorerUi();
@@ -197,7 +199,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
     private static int ToolColumns()
     {
-        var labels = new[] { Ui.L("Loot"), Ui.L("Rules"), Ui.L("Objects"), Ui.L("Dialogs"), Ui.L("Update"), Ui.L("Shop Lists"),
+        var labels = new[] { Ui.L("Loot"), Ui.L("Inventory"), Ui.L("Rules"), Ui.L("Objects"), Ui.L("Dialogs"), Ui.L("Update"), Ui.L("Shop Lists"),
             Ui.L("Enable {0}", "QSTcomp"), Ui.L("Disable {0}", "QSTcomp"), Ui.L("Enable {0}", "HealBot"), Ui.L("Disable {0}", "HealBot"),
             Ui.L("Enable {0}", "AutoDuty"), Ui.L("Disable {0}", "AutoDuty") };
         var width = labels.Max(label => WindowLayout.ButtonMinimum(label, MaterialIcon.Play)) + ImGui.GetStyle().CellPadding.X * 2;

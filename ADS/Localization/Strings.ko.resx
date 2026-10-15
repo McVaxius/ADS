@@ -11485,4 +11485,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>컷신 진행 중: ADS 이동과 타이머가 일시 정지되었습니다.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS 소지품</value></data>
+  <data name="Gear" xml:space="preserve"><value>장비</value></data>
+  <data name="Selling" xml:space="preserve"><value>판매</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>추천 장비 착용</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>일반 장비 이동</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>보호 안 된 장비 모두 이동</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>흰색 장비 판매: 소지품</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>흰색 장비 판매: 장비함</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>흰색 장비 판매: 모두</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>AR 목록 판매</value></data>
+  <data name="Self repair" xml:space="preserve"><value>직접 수리</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>소지품 작업 중지</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>수량 새로 고침</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>빈 칸: 소지품 {0} / 장비함 {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>일반 장비: 소지품 {0} / 장비함 {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>소지품 수량 확인 불가</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>현재 직업의 추천 장비를 착용하고 사용 중인 장비 세트를 갱신합니다.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>장비함의 장비를 소지품으로 옮깁니다. 저장된 장비 세트를 보호하고 가득 차면 멈춥니다.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>판매 가능한 일반 장비를 미리 보고 판매합니다. 저장된 장비 세트를 보호합니다.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>AutoRetainer에 설정된 목록을 판매합니다. 일반 장비 판매와 별개입니다.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>작업을 시작하지 않고 제어 창을 엽니다.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>로그인한 캐릭터가 필요합니다.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS가 여관에 입장 중입니다.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS가 이미 {0} 실행 중입니다.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS가 활성 임무를 제어 중입니다.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>추천 장비를 확인하지 못해 장비세트를 갱신하지 않았습니다.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>캐릭터, 직업, 장비세트 또는 네이티브 제어권이 변경되어 자동 장착을 중지했습니다.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>현재 직업의 추천 장비를 계산 중입니다.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>아이템은 판매되었으나 정확한 길 변화를 확인하지 못했습니다.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADS의 임무, 여관 또는 지역 제어로 장비 판매가 차단되었습니다.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>장비 판매에는 비어 있지 않은 새 작업 ID가 필요합니다. 최대 128자입니다.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>판매 요청 전에 길 잔액을 읽을 수 있어야 합니다.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>요청 전에 무관한 확인창이 나타나 장비 판매를 중지했습니다.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>장비 판매 중지: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>장비 판매 시간 초과: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>보호되지 않은 장비를 소지품으로 이동 중입니다.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>적합한 비보호 장비를 찾지 못했습니다.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>이 작업 ID와 일치하는 장비 판매 기록이 없습니다.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>추천 장비와 활성 장비세트를 확인했습니다.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>추천 장비를 장착했으나 활성 장비세트 갱신이 거부되었습니다.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>추천 장비를 확인했으며 일치하는 활성 저장 장비세트는 변경하지 않았습니다.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>추천 장비 계산이 10초 이내에 끝나지 않았습니다.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>추천 장비를 사용할 수 없거나 이미 사용 중입니다.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>범위는 소지품, 장비함 또는 모두여야 합니다.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>장비 판매를 시작합니다.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>저장된 장비세트가 확인된 착용 장비와 일치하지 않습니다.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>갱신된 장비세트의 슬롯 수가 예상과 다릅니다.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>추천 장비 확인을 기다리는 중입니다.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>장비 상점 또는 선택한 아이템 메뉴가 준비되기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>해당 장비 판매 확인이 끝나기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>정확한 장비 판매 가격과 길 변화를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>선택한 장비 상인의 대화 종료를 기다리는 중입니다.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>대화가 요청된 장비 판매를 중단했습니다.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>해당 장비 판매 취소됨</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>추천 장비</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>다른 작업의 소지품 메뉴가 열려 있습니다.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>장비 판매 중 무관한 확인창이 나타났습니다.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>다른 상점 동작이나 대화가 장비 판매를 대체했습니다.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno가 다른 상점 거래에 속합니다.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>요청 전에 확인된 장비 슬롯이 변경되었습니다.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>장비 메뉴 선택이 변경되었습니다.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>판매 콜백 또는 확인된 슬롯이 더 이상 유효하지 않습니다.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>장비 판매의 캐릭터 또는 지역이 변경되었습니다.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>장비 판매 대상이 다른 개체로 변경되었습니다.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>판매하면 게임의 길 소지 한도를 초과합니다.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>장비 상점에 판매 콜백이 여러 개 있습니다.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>장비 상점이 재매입 또는 지원하지 않는 모드입니다.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>장비 원본 소지품을 읽을 수 없습니다.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>네이티브 메뉴가 확인된 장비 슬롯과 일치하지 않습니다.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>네이티브 장비 상점 상태를 지원하지 않습니다.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>네이티브 판매 거래가 확인된 장비 슬롯과 일치하지 않습니다.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>네이티브 상점 또는 NPC가 선택한 장비 상인과 다릅니다.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>AgentShop이 해당 Shop 콜백 수신기를 사용하기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>장비 상점이 일반 모드가 되기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>해당 장비 판매 확인을 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>네이티브 장비 확인 콜백을 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>네이티브 장비 상점 관리자를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>네이티브 소지품 메뉴 에이전트를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>네이티브 Shop 프록시 및 에이전트를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>네이티브 Shop 프록시가 이 창에 연결되기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>네이티브 Shop 프록시 핸들러를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>해당 Shop 창이 나타나기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>선택한 장비 메뉴가 초기화되기를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop 창 설정 완료를 기다리는 중입니다.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>상점의 네이티브 NPC 식별 정보를 기다리는 중입니다.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>장비 판매: {0} {1}/{2}개 판매, {3}개 남음.</value></data>
 </root>

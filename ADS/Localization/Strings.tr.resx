@@ -4057,4 +4057,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>Ara sahne etkin; ADS hareketi ve zamanlayıcıları duraklatıldı.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS Envanteri</value></data>
+  <data name="Gear" xml:space="preserve"><value>Ekipman</value></data>
+  <data name="Selling" xml:space="preserve"><value>Satış</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>Önerileni kuşan</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>Beyaz ekipmanı taşı</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>Korunmayanların tümünü taşı</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>Beyaz sat: envanter</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>Beyaz sat: cephanelik</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>Beyaz sat: ikisi</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>AR listesini sat</value></data>
+  <data name="Self repair" xml:space="preserve"><value>Kendin onar</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>Envanter işlemini durdur</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>Sayıları yenile</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>Boş yuva: çanta {0} / cephanelik {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>Beyaz ekipman: çanta {0} / cephanelik {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>Envanter sayıları kullanılamıyor</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>Mevcut meslek için önerilen ekipmanı kuşan ve etkin setini güncelle.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>Ekipmanı cephanelikten envantere taşı; kayıtlı setleri koru ve çantalar dolunca dur.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>Uygun beyaz ekipmanı önizle ve sat; kayıtlı setleri koru.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>AutoRetainer listesini beyaz ekipman satışından ayrı olarak sat.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>İşlem başlatmadan kontrolleri aç.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>Giriş yapmış bir karakter gerekli.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS hana giriş yapıyor.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS zaten {0} çalıştırıyor.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS etkin görevi yönetiyor.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>Otomatik Kuşan önerilen ekipmanı doğrulayamadı; set güncellenmedi.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>Karakter, meslek, set veya yerel kontrol değiştiği için Otomatik Kuşan durdu.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>Geçerli meslek için önerilen ekipman hesaplanıyor.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>Eşya satıldı ancak kesin gil sonucu doğrulanamadı.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADS görev, han veya bölge kontrolü ekipman satışını engelliyor.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>Satış için en fazla 128 karakterli, yeni ve boş olmayan işlem kimliği gerekli.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>Satış gönderilmeden önce gil okunabilir olmalı.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>Gönderimden önce ilgisiz bir onay çıktığı için ekipman satışı durdu.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>Ekipman satışı durdu: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>Ekipman satışı zaman aşımı: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>Korunmayan ekipman envantere taşınıyor.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>Uygun korunmayan ekipman bulunamadı.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>Bu işlem kimliğiyle eşleşen ekipman satış kaydı yok.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>Önerilen ekipman ve etkin set doğrulandı.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>Önerilen ekipman kuşanıldı ancak etkin set güncellemesi reddedildi.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>Önerilen ekipman doğrulandı; eşleşen etkin kayıtlı set değiştirilmedi.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>Önerilen ekipman hesabı 10 saniyede tamamlanmadı.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>Önerilen Ekipman kullanılamıyor veya zaten kullanımda.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>Kapsam envanter, cephanelik veya ikisi olmalı.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>Ekipman satışı başlatılıyor.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>Kayıtlı set doğrulanan kuşanılmış eşyalarla eşleşmiyor.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>Güncellenen sette beklenmedik sayıda ekipman yuvası var.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>Önerilen ekipmanın doğrulanması bekleniyor.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>Ekipman dükkânı veya seçili eşya menüsünün hazır olması bekleniyor.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>Tam olarak bu ekipman satışı onayının tamamlanması bekleniyor.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>Kesin ekipman satış fiyatı ve gil sonucu bekleniyor.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>Seçili ekipman satıcısının diyaloğunun bitmesi bekleniyor.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>Bir diyalog gönderilen ekipman satışını kesintiye uğrattı.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>eşleşen ekipman satışı iptal edildi</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>önerilen ekipman</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>Başka bir işleme ait envanter menüsü açık.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>Ekipman satışı sırasında ilgisiz bir onay çıktı.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>Başka bir dükkân eylemi veya diyalog satışın yerini aldı.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno başka bir dükkân işlemine ait.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>Onaylanan ekipman yuvası gönderimden önce değişti.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>Ekipman menüsü seçimi değişti.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>Satış geri çağrısı veya onaylanan yuva artık geçerli değil.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>Satışın karakteri veya bölgesi değişti.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>Satış hedefi başka bir nesneye değişti.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>Satış oyunun gil sınırını aşacak.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>Dükkânda birden fazla satış geri çağrısı var.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>Dükkân geri alımda veya desteklenmeyen modda.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>Ekipmanın kaynak envanteri okunamıyor.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>Yerel menü onaylanan ekipman yuvasıyla eşleşmiyor.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>Yerel ekipman dükkânı durumu desteklenmiyor.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>Yerel satış işlemi onaylanan ekipman yuvasıyla eşleşmiyor.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>Yerel dükkân veya NPC seçili satıcıyla eşleşmiyor.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>AgentShop'un ilgili Shop geri çağrı alıcısını kullanması bekleniyor.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>Ekipman dükkânının normal moda geçmesi bekleniyor.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>Tam olarak bu ekipman satışının onayı bekleniyor.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>Yerel ekipman onay geri çağrısı bekleniyor.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>Yerel ekipman dükkânı yöneticisi bekleniyor.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>Yerel envanter menüsü aracısı bekleniyor.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>Yerel Shop vekili ve aracısı bekleniyor.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>Yerel Shop vekilinin bu pencereye bağlanması bekleniyor.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>Yerel Shop vekili işleyicisi bekleniyor.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>İlgili Shop penceresinin açılması bekleniyor.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>Seçili ekipman menüsünün başlatılması bekleniyor.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop penceresi kurulumunun bitmesi bekleniyor.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Dükkânın yerel NPC kimliği bekleniyor.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Ekipman satışı: {0} Satılan {1}/{2}; kalan {3}.</value></data>
 </root>

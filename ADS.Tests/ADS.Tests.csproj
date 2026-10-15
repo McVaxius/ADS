@@ -14,9 +14,11 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="$(DALAMUD_HOME)/cimgui.dll" Link="cimgui.dll" CopyToOutputDirectory="PreserveNewest" Condition="'$(DALAMUD_HOME)' != ''" />
+    <None Include="$(appdata)\XIVLauncher\addon\Hooks\dev\cimgui.dll" Link="cimgui.dll" CopyToOutputDirectory="PreserveNewest" Condition="'$(DALAMUD_HOME)' == ''" />
     <ProjectReference Include="..\ADS\ADS.csproj" />
     <ProjectReference Include="..\..\FrenRider\FrenRider\FrenRider.csproj" />
-    <Reference Include="Dalamud;Lumina;Lumina.Excel;FFXIVClientStructs">
+    <Reference Include="Dalamud;Dalamud.Bindings.ImGui;Lumina;Lumina.Excel;FFXIVClientStructs;InteropGenerator.Runtime">
       <HintPath Condition="'$(DALAMUD_HOME)' == ''">$(appdata)\XIVLauncher\addon\Hooks\dev\%(Identity).dll</HintPath>
       <HintPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)/%(Identity).dll</HintPath>
       <Private>true</Private>

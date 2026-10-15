@@ -11485,4 +11485,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>Zwischensequenz aktiv; ADS-Bewegung und Timer sind pausiert.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS-Inventar</value></data>
+  <data name="Gear" xml:space="preserve"><value>Ausrüstung</value></data>
+  <data name="Selling" xml:space="preserve"><value>Verkauf</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>Empfohlenes anlegen</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>Weiße Ausrüstung bewegen</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>Alles Ungeschützte bewegen</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>Weiß verkaufen: Inventar</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>Weiß verkaufen: Arsenal</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>Weiß verkaufen: beide</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>AR-Liste verkaufen</value></data>
+  <data name="Self repair" xml:space="preserve"><value>Selbst reparieren</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>Inventaraktion stoppen</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>Inventarzahlen aktualisieren</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>Freie Plätze: Inventar {0} / Arsenal {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>Weiße Ausrüstung: Inventar {0} / Arsenal {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>Inventarzahlen nicht verfügbar</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>Empfohlene Ausrüstung für den aktuellen Job anlegen und dessen aktives Set aktualisieren.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>Arsenalausrüstung ins Inventar bewegen; Sets schützen und bei vollen Taschen stoppen.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>Geeignete weiße Ausrüstung voranzeigen und verkaufen; Sets schützen.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>Die konfigurierte AutoRetainer-Liste verkaufen, getrennt vom Verkauf weißer Ausrüstung.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>Steuerung öffnen, ohne eine Aktion zu starten.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>Ein eingeloggter Charakter ist erforderlich.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS betritt gerade einen Gasthof.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS führt bereits {0} aus.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS steuert gerade einen Inhalt.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>Auto-Ausrüsten konnte die empfohlene Ausrüstung nicht prüfen; das Set wurde nicht aktualisiert.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>Auto-Ausrüsten wurde gestoppt, weil Charakter, Klasse, Set oder native Zuständigkeit wechselte.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>Empfohlene Ausrüstung für die aktuelle Klasse wird berechnet.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>Der Gegenstand wurde verkauft, aber der genaue Gil-Ertrag konnte nicht bestätigt werden.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADS-Inhalts-, Gasthof- oder Gebietszuständigkeit verhindert den Ausrüstungsverkauf.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>Der Ausrüstungsverkauf benötigt eine neue, nicht leere Vorgangs-ID mit höchstens 128 Zeichen.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>Vor dem Verkauf muss der Gil-Bestand lesbar sein.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>Der Ausrüstungsverkauf wurde wegen einer fremden Bestätigung vor der Übermittlung gestoppt.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>Ausrüstungsverkauf gestoppt: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>Zeitlimit beim Ausrüstungsverkauf: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>Ungeschützte Ausrüstung wird ins Inventar verschoben.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>Keine geeignete ungeschützte Ausrüstung gefunden.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>Kein Ausrüstungsverkaufsbeleg passt zu dieser Vorgangs-ID.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>Empfohlene Ausrüstung und aktives Set wurden geprüft.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>Empfohlene Ausrüstung ist angelegt, aber die Aktualisierung des aktiven Sets wurde abgelehnt.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>Empfohlene Ausrüstung wurde geprüft; kein passendes aktives gespeichertes Set wurde geändert.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>Empfohlene Ausrüstung wurde nicht innerhalb von 10 Sekunden berechnet.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>Empfohlene Ausrüstung ist nicht verfügbar oder wird bereits verwendet.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>Der Bereich muss Inventar, Arsenal oder beides sein.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>Ausrüstungsverkauf wird gestartet.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>Das gespeicherte Set stimmt nicht mit der geprüften angelegten Ausrüstung überein.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>Das aktualisierte Set hat eine unerwartete Anzahl an Ausrüstungsplätzen.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>Warte auf Prüfung der empfohlenen Ausrüstung.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>Warte, bis Ausrüstungsladen oder ausgewähltes Gegenstandsmenü bereit ist.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>Warte auf Abschluss der genauen Ausrüstungsverkaufsbestätigung.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>Warte auf den genauen Verkaufspreis und Gil-Ertrag.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>Warte auf Abschluss des Dialogs mit dem ausgewählten Ausrüstungshändler.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>Ein Dialog hat den übermittelten Ausrüstungsverkauf unterbrochen.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>zugehöriger Ausrüstungsverkauf abgebrochen</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>empfohlene Ausrüstung</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>Ein fremdes Inventar-Kontextmenü ist geöffnet.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>Beim Ausrüstungsverkauf erschien eine fremde Bestätigung.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>Eine andere Ladenaktion oder ein Dialog hat den Ausrüstungsverkauf ersetzt.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno gehört zu einer anderen Ladentransaktion.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>Der bestätigte Ausrüstungsplatz änderte sich vor der Übermittlung.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>Die Auswahl im Ausrüstungs-Kontextmenü hat sich geändert.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>Der Verkaufs-Callback oder bestätigte Platz ist nicht mehr gültig.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>Charakter oder Gebiet des Ausrüstungsverkaufs hat sich geändert.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>Das Verkaufsziel wechselte zu einem anderen Objekt.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>Der Verkauf würde das Gil-Limit des Spiels überschreiten.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>Der Ausrüstungsladen bietet mehrere Verkaufs-Callbacks an.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>Der Ausrüstungsladen ist im Rückkauf oder einem nicht unterstützten Modus.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>Das Quellinventar der Ausrüstung ist nicht lesbar.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>Das native Kontextmenü passt nicht zum bestätigten Ausrüstungsplatz.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>Der native Zustand des Ausrüstungsladens wird nicht unterstützt.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>Die native Verkaufstransaktion passt nicht zum bestätigten Ausrüstungsplatz.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>Nativer Laden oder NPC passen nicht zum ausgewählten Ausrüstungshändler.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>Warte auf AgentShop mit dem zugehörigen Shop-Callback-Empfänger.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>Warte auf den Normalmodus des Ausrüstungsladens.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>Warte auf die genaue Bestätigung des Ausrüstungsverkaufs.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>Warte auf den nativen Bestätigungs-Callback.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>Warte auf die native Ausrüstungsladenverwaltung.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>Warte auf den nativen Inventar-Kontextagenten.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>Warte auf nativen Shop-Proxy und Agenten.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>Warte auf die Verbindung des nativen Shop-Proxys mit diesem Addon.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>Warte auf den Handler des nativen Shop-Proxys.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>Warte auf das zugehörige Shop-Addon.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>Warte auf Initialisierung des ausgewählten Ausrüstungs-Kontextmenüs.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Warte auf Abschluss der Shop-Addon-Einrichtung.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Warte auf die native NPC-Identität des Ladens.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Ausrüstungsverkauf: {0} {1}/{2} verkauft; {3} verbleibend.</value></data>
 </root>

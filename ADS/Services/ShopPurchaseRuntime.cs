@@ -311,7 +311,14 @@ internal interface IShopPurchaseRuntime
     bool TryMoveGearCleanupItem(GearCleanupCandidate item, out InventoryType destination, out ushort slot, out bool full)
     { destination = default; slot = 0; full = false; return false; }
     GearSaleState GetGearSaleState(uint npcId, uint shopId, GearCleanupCandidate? pending) => GearSaleState.Unsupported;
-    bool TrySellGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item) => false;
+    string GearSaleDiagnostic => "The native equipment shop state is unsupported.";
+    long GearSaleGil => -1;
+    long GearSaleUnitPrice => -1;
+    bool GearSaleUiSettled => !IsAnyShopVisible && !HasUnexpectedConfirmation && !IsInventoryContextVisible
+        && !IsSelectionMenuVisible && !IsTalkVisible;
+    GearSaleState SubmitGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item) => GearSaleState.Unsupported;
+    bool TryAcceptGearSaleConfirmation(uint npcId, uint shopId, GearCleanupCandidate item) => false;
+    bool TryAdvanceGearSaleTalk(uint npcId) => false;
     bool TrySelectGearSaleMenu(uint npcId, IReadOnlyList<ShopMenuPathStep> path, uint previousHandler, out uint selectedHandler)
     { selectedHandler = 0; return false; }
     void CloseOwnedGearSaleUi(uint npcId, uint shopId) { }
@@ -342,6 +349,24 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private bool companyActionUiOwned;
     private ulong shopUiCharacter;
     private ulong shopUiNpc;
+    private GearCleanupCandidate? gearSaleContextItem;
+    private uint gearSaleConfirmedAddon;
+    private string? gearSaleConfirmedPrompt;
+    public string GearSaleDiagnostic { get; private set; } = string.Empty;
+    public long GearSaleGil
+    { get { var manager = InventoryManager.Instance(); return manager == null ? -1 : manager->GetGil(); } }
+    public long GearSaleUnitPrice { get; private set; } = -1;
+    public bool GearSaleUiSettled
+    {
+        get
+        {
+            if (IsAnyShopVisible || HasUnexpectedConfirmation || IsInventoryContextVisible || IsSelectionMenuVisible || IsTalkVisible)
+                return false;
+            var proxy = ShopEventHandler.AgentProxy.Instance();
+            var handler = proxy == null ? null : proxy->Handler;
+            return handler == null || IsGearSaleTransactionIdle(handler);
+        }
+    }
     private bool achievementExchangeSelected;
     private bool achievementCategorySelected;
     private DateTime ownedUiCleanupUntil;
@@ -549,7 +574,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             if (item->ItemId != 0) protection.Add(DesynthPolicyService.NormalizeBaseItemId(item->ItemId));
         }
         var captured = new List<GearCleanupCandidate>();
-        foreach (var type in GearCleanupPolicy.Containers(scope))
+        foreach (var type in GearCleanupPolicy.Containers(scope, allUnprotected: true))
         {
             var container = manager->GetInventoryContainer(type);
             if (container == null || !container->IsLoaded) return false;
@@ -610,75 +635,239 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return false;
     }
 
-    private bool TryGetOwnedGearShop(uint npcId, uint shopId, out ShopEventHandler* handler)
+    private GearSaleState ValidateOwnedGearShop(uint npcId, uint shopId, out ShopEventHandler* handler)
     {
         handler = null;
         if (!IsLoggedIn || shopUiCharacter == 0 || CharacterId != shopUiCharacter
-            || targetManager.Target?.GameObjectId != shopUiNpc || targetManager.Target.BaseId != npcId
-            || IsBetweenAreas || HasUnexpectedConfirmation || IsSelectionMenuVisible || IsTalkVisible) return false;
+            || IsBetweenAreas)
+            return GearState(GearSaleState.Unsupported, "The equipment sale character or territory changed.");
+        if (targetManager.Target is { } target && target.GameObjectId != shopUiNpc)
+            return GearState(GearSaleState.Unsupported, "The equipment sale target changed to another object.");
         var unitManager = RaptureAtkUnitManager.Instance();
-        if (unitManager == null) return false;
+        if (unitManager == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the native equipment shop manager.");
         var addon = unitManager->GetAddonByName("Shop");
         var proxy = ShopEventHandler.AgentProxy.Instance();
         var agent = AgentShop.Instance();
-        if (addon == null || !addon->IsVisible || !addon->IsReady || proxy == null || agent == null
-            || proxy->Handler == null || proxy->AddonId != addon->Id || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
-            return false;
+        if (addon == null || !addon->IsVisible)
+            return GearState(GearSaleState.NotReady, "Waiting for the owned Shop addon to appear.");
+        if (!addon->IsReady)
+            return GearState(GearSaleState.NotReady, "Waiting for the Shop addon setup to finish.");
+        if (proxy == null || agent == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the native Shop proxy and agent.");
+        if (proxy->Handler == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the native Shop proxy's handler.");
+        if (proxy->AddonId != addon->Id)
+            return GearState(GearSaleState.NotReady, "Waiting for the native Shop proxy to attach to this addon.");
+        if (agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
+            return GearState(GearSaleState.NotReady, "Waiting for AgentShop to use the owned Shop callback receiver.");
         handler = proxy->Handler;
-        return handler->Info.EventId.Id == shopId && handler->CurrentMode == 1 && !handler->IsTradingWithRetainer;
+        var npc = handler->EventHandler.EventGameObject;
+        if (npc == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the shop's native NPC identity.");
+        var state = ReadGearSaleHandlerState(handler, npcId, shopId, shopUiNpc,
+            (ulong)npc->GetGameObjectId(), npc->BaseId, out var diagnostic);
+        return GearState(state, diagnostic);
+    }
+
+    internal static GearSaleState ReadGearSaleHandlerState(ShopEventHandler* handler, uint npcId, uint shopId,
+        ulong ownedNpc, ulong actualNpc, uint actualNpcBaseId, out string diagnostic)
+    {
+        diagnostic = string.Empty;
+        if (actualNpc != ownedNpc || actualNpcBaseId != npcId || handler->Info.EventId.Id != shopId
+            || handler->IsTradingWithRetainer)
+        {
+            diagnostic = "The native shop or NPC does not match the selected equipment vendor.";
+            return GearSaleState.Unsupported;
+        }
+        // Selling normally switches the vendor to Buyback. The selected tab does
+        // not change ownership or invalidate inventory sale callbacks or cleanup.
+        return GearSaleState.Ready;
+    }
+
+    internal static bool IsGearSaleTransactionIdle(ShopEventHandler* handler)
+        => !handler->WaitingForSellConfirm && !handler->WaitingForTransactionToFinish
+            && !handler->StartingSell && !handler->StartingBuy;
+
+    private bool TryGetOwnedGearShop(uint npcId, uint shopId, out ShopEventHandler* handler)
+        => ValidateOwnedGearShop(npcId, shopId, out handler) == GearSaleState.Ready;
+
+    private GearSaleState GearState(GearSaleState state, string message)
+    { GearSaleDiagnostic = message; return state; }
+
+    private static bool MatchesGearTransaction(ShopEventHandler* handler, GearCleanupCandidate item)
+        => (handler->TransactionType == 2
+                || (handler->TransactionType == 0 && !handler->WaitingForSellConfirm && !handler->StartingSell))
+            && handler->TransactionItemId == DesynthPolicyService.NormalizeBaseItemId(item.Item.ItemId)
+            && handler->TransactionItemCount == 1 && handler->SellInventoryType == item.Container
+            && handler->SellInventorySlot == item.Slot;
+
+    internal static GearSaleState ReadGearSaleTransactionPhase(ShopEventHandler* handler, GearCleanupCandidate? pending,
+        out long unitPrice)
+    {
+        unitPrice = -1;
+        if (handler->StartingBuy) return GearSaleState.Unsupported;
+        // StartingSell waits for the native Item-sheet reader. Quantity and other
+        // committed transaction fields are not ready during this phase.
+        if (handler->StartingSell) return pending == null ? GearSaleState.Unsupported : GearSaleState.Pending;
+        var waiting = handler->WaitingForTransactionToFinish || handler->WaitingForSellConfirm;
+        var matches = pending != null && MatchesGearTransaction(handler, pending);
+        if (waiting && !matches) return GearSaleState.Unsupported;
+        if (matches && handler->SellPrice > 0) unitPrice = handler->SellPrice;
+        return waiting ? GearSaleState.Pending : GearSaleState.Ready;
     }
 
     public GearSaleState GetGearSaleState(uint npcId, uint shopId, GearCleanupCandidate? pending)
     {
-        if (!TryGetOwnedGearShop(npcId, shopId, out var handler) || handler->WaitingForSellConfirm || handler->StartingBuy)
-            return GearSaleState.Unsupported;
-        if (pending != null && (handler->TransactionType != 2
-            || handler->TransactionItemId != DesynthPolicyService.NormalizeBaseItemId(pending.Item.ItemId)
-            || handler->TransactionItemCount != 1 || handler->SellInventoryType != pending.Container
-            || handler->SellInventorySlot != pending.Slot)) return GearSaleState.Unsupported;
-        if (!handler->StartingSell && !handler->WaitingForTransactionToFinish) return GearSaleState.Ready;
-        return pending != null ? GearSaleState.Pending : GearSaleState.Unsupported;
+        var state = ValidateOwnedGearShop(npcId, shopId, out var handler);
+        if (state != GearSaleState.Ready) return state;
+        if (handler->StartingBuy || IsSelectionMenuVisible || IsTalkVisible)
+            return GearState(GearSaleState.Unsupported, "Another shop action or dialog replaced the equipment sale.");
+        var phase = ReadGearSaleTransactionPhase(handler, pending, out var unitPrice);
+        if (phase == GearSaleState.Unsupported)
+        {
+            log.Warning("[ADS][GearSale] Native transaction mismatch; expected item={ExpectedItem} count=1 inventory={ExpectedInventory} slot={ExpectedSlot}; actual type={Type} item={Item} count={Count} inventory={Inventory} slot={Slot} price={Price}; startingSell={StartingSell} confirming={Confirming} waiting={Waiting}",
+                pending?.Item.ItemId ?? 0u, pending?.Container ?? InventoryType.Invalid, pending == null ? -1 : (int)pending.Slot,
+                handler->TransactionType, handler->TransactionItemId, handler->TransactionItemCount,
+                handler->SellInventoryType, handler->SellInventorySlot, handler->SellPrice,
+                handler->StartingSell, handler->WaitingForSellConfirm, handler->WaitingForTransactionToFinish);
+            return GearState(GearSaleState.Unsupported, "The native sale transaction does not match the confirmed equipment slot.");
+        }
+        if (handler->StartingSell)
+            return GearState(GearSaleState.Pending, "Waiting for the equipment shop or selected item menu to be ready.");
+        if (unitPrice > 0) GearSaleUnitPrice = unitPrice;
+        if (handler->WaitingForSellConfirm)
+        {
+            if (GearSaleUnitPrice > 0 && GearSaleGil > 999_999_999L - GearSaleUnitPrice)
+                return GearState(GearSaleState.Unsupported, "The equipment sale would exceed the game's gil limit.");
+            var confirmation = ValidateGearConfirmation(handler, out _);
+            return confirmation == GearSaleState.Ready
+                ? GearState(GearSaleState.Confirmation, "Waiting for the exact equipment sale confirmation.") : confirmation;
+        }
+        if (HasUnexpectedConfirmation)
+        {
+            if (gearSaleConfirmedAddon != 0 && ValidateGearConfirmation(handler, out var confirmed) == GearSaleState.Ready
+                && confirmed->Id == gearSaleConfirmedAddon
+                && GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt) && prompt == gearSaleConfirmedPrompt)
+                return GearSaleState.Pending;
+            return GearState(GearSaleState.Unsupported, "An unrelated confirmation appeared during equipment selling.");
+        }
+        gearSaleConfirmedAddon = 0;
+        gearSaleConfirmedPrompt = null;
+        return phase;
     }
 
-    public bool TrySellGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item)
+    public GearSaleState SubmitGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item)
     {
-        if (GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
-            || !TryGetOwnedGearShop(npcId, shopId, out var handler) || IsInventoryContextVisible
-            || !TryReadGearCleanupSlot(item.Container, item.Slot, out var current) || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+        var state = GetGearSaleState(npcId, shopId, null);
+        if (state != GearSaleState.Ready) return state;
+        if (!TryGetOwnedGearShop(npcId, shopId, out var handler)
+            || !TryReadGearCleanupSlot(item.Container, item.Slot, out var current) || !GearCleanupPolicy.Matches(current, item.Item))
+            return GearState(GearSaleState.Unsupported, "The confirmed equipment slot changed before submission.");
         var context = AgentInventoryContext.Instance();
         var manager = InventoryManager.Instance();
-        if (context == null || manager == null) return false;
+        if (context == null || manager == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the native inventory context agent.");
         var source = manager->GetInventoryContainer(item.Container);
-        if (source == null || !source->IsLoaded || item.Slot >= source->Size) return false;
+        if (source == null || !source->IsLoaded || item.Slot >= source->Size)
+            return GearState(GearSaleState.Unsupported, "The equipment source inventory is unreadable.");
         var sourceSlot = source->GetInventorySlot(item.Slot);
         var proxy = ShopEventHandler.AgentProxy.Instance();
-        context->OpenForItemSlot(item.Container, item.Slot, 0, proxy->AddonId);
+        if (gearSaleContextItem == null)
+        {
+            if (IsInventoryContextVisible)
+                return GearState(GearSaleState.Unsupported, "An unowned inventory context menu is open.");
+            gearSaleContextItem = item;
+            GearSaleUnitPrice = -1;
+            context->OpenForItemSlot(item.Container, item.Slot, 0, proxy->AddonId);
+            return GearState(GearSaleState.NotReady, "Waiting for the selected equipment context menu to initialize.");
+        }
+        if (gearSaleContextItem != item)
+            return GearState(GearSaleState.Unsupported, "The equipment context menu selection changed.");
+        if (!IsInventoryContextVisible || context->ContextItemCount == 0)
+            return GearState(GearSaleState.NotReady, "Waiting for the selected equipment context menu to initialize.");
         if (context->TargetInventoryId != item.Container || context->TargetInventorySlotId != item.Slot
             || context->TargetInventorySlot == null || context->TargetInventorySlot != sourceSlot
             || !GearCleanupPolicy.Matches(*context->TargetInventorySlot, item.Item)
             || context->OwnerAddonId != proxy->AddonId || context->ContextCallbackInfos == null
-            || context->ContextItemCount is < 1 or > 32) return false;
+            || context->ContextItemCount is < 1 or > 32)
+            return GearState(GearSaleState.Unsupported, "The native context menu does not match the confirmed equipment slot.");
         AgentInventoryContext.ContextCallbackInfo* match = null;
         for (var index = 0; index < context->ContextItemCount; index++)
         {
             var callback = &context->ContextCallbackInfos[index];
             if (callback->Handler != &handler->InventoryContextEvent || context->IsContextItemDisabled(index)) continue;
-            if (match != null) return false;
+            if (match != null)
+                return GearState(GearSaleState.Unsupported, "The equipment shop exposes multiple sale callbacks.");
             match = callback;
         }
         if (match == null || GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
-            || !TryReadGearCleanupSlot(item.Container, item.Slot, out current) || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+            || !TryReadGearCleanupSlot(item.Container, item.Slot, out current) || !GearCleanupPolicy.Matches(current, item.Item))
+            return GearState(GearSaleState.Unsupported, "The equipment sale callback or confirmed slot is no longer valid.");
         // Use the active shop's exact inventory callback and its native parameter.
         match->Handler->HandleCallback(item.Slot, item.Container, context->TargetInventoryFlags, match->CallbackParam);
+        gearSaleContextItem = null;
+        ReadGearSaleTransactionPhase(handler, item, out var unitPrice);
+        if (unitPrice > 0) GearSaleUnitPrice = unitPrice;
         if (context->TargetInventoryId == item.Container && context->TargetInventorySlotId == item.Slot)
             GameInteractionHelper.TryCloseAddon("ContextMenu", log);
+        return GearSaleState.Pending;
+    }
+
+    public bool TryAcceptGearSaleConfirmation(uint npcId, uint shopId, GearCleanupCandidate item)
+    {
+        if (GetGearSaleState(npcId, shopId, item) != GearSaleState.Confirmation
+            || !TryGetOwnedGearShop(npcId, shopId, out var handler)
+            || !TryReadGearCleanupSlot(item.Container, item.Slot, out var current)
+            || !GearCleanupPolicy.Matches(current, item.Item)) return false;
+        if (ValidateGearConfirmation(handler, out var addon) != GearSaleState.Ready
+            || !GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt)) return false;
+        if (gearSaleConfirmedAddon == addon->Id && gearSaleConfirmedPrompt == prompt) return false;
+        if (!GameInteractionHelper.TrySelectYesNo(true, Plugin.GameGui, log)) return false;
+        gearSaleConfirmedAddon = addon->Id;
+        gearSaleConfirmedPrompt = prompt;
+        return true;
+    }
+
+    private GearSaleState ValidateGearConfirmation(ShopEventHandler* handler, out AtkUnitBase* addon)
+    {
+        var module = RaptureAtkModule.Instance();
+        var units = RaptureAtkUnitManager.Instance();
+        addon = units == null ? null : units->GetAddonByName("SelectYesno");
+        if (module == null || addon == null || !addon->IsVisible || !addon->IsReady
+            || !module->AtkModule.AddonCallbackMapping.TryGetValue(addon->Id, out var callback, copyCtor: false)
+            || callback.EventInterface == null)
+            return GearState(GearSaleState.NotReady, "Waiting for the native equipment confirmation callback.");
+        // The native confirmation callback identifies the shop that owns this dialog.
+        var owner = (ShopEventHandler.YesNoProxy*)callback.EventInterface;
+        if (owner->Handler != handler || owner->AddonId != addon->Id)
+            return GearState(GearSaleState.Unsupported, "SelectYesno belongs to a different shop transaction.");
+        return GearSaleState.Ready;
+    }
+
+    public bool TryAdvanceGearSaleTalk(uint npcId)
+    {
+        if (shopUiCharacter == 0 || CharacterId != shopUiCharacter
+            || targetManager.Target?.GameObjectId != shopUiNpc || targetManager.Target.BaseId != npcId
+            || !condition[ConditionFlag.OccupiedInQuestEvent]) return false;
+        var talk = RaptureAtkUnitManager.Instance()->GetAddonByName("Talk");
+        if (talk == null || !talk->IsVisible || !talk->IsReady) return false;
+        new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.Talk(talk).Click();
         return true;
     }
 
     public void CloseOwnedGearSaleUi(uint npcId, uint shopId)
     {
-        if (TryGetOwnedGearShop(npcId, shopId, out var handler) && !handler->WaitingForSellConfirm
-            && !handler->WaitingForTransactionToFinish && !handler->StartingSell && !handler->StartingBuy)
+        if (!TryGetOwnedGearShop(npcId, shopId, out var handler))
+        { gearSaleContextItem = null; return; }
+        var context = AgentInventoryContext.Instance();
+        var proxy = ShopEventHandler.AgentProxy.Instance();
+        if (gearSaleContextItem is { } item && context != null
+            && proxy != null && context->OwnerAddonId == proxy->AddonId
+            && context->TargetInventoryId == item.Container && context->TargetInventorySlotId == item.Slot)
+            GameInteractionHelper.TryCloseAddon("ContextMenu", log);
+        gearSaleContextItem = null;
+        if (!HasUnexpectedConfirmation && IsGearSaleTransactionIdle(handler))
             CloseShopAddon("Shop");
     }
 
@@ -1064,6 +1253,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (nearest == null || !GameInteractionHelper.TryInteractWithObject(targetManager, nearest, log)) return false;
         shopUiCharacter = CharacterId;
         shopUiNpc = nearest.GameObjectId;
+        gearSaleContextItem = null;
+        GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
         ownedUiCleanupUntil = default;
         return true;

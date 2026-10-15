@@ -4415,4 +4415,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>Идёт кат-сцена; перемещение и таймеры ADS приостановлены.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>Инвентарь ADS</value></data>
+  <data name="Gear" xml:space="preserve"><value>Снаряжение</value></data>
+  <data name="Selling" xml:space="preserve"><value>Продажа</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>Надеть рекомендованное</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>Перенести белое</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>Перенести всё незащищённое</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>Продать белое: инвентарь</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>Продать белое: арсенал</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>Продать белое: оба</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>Продать список AR</value></data>
+  <data name="Self repair" xml:space="preserve"><value>Починить самому</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>Остановить операцию</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>Обновить количество</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>Свободные ячейки: сумки {0} / арсенал {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>Белое снаряжение: сумки {0} / арсенал {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>Количество предметов недоступно</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>Надеть рекомендованное для текущей профессии и обновить её активный набор.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>Перенести снаряжение из арсенала в инвентарь; защитить сохранённые наборы и остановиться при заполнении сумок.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>Показать предпросмотр и продать подходящее белое снаряжение; защитить наборы.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>Продать настроенный список AutoRetainer отдельно от белого снаряжения.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>Открыть управление без запуска операции.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>Требуется персонаж, вошедший в игру.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS выполняет вход в гостиницу.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS уже выполняет {0}.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS управляет активным заданием.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>Автоэкипировка не смогла проверить рекомендуемое снаряжение; комплект не обновлён.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>Автоэкипировка остановлена: изменились персонаж, профессия, комплект или нативный владелец операции.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>Вычисляется рекомендуемое снаряжение для текущей профессии.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>Предмет продан, но точное изменение гил проверить не удалось.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>Продажа снаряжения заблокирована управлением заданием, гостиницей или территорией ADS.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>Для продажи нужен новый непустой ID операции длиной не более 128 символов.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>Перед отправкой продажи баланс гил должен быть доступен для чтения.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>Продажа остановлена: перед отправкой появилось чужое подтверждение.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>Продажа снаряжения остановлена: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>Время продажи снаряжения истекло: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>Перемещение незащищённого снаряжения в инвентарь.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>Подходящее незащищённое снаряжение не найдено.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>Нет записи о продаже с этим ID операции.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>Рекомендуемое снаряжение и активный комплект проверены.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>Рекомендуемое снаряжение надето, но обновление активного комплекта отклонено.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>Рекомендуемое снаряжение проверено; соответствующий активный сохранённый комплект не изменялся.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>Вычисление рекомендуемого снаряжения не завершилось за 10 секунд.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>Рекомендуемое снаряжение недоступно или уже используется.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>Область должна быть: инвентарь, арсенал или оба.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>Запуск продажи снаряжения.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>Сохранённый комплект не совпадает с проверенным надетым снаряжением.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>В обновлённом комплекте неожиданное число ячеек снаряжения.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>Ожидание проверки рекомендуемого снаряжения.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>Ожидание готовности магазина или меню выбранного предмета.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>Ожидание завершения подтверждения именно этой продажи.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>Ожидание точной цены продажи и изменения гил.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>Ожидание завершения диалога выбранного продавца.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>Диалог прервал отправленную продажу снаряжения.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>соответствующая продажа снаряжения отменена</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>рекомендуемое снаряжение</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>Открыто чужое контекстное меню инвентаря.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>Во время продажи появилось чужое подтверждение.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>Другое действие магазина или диалог заменили продажу.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno относится к другой сделке магазина.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>Подтверждённая ячейка снаряжения изменилась до отправки.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>Выбор в контекстном меню снаряжения изменился.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>Обработчик продажи или подтверждённая ячейка больше не действительны.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>Персонаж или территория продажи изменились.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>Цель продажи сменилась на другой объект.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>Продажа превысила бы лимит гил в игре.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>Магазин предоставляет несколько обработчиков продажи.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>Магазин находится в режиме выкупа или неподдерживаемом режиме.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>Исходный инвентарь снаряжения недоступен для чтения.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>Нативное меню не соответствует подтверждённой ячейке.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>Нативное состояние магазина не поддерживается.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>Нативная сделка не соответствует подтверждённой ячейке.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>Нативный магазин или NPC не соответствует выбранному продавцу.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>Ожидание нужного получателя вызовов Shop в AgentShop.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>Ожидание обычного режима магазина снаряжения.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>Ожидание точного подтверждения продажи снаряжения.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>Ожидание нативного обработчика подтверждения снаряжения.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>Ожидание нативного менеджера магазина снаряжения.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>Ожидание нативного агента контекстного меню инвентаря.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>Ожидание нативных прокси и агента Shop.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>Ожидание привязки нативного прокси Shop к этому окну.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>Ожидание обработчика нативного прокси Shop.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>Ожидание появления нужного окна Shop.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>Ожидание инициализации меню выбранного снаряжения.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Ожидание завершения настройки окна Shop.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Ожидание нативного идентификатора NPC магазина.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Продажа снаряжения: {0} Продано {1}/{2}; осталось {3}.</value></data>
 </root>

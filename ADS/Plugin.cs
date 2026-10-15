@@ -182,6 +182,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GhostListWindow ghostListWindow;
     private readonly FrontierLabelWindow frontierLabelWindow;
     private readonly QuickControlWindow quickControlWindow;
+    private readonly InventoryUtilityWindow inventoryUtilityWindow;
     private readonly LootWindow lootWindow;
     private readonly LazyLootWarningWindow lazyLootWarningWindow;
     private readonly ObjectRuleEditorWindow objectRuleEditorWindow;
@@ -327,7 +328,7 @@ public sealed class Plugin : IDalamudPlugin
             new SystemShopPurchaseClock());
         Log.Information("[ADS][InnRepair] startup; build=I403-manual-inn-destinations-03; pid={Pid}; utc={Utc}", Environment.ProcessId, DateTime.UtcNow);
         Log.Information("[ADS][Cutscene] startup; build=devhub-cutscene-pause-20261014-01");
-        Log.Information("[ADS][NpcSale] startup; build=ads-fishing-sale-settlement-20261014-01");
+        Log.Information("[ADS][NpcSale] startup; build=ads-inventory-move-20261014-01");
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
@@ -377,6 +378,10 @@ public sealed class Plugin : IDalamudPlugin
             StartNpcSale,
             () => JsonSerializer.Serialize(UtilityAutomationService.NpcSaleStatus, ShopStatusJsonOptions),
             UtilityAutomationService.CancelNpcSale,
+            PreviewGearSaleJson,
+            StartGearSale,
+            GetGearSaleStatusJson,
+            UtilityAutomationService.CancelGearSale,
             StartGuardedShopPurchase,
             CancelShopPurchase,
             SetShopKeepOpen,
@@ -411,6 +416,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow = new GhostListWindow(this);
         frontierLabelWindow = new FrontierLabelWindow(this);
         quickControlWindow = new QuickControlWindow(this);
+        inventoryUtilityWindow = new InventoryUtilityWindow(this);
         lootWindow = new LootWindow(this);
         lazyLootWarningWindow = new LazyLootWarningWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
@@ -432,6 +438,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(ghostListWindow);
         WindowSystem.AddWindow(frontierLabelWindow);
         WindowSystem.AddWindow(quickControlWindow);
+        WindowSystem.AddWindow(inventoryUtilityWindow);
         WindowSystem.AddWindow(lootWindow);
         WindowSystem.AddWindow(lazyLootWarningWindow);
         WindowSystem.AddWindow(objectRuleEditorWindow);
@@ -529,6 +536,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.Dispose();
         frontierLabelWindow.Dispose();
         quickControlWindow.Dispose();
+        inventoryUtilityWindow.Dispose();
         lootWindow.Dispose();
         lazyLootWarningWindow.Dispose();
         objectRuleEditorWindow.Dispose();
@@ -628,6 +636,79 @@ public sealed class Plugin : IDalamudPlugin
 
     public void ToggleLootUi()
         => lootWindow.IsOpen = !lootWindow.IsOpen;
+
+    public void ToggleInventoryUi()
+        => inventoryUtilityWindow.IsOpen = !inventoryUtilityWindow.IsOpen;
+
+    public string? InventoryUtilityBlocker => !ClientState.IsLoggedIn ? "A logged-in character is required."
+        : UtilityAutomationService.IsRunning ? $"ADS is already running {UtilityAutomationService.ActiveTaskName}."
+        : ExecutionService.IsOwned ? "ADS owns active duty execution."
+        : InnEntryService.IsRunning ? "ADS inn entry is running." : null;
+
+    public bool StartAutoEquip()
+    {
+        if (!CanStartManualUtility("recommended equipment")) return false;
+        var accepted = UtilityAutomationService.StartAutoEquip();
+        PrintStatus(UtilityAutomationService.StatusMessage);
+        return accepted;
+    }
+
+    public bool StartGearMove(bool allUnprotected = false)
+    {
+        if (!CanStartManualUtility("equipment moving")) return false;
+        gearSalePreviewWindow.CloseSelection();
+        var accepted = UtilityAutomationService.StartGearMove(allUnprotected);
+        PrintStatus(UtilityAutomationService.StatusMessage);
+        return accepted;
+    }
+
+    public bool PreviewGearSale(GearCleanupScope scope)
+    {
+        if (!CanStartManualUtility("equipment selling")) return false;
+        gearSalePreviewWindow.CloseSelection();
+        if (!UtilityAutomationService.TryPreviewGearSale(scope, out var selection))
+        { PrintStatus(UtilityAutomationService.StatusMessage); return false; }
+        if (!Configuration.GearSaleConfirmationEnabled) return StartConfirmedGearSale(selection!);
+        gearSalePreviewWindow.Show(selection!);
+        return true;
+    }
+
+    private static bool TryGearScope(string scope, out GearCleanupScope result)
+        => Enum.TryParse(scope, true, out result) && Enum.IsDefined(result)
+            && scope.Equals(result.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    public string PreviewGearSaleJson(string scope)
+    {
+        if (!TryGearScope(scope, out var parsed))
+            return JsonSerializer.Serialize(new { available = false, message = "Scope must be inventory, armoury or both." }, ShopStatusJsonOptions);
+        var available = UtilityAutomationService.TryPreviewGearSale(parsed, out var selection, out var message);
+        return JsonSerializer.Serialize(new { available, scope, message, items = selection?.Items.Select(item => new
+        { itemId = item.Item.ItemId, item.Name, container = item.Container.ToString(), slot = item.Slot,
+            quantity = item.Item.Quantity, highQuality = (item.Item.Flags & InventoryItem.ItemFlags.HighQuality) != 0 }) }, ShopStatusJsonOptions);
+    }
+
+    public bool StartGearSale(string operationId, string scope, bool localOnly)
+    {
+        if (!TryGearScope(scope, out var parsed))
+            return UtilityAutomationService.RejectGearSaleStart("Scope must be inventory, armoury or both.");
+        if (!CanStartManualUtility("equipment selling"))
+            return UtilityAutomationService.RejectGearSaleStart("Equipment selling is blocked by ADS duty, inn or territory ownership.");
+        var accepted = UtilityAutomationService.StartGearSale(operationId, parsed, localOnly);
+        if (accepted) gearSalePreviewWindow.CloseSelection();
+        return accepted;
+    }
+
+    public string GetGearSaleStatusJson(string operationId)
+    {
+        var receipt = UtilityAutomationService.GearSaleStatus;
+        if (receipt.OperationId != operationId)
+            receipt = new(operationId, string.Empty, false, false, null, 0, 0, 0,
+                "No equipment sale receipt matches this operation ID.", LastStartError: receipt.LastStartError);
+        return JsonSerializer.Serialize(receipt, ShopStatusJsonOptions);
+    }
+
+    public bool StartConfiguredNpcSale()
+        => StartNpcSale($"manual-npc-{Guid.NewGuid():N}", localOnly: false);
 
     public void OpenLootUi()
         => lootWindow.IsOpen = true;
@@ -925,6 +1006,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.QueueResetToOrigin();
         frontierLabelWindow.QueueResetToOrigin();
         quickControlWindow.QueueResetToOrigin();
+        inventoryUtilityWindow.QueueResetToOrigin();
         lootWindow.QueueResetToOrigin();
         objectRuleEditorWindow.QueueResetToOrigin();
         dialogRuleEditorWindow.QueueResetToOrigin();
@@ -946,6 +1028,7 @@ public sealed class Plugin : IDalamudPlugin
         ghostListWindow.QueueRandomVisibleJump();
         frontierLabelWindow.QueueRandomVisibleJump();
         quickControlWindow.QueueRandomVisibleJump();
+        inventoryUtilityWindow.QueueRandomVisibleJump();
         lootWindow.QueueRandomVisibleJump();
         objectRuleEditorWindow.QueueRandomVisibleJump();
         dialogRuleEditorWindow.QueueRandomVisibleJump();
@@ -3381,6 +3464,10 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads ghosts - toggle the ghost inspector\n" +
                 "/ads labels - toggle the frontier label window\n" +
                 "/ads mini - toggle the compact control window\n" +
+                "/ads inv - toggle inventory utility controls\n" +
+                "/ads gear equip|move|move-all - recommended gear or move unprotected armoury equipment\n" +
+                "/ads gear sell inventory|armoury|both - preview and sell eligible white equipment\n" +
+                "/ads sell - sell AutoRetainer's configured list through ADS\n" +
                 "/ads loot|l - toggle the loot control window\n" +
                 "/ads debug on|off|status|release - toggle mini-window debug strafe controls\n" +
                 "/ads rules - toggle the rules editor\n" +
@@ -3636,6 +3723,10 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (trimmed.Equals("inv", StringComparison.OrdinalIgnoreCase))
+        { ToggleInventoryUi(); return; }
+        if (trimmed.Equals("sell", StringComparison.OrdinalIgnoreCase))
+        { StartConfiguredNpcSale(); return; }
         if (trimmed.Equals("gear", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("gear ", StringComparison.OrdinalIgnoreCase))
         {
@@ -3986,12 +4077,12 @@ public sealed class Plugin : IDalamudPlugin
 
     private void HandleGearCleanupCommand(string command)
     {
-        if (command.Equals("gear move", StringComparison.OrdinalIgnoreCase))
+        if (command.Equals("gear equip", StringComparison.OrdinalIgnoreCase))
+        { StartAutoEquip(); return; }
+        if (command.Equals("gear move", StringComparison.OrdinalIgnoreCase)
+            || command.Equals("gear move-all", StringComparison.OrdinalIgnoreCase))
         {
-            if (!CanStartManualUtility("equipment moving")) return;
-            gearSalePreviewWindow.CloseSelection();
-            UtilityAutomationService.StartGearMove();
-            PrintStatus(UtilityAutomationService.StatusMessage);
+            StartGearMove(command.Equals("gear move-all", StringComparison.OrdinalIgnoreCase));
             return;
         }
         var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -3999,15 +4090,10 @@ public sealed class Plugin : IDalamudPlugin
             || !Enum.TryParse<GearCleanupScope>(parts[2], true, out var scope) || !Enum.IsDefined(scope)
             || !parts[2].Equals(scope.ToString(), StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus("Equipment commands: /ads gear move or /ads gear sell armoury|inventory|both.");
+            PrintStatus("Equipment commands: /ads gear equip, /ads gear move, /ads gear move-all or /ads gear sell armoury|inventory|both.");
             return;
         }
-        if (!CanStartManualUtility("equipment selling")) return;
-        gearSalePreviewWindow.CloseSelection();
-        if (!UtilityAutomationService.TryPreviewGearSale(scope, out var selection))
-        { PrintStatus(UtilityAutomationService.StatusMessage); return; }
-        if (Configuration.GearSaleConfirmationEnabled) gearSalePreviewWindow.Show(selection!);
-        else StartConfirmedGearSale(selection!);
+        PreviewGearSale(scope);
     }
 
     internal bool StartConfirmedGearSale(GearCleanupSelection selection)

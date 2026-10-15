@@ -90,6 +90,14 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
     private MaterialTitlebarStatus TitlebarStatus(Dalamud.Interface.Windowing.Window owner)
     {
         if (owner is ObjectExplorerWindow explorer) return explorer.TitlebarStatus;
+        if (owner is InventoryUtilityWindow)
+        {
+            var utility = plugin.UtilityAutomationService;
+            var shortStatus = Ui.T(utility.IsRunning ? "Titlebar.Running" : "Stopped");
+            var message = Ui.Display(utility.StatusMessage);
+            return new(plugin.Configuration.UiDetailedTitlebarStatus ? shortStatus + " · " + message : shortStatus,
+                shortStatus, message, utility.IsRunning ? MaterialTheme.Current.Colors.Primary : MaterialTheme.Current.Colors.OnSurfaceVariant);
+        }
         var execution = plugin.ExecutionService;
         var state = Ui.T(execution.CurrentMode switch
         {

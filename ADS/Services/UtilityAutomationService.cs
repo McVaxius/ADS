@@ -29,6 +29,7 @@ public sealed unsafe class UtilityAutomationService
         ShopPurchase,
         ShopListBatch,
         GearMove,
+        AutoEquip,
     }
 
     private enum NpcRepairMode
@@ -241,6 +242,26 @@ public sealed unsafe class UtilityAutomationService
     private bool gearCleanupInteracted;
     private uint gearCleanupLastMenuHandler;
     private ulong gearCleanupConfirmationCharacter;
+    private long gearCleanupGilBefore = -1;
+    private DateTime gearCleanupSettlementReadyUtc;
+    private GearSaleStatusSnapshot gearSaleStatus = new(null, string.Empty, false, false, null, 0, 0, 0, "Idle");
+    private string gearSaleLastStartError = string.Empty;
+    private ulong autoEquipCharacter;
+    private byte autoEquipJob;
+    private int autoEquipGearset = -1;
+    private uint[]? autoEquipExpected;
+    private DateTime autoEquipSubmittedUtc;
+    public GearSaleStatusSnapshot GearSaleStatus
+    {
+        get
+        {
+            if (!gearSaleStatus.Running && !gearSaleStatus.Settled
+                && shopRuntime.GearSaleUiSettled)
+                gearSaleStatus = gearSaleStatus with { Settled = true };
+            return gearSaleStatus with { StatusMessage = gearSaleStatus.Running ? StatusMessage : gearSaleStatus.StatusMessage,
+                LastStartError = gearSaleLastStartError };
+        }
+    }
     private string npcSaleLastStartError = string.Empty;
     public NpcSaleStatusSnapshot NpcSaleStatus
     {
@@ -396,7 +417,7 @@ public sealed unsafe class UtilityAutomationService
     }
 
     public bool SuppressesGenericYesNo
-        => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair or UtilityTask.ShopPurchase or UtilityTask.ShopListBatch or UtilityTask.GearMove
+        => activeTask is UtilityTask.SelfRepair or UtilityTask.NpcRepair or UtilityTask.ShopPurchase or UtilityTask.ShopListBatch or UtilityTask.GearMove or UtilityTask.AutoEquip
             || SuppressesStoppedGearSaleConfirmation();
 
     private bool SuppressesStoppedGearSaleConfirmation()
@@ -435,6 +456,7 @@ public sealed unsafe class UtilityAutomationService
             UtilityTask.ShopPurchase => "shop-purchase",
             UtilityTask.ShopListBatch => "shop-list-batch",
             UtilityTask.GearMove => "gear-move",
+            UtilityTask.AutoEquip => "auto-equip",
             _ => string.Empty,
         };
 
@@ -727,7 +749,43 @@ public sealed unsafe class UtilityAutomationService
     public bool TryPreviewGearSale(GearCleanupScope scope, out GearCleanupSelection? selection)
         => TryCaptureGearCleanupSelection(scope, true, out selection);
 
-    private bool TryCaptureGearCleanupSelection(GearCleanupScope scope, bool selling, out GearCleanupSelection? selection)
+    public (int BagsFree, int ArmouryFree, int BagGear, int ArmouryGear)? ReadInventorySummary()
+    {
+        if (!clientState.IsLoggedIn) return null;
+        var manager = InventoryManager.Instance();
+        if (manager == null
+            || !shopRuntime.TryCaptureGearCleanup(GearCleanupScope.Both, out var items, out var protection)) return null;
+        var armouryFree = 0;
+        foreach (var type in GearCleanupPolicy.Containers(GearCleanupScope.Armoury, allUnprotected: true))
+        {
+            var container = manager->GetInventoryContainer(type);
+            if (container == null || !container->IsLoaded) return null;
+            for (var index = 0; index < container->Size; index++)
+            {
+                var item = container->GetInventorySlot(index);
+                if (item == null) return null;
+                if (item->ItemId == 0 && !item->IsSymbolic) armouryFree++;
+            }
+        }
+        return (checked((int)manager->GetEmptySlotsInBag()), armouryFree,
+            items.Count(item => GearCleanupPolicy.IsEligible(item, GearCleanupScope.Inventory, true, protection)),
+            items.Count(item => GearCleanupPolicy.IsEligible(item, GearCleanupScope.Armoury, true, protection)));
+    }
+
+    public bool TryPreviewGearSale(GearCleanupScope scope, out GearCleanupSelection? selection, out string message)
+    {
+        var previous = StatusMessage;
+        try
+        {
+            var accepted = TryPreviewGearSale(scope, out selection);
+            message = StatusMessage;
+            return accepted;
+        }
+        finally { StatusMessage = previous; }
+    }
+
+    private bool TryCaptureGearCleanupSelection(GearCleanupScope scope, bool selling, out GearCleanupSelection? selection,
+        bool allUnprotected = false)
     {
         selection = null;
         if (!Enum.IsDefined(scope) || IsRunning)
@@ -735,22 +793,129 @@ public sealed unsafe class UtilityAutomationService
         if (!CanRunGearCleanup(requireClosedUi: true)) return false;
         if (!shopRuntime.TryCaptureGearCleanup(scope, out var items, out var protection))
         { StatusMessage = "Equipment cleanup requires readable inventory and gearset protection."; return false; }
-        var eligible = items.Where(item => GearCleanupPolicy.IsEligible(item, scope, selling, protection)).ToArray();
+        var eligible = items.Where(item => GearCleanupPolicy.IsEligible(item, scope, selling, protection, allUnprotected)).ToArray();
         if (eligible.Length == 0)
-        { StatusMessage = "No eligible white-name equipment was found."; return false; }
-        selection = new(Plugin.PlayerState.ContentId, scope, Array.AsReadOnly(eligible));
+        { StatusMessage = allUnprotected ? "No eligible unprotected equipment was found." : "No eligible white-name equipment was found."; return false; }
+        selection = new(Plugin.PlayerState.ContentId, scope, Array.AsReadOnly(eligible), allUnprotected);
         StatusMessage = $"Equipment sale preview: {eligible.Length} items.";
         return true;
     }
 
-    public bool StartGearMove()
-        => TryCaptureGearCleanupSelection(GearCleanupScope.Armoury, false, out var selection)
+    public bool StartGearMove(bool allUnprotected = false)
+        => TryCaptureGearCleanupSelection(GearCleanupScope.Armoury, false, out var selection, allUnprotected)
             && StartGearCleanup(selection!, selling: false);
 
-    public bool StartGearSale(GearCleanupSelection selection)
-        => StartGearCleanup(selection, selling: true);
+    public bool StartAutoEquip()
+    {
+        if (!CanRunGearCleanup(requireClosedUi: true)) return false;
+        var recommended = RecommendEquipModule.Instance();
+        var gearsets = RaptureGearsetModule.Instance();
+        var job = objectTable.LocalPlayer?.ClassJob.RowId ?? 0;
+        if (recommended == null || recommended->IsUpdating || job is 0 or > byte.MaxValue)
+        { StatusMessage = "Recommended Gear is unavailable or already in use."; return false; }
+        if (!TryStartTask(UtilityTask.AutoEquip, "Calculating recommended gear for the current job.")) return false;
+        autoEquipCharacter = Plugin.PlayerState.ContentId;
+        autoEquipJob = (byte)job;
+        if (gearsets != null && gearsets->CurrentGearsetIndex is >= 0 and < 100
+            && gearsets->IsValidGearset(gearsets->CurrentGearsetIndex)
+            && gearsets->GetGearset(gearsets->CurrentGearsetIndex)->ClassJob == job)
+            autoEquipGearset = gearsets->CurrentGearsetIndex;
+        // The native Boolean is unreliable; completion is reported by IsUpdating.
+        recommended->SetupForClassJob(autoEquipJob);
+        return true;
+    }
 
-    private bool StartGearCleanup(GearCleanupSelection selection, bool selling)
+    private static uint EquipmentItemId(InventoryItem item)
+        => item.ItemId == 0 ? 0 : DesynthPolicyService.NormalizeBaseItemId(item.ItemId)
+            + ((item.Flags & InventoryItem.ItemFlags.HighQuality) != 0 ? 1_000_000u : 0);
+
+    private void UpdateAutoEquip()
+    {
+        var recommended = RecommendEquipModule.Instance();
+        var gearsets = RaptureGearsetModule.Instance();
+        if (!CanRunGearCleanup(requireClosedUi: true) || autoEquipCharacter != Plugin.PlayerState.ContentId
+            || objectTable.LocalPlayer?.ClassJob.RowId != autoEquipJob || recommended == null
+            || recommended->ClassJob != autoEquipJob
+            || (autoEquipGearset >= 0 && (gearsets == null || gearsets->CurrentGearsetIndex != autoEquipGearset
+                || !gearsets->IsValidGearset(autoEquipGearset) || gearsets->GetGearset(autoEquipGearset)->ClassJob != autoEquipJob)))
+        { Fail("Auto Equip stopped because its character, job, gearset or native ownership changed."); return; }
+        if (recommended->IsUpdating)
+        {
+            if (DateTime.UtcNow - startedAtUtc > TimeSpan.FromSeconds(10))
+                Fail("Recommended Gear did not finish calculating within 10 seconds.");
+            return;
+        }
+        if (autoEquipExpected == null)
+        {
+            autoEquipExpected = new uint[recommended->RecommendedItems.Length];
+            for (var index = 0; index < autoEquipExpected.Length; index++)
+            {
+                InventoryItem* item = recommended->RecommendedItems[index];
+                if (item != null) autoEquipExpected[index] = EquipmentItemId(*item);
+            }
+            recommended->EquipRecommendedGear();
+            autoEquipSubmittedUtc = DateTime.UtcNow;
+            StatusMessage = "Waiting for recommended equipment to be verified.";
+            return;
+        }
+        var manager = InventoryManager.Instance();
+        var equipped = manager == null ? null : manager->GetInventoryContainer(InventoryType.EquippedItems);
+        if (equipped == null || !equipped->IsLoaded || equipped->Size < autoEquipExpected.Length) return;
+        var equippedIds = new uint[autoEquipExpected.Length];
+        for (var index = 0; index < equippedIds.Length; index++)
+        {
+            var slot = equipped->GetInventorySlot(index);
+            if (slot == null) return;
+            equippedIds[index] = EquipmentItemId(*slot);
+            if (autoEquipExpected[index] != 0 && equippedIds[index] != autoEquipExpected[index])
+            {
+                if (DateTime.UtcNow - autoEquipSubmittedUtc > TimeSpan.FromSeconds(10))
+                    Fail("Auto Equip could not verify the recommended equipment; the gearset was not updated.");
+                return;
+            }
+        }
+        if (autoEquipGearset >= 0)
+        {
+            var result = gearsets->UpdateGearset(autoEquipGearset);
+            if (result is < 0 or >= 100)
+            { Fail("Recommended equipment is equipped, but the active gearset update was rejected."); return; }
+            gearsets->SaveFile(false);
+            var saved = gearsets->GetGearset(autoEquipGearset);
+            if (saved->Items.Length != equippedIds.Length)
+            { Fail("The updated gearset has an unexpected number of equipment slots."); return; }
+            for (var index = 0; index < equippedIds.Length; index++)
+                if (saved->Items[index].ItemId != equippedIds[index])
+                { Fail("The saved gearset does not match the verified equipped items."); return; }
+        }
+        Complete(autoEquipGearset >= 0 ? "Recommended equipment and the active gearset were verified."
+            : "Recommended equipment was verified; no matching active saved gearset was changed.");
+    }
+
+    public bool StartGearSale(GearCleanupSelection selection)
+        => StartGearCleanup(selection, selling: true, operationId: $"manual-gear-{Guid.NewGuid():N}");
+
+    public bool StartGearSale(string operationId, GearCleanupScope scope, bool localOnly)
+    {
+        if (IsRunning) return RejectGearSaleStart($"ADS is already running {ActiveTaskName}.");
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 || operationId != operationId.Trim()
+            || operationId == gearSaleStatus.OperationId)
+            return RejectGearSaleStart("Equipment selling requires a new, nonempty operation ID of at most 128 characters.");
+        if (!TryCaptureGearCleanupSelection(scope, true, out var selection)) return RejectGearSaleStart(StatusMessage);
+        var accepted = StartGearCleanup(selection!, true, operationId, localOnly);
+        return accepted || RejectGearSaleStart(StatusMessage);
+    }
+
+    public bool RejectGearSaleStart(string message)
+    { gearSaleLastStartError = message; return false; }
+
+    public bool CancelGearSale(string operationId)
+    {
+        if (!gearSaleStatus.Running || gearSaleStatus.OperationId != operationId || !gearCleanupSelling) return false;
+        Cancel("matching equipment sale cancelled");
+        return true;
+    }
+
+    private bool StartGearCleanup(GearCleanupSelection selection, bool selling, string? operationId = null, bool localOnly = false)
     {
         if (IsRunning || selection.CharacterId == 0 || selection.CharacterId != Plugin.PlayerState.ContentId
             || !Enum.IsDefined(selection.Scope) || selection.Items.Count == 0
@@ -760,8 +925,17 @@ public sealed unsafe class UtilityAutomationService
         if (frozen.Items.Select(item => (item.Container, item.Slot)).Distinct().Count() != frozen.Items.Count)
         { StatusMessage = "Equipment cleanup cannot start with the current selection or ownership."; return false; }
         if (!TryRevalidateGearCleanup(frozen, selling, frozen.Items)) return false;
-        if (selling) return StartNpcRepair(NpcRepairMode.NoInn, gearSale: frozen);
-        if (!TryStartTask(UtilityTask.GearMove, "Moving white-name equipment into inventory.")) return false;
+        if (selling)
+        {
+            gearSaleLastStartError = string.Empty;
+            gearSaleStatus = new(operationId, selection.Scope.ToString().ToLowerInvariant(), true, false, null,
+                frozen.Items.Count, 0, 0, "Starting equipment selling.", Settled: false);
+            var accepted = StartNpcRepair(localOnly ? NpcRepairMode.NoTeleportNoInn : NpcRepairMode.NoInn, gearSale: frozen);
+            if (!accepted && gearSaleStatus.Running) FinishGearSale(false, StatusMessage);
+            return accepted;
+        }
+        if (!TryStartTask(UtilityTask.GearMove, frozen.AllUnprotected
+                ? "Moving unprotected equipment into inventory." : "Moving white-name equipment into inventory.")) return false;
         gearCleanupSelection = frozen;
         return true;
     }
@@ -797,7 +971,7 @@ public sealed unsafe class UtilityAutomationService
         {
             var current = items.FirstOrDefault(row => row.Container == item.Container && row.Slot == item.Slot);
             if (current == null || !GearCleanupPolicy.Matches(current.Item, item.Item)
-                || !GearCleanupPolicy.IsEligible(current, selection.Scope, selling, protection))
+                || !GearCleanupPolicy.IsEligible(current, selection.Scope, selling, protection, selection.AllUnprotected))
             { StatusMessage = $"Equipment cleanup stopped because the confirmed item changed: {item.Name}."; return false; }
         }
         return true;
@@ -819,20 +993,61 @@ public sealed unsafe class UtilityAutomationService
             var saleState = gearCleanupSelling
                 ? shopRuntime.GetGearSaleState(gearCleanupVendor!.NpcId, gearCleanupVendor.ShopId, item) : GearSaleState.Ready;
             if (saleState == GearSaleState.Unsupported)
-            { Fail("Equipment selling stopped at an unsupported shop or confirmation state."); return; }
+            { Fail($"Equipment selling stopped: {shopRuntime.GearSaleDiagnostic}"); return; }
+            if (saleState == GearSaleState.NotReady)
+            { StatusMessage = "Waiting for the equipment shop or selected item menu to be ready."; return; }
+            if (saleState == GearSaleState.Confirmation)
+            {
+                if (!TryRevalidateGearCleanup(selection, true, [item])) { Fail(StatusMessage); return; }
+                if (DateTime.UtcNow - lastActionUtc >= UiRetryCooldown
+                    && shopRuntime.TryAcceptGearSaleConfirmation(gearCleanupVendor!.NpcId, gearCleanupVendor.ShopId, item))
+                    lastActionUtc = DateTime.UtcNow;
+                StatusMessage = "Waiting for the exact equipment sale confirmation to settle.";
+                return;
+            }
+            if (gearCleanupSelling && saleState == GearSaleState.Ready && gearCleanupSettlementReadyUtc == default)
+                gearCleanupSettlementReadyUtc = DateTime.UtcNow;
             var sourceEmpty = source.ItemId == 0 && !source.IsSymbolic;
             if (sourceEmpty && saleState == GearSaleState.Ready)
             {
-                if (!gearCleanupSelling && (!shopRuntime.TryReadGearCleanupSlot(gearCleanupDestination, gearCleanupDestinationSlot, out var moved)
-                    || !GearCleanupPolicy.Matches(moved, item.Item, allowMovedSlot: true)))
-                { Fail("Equipment move could not verify its exact destination item."); return; }
+                if (gearCleanupSelling)
+                {
+                    var gil = shopRuntime.GearSaleGil;
+                    var price = shopRuntime.GearSaleUnitPrice;
+                    if (price <= 0 || gil < 0 || gearCleanupGilBefore < 0 || gil - gearCleanupGilBefore != price)
+                    {
+                        if (DateTime.UtcNow - gearCleanupSettlementReadyUtc <= UiSettleCooldown)
+                        { StatusMessage = "Waiting for the exact equipment sale price and gil result."; return; }
+                        Fail("Equipment sale removed its item, but the exact gil result could not be verified.");
+                        return;
+                    }
+                    gearSaleStatus = gearSaleStatus with { SoldCount = gearSaleStatus.SoldCount + 1,
+                        GilEarned = checked(gearSaleStatus.GilEarned + price) };
+                    gearCleanupGilBefore = -1;
+                }
+                if (!gearCleanupSelling)
+                {
+                    var readable = shopRuntime.TryReadGearCleanupSlot(gearCleanupDestination, gearCleanupDestinationSlot, out var moved);
+                    if (!readable || !GearCleanupPolicy.Matches(moved, item.Item, allowMovedSlot: true))
+                    {
+                        if (DateTime.UtcNow - lastActionUtc <= UiSettleCooldown)
+                        { StatusMessage = "Waiting for the exact equipment operation to finish."; return; }
+                        log.Warning("[ADS][GearMove] Destination did not settle; from={SourceInventory}/{SourceSlot} to={DestinationInventory}/{DestinationSlot} readable={Readable}; expected item={ExpectedItem} quantity={ExpectedQuantity} flags={ExpectedFlags}; actual item={ActualItem} quantity={ActualQuantity} flags={ActualFlags}",
+                            item.Container, item.Slot, gearCleanupDestination, gearCleanupDestinationSlot, readable,
+                            item.Item.ItemId, item.Item.Quantity, item.Item.Flags, moved.ItemId, moved.Quantity, moved.Flags);
+                        Fail("Equipment move could not verify its exact destination item.");
+                        return;
+                    }
+                }
                 gearCleanupIndex++;
                 gearCleanupPending = false;
+                gearCleanupSettlementReadyUtc = default;
                 StatusMessage = $"Equipment cleanup progress: {gearCleanupIndex}/{selection.Items.Count}.";
                 return;
             }
             if ((sourceEmpty ? saleState != GearSaleState.Pending : !GearCleanupPolicy.Matches(source, item.Item))
-                || (DateTime.UtcNow - lastActionUtc > UiSettleCooldown && saleState != GearSaleState.Pending))
+                || (DateTime.UtcNow - (gearCleanupSelling ? gearCleanupSettlementReadyUtc : lastActionUtc) > UiSettleCooldown
+                    && saleState != GearSaleState.Pending))
             { Fail("Equipment cleanup did not observe the exact submitted operation finish."); return; }
             StatusMessage = "Waiting for the exact equipment operation to finish.";
             return;
@@ -841,8 +1056,15 @@ public sealed unsafe class UtilityAutomationService
         { Fail(StatusMessage); return; }
         if (gearCleanupSelling)
         {
-            if (!shopRuntime.TrySellGearCleanupItem(gearCleanupVendor!.NpcId, gearCleanupVendor.ShopId, item))
-            { Fail("Equipment selling stopped at an unsupported shop or confirmation state."); return; }
+            if (gearCleanupGilBefore < 0) gearCleanupGilBefore = shopRuntime.GearSaleGil;
+            if (gearCleanupGilBefore < 0)
+            { Fail("Equipment selling requires readable gil before submission."); return; }
+            var submission = shopRuntime.SubmitGearCleanupItem(gearCleanupVendor!.NpcId, gearCleanupVendor.ShopId, item);
+            if (submission == GearSaleState.NotReady)
+            { StatusMessage = "Waiting for the equipment shop or selected item menu to be ready."; return; }
+            if (submission != GearSaleState.Pending)
+            { Fail($"Equipment selling stopped: {shopRuntime.GearSaleDiagnostic}"); return; }
+            gearSaleStatus = gearSaleStatus with { CommandSent = true };
         }
         else if (!shopRuntime.TryMoveGearCleanupItem(item, out gearCleanupDestination, out gearCleanupDestinationSlot, out var full))
         {
@@ -851,6 +1073,7 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
         gearCleanupPending = true;
+        gearCleanupSettlementReadyUtc = default;
         lastActionUtc = DateTime.UtcNow;
         StatusMessage = "Waiting for the exact equipment operation to finish.";
     }
@@ -874,8 +1097,17 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage = "Opening the selected equipment vendor.";
             return;
         }
-        if (shopRuntime.HasUnexpectedConfirmation || shopRuntime.IsTalkVisible || shopRuntime.IsInventoryContextVisible)
-        { Fail("Equipment selling stopped at an unsupported shop or confirmation state."); return; }
+        if (shopRuntime.IsTalkVisible)
+        {
+            if (gearCleanupPending)
+            { Fail("A dialog interrupted the submitted equipment sale."); return; }
+            if (DateTime.UtcNow - lastInteractUtc >= UiRetryCooldown && shopRuntime.TryAdvanceGearSaleTalk(gearCleanupVendor.NpcId))
+                lastInteractUtc = DateTime.UtcNow;
+            StatusMessage = "Waiting for the selected equipment vendor's dialog to finish.";
+            return;
+        }
+        if (shopRuntime.HasUnexpectedConfirmation && !gearCleanupPending)
+        { Fail("Equipment selling stopped because an unowned confirmation appeared before submission."); return; }
         if (shopRuntime.IsExpectedShopVisible(ShopOfferKind.GilShop))
         { UpdateGearCleanup(); return; }
         if (shopRuntime.IsAnyShopVisible)
@@ -1442,6 +1674,8 @@ public sealed unsafe class UtilityAutomationService
                 && now - startedAtUtc > OverallTimeout
                 && !IsNpcRepairFieldRouteAttemptActive())
             {
+                if (gearCleanupSelling)
+                { Fail($"Equipment selling timed out: {(string.IsNullOrWhiteSpace(shopRuntime.GearSaleDiagnostic) ? StatusMessage : shopRuntime.GearSaleDiagnostic)}"); return; }
                 Fail(npcSaleRequest && npcSaleCommandSent
                     ? npcSaleBusyObserved
                         ? "Timed out waiting for AutoRetainer work after the NPC sale command."
@@ -1473,6 +1707,9 @@ public sealed unsafe class UtilityAutomationService
                     break;
                 case UtilityTask.GearMove:
                     UpdateGearCleanup();
+                    break;
+                case UtilityTask.AutoEquip:
+                    UpdateAutoEquip();
                     break;
             }
         }
@@ -1556,6 +1793,7 @@ public sealed unsafe class UtilityAutomationService
         var cancelledTask = activeTask;
         var message = $"Cancelled {ActiveTaskName}: {reason}";
         FinishNpcSale(false, message);
+        message = FinishGearSale(false, message);
         LastFailureMessage = message;
         if (cancelledTask == UtilityTask.ExtractMateria)
             RecordExtractMateriaCompletion(false, message);
@@ -3393,6 +3631,16 @@ public sealed unsafe class UtilityAutomationService
             StatusMessage = message, CommandSent = npcSaleCommandSent, Settled = !npcSaleCommandSent };
     }
 
+    private string FinishGearSale(bool succeeded, string message)
+    {
+        if (!gearSaleStatus.Running) return message;
+        if (!succeeded)
+            message = $"Equipment sale: {message} Sold {gearSaleStatus.SoldCount}/{gearSaleStatus.RequestedCount}; {gearSaleStatus.RequestedCount - gearSaleStatus.SoldCount} remaining.";
+        gearSaleStatus = gearSaleStatus with { Running = false, Done = true, Succeeded = succeeded,
+            StatusMessage = message, Settled = false };
+        return message;
+    }
+
     private void TryInteractWithRepairNpc(IGameObject npc)
     {
         lastInteractUtc = DateTime.UtcNow;
@@ -3982,6 +4230,7 @@ public sealed unsafe class UtilityAutomationService
     private void Complete(string message)
     {
         FinishNpcSale(true, message);
+        FinishGearSale(true, message);
         if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn
             && npcRepairTravelStage != NpcRepairTravelStage.ReturningToInn)
         {
@@ -4012,6 +4261,7 @@ public sealed unsafe class UtilityAutomationService
     private void Fail(string message)
     {
         FinishNpcSale(false, message);
+        message = FinishGearSale(false, message);
         var failedTask = activeTask;
         StopMovementIfNpcRepair();
         log.Warning($"[ADS][Utility] {message}");
@@ -4037,6 +4287,16 @@ public sealed unsafe class UtilityAutomationService
 
     private void ResetState()
     {
+        if (activeTask == UtilityTask.AutoEquip && autoEquipCharacter != 0 && autoEquipCharacter == Plugin.PlayerState.ContentId)
+        {
+            var recommended = RecommendEquipModule.Instance();
+            if (recommended != null && recommended->ClassJob == autoEquipJob) recommended->Clear();
+        }
+        autoEquipCharacter = 0;
+        autoEquipJob = 0;
+        autoEquipGearset = -1;
+        autoEquipExpected = null;
+        autoEquipSubmittedUtc = default;
         // A submitted sale can leave a native confirmation behind after failure/cancellation.
         // Keep the existing generic-dialog suppression until that character's shop UI closes.
         if (gearCleanupSelling && gearCleanupPending && clientState.IsLoggedIn
@@ -4052,6 +4312,8 @@ public sealed unsafe class UtilityAutomationService
         gearCleanupVendor = null;
         gearCleanupInteracted = false;
         gearCleanupLastMenuHandler = 0;
+        gearCleanupGilBefore = -1;
+        gearCleanupSettlementReadyUtc = default;
         StopOwnedNpcRepairTravel();
         npcSaleRequest = false;
         npcSaleCommandSent = false;
@@ -4144,6 +4406,7 @@ public sealed unsafe class UtilityAutomationService
             UtilityTask.ShopPurchase => "shop purchasing",
             UtilityTask.ShopListBatch => "shop-list purchasing",
             UtilityTask.GearMove => "equipment moving",
+            UtilityTask.AutoEquip => "recommended equipment",
             _ => "utility automation",
         };
 

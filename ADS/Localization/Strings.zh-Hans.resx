@@ -11485,4 +11485,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>过场动画播放中；ADS移动和计时器已暂停。</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS 背包</value></data>
+  <data name="Gear" xml:space="preserve"><value>装备</value></data>
+  <data name="Selling" xml:space="preserve"><value>出售</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>穿戴推荐装备</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>移动白色装备</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>移动所有未保护装备</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>出售白装：背包</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>出售白装：兵装库</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>出售白装：两者</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>出售 AR 清单</value></data>
+  <data name="Self repair" xml:space="preserve"><value>自行修理</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>停止背包操作</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>刷新数量</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>空位：背包 {0}／兵装库 {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>白色装备：背包 {0}／兵装库 {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>无法读取背包数量</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>穿戴当前职业的推荐装备，并更新正在使用的套装。</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>将兵装库装备移入背包；保护已保存的套装，背包满时停止。</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>预览并出售符合条件的白色装备；保护已保存的套装。</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>出售 AutoRetainer 中配置的清单，与白色装备出售分开。</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>打开控制界面，不开始操作。</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>需要已登录的角色。</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS正在进入旅馆。</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS已在执行{0}。</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS正在控制副本执行。</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>自动装备未能验证推荐装备；套装未更新。</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>角色、职业、套装或原生操作归属改变，自动装备已停止。</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>正在计算当前职业的推荐装备。</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>物品已出售，但无法验证准确的金币变化。</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADS的副本、旅馆或区域操作阻止了装备出售。</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>装备出售需要新的非空操作ID，最长128个字符。</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>提交出售前必须能读取金币余额。</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>提交前出现了无关确认，装备出售已停止。</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>装备出售已停止：{0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>装备出售超时：{0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>正在将未保护的装备移入背包。</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>未找到符合条件的未保护装备。</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>没有与此操作ID匹配的装备出售记录。</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>已验证推荐装备和当前套装。</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>已穿戴推荐装备，但当前套装更新被拒绝。</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>已验证推荐装备；未更改匹配的当前已保存套装。</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>推荐装备计算未能在10秒内完成。</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>推荐装备不可用或已在使用中。</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>范围必须为背包、兵装库或两者。</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>正在开始出售装备。</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>已保存的套装与已验证的当前装备不匹配。</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>更新后的套装装备栏位数量异常。</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>正在等待验证推荐装备。</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>正在等待装备商店或所选物品菜单就绪。</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>正在等待此装备出售确认完成。</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>正在等待准确的装备出售价格及金币变化。</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>正在等待所选装备商人的对话结束。</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>对话中断了已提交的装备出售。</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>已取消对应的装备出售</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>推荐装备</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>有不属于此操作的背包右键菜单处于打开状态。</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>装备出售期间出现了无关确认。</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>其他商店操作或对话替换了装备出售。</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno属于另一笔商店交易。</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>提交前，已确认的装备栏位发生了变化。</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>装备右键菜单的选择发生了变化。</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>出售回调或已确认的栏位已无效。</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>装备出售的角色或区域发生了变化。</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>装备出售的目标已变为其他对象。</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>出售会超过游戏的金币上限。</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>装备商店提供了多个出售回调。</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>装备商店处于回购或不支持的模式。</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>无法读取装备来源库存。</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>原生右键菜单与已确认的装备栏位不匹配。</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>不支持此原生装备商店状态。</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>原生出售交易与已确认的装备栏位不匹配。</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>原生商店或NPC与所选装备商人不匹配。</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>正在等待AgentShop使用所属Shop回调接收器。</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>正在等待装备商店进入正常模式。</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>正在等待此装备出售的确认。</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>正在等待原生装备确认回调。</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>正在等待原生装备商店管理器。</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>正在等待原生背包右键菜单代理。</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>正在等待原生Shop代理和Agent。</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>正在等待原生Shop代理连接此窗口。</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>正在等待原生Shop代理的处理程序。</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>正在等待所属Shop窗口出现。</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>正在等待所选装备右键菜单初始化。</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>正在等待Shop窗口完成设置。</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>正在等待商店的原生NPC标识。</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>装备出售：{0} 已出售 {1}/{2} 件；剩余 {3} 件。</value></data>
 </root>

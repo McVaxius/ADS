@@ -4057,4 +4057,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>Cutscene aktif; pergerakan dan pengatur waktu ADS dijeda.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>Inventaris ADS</value></data>
+  <data name="Gear" xml:space="preserve"><value>Perlengkapan</value></data>
+  <data name="Selling" xml:space="preserve"><value>Penjualan</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>Pakai rekomendasi</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>Pindahkan gear putih</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>Pindahkan semua tak dilindungi</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>Jual putih: inventaris</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>Jual putih: peti senjata</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>Jual putih: keduanya</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>Jual daftar AR</value></data>
+  <data name="Self repair" xml:space="preserve"><value>Perbaiki sendiri</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>Hentikan tugas inventaris</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>Perbarui jumlah</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>Slot kosong: tas {0} / lemari {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>Gear putih: tas {0} / lemari {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>Jumlah inventaris tidak tersedia</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>Pakai gear rekomendasi untuk job saat ini lalu perbarui set aktifnya.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>Pindahkan gear dari lemari ke inventaris; lindungi set tersimpan dan berhenti saat tas penuh.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>Pratinjau dan jual gear putih yang layak; lindungi set tersimpan.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>Jual daftar AutoRetainer yang dikonfigurasi, terpisah dari penjualan gear putih.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>Buka kontrol tanpa memulai tugas.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>Karakter yang masuk diperlukan.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS sedang memasuki penginapan.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS sudah menjalankan {0}.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS mengendalikan tugas aktif.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>Auto Equip tidak dapat memverifikasi perlengkapan rekomendasi; set tidak diperbarui.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>Auto Equip berhenti karena karakter, job, set, atau kendali native berubah.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>Menghitung perlengkapan rekomendasi untuk job saat ini.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>Barang terjual, tetapi hasil gil yang tepat tidak dapat diverifikasi.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>Penjualan perlengkapan diblokir oleh kendali tugas, penginapan, atau wilayah ADS.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>Penjualan perlengkapan memerlukan ID operasi baru yang tidak kosong, maksimal 128 karakter.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>Gil harus dapat dibaca sebelum penjualan dikirim.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>Penjualan berhenti karena konfirmasi lain muncul sebelum pengiriman.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>Penjualan perlengkapan berhenti: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>Waktu penjualan perlengkapan habis: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>Memindahkan perlengkapan tanpa perlindungan ke inventaris.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>Tidak ditemukan perlengkapan tanpa perlindungan yang memenuhi syarat.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>Tidak ada bukti penjualan perlengkapan yang cocok dengan ID operasi ini.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>Perlengkapan rekomendasi dan set aktif telah diverifikasi.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>Perlengkapan rekomendasi terpasang, tetapi pembaruan set aktif ditolak.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>Perlengkapan rekomendasi diverifikasi; tidak ada set aktif tersimpan yang cocok yang diubah.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>Perhitungan perlengkapan rekomendasi tidak selesai dalam 10 detik.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>Recommended Gear tidak tersedia atau sedang digunakan.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>Cakupan harus inventaris, peti senjata, atau keduanya.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>Memulai penjualan perlengkapan.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>Set tersimpan tidak cocok dengan perlengkapan terpasang yang diverifikasi.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>Set yang diperbarui memiliki jumlah slot yang tidak terduga.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>Menunggu verifikasi perlengkapan rekomendasi.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>Menunggu toko atau menu barang terpilih siap.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>Menunggu konfirmasi penjualan perlengkapan yang tepat selesai.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>Menunggu harga jual dan hasil gil yang tepat.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>Menunggu dialog penjual perlengkapan terpilih selesai.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>Dialog mengganggu penjualan perlengkapan yang telah dikirim.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>penjualan perlengkapan terkait dibatalkan</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>perlengkapan rekomendasi</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>Menu konteks inventaris lain sedang terbuka.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>Konfirmasi yang tidak terkait muncul selama penjualan.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>Tindakan toko atau dialog lain menggantikan penjualan.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno milik transaksi toko lain.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>Slot perlengkapan terkonfirmasi berubah sebelum pengiriman.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>Pilihan menu konteks perlengkapan berubah.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>Callback penjualan atau slot terkonfirmasi tidak lagi valid.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>Karakter atau wilayah penjualan berubah.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>Target penjualan berubah ke objek lain.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>Penjualan akan melampaui batas gil permainan.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>Toko perlengkapan memiliki beberapa callback penjualan.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>Toko dalam mode pembelian kembali atau mode tidak didukung.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>Inventaris sumber perlengkapan tidak dapat dibaca.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>Menu konteks native tidak cocok dengan slot terkonfirmasi.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>Status toko perlengkapan native tidak didukung.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>Transaksi penjualan native tidak cocok dengan slot terkonfirmasi.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>Toko atau NPC native tidak cocok dengan penjual terpilih.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>Menunggu AgentShop memakai penerima callback Shop terkait.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>Menunggu toko perlengkapan masuk mode normal.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>Menunggu konfirmasi penjualan perlengkapan yang tepat.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>Menunggu callback konfirmasi perlengkapan native.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>Menunggu pengelola toko perlengkapan native.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>Menunggu agen konteks inventaris native.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>Menunggu proxy dan agen Shop native.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>Menunggu proxy Shop native terhubung ke jendela ini.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>Menunggu handler proxy Shop native.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>Menunggu jendela Shop terkait muncul.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>Menunggu menu konteks perlengkapan terpilih diinisialisasi.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Menunggu persiapan jendela Shop selesai.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Menunggu identitas NPC native toko.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Penjualan perlengkapan: {0} Terjual {1}/{2}; tersisa {3}.</value></data>
 </root>

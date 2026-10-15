@@ -702,7 +702,7 @@ public sealed class ShopPurchaseRunnerTests
     {
         using var temp = new TempDirectory();
         var store = new ShopListPresetStore(temp.Path);
-        Assert.True(store.Create("Standalone", out _));
+        Assert.True(store.Create("Standalone", out var createError), createError);
         Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out _));
         Assert.True(store.SetItem(100, 5, 5, false, ShopListOwnershipScope.InventoryOnly, out _));
         var presetId = store.ActivePresetId;
@@ -742,7 +742,7 @@ public sealed class ShopPurchaseRunnerTests
         for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
         Assert.Equal(2, utility.ShopListBatchStatus.CreditedQuantities![rowId]);
         Assert.Equal(5, store.GetOrderProgress(1, presetId)[rowId]);
-        Assert.True(service.StartNewOrder(out _));
+        Assert.True(service.StartNewOrder(out var resetError), resetError);
         Assert.Empty(store.GetOrderProgress(1, presetId));
     }
 

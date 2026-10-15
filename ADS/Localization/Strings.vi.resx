@@ -4057,4 +4057,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>Đang phát cảnh cắt; di chuyển và bộ hẹn giờ ADS tạm dừng.</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>Túi đồ ADS</value></data>
+  <data name="Gear" xml:space="preserve"><value>Trang bị</value></data>
+  <data name="Selling" xml:space="preserve"><value>Bán</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>Mặc đồ đề xuất</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>Chuyển đồ trắng</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>Chuyển mọi đồ không bảo vệ</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>Bán đồ trắng: túi</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>Bán đồ trắng: kho giáp</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>Bán đồ trắng: cả hai</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>Bán danh sách AR</value></data>
+  <data name="Self repair" xml:space="preserve"><value>Tự sửa</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>Dừng thao tác túi đồ</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>Làm mới số lượng</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>Ô trống: túi {0} / kho trang bị {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>Đồ trắng: túi {0} / kho trang bị {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>Không đọc được số lượng</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>Mặc trang bị đề xuất cho nghề hiện tại và cập nhật bộ trang bị đang dùng.</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>Chuyển đồ từ kho trang bị vào túi; bảo vệ bộ đã lưu và dừng khi túi đầy.</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>Xem trước và bán đồ trắng hợp lệ; bảo vệ bộ trang bị đã lưu.</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>Bán danh sách đã đặt của AutoRetainer, riêng với việc bán đồ trắng.</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>Mở điều khiển mà không bắt đầu thao tác.</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>Cần nhân vật đã đăng nhập.</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS đang vào nhà trọ.</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS đang chạy {0}.</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS đang điều khiển phó bản.</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>Tự trang bị không xác minh được trang bị đề xuất; bộ đồ chưa được cập nhật.</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>Tự trang bị dừng vì nhân vật, nghề, bộ đồ hoặc quyền điều khiển gốc đã đổi.</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>Đang tính trang bị đề xuất cho nghề hiện tại.</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>Đã bán vật phẩm nhưng không xác minh được lượng gil thay đổi chính xác.</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>Bán trang bị bị chặn bởi quyền điều khiển phó bản, nhà trọ hoặc khu vực của ADS.</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>Bán trang bị cần ID thao tác mới, không trống, tối đa 128 ký tự.</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>Cần đọc được số gil trước khi gửi lệnh bán.</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>Bán trang bị dừng vì có xác nhận không thuộc thao tác xuất hiện trước khi gửi.</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>Bán trang bị đã dừng: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>Bán trang bị quá thời gian: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>Đang chuyển trang bị không được bảo vệ vào túi.</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>Không tìm thấy trang bị không được bảo vệ đủ điều kiện.</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>Không có biên nhận bán trang bị khớp ID thao tác này.</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>Đã xác minh trang bị đề xuất và bộ đồ hiện hành.</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>Đã mặc trang bị đề xuất nhưng cập nhật bộ đồ hiện hành bị từ chối.</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>Đã xác minh trang bị đề xuất; không đổi bộ đồ hiện hành đã lưu tương ứng.</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>Tính trang bị đề xuất không xong trong 10 giây.</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>Trang bị đề xuất không khả dụng hoặc đang được sử dụng.</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>Phạm vi phải là túi, kho giáp hoặc cả hai.</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>Đang bắt đầu bán trang bị.</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>Bộ đồ đã lưu không khớp trang bị đang mặc đã xác minh.</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>Bộ đồ được cập nhật có số ô trang bị bất thường.</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>Đang chờ xác minh trang bị đề xuất.</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>Đang chờ cửa hàng hoặc menu vật phẩm đã chọn sẵn sàng.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>Đang chờ xác nhận đúng giao dịch bán trang bị hoàn tất.</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>Đang chờ giá bán và lượng gil thay đổi chính xác.</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>Đang chờ hội thoại của người bán trang bị đã chọn kết thúc.</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>Một hội thoại đã ngắt lệnh bán trang bị đã gửi.</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>đã hủy giao dịch bán trang bị tương ứng</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>trang bị đề xuất</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>Đang mở menu túi không thuộc thao tác này.</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>Xuất hiện xác nhận không liên quan khi bán trang bị.</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>Thao tác cửa hàng hoặc hội thoại khác đã thay thế việc bán.</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno thuộc một giao dịch cửa hàng khác.</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>Ô trang bị đã xác nhận thay đổi trước khi gửi.</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>Lựa chọn menu trang bị đã thay đổi.</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>Callback bán hoặc ô đã xác nhận không còn hợp lệ.</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>Nhân vật hoặc khu vực bán trang bị đã đổi.</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>Mục tiêu bán đã đổi sang đối tượng khác.</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>Bán sẽ vượt giới hạn gil của trò chơi.</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>Cửa hàng có nhiều callback bán.</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>Cửa hàng đang ở chế độ mua lại hoặc không được hỗ trợ.</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>Không thể đọc túi nguồn của trang bị.</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>Menu gốc không khớp ô trang bị đã xác nhận.</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>Trạng thái cửa hàng gốc không được hỗ trợ.</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>Giao dịch bán gốc không khớp ô đã xác nhận.</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>Cửa hàng hoặc NPC gốc không khớp người bán đã chọn.</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>Đang chờ AgentShop dùng bộ nhận callback Shop tương ứng.</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>Đang chờ cửa hàng trang bị vào chế độ bình thường.</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>Đang chờ xác nhận đúng giao dịch bán trang bị.</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>Đang chờ callback xác nhận trang bị gốc.</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>Đang chờ trình quản lý cửa hàng trang bị gốc.</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>Đang chờ tác nhân menu túi gốc.</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>Đang chờ proxy và tác nhân Shop gốc.</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>Đang chờ proxy Shop gốc gắn với cửa sổ này.</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>Đang chờ bộ xử lý proxy Shop gốc.</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>Đang chờ cửa sổ Shop tương ứng xuất hiện.</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>Đang chờ menu trang bị đã chọn khởi tạo.</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Đang chờ cửa sổ Shop chuẩn bị xong.</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Đang chờ định danh NPC gốc của cửa hàng.</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Bán trang bị: {0} Đã bán {1}/{2}; còn lại {3}.</value></data>
 </root>

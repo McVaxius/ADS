@@ -234,6 +234,10 @@ public static class Ui
     // Only these captured fields are generated statuses. Names, paths and diagnostics stay raw.
     private static readonly Dictionary<string, int[]> NestedStatusArguments = new(StringComparer.Ordinal)
     {
+        ["Equipment selling stopped: {0}"] = [0],
+        ["Equipment sale: {0} Sold {1}/{2}; {3} remaining."] = [0],
+        ["Equipment selling timed out: {0}"] = [0],
+        ["ADS is already running {0}."] = [0],
         ["DhogNav teleport: {0}"] = [0],
         ["Another ADS utility is active: {0}"] = [0],
         ["Cancelled {0}: {1}"] = [0, 1],

@@ -21,6 +21,7 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads` | Toggle Main |
 | `/ads config` | Open Settings |
 | `/ads mini` | Toggle compact Controls |
+| `/ads inv` | Toggle Inventory utilities; also available from Inventory in ADS Mini |
 | `/ads shopper` | Open Shop Lists |
 | `/ads obj` | Toggle Object Explorer |
 | `/ads ghosts` | Toggle Ghost Inspector |
@@ -36,6 +37,20 @@ ADS registers `/ads` plus aliases `/aids` and `/aisolver`. Commands are case-ins
 | `/ads mapeffects` | Alias for `/ads events` |
 | `/ads vfx` | Toggle VFX Explorer |
 | `/ads reflection` | Toggle BMR Reflection controls |
+
+## Inventory Utilities
+
+| Command | Action |
+|---|---|
+| `/ads gear equip` | Equip current-job Recommended Gear, verify equipped items, then update its matching active saved gearset |
+| `/ads gear move` | Move eligible unprotected white equipment from armoury to inventory |
+| `/ads gear move-all` | Separately move all unprotected unequipped armoury gear, including coloured gear and unused soul crystals |
+| `/ads gear sell inventory` | Preview and sell eligible white equipment from inventory |
+| `/ads gear sell armoury` | Preview and sell eligible white equipment from armoury |
+| `/ads gear sell both` | Preview and sell eligible white equipment from both |
+| `/ads sell` | Run ADS's existing vendor/AutoRetainer configured-list selling handoff |
+
+The existing preview preference applies to manual equipment sales. Saved gearsets and equipped items stay protected. Moves stop with partial progress if bags fill. Stop inventory utility cancels active utility work without stopping unrelated duty execution.
 
 ## Window Placement
 

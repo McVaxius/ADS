@@ -25,6 +25,10 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartNpcSale(string operationId, bool localOnly) -> bool`
 - `ADS.GetNpcSaleStatusJson() -> string`
 - `ADS.CancelNpcSale(string operationId) -> bool`
+- `ADS.PreviewGearSaleJson(string scope) -> string`
+- `ADS.StartGearSale(string operationId, string scope, bool localOnly) -> bool`
+- `ADS.GetGearSaleStatusJson(string operationId) -> string`
+- `ADS.CancelGearSale(string operationId) -> bool`
 - `ADS.StartGuardedShopPurchase(string requestJson, Func<string, bool> authorize) -> bool`
 - `ADS.CancelShopPurchase(string operationId) -> bool`
 - `ADS.SetShopKeepOpen(bool enabled) -> bool`
@@ -43,6 +47,14 @@ Existing ADS IPC endpoints remain available.
 - `ADS.GetDesynthStatusJson() -> string`
 
 `ADS.OpenPlayerObjectExplorer` opens the existing object explorer, clears its search, level, targetable, and same-map filters, and selects Player. Player rows show a whitelist action only while the loaded DhogNav plugin exposes `DhogNav.AddWhitelistedPlayer(string identity) -> bool`; parasite mode may be off. The action resolves the live player by object ID and sends a complete `Name@HomeServer` identity. DhogNav rejects incomplete identities and active whitelist edits, deduplicates accepted entries, and returns false if saving fails. Save failures can leave the entry in memory; check DhogNav's save status.
+
+`equipmentSelling: 1` in capabilities advertises the white-equipment endpoints. `scope` must be `inventory`, `armoury` or `both` (case-insensitive, without numeric enum values). Preview is purchase/sale-free and returns `available`, `scope`, `message` and exact eligible item/container/slot/quantity/quality rows. It does not replace another utility's status. Equipped items and saved gearsets remain protected.
+
+`StartGearSale` is an explicit, noninteractive authorization to capture and sell the eligible white equipment in that scope. It does not open the human preview popup. Use a new nonempty operation ID of at most 128 characters; ADS rejects a reused latest ID and concurrent utility/duty/inn ownership. `localOnly: true` forbids teleport travel and requires an existing nearby vendor. `false` permits the existing vendor route. Admission is distinct from a successful sale. Manual commands/buttons continue to use the saved preview preference.
+
+Poll `GetGearSaleStatusJson` with the same ID. The receipt contains `operationId`, `scope`, `running`, `done`, nullable `succeeded`, `requestedCount`, verified `soldCount`, `gilEarned`, `commandSent`, `settled`, `statusMessage` and `lastStartError`. A different ID returns an unmatched result rather than another caller's receipt. Only the latest equipment-sale receipt is retained; there is no saved queue or receipt history. `done` means ADS ended its run; wait for `settled` before starting incompatible work. Unknown UI, changed protection/slots or an unverified gil result fail visibly without repeating the sale callback. A failed or cancelled dispatched operation may remain unsettled while its UI is open; do not blindly restart it.
+
+`CancelGearSale` cancels only its matching active equipment sale. Existing `StartNpcSale`/status/cancel still operate AutoRetainer's configured list and remain compatible with fishing. Their backend/UI-settlement receipt is separate from the exact equipment item/gil verification above.
 
 `ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. They best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty.
 

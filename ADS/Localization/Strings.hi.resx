@@ -4041,4 +4041,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>कटसीन चल रहा है; ADS की गतिविधि और टाइमर रुके हुए हैं।</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS इन्वेंटरी</value></data>
+  <data name="Gear" xml:space="preserve"><value>उपकरण</value></data>
+  <data name="Selling" xml:space="preserve"><value>बिक्री</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>अनुशंसित उपकरण पहनें</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>सफेद उपकरण ले जाएँ</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>सभी असुरक्षित उपकरण ले जाएँ</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>सफ़ेद बेचें: इन्वेंटरी</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>सफ़ेद बेचें: आर्मरी</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>सफ़ेद बेचें: दोनों</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>AR सूची बेचें</value></data>
+  <data name="Self repair" xml:space="preserve"><value>खुद मरम्मत करें</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>इन्वेंटरी कार्य रोकें</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>गिनती ताज़ा करें</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>खाली स्थान: बैग {0} / आर्मरी {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>सफेद उपकरण: बैग {0} / आर्मरी {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>इन्वेंटरी गिनती उपलब्ध नहीं</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>वर्तमान जॉब के अनुशंसित उपकरण पहनें और उसका सक्रिय गियरसेट अपडेट करें।</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>आर्मरी के उपकरण इन्वेंटरी में ले जाएँ; सहेजे गए गियरसेट सुरक्षित रखें और बैग भरने पर रुकें।</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>योग्य सफेद उपकरण का पूर्वावलोकन करके बेचें; सहेजे गए गियरसेट सुरक्षित रखें।</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>AutoRetainer की निर्धारित सूची बेचें; यह सफेद उपकरण की बिक्री से अलग है।</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>कार्य शुरू किए बिना नियंत्रण खोलें।</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>लॉग इन किया हुआ पात्र आवश्यक है।</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADS सराय में प्रवेश कर रहा है।</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADS पहले से {0} चला रहा है।</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADS सक्रिय ड्यूटी को नियंत्रित कर रहा है।</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>ऑटो इक्विप अनुशंसित उपकरण सत्यापित नहीं कर सका; गियरसेट अपडेट नहीं हुआ।</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>पात्र, जॉब, गियरसेट या नेटिव नियंत्रण बदलने के कारण ऑटो इक्विप रुक गया।</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>वर्तमान जॉब के लिए अनुशंसित उपकरण की गणना हो रही है।</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>उपकरण बिक गया, लेकिन गिल का सटीक परिणाम सत्यापित नहीं हुआ।</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADS की ड्यूटी, सराय या क्षेत्र के नियंत्रण के कारण उपकरण बिक्री अवरुद्ध है।</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>उपकरण बिक्री के लिए अधिकतम 128 अक्षरों की नई, खाली न होने वाली ऑपरेशन ID चाहिए।</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>बिक्री भेजने से पहले गिल की मात्रा पढ़ने योग्य होनी चाहिए।</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>बिक्री भेजने से पहले असंबंधित पुष्टि आने के कारण उपकरण बिक्री रुक गई।</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>उपकरण बिक्री रुक गई: {0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>उपकरण बिक्री का समय समाप्त: {0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>असुरक्षित उपकरण इन्वेंटरी में ले जाए जा रहे हैं।</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>कोई योग्य असुरक्षित उपकरण नहीं मिला।</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>इस ऑपरेशन ID से मेल खाने वाली उपकरण बिक्री रसीद नहीं है।</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>अनुशंसित उपकरण और सक्रिय गियरसेट सत्यापित हुए।</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>अनुशंसित उपकरण पहन लिए गए, लेकिन सक्रिय गियरसेट अपडेट अस्वीकार हुआ।</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>अनुशंसित उपकरण सत्यापित हुए; कोई मेल खाने वाला सक्रिय सहेजा गियरसेट नहीं बदला।</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>अनुशंसित उपकरण की गणना 10 सेकंड में पूरी नहीं हुई।</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>अनुशंसित उपकरण उपलब्ध नहीं है या पहले से उपयोग में है।</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>दायरा इन्वेंटरी, आर्मरी या दोनों होना चाहिए।</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>उपकरण बिक्री शुरू हो रही है।</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>सहेजा गियरसेट सत्यापित पहने हुए उपकरणों से मेल नहीं खाता।</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>अपडेट किए गियरसेट में उपकरण स्लॉटों की संख्या अप्रत्याशित है।</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>अनुशंसित उपकरण सत्यापन की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>उपकरण दुकान या चुने हुए आइटम मेनू के तैयार होने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>सटीक उपकरण बिक्री पुष्टि पूरी होने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>सटीक बिक्री मूल्य और गिल परिणाम की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>चुने हुए उपकरण विक्रेता का संवाद समाप्त होने की प्रतीक्षा है।</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>एक संवाद ने भेजी हुई उपकरण बिक्री बाधित कर दी।</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>संबंधित उपकरण बिक्री रद्द हुई</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>अनुशंसित उपकरण</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>असंबंधित इन्वेंटरी संदर्भ मेनू खुला है।</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>उपकरण बिक्री के दौरान असंबंधित पुष्टि दिखाई दी।</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>दूसरी दुकान क्रिया या संवाद ने उपकरण बिक्री की जगह ले ली।</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesno किसी अन्य दुकान लेनदेन से संबंधित है।</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>बिक्री भेजने से पहले पुष्ट उपकरण स्लॉट बदल गया।</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>उपकरण संदर्भ मेनू का चयन बदल गया।</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>बिक्री कॉलबैक या पुष्ट स्लॉट अब वैध नहीं है।</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>बिक्री वाला पात्र या क्षेत्र बदल गया।</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>बिक्री का लक्ष्य किसी अन्य ऑब्जेक्ट में बदल गया।</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>बिक्री खेल की गिल सीमा से अधिक कर देगी।</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>उपकरण दुकान में कई बिक्री कॉलबैक हैं।</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>उपकरण दुकान बायबैक या असमर्थित मोड में है।</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>उपकरण की स्रोत इन्वेंटरी पढ़ी नहीं जा सकती।</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>नेटिव संदर्भ मेनू पुष्ट उपकरण स्लॉट से मेल नहीं खाता।</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>नेटिव उपकरण दुकान की स्थिति समर्थित नहीं है।</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>नेटिव बिक्री लेनदेन पुष्ट उपकरण स्लॉट से मेल नहीं खाता।</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>नेटिव दुकान या NPC चुने हुए उपकरण विक्रेता से मेल नहीं खाता।</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>AgentShop के संबंधित Shop कॉलबैक रिसीवर उपयोग करने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>उपकरण दुकान के सामान्य मोड में आने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>सटीक उपकरण बिक्री पुष्टि की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>नेटिव उपकरण पुष्टि कॉलबैक की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>नेटिव उपकरण दुकान प्रबंधक की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>नेटिव इन्वेंटरी संदर्भ एजेंट की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>नेटिव Shop प्रॉक्सी और एजेंट की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>नेटिव Shop प्रॉक्सी के इस विंडो से जुड़ने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>नेटिव Shop प्रॉक्सी हैंडलर की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>संबंधित Shop विंडो दिखाई देने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>चुने उपकरण संदर्भ मेनू के आरंभ होने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop विंडो सेटअप पूरा होने की प्रतीक्षा है।</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>दुकान की नेटिव NPC पहचान की प्रतीक्षा है।</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>उपकरण बिक्री: {0} {1}/{2} बेचे गए; {3} शेष।</value></data>
 </root>

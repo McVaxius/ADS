@@ -11485,4 +11485,90 @@
   <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
     <value>カットシーン中のため、ADSの移動とタイマーを一時停止しています。</value>
   </data>
+  <data name="ADS Inventory" xml:space="preserve"><value>ADS 所持品</value></data>
+  <data name="Gear" xml:space="preserve"><value>装備</value></data>
+  <data name="Selling" xml:space="preserve"><value>売却</value></data>
+  <data name="Auto Equip" xml:space="preserve"><value>おすすめ装備</value></data>
+  <data name="Move white gear" xml:space="preserve"><value>白装備を移動</value></data>
+  <data name="Move all unprotected" xml:space="preserve"><value>未保護装備をすべて移動</value></data>
+  <data name="Sell white: inventory" xml:space="preserve"><value>白装備売却：所持品</value></data>
+  <data name="Sell white: armoury" xml:space="preserve"><value>白装備売却：アーマリー</value></data>
+  <data name="Sell white: both" xml:space="preserve"><value>白装備売却：両方</value></data>
+  <data name="Sell AR list" xml:space="preserve"><value>ARリストを売却</value></data>
+  <data name="Self repair" xml:space="preserve"><value>自分で修理</value></data>
+  <data name="Stop inventory utility" xml:space="preserve"><value>所持品操作を停止</value></data>
+  <data name="Refresh inventory counts" xml:space="preserve"><value>個数を更新</value></data>
+  <data name="Free slots: bags {0} / armoury {1}" xml:space="preserve"><value>空き枠：所持品 {0}／アーマリー {1}</value></data>
+  <data name="White gear: bags {0} / armoury {1}" xml:space="preserve"><value>白装備：所持品 {0}／アーマリー {1}</value></data>
+  <data name="Inventory counts unavailable" xml:space="preserve"><value>所持品の個数を取得できません</value></data>
+  <data name="Equip recommended gear for the current job and update its active gearset." xml:space="preserve"><value>現在のジョブのおすすめ装備に変更し、使用中のギアセットを更新します。</value></data>
+  <data name="Move armoury gear to inventory; protect saved gearsets and stop when bags fill." xml:space="preserve"><value>アーマリーチェストの装備を所持品へ移動します。保存済みギアセットを保護し、満杯なら停止します。</value></data>
+  <data name="Preview and sell eligible white equipment; protect saved gearsets." xml:space="preserve"><value>対象の白装備を確認して売却します。保存済みギアセットは保護します。</value></data>
+  <data name="Sell AutoRetainer's configured list, separate from white-equipment selling." xml:space="preserve"><value>AutoRetainerで設定したリストを売却します。白装備の売却とは別です。</value></data>
+  <data name="Open controls without starting work." xml:space="preserve"><value>処理を開始せずに操作画面を開きます。</value></data>
+  <data name="A logged-in character is required." xml:space="preserve"><value>ログイン中のキャラクターが必要です。</value></data>
+  <data name="ADS inn entry is running." xml:space="preserve"><value>ADSが宿屋への入室を実行中です。</value></data>
+  <data name="ADS is already running {0}." xml:space="preserve"><value>ADSはすでに{0}を実行中です。</value></data>
+  <data name="ADS owns active duty execution." xml:space="preserve"><value>ADSがコンテンツを実行中です。</value></data>
+  <data name="Auto Equip could not verify the recommended equipment; the gearset was not updated." xml:space="preserve"><value>おすすめ装備を確認できなかったため、ギアセットは更新されませんでした。</value></data>
+  <data name="Auto Equip stopped because its character, job, gearset or native ownership changed." xml:space="preserve"><value>キャラクター、ジョブ、ギアセットまたはネイティブ操作の所有状態が変わったため、自動装備を停止しました。</value></data>
+  <data name="Calculating recommended gear for the current job." xml:space="preserve"><value>現在のジョブのおすすめ装備を計算中です。</value></data>
+  <data name="Equipment sale removed its item, but the exact gil result could not be verified." xml:space="preserve"><value>アイテムは売却されましたが、正確なギルの変化を確認できませんでした。</value></data>
+  <data name="Equipment selling is blocked by ADS duty, inn or territory ownership." xml:space="preserve"><value>ADSのコンテンツ・宿屋・エリア操作中のため、装備売却はできません。</value></data>
+  <data name="Equipment selling requires a new, nonempty operation ID of at most 128 characters." xml:space="preserve"><value>装備売却には新しい空でない128文字以内の操作IDが必要です。</value></data>
+  <data name="Equipment selling requires readable gil before submission." xml:space="preserve"><value>売却実行前にギル残高を読み取る必要があります。</value></data>
+  <data name="Equipment selling stopped because an unowned confirmation appeared before submission." xml:space="preserve"><value>実行前に無関係な確認が表示されたため、装備売却を停止しました。</value></data>
+  <data name="Equipment selling stopped: {0}" xml:space="preserve"><value>装備売却を停止：{0}</value></data>
+  <data name="Equipment selling timed out: {0}" xml:space="preserve"><value>装備売却がタイムアウト：{0}</value></data>
+  <data name="Moving unprotected equipment into inventory." xml:space="preserve"><value>保護されていない装備を所持品に移動中です。</value></data>
+  <data name="No eligible unprotected equipment was found." xml:space="preserve"><value>対象となる未保護の装備がありません。</value></data>
+  <data name="No equipment sale receipt matches this operation ID." xml:space="preserve"><value>この操作IDに一致する装備売却記録はありません。</value></data>
+  <data name="Recommended equipment and the active gearset were verified." xml:space="preserve"><value>おすすめ装備と使用中のギアセットを確認しました。</value></data>
+  <data name="Recommended equipment is equipped, but the active gearset update was rejected." xml:space="preserve"><value>おすすめ装備に変更しましたが、使用中のギアセット更新は拒否されました。</value></data>
+  <data name="Recommended equipment was verified; no matching active saved gearset was changed." xml:space="preserve"><value>おすすめ装備を確認しました。一致する使用中の保存済みギアセットは変更していません。</value></data>
+  <data name="Recommended Gear did not finish calculating within 10 seconds." xml:space="preserve"><value>おすすめ装備の計算が10秒以内に完了しませんでした。</value></data>
+  <data name="Recommended Gear is unavailable or already in use." xml:space="preserve"><value>おすすめ装備は利用できないか、すでに使用中です。</value></data>
+  <data name="Scope must be inventory, armoury or both." xml:space="preserve"><value>対象は所持品、アーマリー、両方のいずれかにしてください。</value></data>
+  <data name="Starting equipment selling." xml:space="preserve"><value>装備売却を開始中です。</value></data>
+  <data name="The saved gearset does not match the verified equipped items." xml:space="preserve"><value>保存済みギアセットが確認済みの装備と一致しません。</value></data>
+  <data name="The updated gearset has an unexpected number of equipment slots." xml:space="preserve"><value>更新されたギアセットの装備枠数が想定外です。</value></data>
+  <data name="Waiting for recommended equipment to be verified." xml:space="preserve"><value>おすすめ装備の確認を待っています。</value></data>
+  <data name="Waiting for the equipment shop or selected item menu to be ready." xml:space="preserve"><value>装備ショップまたは選択アイテムのメニューの準備を待っています。</value></data>
+  <data name="Waiting for the exact equipment sale confirmation to settle." xml:space="preserve"><value>対象の装備売却確認が完了するのを待っています。</value></data>
+  <data name="Waiting for the exact equipment sale price and gil result." xml:space="preserve"><value>正確な装備売却価格とギルの変化を待っています。</value></data>
+  <data name="Waiting for the selected equipment vendor's dialog to finish." xml:space="preserve"><value>選択した装備販売NPCの会話終了を待っています。</value></data>
+  <data name="A dialog interrupted the submitted equipment sale." xml:space="preserve"><value>会話により実行済みの装備売却が中断されました。</value></data>
+  <data name="matching equipment sale cancelled" xml:space="preserve"><value>対象の装備売却をキャンセル</value></data>
+  <data name="recommended equipment" xml:space="preserve"><value>おすすめ装備</value></data>
+  <data name="An unowned inventory context menu is open." xml:space="preserve"><value>無関係な所持品コンテキストメニューが開いています。</value></data>
+  <data name="An unrelated confirmation appeared during equipment selling." xml:space="preserve"><value>装備売却中に無関係な確認が表示されました。</value></data>
+  <data name="Another shop action or dialog replaced the equipment sale." xml:space="preserve"><value>別のショップ操作または会話が装備売却を置き換えました。</value></data>
+  <data name="SelectYesno belongs to a different shop transaction." xml:space="preserve"><value>SelectYesnoは別のショップ取引に属しています。</value></data>
+  <data name="The confirmed equipment slot changed before submission." xml:space="preserve"><value>実行前に確認済みの装備枠が変わりました。</value></data>
+  <data name="The equipment context menu selection changed." xml:space="preserve"><value>装備コンテキストメニューの選択が変わりました。</value></data>
+  <data name="The equipment sale callback or confirmed slot is no longer valid." xml:space="preserve"><value>売却コールバックまたは確認済みの枠が無効です。</value></data>
+  <data name="The equipment sale character or territory changed." xml:space="preserve"><value>装備売却のキャラクターまたはエリアが変わりました。</value></data>
+  <data name="The equipment sale target changed to another object." xml:space="preserve"><value>装備売却のターゲットが別のオブジェクトに変わりました。</value></data>
+  <data name="The equipment sale would exceed the game's gil limit." xml:space="preserve"><value>売却するとゲームの所持ギル上限を超えます。</value></data>
+  <data name="The equipment shop exposes multiple sale callbacks." xml:space="preserve"><value>装備ショップに複数の売却コールバックがあります。</value></data>
+  <data name="The equipment shop is in buyback or an unsupported mode." xml:space="preserve"><value>装備ショップが買い戻しまたは未対応モードになっています。</value></data>
+  <data name="The equipment source inventory is unreadable." xml:space="preserve"><value>装備の移動元インベントリを読み取れません。</value></data>
+  <data name="The native context menu does not match the confirmed equipment slot." xml:space="preserve"><value>ネイティブメニューが確認済みの装備枠と一致しません。</value></data>
+  <data name="The native equipment shop state is unsupported." xml:space="preserve"><value>ネイティブ装備ショップの状態に対応していません。</value></data>
+  <data name="The native sale transaction does not match the confirmed equipment slot." xml:space="preserve"><value>ネイティブ売却取引が確認済みの装備枠と一致しません。</value></data>
+  <data name="The native shop or NPC does not match the selected equipment vendor." xml:space="preserve"><value>ネイティブショップまたはNPCが選択した販売NPCと一致しません。</value></data>
+  <data name="Waiting for AgentShop to use the owned Shop callback receiver." xml:space="preserve"><value>AgentShopが対象のShopコールバック受信先を使うのを待っています。</value></data>
+  <data name="Waiting for the equipment shop to enter its normal mode." xml:space="preserve"><value>装備ショップが通常モードになるのを待っています。</value></data>
+  <data name="Waiting for the exact equipment sale confirmation." xml:space="preserve"><value>対象の装備売却確認を待っています。</value></data>
+  <data name="Waiting for the native equipment confirmation callback." xml:space="preserve"><value>ネイティブ装備確認コールバックを待っています。</value></data>
+  <data name="Waiting for the native equipment shop manager." xml:space="preserve"><value>ネイティブ装備ショップ管理機能を待っています。</value></data>
+  <data name="Waiting for the native inventory context agent." xml:space="preserve"><value>ネイティブ所持品コンテキストエージェントを待っています。</value></data>
+  <data name="Waiting for the native Shop proxy and agent." xml:space="preserve"><value>ネイティブShopプロキシとエージェントを待っています。</value></data>
+  <data name="Waiting for the native Shop proxy to attach to this addon." xml:space="preserve"><value>ネイティブShopプロキシがこのウィンドウに接続するのを待っています。</value></data>
+  <data name="Waiting for the native Shop proxy's handler." xml:space="preserve"><value>ネイティブShopプロキシのハンドラーを待っています。</value></data>
+  <data name="Waiting for the owned Shop addon to appear." xml:space="preserve"><value>対象のShopウィンドウの表示を待っています。</value></data>
+  <data name="Waiting for the selected equipment context menu to initialize." xml:space="preserve"><value>選択した装備コンテキストメニューの初期化を待っています。</value></data>
+  <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shopウィンドウの初期設定完了を待っています。</value></data>
+  <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>ショップのネイティブNPC識別情報を待っています。</value></data>
+  <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>装備売却: {0} 売却済み {1}/{2} 個、残り {3} 個。</value></data>
 </root>

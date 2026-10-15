@@ -22,6 +22,8 @@ Debug x64 compilation, exact embedded-resource/status checks and native selector
 
 ADS includes policy-driven desynthesis with local presets, skill-up filtering, three source scopes, completed-duty gain tracking, and stable IPC. Open it with `/ads desynth`; Main > Tools > Treasure And Operations has compact Desynth Controls and Extract Materia launchers. See [Desynthesis](docs/DESYNTHESIS.md) and [IPC](docs/IPC.md).
 
+Open `/ads inv`, or use Inventory in ADS Mini, for manual inventory utilities: current-job Recommended Gear, protected armoury-to-bag moves, white-equipment sales, AutoRetainer-list selling, repairs and existing materia/desynthesis/shopping controls. `/ads gear move` stays white-only; `/ads gear move-all` separately includes all unprotected unequipped armoury gear. White-equipment sales keep their preview preference and saved-gearset protections. The equipment-sale IPC lets another plugin explicitly start and observe that same flow; opening the window starts no work.
+
 ## Shop Purchasing
 
 ADS can resolve deterministic NPC vendor offers and NPC placements from local game data plus a checked-in offline fallback catalog, then buy an exact additional item quantity with `/ads shop <itemID> <quantity>`. Shop List presets add currency-filtered vendor discovery, targeted refill or spend-until-limit modes, inventory/retainer ownership rules, purchase-free previews, and stable Dad-facing operation IPC without changing the single-purchase contract. Supported families include gil, direct/FATE-routed special exchanges, Inclusion, Grand Company, and Free Company shops. Turn-in, sale, random, ambiguous, and unprovable offers remain callback-free. See [Shop Purchasing](docs/SHOP_PURCHASING.md), [Commands](docs/COMMANDS.md), and [IPC](docs/IPC.md).
