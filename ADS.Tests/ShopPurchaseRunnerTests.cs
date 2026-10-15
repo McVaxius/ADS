@@ -802,6 +802,84 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    [InlineData(4, true)]
+    public void EditableExpansionOrderUsesItsRealWeaponArmorAccessoryOffersAndPreservesStopRepeat(int expansionIndex, bool stop)
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        var template = ShopListExamples.GearExpansions[expansionIndex].Jobs[0]; // PLD: distinct weapon and armor menus.
+        Assert.True(store.AddExample(template, out var error), error);
+        var selectedItems = new[] { template.Items[0].ItemId, template.Items[2].ItemId, template.Items[7].ItemId };
+        foreach (var row in store.ActivePreset.Items.ToArray())
+            if (!selectedItems.Contains(row.ItemId)) Assert.True(store.RemoveItem(row.RowId, out error), error);
+        var presetId = store.ActivePresetId;
+        var savedRows = store.ActivePreset.Items.Select(row => row.RowId).ToArray();
+        var snapshot = PoeticsGearCatalogTests.CreateSnapshot();
+        var catalog = new ShopCatalogService(new FixedPoeticsGearSheets(snapshot));
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ArriveOnMove = true };
+        runtime.SetCurrency(Poetics, 2000);
+        runtime.SelectionMenuNpcIds.UnionWith(snapshot.NpcLinks.Select(link => link.NpcId));
+        if (stop) runtime.SetItemCount(selectedItems[1], 1); // An already owned unique piece is skipped.
+        var clock = new FakeClock();
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(catalog, runtime, clock, log);
+        var service = new ShopListService(store, null!, utility, _ => throw new InvalidOperationException("Inventory-only template queried retainers"), log);
+        string Start(string id) => service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+        { version = 1, operationId = id, presetId, supportsFiniteOrderProgress = true }));
+        void Tick(bool interrupt)
+        {
+            for (var tick = 0; tick < 250 && utility.IsRunning; tick++)
+            {
+                utility.Update();
+                clock.Advance(TimeSpan.FromMilliseconds(250));
+                if (interrupt && runtime.SubmitCount == 1) utility.Cancel("Stop expansion test");
+            }
+            Assert.False(utility.IsRunning, utility.StatusMessage);
+        }
+        Assert.Contains("\"accepted\":true", Start("expansion-first"));
+        Tick(stop);
+        Assert.Equal(stop ? 1 : 3, runtime.SubmitCount);
+        if (stop)
+        {
+            Assert.Contains("\"accepted\":true", Start("expansion-remaining"));
+            Tick(false);
+        }
+        Assert.True(utility.ShopListBatchStatus.Succeeded, utility.ShopListBatchStatus.FailureMessage);
+        var expectedCost = selectedItems.Where(item => !stop || item != selectedItems[1])
+            .Sum(item => (long)Assert.Single(catalog.Resolve(item, 1).Offers).Currencies.Single().AmountPerTransaction);
+        Assert.Equal(2000 - expectedCost, runtime.GetAvailableCurrency(new(ShopCurrencyKind.Tomestone, 28, "Poetics", 1)));
+        Assert.All(selectedItems, item => Assert.Equal(1, runtime.GetItemCount(item)));
+        Assert.Equal(stop ? 2 : 3, runtime.SubmitCount);
+        Assert.True(runtime.MenuSelectCount >= 2);
+        Assert.True(runtime.TeleportCount > 0);
+        Assert.All(runtime.SubmittedNpcIds, npc => Assert.Contains(npc, selectedItems.Select(item =>
+            Assert.Single(catalog.Resolve(item, 1).Offers).NpcId)));
+        var before = runtime.SubmitCount;
+        var currencyBefore = runtime.GetAvailableCurrency(new(ShopCurrencyKind.Tomestone, 28, "Poetics", 1));
+        Assert.Contains("\"disposition\":\"fulfilled\"", Start("expansion-repeat"));
+        Tick(false);
+        Assert.Equal(before, runtime.SubmitCount);
+        Assert.Equal(currencyBefore, runtime.GetAvailableCurrency(new(ShopCurrencyKind.Tomestone, 28, "Poetics", 1)));
+        store.Reload();
+        Assert.Equal(savedRows, store.ActivePreset.Items.Select(row => row.RowId));
+        Assert.Equal(presetId, store.ActivePresetId);
+    }
+
+    private sealed class FixedPoeticsGearSheets(ShopCatalogSnapshot snapshot) : IShopSheetSource
+    {
+        public ShopCatalogSnapshot BuildSnapshot() => snapshot;
+    }
+
+    [Theory]
     [InlineData(ShopListMode.TargetedRefill, 2000, false)]
     [InlineData(ShopListMode.TargetedRefill, 900, false)]
     [InlineData(ShopListMode.FillOrderOverMultipleRuns, 900, false)]

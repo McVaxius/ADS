@@ -11574,4 +11574,12 @@
   <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>装備品「{0}」の売却をスキップ：{1}</value></data>
   <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>装備品の売却完了：{0}個売却、{1}個スキップ。</value></data>
   <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>選択した装備品には実行可能な売却操作がありません。</value></data>
+  <data name="Job" xml:space="preserve"><value>ジョブ</value></data>
+  <data name="Add gear example" xml:space="preserve"><value>装備サンプルを追加</value></data>
+  <data name="One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying." xml:space="preserve"><value>このジョブで入手可能な詩学装備を各1個。レア属性の指輪は1個のみで、古い段階には新ジョブ用の武器がない場合があります。コピーを編集し、購入前にリストをテストしてください。</value></data>
+  <data name="ARR - Augmented Ironworks (Lv. 50 / IL 130)" xml:space="preserve"><value>ARR - 詩学装備 (Lv. 50 / IL 130)</value></data>
+  <data name="HW - Augmented Shire (Lv. 60 / IL 270)" xml:space="preserve"><value>HW - 詩学装備 (Lv. 60 / IL 270)</value></data>
+  <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 詩学装備 (Lv. 70 / IL 400)</value></data>
+  <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 詩学装備 (Lv. 80 / IL 530)</value></data>
+  <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 詩学装備 (Lv. 90 / IL 660)</value></data>
 </root>

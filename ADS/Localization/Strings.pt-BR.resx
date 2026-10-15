@@ -11574,4 +11574,12 @@
   <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Venda de equipamento ignorada para {0}: {1}</value></data>
   <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Venda de equipamento concluída: {0} vendidos; {1} ignorados.</value></data>
   <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>O equipamento selecionado não tem nenhuma ação de venda disponível.</value></data>
+  <data name="Job" xml:space="preserve"><value>Job</value></data>
+  <data name="Add gear example" xml:space="preserve"><value>Adicionar exemplo de equipamento</value></data>
+  <data name="One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying." xml:space="preserve"><value>Uma unidade de cada peça de Poéticas disponível para este job. Anéis únicos aparecem uma vez; patamares antigos podem não ter armas para jobs novos. Edite a cópia e teste a lista antes de comprar.</value></data>
+  <data name="ARR - Augmented Ironworks (Lv. 50 / IL 130)" xml:space="preserve"><value>ARR - Equipamento de Poéticas (nv. 50 / IL 130)</value></data>
+  <data name="HW - Augmented Shire (Lv. 60 / IL 270)" xml:space="preserve"><value>HW - Equipamento de Poéticas (nv. 60 / IL 270)</value></data>
+  <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Equipamento de Poéticas (nv. 70 / IL 400)</value></data>
+  <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Equipamento de Poéticas (nv. 80 / IL 530)</value></data>
+  <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Equipamento de Poéticas (nv. 90 / IL 660)</value></data>
 </root>

@@ -11574,4 +11574,12 @@
   <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>略過出售裝備 {0}：{1}</value></data>
   <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>裝備出售結束：已出售 {0} 件；已略過 {1} 件。</value></data>
   <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>所選裝備沒有可用的出售操作。</value></data>
+  <data name="Job" xml:space="preserve"><value>職業</value></data>
+  <data name="Add gear example" xml:space="preserve"><value>新增裝備範例</value></data>
+  <data name="One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying." xml:space="preserve"><value>此職業可購買的詩學裝備各一件。獨有戒指只列一次；舊裝備階段可能沒有新職業的武器。請編輯副本，並在購買前測試清單。</value></data>
+  <data name="ARR - Augmented Ironworks (Lv. 50 / IL 130)" xml:space="preserve"><value>ARR - 詩學裝備 (等級 50 / IL 130)</value></data>
+  <data name="HW - Augmented Shire (Lv. 60 / IL 270)" xml:space="preserve"><value>HW - 詩學裝備 (等級 60 / IL 270)</value></data>
+  <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 詩學裝備 (等級 70 / IL 400)</value></data>
+  <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 詩學裝備 (等級 80 / IL 530)</value></data>
+  <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 詩學裝備 (等級 90 / IL 660)</value></data>
 </root>

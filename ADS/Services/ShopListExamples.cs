@@ -5,8 +5,143 @@ internal sealed record ShopListExample(
     string Description,
     IReadOnlyList<(uint ItemId, int Quantity)> Items);
 
+internal sealed record ShopListGearExpansion(string Name, IReadOnlyList<ShopListExample> Jobs);
+
 internal static class ShopListExamples
 {
+    internal static readonly string[] GearJobs = ["PLD", "WAR", "DRK", "GNB", "WHM", "SCH", "AST", "SGE", "MNK", "DRG", "NIN", "SAM", "RPR", "VPR", "BRD", "MCH", "DNC", "BLM", "SMN", "RDM", "PCT"];
+    internal const string GearDescription = "One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying.";
+
+    // Current Item/ClassJobCategory and SpecialShop offers, XIVAPI sheet version
+    // 5c744a8d8daafb25. Prices and vendor routing remain the live catalog's responsibility.
+    // ARR/HW accessories allow every class; these lists use the job's intended stat role.
+    internal static IReadOnlyList<ShopListGearExpansion> GearExpansions { get; } =
+    [
+        new("ARR - Augmented Ironworks (Lv. 50 / IL 130)",
+        [
+            Gear("ARR - Augmented Ironworks - PLD", [8933, 8932, 8876, 8877, 8878, 8879, 8880, 8883, 8884, 8882, 8885]),
+            Gear("ARR - Augmented Ironworks - WAR", [8935, 8876, 8877, 8878, 8879, 8880, 8883, 8884, 8882, 8885]),
+            Gear("ARR - Augmented Ironworks - DRK", [10461, 8876, 8877, 8878, 8879, 8880, 8883, 8884, 8882, 8885]),
+            Gear("ARR - Augmented Ironworks - GNB", [8876, 8877, 8878, 8879, 8880, 8883, 8884, 8882, 8885]),
+            Gear("ARR - Augmented Ironworks - WHM", [8939, 8912, 8913, 8914, 8915, 8916, 8919, 8920, 8918, 8921]),
+            Gear("ARR - Augmented Ironworks - SCH", [8942, 8912, 8913, 8914, 8915, 8916, 8919, 8920, 8918, 8921]),
+            Gear("ARR - Augmented Ironworks - AST", [10585, 8912, 8913, 8914, 8915, 8916, 8919, 8920, 8918, 8921]),
+            Gear("ARR - Augmented Ironworks - SGE", [8912, 8913, 8914, 8915, 8916, 8919, 8920, 8918, 8921]),
+            Gear("ARR - Augmented Ironworks - MNK", [8934, 8892, 8893, 8894, 8895, 8896, 8899, 8900, 8898, 8901]),
+            Gear("ARR - Augmented Ironworks - DRG", [8936, 8886, 8887, 8888, 8889, 8890, 8899, 8900, 8898, 8901]),
+            Gear("ARR - Augmented Ironworks - NIN", [8938, 9473, 9474, 9475, 9476, 9477, 8909, 8910, 8908, 8911]),
+            Gear("ARR - Augmented Ironworks - SAM", [20386, 8892, 8893, 8894, 8895, 8896, 8899, 8900, 8898, 8901]),
+            Gear("ARR - Augmented Ironworks - RPR", [8886, 8887, 8888, 8889, 8890, 8899, 8900, 8898, 8901]),
+            Gear("ARR - Augmented Ironworks - VPR", [9473, 9474, 9475, 9476, 9477, 8909, 8910, 8908, 8911]),
+            Gear("ARR - Augmented Ironworks - BRD", [8937, 8902, 8903, 8904, 8905, 8906, 8909, 8910, 8908, 8911]),
+            Gear("ARR - Augmented Ironworks - MCH", [10523, 8902, 8903, 8904, 8905, 8906, 8909, 8910, 8908, 8911]),
+            Gear("ARR - Augmented Ironworks - DNC", [8902, 8903, 8904, 8905, 8906, 8909, 8910, 8908, 8911]),
+            Gear("ARR - Augmented Ironworks - BLM", [8940, 8922, 8923, 8924, 8925, 8926, 8929, 8930, 8928, 8931]),
+            Gear("ARR - Augmented Ironworks - SMN", [8941, 8922, 8923, 8924, 8925, 8926, 8929, 8930, 8928, 8931]),
+            Gear("ARR - Augmented Ironworks - RDM", [20387, 8922, 8923, 8924, 8925, 8926, 8929, 8930, 8928, 8931]),
+            Gear("ARR - Augmented Ironworks - PCT", [8922, 8923, 8924, 8925, 8926, 8929, 8930, 8928, 8931]),
+        ]),
+        new("HW - Augmented Shire (Lv. 60 / IL 270)",
+        [
+            Gear("HW - Augmented Shire - PLD", [16327, 16340, 16341, 16342, 16343, 16344, 16345, 16383, 16388, 16393, 16398]),
+            Gear("HW - Augmented Shire - WAR", [16329, 16341, 16342, 16343, 16344, 16345, 16383, 16388, 16393, 16398]),
+            Gear("HW - Augmented Shire - DRK", [16333, 16341, 16342, 16343, 16344, 16345, 16383, 16388, 16393, 16398]),
+            Gear("HW - Augmented Shire - GNB", [27353, 16341, 16342, 16343, 16344, 16345, 16383, 16388, 16393, 16398]),
+            Gear("HW - Augmented Shire - WHM", [16335, 16371, 16372, 16373, 16374, 16375, 16386, 16391, 16396, 16401]),
+            Gear("HW - Augmented Shire - SCH", [16338, 16371, 16372, 16373, 16374, 16375, 16386, 16391, 16396, 16401]),
+            Gear("HW - Augmented Shire - AST", [16339, 16371, 16372, 16373, 16374, 16375, 16386, 16391, 16396, 16401]),
+            Gear("HW - Augmented Shire - SGE", [16371, 16372, 16373, 16374, 16375, 16386, 16391, 16396, 16401]),
+            Gear("HW - Augmented Shire - MNK", [16328, 16353, 16354, 16355, 16356, 16357, 16384, 16389, 16394, 16399]),
+            Gear("HW - Augmented Shire - DRG", [16330, 16347, 16348, 16349, 16350, 16351, 16384, 16389, 16394, 16399]),
+            Gear("HW - Augmented Shire - NIN", [16332, 16365, 16366, 16367, 16368, 16369, 16385, 16390, 16395, 16400]),
+            Gear("HW - Augmented Shire - SAM", [20422, 16353, 16354, 16355, 16356, 16357, 16384, 16389, 16394, 16399]),
+            Gear("HW - Augmented Shire - RPR", [16347, 16348, 16349, 16350, 16351, 16384, 16389, 16394, 16399]),
+            Gear("HW - Augmented Shire - VPR", [16365, 16366, 16367, 16368, 16369, 16385, 16390, 16395, 16400]),
+            Gear("HW - Augmented Shire - BRD", [16331, 16359, 16360, 16361, 16362, 16363, 16385, 16390, 16395, 16400]),
+            Gear("HW - Augmented Shire - MCH", [16334, 16359, 16360, 16361, 16362, 16363, 16385, 16390, 16395, 16400]),
+            Gear("HW - Augmented Shire - DNC", [27354, 16359, 16360, 16361, 16362, 16363, 16385, 16390, 16395, 16400]),
+            Gear("HW - Augmented Shire - BLM", [16336, 16377, 16378, 16379, 16380, 16381, 16387, 16392, 16397, 16402]),
+            Gear("HW - Augmented Shire - SMN", [16337, 16377, 16378, 16379, 16380, 16381, 16387, 16392, 16397, 16402]),
+            Gear("HW - Augmented Shire - RDM", [20423, 16377, 16378, 16379, 16380, 16381, 16387, 16392, 16397, 16402]),
+            Gear("HW - Augmented Shire - PCT", [16377, 16378, 16379, 16380, 16381, 16387, 16392, 16397, 16402]),
+        ]),
+        new("SB - Augmented Scaevan (Lv. 70 / IL 400)",
+        [
+            Gear("SB - Augmented Scaevan - PLD", [23472, 23487, 23488, 23489, 23490, 23491, 23492, 23530, 23535, 23540, 23545]),
+            Gear("SB - Augmented Scaevan - WAR", [23474, 23488, 23489, 23490, 23491, 23492, 23530, 23535, 23540, 23545]),
+            Gear("SB - Augmented Scaevan - DRK", [23478, 23488, 23489, 23490, 23491, 23492, 23530, 23535, 23540, 23545]),
+            Gear("SB - Augmented Scaevan - GNB", [27385, 23488, 23489, 23490, 23491, 23492, 23530, 23535, 23540, 23545]),
+            Gear("SB - Augmented Scaevan - WHM", [23480, 23518, 23519, 23520, 23521, 23522, 23533, 23538, 23543, 23548]),
+            Gear("SB - Augmented Scaevan - SCH", [23483, 23518, 23519, 23520, 23521, 23522, 23533, 23538, 23543, 23548]),
+            Gear("SB - Augmented Scaevan - AST", [23484, 23518, 23519, 23520, 23521, 23522, 23533, 23538, 23543, 23548]),
+            Gear("SB - Augmented Scaevan - SGE", [35779, 23518, 23519, 23520, 23521, 23522, 23533, 23538, 23543, 23548]),
+            Gear("SB - Augmented Scaevan - MNK", [23473, 23500, 23501, 23502, 23503, 23504, 23531, 23536, 23541, 23546]),
+            Gear("SB - Augmented Scaevan - DRG", [23475, 23494, 23495, 23496, 23497, 23498, 23531, 23536, 23541, 23546]),
+            Gear("SB - Augmented Scaevan - NIN", [23477, 23512, 23513, 23514, 23515, 23516, 23532, 23537, 23542, 23547]),
+            Gear("SB - Augmented Scaevan - SAM", [23485, 23500, 23501, 23502, 23503, 23504, 23531, 23536, 23541, 23546]),
+            Gear("SB - Augmented Scaevan - RPR", [35761, 23494, 23495, 23496, 23497, 23498, 23531, 23536, 23541, 23546]),
+            Gear("SB - Augmented Scaevan - VPR", [23512, 23513, 23514, 23515, 23516, 23532, 23537, 23542, 23547]),
+            Gear("SB - Augmented Scaevan - BRD", [23476, 23506, 23507, 23508, 23509, 23510, 23532, 23537, 23542, 23547]),
+            Gear("SB - Augmented Scaevan - MCH", [23479, 23506, 23507, 23508, 23509, 23510, 23532, 23537, 23542, 23547]),
+            Gear("SB - Augmented Scaevan - DNC", [27386, 23506, 23507, 23508, 23509, 23510, 23532, 23537, 23542, 23547]),
+            Gear("SB - Augmented Scaevan - BLM", [23481, 23524, 23525, 23526, 23527, 23528, 23534, 23539, 23544, 23549]),
+            Gear("SB - Augmented Scaevan - SMN", [23482, 23524, 23525, 23526, 23527, 23528, 23534, 23539, 23544, 23549]),
+            Gear("SB - Augmented Scaevan - RDM", [23486, 23524, 23525, 23526, 23527, 23528, 23534, 23539, 23544, 23549]),
+            Gear("SB - Augmented Scaevan - PCT", [23524, 23525, 23526, 23527, 23528, 23534, 23539, 23544, 23549]),
+        ]),
+        new("ShB - Augmented Cryptlurker (Lv. 80 / IL 530)",
+        [
+            Gear("ShB - Augmented Cryptlurker - PLD", [32498, 32515, 32516, 32517, 32518, 32519, 32520, 32558, 32563, 32568, 32573]),
+            Gear("ShB - Augmented Cryptlurker - WAR", [32500, 32516, 32517, 32518, 32519, 32520, 32558, 32563, 32568, 32573]),
+            Gear("ShB - Augmented Cryptlurker - DRK", [32504, 32516, 32517, 32518, 32519, 32520, 32558, 32563, 32568, 32573]),
+            Gear("ShB - Augmented Cryptlurker - GNB", [32513, 32516, 32517, 32518, 32519, 32520, 32558, 32563, 32568, 32573]),
+            Gear("ShB - Augmented Cryptlurker - WHM", [32506, 32546, 32547, 32548, 32549, 32550, 32561, 32566, 32571, 32576]),
+            Gear("ShB - Augmented Cryptlurker - SCH", [32509, 32546, 32547, 32548, 32549, 32550, 32561, 32566, 32571, 32576]),
+            Gear("ShB - Augmented Cryptlurker - AST", [32510, 32546, 32547, 32548, 32549, 32550, 32561, 32566, 32571, 32576]),
+            Gear("ShB - Augmented Cryptlurker - SGE", [35789, 32546, 32547, 32548, 32549, 32550, 32561, 32566, 32571, 32576]),
+            Gear("ShB - Augmented Cryptlurker - MNK", [32499, 32528, 32529, 32530, 32531, 32532, 32559, 32564, 32569, 32574]),
+            Gear("ShB - Augmented Cryptlurker - DRG", [32501, 32522, 32523, 32524, 32525, 32526, 32559, 32564, 32569, 32574]),
+            Gear("ShB - Augmented Cryptlurker - NIN", [32503, 32540, 32541, 32542, 32543, 32544, 32560, 32565, 32570, 32575]),
+            Gear("ShB - Augmented Cryptlurker - SAM", [32511, 32528, 32529, 32530, 32531, 32532, 32559, 32564, 32569, 32574]),
+            Gear("ShB - Augmented Cryptlurker - RPR", [35771, 32522, 32523, 32524, 32525, 32526, 32559, 32564, 32569, 32574]),
+            Gear("ShB - Augmented Cryptlurker - VPR", [43630, 32540, 32541, 32542, 32543, 32544, 32560, 32565, 32570, 32575]),
+            Gear("ShB - Augmented Cryptlurker - BRD", [32502, 32534, 32535, 32536, 32537, 32538, 32560, 32565, 32570, 32575]),
+            Gear("ShB - Augmented Cryptlurker - MCH", [32505, 32534, 32535, 32536, 32537, 32538, 32560, 32565, 32570, 32575]),
+            Gear("ShB - Augmented Cryptlurker - DNC", [32514, 32534, 32535, 32536, 32537, 32538, 32560, 32565, 32570, 32575]),
+            Gear("ShB - Augmented Cryptlurker - BLM", [32507, 32552, 32553, 32554, 32555, 32556, 32562, 32567, 32572, 32577]),
+            Gear("ShB - Augmented Cryptlurker - SMN", [32508, 32552, 32553, 32554, 32555, 32556, 32562, 32567, 32572, 32577]),
+            Gear("ShB - Augmented Cryptlurker - RDM", [32512, 32552, 32553, 32554, 32555, 32556, 32562, 32567, 32572, 32577]),
+            Gear("ShB - Augmented Cryptlurker - PCT", [43651, 32552, 32553, 32554, 32555, 32556, 32562, 32567, 32572, 32577]),
+        ]),
+        new("EW - Augmented Credendum (Lv. 90 / IL 660)",
+        [
+            Gear("EW - Augmented Credendum - PLD", [40090, 40109, 40110, 40111, 40112, 40113, 40114, 40145, 40150, 40155, 40160]),
+            Gear("EW - Augmented Credendum - WAR", [40092, 40110, 40111, 40112, 40113, 40114, 40145, 40150, 40155, 40160]),
+            Gear("EW - Augmented Credendum - DRK", [40096, 40110, 40111, 40112, 40113, 40114, 40145, 40150, 40155, 40160]),
+            Gear("EW - Augmented Credendum - GNB", [40105, 40110, 40111, 40112, 40113, 40114, 40145, 40150, 40155, 40160]),
+            Gear("EW - Augmented Credendum - WHM", [40098, 40135, 40136, 40137, 40138, 40139, 40148, 40153, 40158, 40163]),
+            Gear("EW - Augmented Credendum - SCH", [40101, 40135, 40136, 40137, 40138, 40139, 40148, 40153, 40158, 40163]),
+            Gear("EW - Augmented Credendum - AST", [40102, 40135, 40136, 40137, 40138, 40139, 40148, 40153, 40158, 40163]),
+            Gear("EW - Augmented Credendum - SGE", [40107, 40135, 40136, 40137, 40138, 40139, 40148, 40153, 40158, 40163]),
+            Gear("EW - Augmented Credendum - MNK", [40091, 40120, 40121, 40122, 40123, 40124, 40146, 40151, 40156, 40161]),
+            Gear("EW - Augmented Credendum - DRG", [40093, 40115, 40116, 40117, 40118, 40119, 40146, 40151, 40156, 40161]),
+            Gear("EW - Augmented Credendum - NIN", [40095, 40130, 40131, 40132, 40133, 40134, 40147, 40152, 40157, 40162]),
+            Gear("EW - Augmented Credendum - SAM", [40103, 40120, 40121, 40122, 40123, 40124, 40146, 40151, 40156, 40161]),
+            Gear("EW - Augmented Credendum - RPR", [40108, 40115, 40116, 40117, 40118, 40119, 40146, 40151, 40156, 40161]),
+            Gear("EW - Augmented Credendum - VPR", [43632, 40130, 40131, 40132, 40133, 40134, 40147, 40152, 40157, 40162]),
+            Gear("EW - Augmented Credendum - BRD", [40094, 40125, 40126, 40127, 40128, 40129, 40147, 40152, 40157, 40162]),
+            Gear("EW - Augmented Credendum - MCH", [40097, 40125, 40126, 40127, 40128, 40129, 40147, 40152, 40157, 40162]),
+            Gear("EW - Augmented Credendum - DNC", [40106, 40125, 40126, 40127, 40128, 40129, 40147, 40152, 40157, 40162]),
+            Gear("EW - Augmented Credendum - BLM", [40099, 40140, 40141, 40142, 40143, 40144, 40149, 40154, 40159, 40164]),
+            Gear("EW - Augmented Credendum - SMN", [40100, 40140, 40141, 40142, 40143, 40144, 40149, 40154, 40159, 40164]),
+            Gear("EW - Augmented Credendum - RDM", [40104, 40140, 40141, 40142, 40143, 40144, 40149, 40154, 40159, 40164]),
+            Gear("EW - Augmented Credendum - PCT", [43653, 40140, 40141, 40142, 40143, 40144, 40149, 40154, 40159, 40164]),
+        ]),
+    ];
+
+    private static ShopListExample Gear(string name, uint[] items)
+        => new(name, GearDescription, items.Select(itemId => (itemId, 1)).ToArray());
+
     // Step quantities: https://ffxiv.consolegameswiki.com/wiki/Zodiac_Weapons
     // and https://ffxiv.consolegameswiki.com/wiki/Anima_Weapons.
     internal static IReadOnlyList<ShopListExample> RelicSteps { get; } =

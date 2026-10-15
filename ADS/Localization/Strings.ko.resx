@@ -11574,4 +11574,12 @@
   <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>장비 {0} 판매 건너뜀: {1}</value></data>
   <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>장비 판매 완료: {0}개 판매, {1}개 건너뜀.</value></data>
   <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>선택한 장비에는 사용 가능한 판매 동작이 없습니다.</value></data>
+  <data name="Job" xml:space="preserve"><value>직업</value></data>
+  <data name="Add gear example" xml:space="preserve"><value>장비 예시 추가</value></data>
+  <data name="One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying." xml:space="preserve"><value>이 직업에 사용할 수 있는 시학 장비를 각 1개씩 포함합니다. 고유 반지는 한 번만 포함되며, 이전 단계에는 신규 직업의 무기가 없을 수 있습니다. 사본을 수정하고 구매 전에 목록을 테스트하세요.</value></data>
+  <data name="ARR - Augmented Ironworks (Lv. 50 / IL 130)" xml:space="preserve"><value>ARR - 시학 장비 (레벨 50 / IL 130)</value></data>
+  <data name="HW - Augmented Shire (Lv. 60 / IL 270)" xml:space="preserve"><value>HW - 시학 장비 (레벨 60 / IL 270)</value></data>
+  <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 시학 장비 (레벨 70 / IL 400)</value></data>
+  <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 시학 장비 (레벨 80 / IL 530)</value></data>
+  <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 시학 장비 (레벨 90 / IL 660)</value></data>
 </root>

@@ -22,6 +22,8 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     private string newPresetName = string.Empty;
     private string renamePresetName = string.Empty;
     private int relicExampleIndex;
+    private int gearExpansionIndex;
+    private int gearJobIndex;
     private int newItemId;
     private int newTriggerBelow = 1;
     private int newRefillToAtLeast = 1;
@@ -186,6 +188,8 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         MaterialText.TextWrapped(Ui.Display(examples[relicExampleIndex].Description));
         MaterialText.TextWrapped(Ui.T("Examples use Poetics and inventory-only refill targets. Adjust targets for your unfinished step; Add example does not start purchases. Mysterious Map and its farming belong to Loot Goblin."));
 
+        DrawGearExamples(service);
+
         ImGui.SetNextItemWidth(240f);
         WindowLayout.InputText(Ui.L("New preset"), ref newPresetName, 80);
         ImGui.SameLine();
@@ -297,6 +301,44 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Add / update item")))
             AddOrUpdateItem((uint)Math.Max(0, newItemId));
+    }
+
+    private void DrawGearExamples(ShopListService service)
+    {
+        var expansions = ShopListExamples.GearExpansions;
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+        ImGui.PushID("poetics-gear-examples");
+        try
+        {
+            var expansionNames = expansions.Select(expansion => Ui.Display(expansion.Name)).ToArray();
+            ImGui.SetNextItemWidth(340f * MaterialTheme.Metrics.Scale);
+            WindowLayout.Combo(WindowLayout.InputLabel("Expansion", WindowLayout.ComboMinimum(expansionNames)),
+                ref gearExpansionIndex, expansionNames, expansionNames.Length);
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(ShopListExamples.GearJobs));
+            WindowLayout.Combo(WindowLayout.InputLabel("Job", WindowLayout.ComboMinimum(ShopListExamples.GearJobs)),
+                ref gearJobIndex, ShopListExamples.GearJobs, ShopListExamples.GearJobs.Length);
+            ImGui.SameLine();
+            if (WindowLayout.Button(Ui.L("Add gear example")))
+            {
+                var succeeded = service.AddExamplePreset(expansions[gearExpansionIndex].Jobs[gearJobIndex], out var error);
+                SetStatus(succeeded, error);
+                if (succeeded)
+                {
+                    renamePresetName = string.Empty;
+                    settingsPresetId = Guid.Empty;
+                    RefreshPreview();
+                    status = "Example added as an editable preset. Review targets, then Test preset before Run Shop List.";
+                }
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.BeginTooltip();
+                try { MaterialText.Text(Ui.T(ShopListExamples.GearDescription), ImGui.GetFontSize() * 32); }
+                finally { ImGui.EndTooltip(); }
+            }
+        }
+        finally { ImGui.PopID(); }
     }
 
     private void DrawImportControls()

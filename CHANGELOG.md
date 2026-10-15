@@ -1,3 +1,8 @@
+2026-10-15 - Expansion Poetics gear examples
+
+- Add editable Poetics gear examples for 21 combat jobs across ARR Ironworks, HW Shire, SB Scaevan, ShB Cryptlurker and EW Credendum. Choose Expansion and Job in Shop Lists, then Add gear example. Existing lists and separate relic/material examples remain intact; adding an example never starts purchasing.
+- Target one of each available piece, including PLD shields and individually named Endwalker weapons. Use the intended stat-role accessories for ARR/HW, omit obsolete belts and include each unique ring once. Prices and vendor/menu selection continue to come from the game catalog.
+
 2026-10-15 - Inventory movement and Auto Equip IPC
 
 - Expose `ADS.StartGearMove(bool allUnprotected)` and `ADS.StartAutoEquip()` through the existing guarded manual action wrappers. Advertise them in capabilities and reuse shared utility status/cancellation. Document the developer signatures, movement scopes and accepted-versus-completed behavior beside equipment-sale IPC.

@@ -6,6 +6,59 @@ namespace ADS.Tests;
 
 public sealed class ShopListExamplesTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void ExpansionGearExamplesSaveEditableCopiesAndNeverOverwriteOrReinsertThem(int expansionIndex)
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.Equal(3, store.Presets.Count); // Gear examples stay opt-in.
+        Assert.True(store.Create("My existing list", out _));
+        Assert.True(store.SetItem(42, 2, 4, true, ShopListOwnershipScope.InventoryAndRetainers, out _));
+        var existingId = store.ActivePresetId;
+        var existing = JsonSerializer.Serialize(store.ActivePreset);
+        var expansion = ShopListExamples.GearExpansions[expansionIndex];
+        foreach (var example in expansion.Jobs)
+        {
+            Assert.True(store.AddExample(example, out var error), error);
+            var copy = store.ActivePreset;
+            Assert.Equal(example.Name, copy.Name);
+            Assert.Equal(ShopListMode.TargetedRefill, copy.Mode);
+            Assert.Equal(new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28), copy.Currency);
+            Assert.Equal(example.Items.Select(item => item.ItemId), copy.Items.Select(item => item.ItemId));
+            Assert.All(copy.Items, row =>
+            {
+                Assert.Equal(1, row.TriggerBelow);
+                Assert.Equal(1, row.RefillToAtLeast);
+                Assert.False(row.Repeatable);
+                Assert.Equal(ShopListOwnershipScope.InventoryOnly, row.OwnershipScope);
+            });
+            var saved = File.ReadAllText(store.ConfigPath);
+            Assert.False(store.AddExample(example, out _));
+            Assert.Equal(saved, File.ReadAllText(store.ConfigPath));
+            store.Reload();
+            Assert.Equal(JsonSerializer.Serialize(copy), JsonSerializer.Serialize(store.ActivePreset));
+            Assert.Equal(existing, JsonSerializer.Serialize(store.Get(existingId)));
+        }
+        var originalCopyId = store.ActivePresetId;
+        var originalRow = store.ActivePreset.Items[0];
+        Assert.True(store.RenameActive("My adjusted gear", out _));
+        Assert.True(store.UpdateItem(originalRow.RowId, 2, 2, false, ShopListOwnershipScope.InventoryOnly, out _));
+        Assert.True(store.AddExample(expansion.Jobs[^1], out _));
+        Assert.NotEqual(originalCopyId, store.ActivePresetId);
+        Assert.All(expansion.Jobs.SelectMany(example => example.Items), item => Assert.Equal(1, item.Quantity));
+        Assert.Equal(2, store.Get(originalCopyId).Items[0].RefillToAtLeast);
+        var deleted = store.ActivePresetId;
+        Assert.True(store.DeleteActive(out _));
+        store.Reload();
+        Assert.DoesNotContain(store.Presets, preset => preset.PresetId == deleted);
+        Assert.Equal(existing, JsonSerializer.Serialize(store.Get(existingId)));
+    }
+
     [Fact]
     public void RelicOrdersHaveStableIdsAndPreserveUpgradeEditsSelectionAndDeletions()
     {

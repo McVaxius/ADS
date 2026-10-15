@@ -4130,4 +4130,12 @@
   <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>उपकरण {0} की बिक्री छोड़ी गई: {1}</value></data>
   <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>उपकरण बिक्री पूरी हुई: {0} बेचे गए; {1} छोड़े गए।</value></data>
   <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>चुने गए उपकरण के लिए कोई बिक्री कार्रवाई उपलब्ध नहीं है।</value></data>
+  <data name="Job" xml:space="preserve"><value>जॉब</value></data>
+  <data name="Add gear example" xml:space="preserve"><value>उपकरण उदाहरण जोड़ें</value></data>
+  <data name="One of each available Poetics piece for this job. Unique rings are included once; older tiers may have no weapon for newer jobs. Edit the copy, then Test preset before buying." xml:space="preserve"><value>इस जॉब के लिए उपलब्ध हर Poetics उपकरण की एक प्रति। अनूठी अंगूठी एक बार शामिल है; पुराने स्तरों पर नए जॉब के हथियार नहीं हो सकते। प्रति संपादित करें और खरीदने से पहले सूची जाँचें।</value></data>
+  <data name="ARR - Augmented Ironworks (Lv. 50 / IL 130)" xml:space="preserve"><value>ARR - Poetics उपकरण (स्तर 50 / IL 130)</value></data>
+  <data name="HW - Augmented Shire (Lv. 60 / IL 270)" xml:space="preserve"><value>HW - Poetics उपकरण (स्तर 60 / IL 270)</value></data>
+  <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Poetics उपकरण (स्तर 70 / IL 400)</value></data>
+  <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Poetics उपकरण (स्तर 80 / IL 530)</value></data>
+  <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Poetics उपकरण (स्तर 90 / IL 660)</value></data>
 </root>
