@@ -52,6 +52,8 @@ Select **Guided Setup** for five independent, replayable setup flows. During an 
 
 Use **Resume** after a plugin reload or intentional stop while still inside the duty. Use **Leave** only when ADS owns execution and you want ADS to request duty exit.
 
+While ADS owns a duty, native cutscenes hold execution and pause its existing navigation, interaction, recovery and frontier timeout budgets. When the cutscene finishes, those timers resume with their remaining time and the objective is retained. **Stop** cancels owned execution; real zoning keeps its normal transition handling.
+
 ## Safety And Stop Guidance
 
 - **Stop** is always available in Main and compact Controls.
@@ -61,7 +63,7 @@ Use **Resume** after a plugin reload or intentional stop while still inside the 
 - **Leave** is disabled unless ADS owns execution.
 - Duty maturity and catalog metadata describe validation status; live instanced-duty truth controls whether inside start/resume is available.
 - On an ADS-owned run, ADS uses XA Slave's dialog/cutscene skipper only when `TextAdvance.IsEnabled` is false or unavailable. `/ads skipper [on|off]` controls that fallback for the current run only; it never changes TextAdvance or FrenRider.
-- ADS is inactive in the current crowded-activity territory list (512, 514, 515, 624, 625, 656, 732, 763, 795, 827, 900, 901, 920, 929, 939, 975, 1163, 1252, 1346): it parks existing work, refuses automation starts, and keeps the UI, **Stop**, and Cancel Utility available.
+- ADS is inactive in the current crowded-activity territory list (512, 514, 515, 624, 625, 656, 732, 763, 795, 827, 900, 901, 920, 929, 939, 975, 1163, 1252, 1346): it parks existing work, refuses automation starts, and keeps the UI, **Stop**, and Cancel Utility available. Ocean Fishing allows the explicitly owned local-only NPC sale used for inventory recovery, without teleporting or entering an inn. After departure, a stale Ocean Fishing context does not block a settled NPC sale. Duty/inn/AutoRetainer ownership, character and UI checks, cancellation and verified completion still apply; other utilities remain excluded.
 
 ## Regular-Duty BossMod Follow
 

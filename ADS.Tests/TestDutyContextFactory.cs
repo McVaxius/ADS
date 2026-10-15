@@ -17,7 +17,8 @@ internal static class TestDutyContextFactory
         string? alliance = null,
         bool inCombat = false,
         bool casting = false,
-        bool occupied39 = false)
+        bool occupied39 = false,
+        bool watchingCutscene = false)
         => new()
         {
             PluginEnabled = pluginEnabled,
@@ -32,7 +33,7 @@ internal static class TestDutyContextFactory
             OccupiedInQuestEvent = occupied,
             OccupiedInEvent = false,
             OccupiedInCutSceneEvent = cutscene,
-            WatchingCutscene = false,
+            WatchingCutscene = watchingCutscene,
             InCombat = inCombat,
             Mounted = false,
             Casting = casting,

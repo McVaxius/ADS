@@ -241,9 +241,26 @@ public sealed unsafe class UtilityAutomationService
     private bool gearCleanupInteracted;
     private uint gearCleanupLastMenuHandler;
     private ulong gearCleanupConfirmationCharacter;
-    public NpcSaleStatusSnapshot NpcSaleStatus => npcSaleStatus.Running
-        ? npcSaleStatus with { StatusMessage = StatusMessage }
-        : npcSaleStatus;
+    private string npcSaleLastStartError = string.Empty;
+    public NpcSaleStatusSnapshot NpcSaleStatus
+    {
+        get
+        {
+            var status = npcSaleStatus with { LastStartError = npcSaleLastStartError };
+            if (status.Running)
+                return status with { StatusMessage = StatusMessage, CommandSent = npcSaleCommandSent, Settled = false };
+            if (!status.CommandSent) return status;
+            try
+            {
+                var busy = Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc();
+                return status with { Settled = !busy && !HasUnownedNpcSaleUi() };
+            }
+            catch { return status with { Settled = false }; }
+        }
+    }
+    internal bool IsLocalNpcSaleRunning => npcSaleRequest && npcSaleStatus.Running
+        && activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.NoTeleportNoInn;
+    internal bool IsNpcSaleRunning => npcSaleStatus.Running;
     private NpcRepairMode activeNpcRepairMode = NpcRepairMode.InnFallback;
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime lastActionUtc = DateTime.MinValue;
@@ -656,33 +673,48 @@ public sealed unsafe class UtilityAutomationService
 
     public bool StartNpcSale(string operationId, bool localOnly)
     {
-        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128 || IsRunning) return false;
+        npcSaleLastStartError = string.Empty;
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128)
+            return RejectNpcSaleStart(operationId, "NPC selling requires a valid operation ID.");
+        if (IsRunning) return RejectNpcSaleStart(operationId, $"ADS is already running {ActiveTaskName}.");
         if (isDutyOwned() || isInnEntryRunning())
-        { StatusMessage = "NPC selling cannot start while duty or inn automation owns ADS."; return false; }
+            return RejectNpcSaleStart(operationId, "NPC selling cannot start while duty or inn automation owns ADS.");
         if (!clientState.IsLoggedIn || objectTable.LocalPlayer == null || Plugin.PlayerState.ContentId == 0)
-        { StatusMessage = "NPC selling requires a logged-in character."; return false; }
+            return RejectNpcSaleStart(operationId, "NPC selling requires a logged-in character.");
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51])
-        { StatusMessage = "Cannot start NPC selling while zoning."; return false; }
+            return RejectNpcSaleStart(operationId, "Cannot start NPC selling while zoning.");
         if (HasUnownedNpcSaleUi())
-        { StatusMessage = "Close existing shop or confirmation UI before requesting an NPC sale."; return false; }
+            return RejectNpcSaleStart(operationId, "Close existing shop or confirmation UI before requesting an NPC sale.");
         try
         {
             if (Plugin.PluginInterface.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc())
-            { StatusMessage = "AutoRetainer already owns work; NPC selling was not started."; return false; }
+                return RejectNpcSaleStart(operationId, "AutoRetainer already owns work; NPC selling was not started.");
         }
-        catch (Exception ex) { StatusMessage = $"AutoRetainer selling is unavailable: {ex.Message}"; return false; }
+        catch (Exception ex) { return RejectNpcSaleStart(operationId, $"AutoRetainer selling is unavailable: {ex.Message}"); }
         try
         {
-            return StartNpcRepair(localOnly ? NpcRepairMode.NoTeleportNoInn : NpcRepairMode.NoInn,
+            var accepted = StartNpcRepair(localOnly ? NpcRepairMode.NoTeleportNoInn : NpcRepairMode.NoInn,
                 saleOperationId: operationId);
+            return accepted || RejectNpcSaleStart(operationId, StatusMessage);
         }
         catch (Exception ex)
         {
             var message = $"NPC selling could not start: {ex.Message}";
             if (npcSaleRequest) Fail(message);
             else StatusMessage = message;
-            return false;
+            return RejectNpcSaleStart(operationId, message);
         }
+    }
+
+    public bool RejectNpcSaleStart(string operationId, string message)
+    {
+        npcSaleLastStartError = message;
+        if (!IsRunning)
+        {
+            StatusMessage = message;
+            npcSaleStatus = new(operationId, false, true, false, message);
+        }
+        return false;
     }
 
     public bool CancelNpcSale(string operationId)
@@ -1675,7 +1707,13 @@ public sealed unsafe class UtilityAutomationService
                     npcSaleBusyObserved = true;
                     StatusMessage = "Waiting for AutoRetainer work after the NPC sale command to settle.";
                 }
-                else if (npcSaleBusyObserved) Complete("AutoRetainer work settled after the NPC sale command.");
+                else if (npcSaleBusyObserved)
+                {
+                    if (HasUnownedNpcSaleUi())
+                        StatusMessage = "AutoRetainer finished; waiting for its sale UI to close.";
+                    else
+                        Complete("AutoRetainer work and sale UI settled after the NPC sale command.");
+                }
                 else StatusMessage = "Waiting for AutoRetainer to start work after the NPC sale command.";
             }
             catch (Exception ex) { Fail($"NPC sale completion is unverified: {ex.Message}"); }
@@ -3351,7 +3389,8 @@ public sealed unsafe class UtilityAutomationService
     {
         if (!npcSaleRequest || !npcSaleStatus.Running) return;
         // Global AR busy/idle and a selected NPC do not establish ownership of its queue or UI.
-        npcSaleStatus = npcSaleStatus with { Running = false, Done = true, Succeeded = succeeded, StatusMessage = message };
+        npcSaleStatus = npcSaleStatus with { Running = false, Done = true, Succeeded = succeeded,
+            StatusMessage = message, CommandSent = npcSaleCommandSent, Settled = !npcSaleCommandSent };
     }
 
     private void TryInteractWithRepairNpc(IGameObject npc)

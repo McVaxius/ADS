@@ -4051,4 +4051,10 @@
   <data name="Moving" xml:space="preserve"><value>Bergerak</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>Menunggu</value></data>
   <data name="Interacting" xml:space="preserve"><value>Berinteraksi</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Mencari katalog penjual...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Pencarian katalog dibatalkan: preset atau mata uang berubah.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Pencarian katalog gagal: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Cutscene aktif; pergerakan dan pengatur waktu ADS dijeda.</value>
+  </data>
 </root>

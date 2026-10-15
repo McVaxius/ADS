@@ -8,6 +8,244 @@ namespace ADS.Tests;
 public sealed class InteractionRangeTests
 {
     [Theory]
+    [InlineData(5, 20)]
+    [InlineData(2, 60)]
+    public void CutsceneResumesTheExactRemainingInteractionBudget(int remainingSeconds, int cutsceneSeconds)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        var normal = TestDutyContextFactory.Create();
+        ArmSentInteraction(fixture.Execution, normal);
+        WritePrivateField(fixture.Execution, "interactionDispatchSettleUntilUtc", now.AddSeconds(remainingSeconds));
+        WritePrivateField(fixture.Execution, "navigationActive", true);
+        var nextPull = fixture.AddMonster(81, "Next pull", new Vector3(20, 0, 0));
+        var planner = HyperFixatedTargetExecutionTests.HyperPlanner(nextPull);
+
+        fixture.Update(planner, TestDutyContextFactory.Create(cutscene: true));
+        now = now.AddSeconds(cutsceneSeconds);
+        fixture.Update(planner, TestDutyContextFactory.Create(watchingCutscene: true));
+
+        Assert.Single(fixture.Commands, command => command == "/vnav stop");
+        Assert.Equal(0, fixture.AcquireCalls);
+        Assert.False(fixture.Execution.RefreshCutsceneHold(normal, true));
+        Assert.True(fixture.Execution.RefreshInteractionActionHold(normal, true, false, now));
+        now = now.AddSeconds(remainingSeconds).AddTicks(-1);
+        Assert.True(fixture.Execution.RefreshInteractionActionHold(normal, true, false, now));
+        now = now.AddTicks(1);
+        Assert.False(fixture.Execution.RefreshInteractionActionHold(normal, true, false, now));
+
+        fixture.Update(planner, normal);
+        Assert.Equal(1, fixture.AcquireCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LongCutsceneDoesNotSpendOptionalCofferBudgets(bool routeMaximum)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        var coffer = new ObservedInteractable
+        {
+            Key = "coffer:82", GameObjectId = 82, DataId = 100, MapId = 1,
+            ObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure,
+            Name = "Treasure Coffer", Position = new Vector3(40, 0, 0), LastSeenUtc = now,
+            Classification = InteractableClass.TreasureCoffer, GhostReason = GhostReason.SeenPreviously,
+        };
+        WritePrivateField(fixture.Execution, "treasureCofferRouteKey", coffer.Key);
+        WritePrivateField(fixture.Execution, "treasureCofferRouteStartedUtc", now.AddSeconds(routeMaximum ? -74 : 0));
+        WritePrivateField(fixture.Execution, "treasureCofferLastProgressUtc", now.AddSeconds(routeMaximum ? 0 : -29));
+        WritePrivateField(fixture.Execution, "treasureCofferBestHorizontalDistance", 40f);
+
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(cutscene: true), true));
+        now = now.AddSeconds(120);
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(watchingCutscene: true), true));
+        Assert.False(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(), true));
+
+        bool TrySkip() => (bool)typeof(ExecutionService)
+            .GetMethod("TrySkipStuckTreasureCoffer", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(fixture.Execution, [coffer, 40f, "Test."])!;
+        Assert.False(TrySkip());
+        now = now.AddSeconds(1).AddTicks(-1);
+        Assert.False(TrySkip());
+        now = now.AddTicks(2);
+        Assert.True(TrySkip());
+        Assert.True(fixture.Memory!.ClearTreasureCofferSuppression(coffer.Key, "test verifies the skip"));
+    }
+
+    [Fact]
+    public void StopDuringCutsceneDoesNotResumeOwnedWork()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        var normal = TestDutyContextFactory.Create();
+        ArmSentInteraction(fixture.Execution, normal);
+        var target = fixture.AddMonster(83, "Next pull", new Vector3(20, 0, 0));
+        var planner = HyperFixatedTargetExecutionTests.HyperPlanner(target);
+        fixture.Update(planner, TestDutyContextFactory.Create(cutscene: true));
+        now = now.AddSeconds(10);
+
+        fixture.Execution.Stop(TestDutyContextFactory.Create(cutscene: true));
+        now = now.AddMinutes(1);
+        fixture.Update(planner, normal);
+
+        Assert.Equal(OwnershipMode.Observing, fixture.Execution.CurrentMode);
+        Assert.Equal(0, fixture.AcquireCalls);
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.Null(fixture.Target);
+    }
+
+    [Fact]
+    public void CompletionTimerCreatedDuringCutsceneGetsItsFullBudgetAfterResume()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        var cutscene = TestDutyContextFactory.Create(cutscene: true);
+        Assert.True(fixture.Execution.RefreshCutsceneHold(cutscene, true));
+        now = now.AddSeconds(10);
+
+        Assert.True(fixture.Execution.BeginDutyCompletionTreasureSweep(cutscene, "Test Duty"));
+        now = now.AddSeconds(30);
+        Assert.True(fixture.Execution.RefreshCutsceneHold(cutscene, true));
+        Assert.False(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(), true));
+        var graceUntil = ReadPrivateField<DateTime>(fixture.Execution, "leaveTreasureSweepGraceUntilUtc");
+        Assert.Equal(TimeSpan.FromSeconds(2), graceUntil - now);
+        now = now.AddSeconds(1);
+        Assert.True(fixture.Execution.BeginDutyCompletionTreasureSweep(TestDutyContextFactory.Create(), "Test Duty"));
+        Assert.Equal(graceUntil, ReadPrivateField<DateTime>(fixture.Execution, "leaveTreasureSweepGraceUntilUtc"));
+    }
+
+    [Fact]
+    public void RealZoningStillUsesItsExistingTransitionPath()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(cutscene: true), true));
+        now = now.AddSeconds(10);
+        var zoning = TestDutyContextFactory.Create(cutscene: true, betweenAreas: true);
+
+        Assert.True(zoning.IsUnsafeTransition);
+        Assert.False(fixture.Execution.RefreshCutsceneHold(zoning, true));
+    }
+
+    [Fact]
+    public void CutsceneReleasesDirectionalInputWithoutConsumingItsRule()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        fixture.Execution.ReadUtcNow = () => now;
+        var rule = new ObjectPriorityRule
+        {
+            Classification = "CardinalHoldNorth", WorldCoordinates = "0,0", MaxDistance = 5,
+            WaitAtDestinationSeconds = 5,
+        };
+        Assert.True(CardinalHoldPolicy.TryParse(rule, out var hold));
+        WritePrivateField(fixture.Execution, "activeCardinalHold", (CardinalHoldRule?)hold);
+        WritePrivateField(fixture.Execution, "activeCardinalHoldUntilUtc", now.AddSeconds(5));
+        var cardinal = ReadPrivateField<CardinalHoldInputService>(fixture.Execution, "cardinalHoldInputService");
+        var strafe = ReadPrivateField<TreasureDoorStrafeInputService>(fixture.Execution, "treasureDoorStrafeInputService");
+        var diagnosticWrites = new List<(string Key, int Flags)>();
+        strafe.WriteDiagnosticInputOverride = (key, state) => diagnosticWrites.Add((key.ToString(), (int)state));
+        WriteEnumPrivateField(cardinal, "heldDirection", "Forward");
+        WriteEnumPrivateField(cardinal, "heldKey", "W");
+        WriteEnumPrivateField(strafe, "heldDirection", "Left");
+        WriteEnumPrivateField(strafe, "heldKey", "A");
+        var tracker = ReadPrivateField<CardinalHoldGhostTracker>(fixture.Execution, "cardinalHoldGhosts");
+
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(cutscene: true), true));
+        now = now.AddSeconds(30);
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(watchingCutscene: true), true));
+        Assert.Equal(RelativeMovementDirection.None, ReadPrivateField<RelativeMovementDirection>(cardinal, "heldDirection"));
+        Assert.Equal("None", ReadPrivateField<object>(strafe, "heldDirection").ToString());
+        Assert.Equal("NO_KEY", ReadPrivateField<object>(cardinal, "heldKey").ToString());
+        Assert.Equal("NO_KEY", ReadPrivateField<object>(strafe, "heldKey").ToString());
+        Assert.Equal(("A", 0), Assert.Single(diagnosticWrites));
+        Assert.False(tracker.IsGhosted(hold.Key));
+        Assert.NotNull(ReadPrivateField<CardinalHoldRule?>(fixture.Execution, "activeCardinalHold"));
+        Assert.False(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(), true));
+        Assert.Equal(TimeSpan.FromSeconds(5), ReadPrivateField<DateTime>(fixture.Execution, "activeCardinalHoldUntilUtc") - now);
+
+        now = now.AddSeconds(5);
+        typeof(ExecutionService).GetMethod("TryUpdateCardinalHold", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(fixture.Execution, [TestDutyContextFactory.Create()]);
+        Assert.True(tracker.IsGhosted(hold.Key));
+    }
+
+    [Fact]
+    public void FrontierCofferStagingKeepsItsRemainingNoProgressTime()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var now = DateTime.UtcNow;
+        var frontier = fixture.Frontier;
+        frontier.ReadUtcNow = () => now;
+        var normal = TestDutyContextFactory.Create();
+        var dutyKey = typeof(DungeonFrontierService).GetMethod("GetDutyKey", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [normal]);
+        WritePrivateField(frontier, "activeDutyKey", dutyKey);
+        WritePrivateField(frontier, "treasureFollowerActiveStagingRoomIndex", 1);
+        WritePrivateField(frontier, "treasureFollowerActiveStagingTargetKey", "stage:1");
+        WritePrivateField(frontier, "treasureFollowerActiveStagingTargetName", "Staging coffer");
+        WritePrivateField(frontier, "treasureFollowerActiveStagingTargetPosition", (Vector3?)new Vector3(40, 0, 0));
+        WritePrivateField(frontier, "treasureFollowerCofferSeekStartedUtc", now.AddSeconds(-12));
+        WritePrivateField(frontier, "treasureFollowerCofferSeekLastProgressUtc", now.AddSeconds(-12));
+        WritePrivateField(frontier, "treasureFollowerCofferSeekBestHorizontalDistance", 40f);
+        WriteEnumPrivateField(frontier, "treasureFollowerCofferSeekState", "Seeking");
+
+        frontier.Update(TestDutyContextFactory.Create(cutscene: true), ObservationSnapshot.Empty);
+        now = now.AddSeconds(30);
+        frontier.Update(TestDutyContextFactory.Create(watchingCutscene: true), ObservationSnapshot.Empty);
+        Assert.Equal("Seeking", frontier.TreasureFollowerCofferSeekStateName);
+        typeof(DungeonFrontierService).GetMethod("RefreshCutsceneHold", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(frontier, [normal]);
+        void Progress() => typeof(DungeonFrontierService)
+            .GetMethod("UpdateTreasureFollowerCofferSeekProgress", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(frontier, [1, (Vector3?)Vector3.Zero, now]);
+
+        Progress();
+        now = now.AddSeconds(3).AddTicks(-1);
+        Progress();
+        Assert.Equal("Seeking", frontier.TreasureFollowerCofferSeekStateName);
+        now = now.AddTicks(1);
+        Progress();
+        Assert.Equal("TimedOut", frontier.TreasureFollowerCofferSeekStateName);
+    }
+
+    private static T ReadPrivateField<T>(object target, string name)
+        => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+
+    private static void WritePrivateField<T>(object target, string name, T value)
+        => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
+
+    private static void WriteEnumPrivateField(object target, string name, string value)
+    {
+        var field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        field.SetValue(target, Enum.Parse(field.FieldType, value));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CutsceneHoldsOwnedExecutionBeforeNewTargetOrMovementDispatch(bool watchingCutscene)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(cutscene: !watchingCutscene, watchingCutscene: watchingCutscene);
+        var nextPull = fixture.AddMonster(80, "Next pull", new Vector3(20, 0, 0));
+
+        fixture.Update(HyperFixatedTargetExecutionTests.HyperPlanner(nextPull), context);
+
+        Assert.Equal(OwnershipMode.OwnedStartInside, fixture.Execution.CurrentMode);
+        Assert.Equal(ExecutionPhase.TransitionHold, fixture.Execution.CurrentPhase);
+        Assert.Equal(0, fixture.AcquireCalls);
+        Assert.Null(fixture.Target);
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData(3f, 4f, 0.5f, 3f, 1.5f, true, true)]
     [InlineData(3f, 4f, 0.5f, 2.75f, 1.75f, true, false)]
     [InlineData(3f, 4f, 0.5f, 2.5f, 2f, true, false)]

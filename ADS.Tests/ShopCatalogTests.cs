@@ -1,12 +1,107 @@
 using System.Numerics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ADS.Models;
 using ADS.Services;
+using ADS.Windows;
 
 namespace ADS.Tests;
 
 public sealed class ShopCatalogTests
 {
+    [Theory]
+    [InlineData("Target")]
+    [InlineData("100")]
+    [InlineData("Fixture")]
+    [InlineData("10")]
+    [InlineData("Vendor")]
+    [InlineData("42")]
+    [InlineData("Territory 156")]
+    [InlineData("156")]
+    [InlineData("Poetics")]
+    [InlineData("Tomestone")]
+    [InlineData("28")]
+    public void TextAndCurrencySearchPruneUnrelatedItemsBeforeResolvingOffers(string query)
+    {
+        var snapshot = SpecialSnapshot(100, "Target", 10, "Fixture", 42, "Vendor", 1, 25) with
+        {
+            Items = new Dictionary<uint, ShopItemSheetRow>
+            {
+                [100] = new(100, "Target", 999, 0, false),
+                [101] = new(101, "Unrelated", 999, 0, false),
+                [29] = new(29, "MGP", 999, 0, false),
+            },
+            SpecialShopRows =
+            [
+                new(10, "Fixture", 0, [(100u, 1u, false)], [new(1, 25, 0, 2)], 4, [], false),
+                new(20, "Other shop", 0, [(101u, 1u, false)], [new(29, 50, 0, 0)], 0, [], false),
+            ],
+            NpcLinks = [Link(ShopSheetKind.Special, 10, 42, "Vendor", false, 0), Link(ShopSheetKind.Special, 20, 43, "Other vendor", false, 0)],
+            NpcPlacements = [Placement(42, 156, Vector3.Zero, ShopNpcPlacementSource.Level, "Fixture", 1),
+                Placement(43, 129, Vector3.One, ShopNpcPlacementSource.Level, "Fixture", 2)],
+            Aetherytes = [new(24, "Mor Dhona", 156, Vector3.Zero), new(8, "Limsa Lominsa", 129, Vector3.One)],
+        };
+        var diagnostics = new List<string>();
+        var service = new ShopCatalogService(new FixedSheets(snapshot), diagnostics.Add);
+        var row = Assert.Single(service.Search(query, new(ShopCurrencyKind.Tomestone, 28), 100).Rows);
+        Assert.Equal(100u, row.ItemId);
+        Assert.DoesNotContain(diagnostics, message => message.Contains("Resolving item=101", StringComparison.Ordinal));
+        Assert.Empty(service.Search("does not exist", null, 100).Rows);
+        Assert.DoesNotContain(diagnostics, message => message.Contains("Resolving item=101", StringComparison.Ordinal));
+        Assert.Equal(101u, Assert.Single(service.Search("MGP", null, 100).Rows).ItemId);
+    }
+
+    [Theory]
+    [InlineData("same")]
+    [InlineData("preset changed")]
+    [InlineData("currency changed")]
+    [InlineData("disposed")]
+    public async Task CatalogButtonReturnsWhileInitialSheetsLoadAndAppliesOnlyOwnedResults(string disposition)
+    {
+        var snapshot = SpecialSnapshot(100, "Target", 10, "Fixture", 42, "Vendor", 1, 25);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var source = new DeferredSheets(() =>
+        {
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test source was not released.");
+            return snapshot;
+        });
+        var utility = (UtilityAutomationService)RuntimeHelpers.GetUninitializedObject(typeof(UtilityAutomationService));
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var window = (ShopListsWindow)RuntimeHelpers.GetUninitializedObject(typeof(ShopListsWindow));
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        void Set(object target, string name, object value) => target.GetType().GetField(name, flags)!.SetValue(target, value);
+        Set(utility, "shopCatalogService", new ShopCatalogService(source));
+        Set(plugin, "<UtilityAutomationService>k__BackingField", utility);
+        Set(window, "plugin", plugin);
+        Set(window, "catalogQuery", "Target");
+        var active = new ShopListPreset { PresetId = Guid.NewGuid(), CurrencyKind = ShopCurrencyKind.Tomestone, CurrencyItemId = 28 };
+        typeof(ShopListsWindow).GetMethod("BeginCatalogSearch", flags)!.Invoke(window, [active.PresetId, active.Currency]);
+        var task = (Task)typeof(ShopListsWindow).GetField("catalogSearch", flags)!.GetValue(window)!;
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5))); // Caller has returned while BuildSnapshot is still blocked.
+            Assert.False(task.IsCompleted);
+            if (disposition == "preset changed") active.PresetId = Guid.NewGuid();
+            if (disposition == "currency changed") active.CurrencyItemId = 999;
+            if (disposition == "disposed") window.Dispose();
+        }
+        finally { release.Set(); }
+        await task.WaitAsync(TimeSpan.FromSeconds(10));
+        typeof(ShopListsWindow).GetMethod("CompleteCatalogSearch", flags)!.Invoke(window, [active]);
+        var rows = (IReadOnlyList<ShopCatalogSearchRow>)typeof(ShopListsWindow).GetField("catalogRows", flags)!.GetValue(window)!;
+        if (disposition == "same") Assert.Equal(100u, Assert.Single(rows).ItemId);
+        else Assert.Empty(rows);
+        Assert.Null(typeof(ShopListsWindow).GetField("catalogSearch", flags)!.GetValue(window));
+    }
+
+    private sealed class DeferredSheets(Func<ShopCatalogSnapshot> build) : IShopSheetSource
+    {
+        public ShopCatalogSnapshot BuildSnapshot() => build();
+    }
+
     [Fact]
     public void ExactItemSearchResolvesOnlyItsBundlesAndPreservesCurrencyDiscovery()
     {

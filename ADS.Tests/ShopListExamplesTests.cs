@@ -23,7 +23,7 @@ public sealed class ShopListExamplesTests
             Assert.Equal(new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28), order.Currency);
             Assert.All(order.Items, row => { Assert.False(row.Repeatable); Assert.Equal(ShopListOwnershipScope.InventoryOnly, row.OwnershipScope); });
         });
-        Assert.True(store.Select(orders[0].PresetId, out _));
+        Assert.True(store.Select(orders[0].PresetId, out var selectionError), selectionError);
         Assert.True(store.RenameActive("Edited ARR", out _));
         Assert.True(store.UpdateItem(orders[0].Items[0].RowId, 2, 2, false, ShopListOwnershipScope.InventoryOnly, out _));
         store.Reload();
@@ -41,6 +41,7 @@ public sealed class ShopListExamplesTests
         { ActivePresetId = original.PresetId, Presets = [original] }));
         other.Reload();
         Assert.Equal(original.PresetId, other.ActivePresetId);
+        Assert.DoesNotContain("failed", other.LastStatus, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("ARR Zodiac — Poetics", other.ActivePresetName);
         Assert.Equal("ARR Zodiac — Poetics (2)", other.Get(orders[0].PresetId).Name);
         other.Reload();

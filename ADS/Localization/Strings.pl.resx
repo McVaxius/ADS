@@ -4051,4 +4051,10 @@
   <data name="Moving" xml:space="preserve"><value>W ruchu</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>Oczekiwanie</value></data>
   <data name="Interacting" xml:space="preserve"><value>Interakcja</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Wyszukiwanie w katalogu sprzedawców...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Wyszukiwanie anulowane: zmieniono preset lub walutę.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Wyszukiwanie w katalogu nie powiodło się: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Trwa scenka; ruch i liczniki czasu ADS są wstrzymane.</value>
+  </data>
 </root>

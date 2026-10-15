@@ -3,7 +3,8 @@ using System.Text.Json;
 
 namespace ADS.Models;
 
-public sealed record NpcSaleStatusSnapshot(string? OperationId, bool Running, bool Done, bool? Succeeded, string StatusMessage);
+public sealed record NpcSaleStatusSnapshot(string? OperationId, bool Running, bool Done, bool? Succeeded,
+    string StatusMessage, bool CommandSent = false, bool Settled = true, string LastStartError = "");
 
 public static class ShopPurchaseFailureCodes
 {

@@ -32,6 +32,9 @@ public sealed class DutyContextSnapshot
     public bool IsUnsafeTransition
         => BetweenAreas || BetweenAreas51;
 
+    public bool IsCutscene
+        => OccupiedInCutSceneEvent || WatchingCutscene;
+
     public bool IsInteractionOccupied
         => OccupiedInQuestEvent || OccupiedInEvent;
 

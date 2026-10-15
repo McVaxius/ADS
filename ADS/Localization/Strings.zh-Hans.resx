@@ -11479,4 +11479,10 @@
   <data name="Moving" xml:space="preserve"><value>移动中</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>等待中</value></data>
   <data name="Interacting" xml:space="preserve"><value>交互中</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>正在搜索商人目录...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>目录搜索已取消：预设或货币已更改。</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>目录搜索失败：{0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>过场动画播放中；ADS移动和计时器已暂停。</value>
+  </data>
 </root>

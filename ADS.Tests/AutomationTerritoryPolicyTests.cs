@@ -39,6 +39,24 @@ public sealed class AutomationTerritoryPolicyTests
     public void KeepsRegularDutiesEntrancesAndVariantCriterionEnabled(uint territoryTypeId)
         => Assert.False(AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId));
 
+    [Theory]
+    [InlineData(900u, 900u, true, false)]
+    [InlineData(1163u, 1163u, true, false)]
+    [InlineData(900u, 1163u, true, false)]
+    [InlineData(900u, 900u, false, true)]
+    [InlineData(1163u, 1163u, false, true)]
+    [InlineData(129u, 900u, false, false)]
+    [InlineData(129u, 1163u, false, false)]
+    [InlineData(129u, 1163u, true, false)]
+    [InlineData(129u, 129u, false, false)]
+    [InlineData(0u, 900u, true, true)]
+    [InlineData(512u, 900u, true, true)]
+    [InlineData(900u, 561u, true, true)]
+    [InlineData(129u, 561u, false, true)]
+    public void NpcSaleExceptionIsLocalOnlyAboardAndIgnoresOnlyStaleOceanContext(
+        uint liveTerritory, uint observedTerritory, bool localOnly, bool excluded)
+        => Assert.Equal(excluded, AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(liveTerritory, observedTerritory, localOnly));
+
     public static IEnumerable<object[]> DeepDungeonTerritories()
         => Enumerable.Range(561, 5).Concat(Enumerable.Range(593, 15)).Append(570)
             .Concat(Enumerable.Range(770, 6)).Concat(Enumerable.Range(782, 4)).Append(780)
@@ -49,5 +67,9 @@ public sealed class AutomationTerritoryPolicyTests
     [Theory]
     [MemberData(nameof(DeepDungeonTerritories))]
     public void ExcludesEveryDeepDungeonFloorAndRestArea(uint territoryTypeId)
-        => Assert.True(AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId));
+    {
+        Assert.True(AutomationTerritoryPolicy.IsAutomationExcludedTerritory(territoryTypeId));
+        Assert.True(AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(territoryTypeId, 900, true));
+        Assert.True(AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(129, territoryTypeId, false));
+    }
 }

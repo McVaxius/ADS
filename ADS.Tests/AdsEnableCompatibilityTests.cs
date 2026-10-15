@@ -13,6 +13,52 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class AdsEnableCompatibilityTests
 {
+    [Theory]
+    [InlineData(900u, 900u, true, false, false, true)]
+    [InlineData(1163u, 1163u, true, false, false, true)]
+    [InlineData(900u, 900u, false, false, false, false)]
+    [InlineData(129u, 900u, false, false, false, true)]
+    [InlineData(129u, 1163u, false, true, false, false)]
+    [InlineData(1163u, 1163u, true, false, true, false)]
+    [InlineData(512u, 512u, true, false, false, false)]
+    public void ActualNpcSaleAdmissionRetainsDutyInnAndOtherUtilityExclusions(
+        uint liveTerritory, uint observedTerritory, bool localOnly, bool dutyOwned, bool innOwned, bool allowed)
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var context = (DutyContextService)RuntimeHelpers.GetUninitializedObject(typeof(DutyContextService));
+        typeof(DutyContextService).GetField("<Current>k__BackingField", flags)!.SetValue(context,
+            Newtonsoft.Json.JsonConvert.DeserializeObject<DutyContextSnapshot>($"{{\"TerritoryTypeId\":{observedTerritory}}}"));
+        var execution = (ExecutionService)RuntimeHelpers.GetUninitializedObject(typeof(ExecutionService));
+        var mode = typeof(ExecutionService).GetField("<CurrentMode>k__BackingField", flags)!;
+        mode.SetValue(execution, Enum.Parse(mode.FieldType, dutyOwned ? "OwnedStartInside" : "Idle"));
+        var inn = (InnEntryService)RuntimeHelpers.GetUninitializedObject(typeof(InnEntryService));
+        var state = typeof(InnEntryService).GetField("state", flags)!;
+        state.SetValue(inn, Enum.ToObject(state.FieldType, innOwned ? 1 : 0));
+        typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin, context);
+        typeof(Plugin).GetField("<ExecutionService>k__BackingField", flags)!.SetValue(plugin, execution);
+        typeof(Plugin).GetField("<InnEntryService>k__BackingField", flags)!.SetValue(plugin, inn);
+        var clientProperty = typeof(Plugin).GetProperty("ClientState", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var chatProperty = typeof(Plugin).GetProperty("ChatGui", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousClient = clientProperty.GetValue(null);
+        var previousChat = chatProperty.GetValue(null);
+        var client = DispatchProxy.Create<IClientState, IpcProxy>();
+        ((IpcProxy)(object)client).TerritoryType = liveTerritory;
+        clientProperty.SetValue(null, client);
+        chatProperty.SetValue(null, DispatchProxy.Create<IChatGui, IpcProxy>());
+        try
+        {
+            var admission = typeof(Plugin).GetMethod("CanStartManualUtility", flags)!;
+            Assert.Equal(allowed, (bool)admission.Invoke(plugin, ["NPC selling", true, localOnly])!);
+            Assert.False((bool)admission.Invoke(plugin, ["NPC repair", false, localOnly])!);
+        }
+        finally
+        {
+            clientProperty.SetValue(null, previousClient);
+            chatProperty.SetValue(null, previousChat);
+        }
+    }
+
     [Fact]
     public void OptInUiProfilerCatchesReportedRangeWithoutLoggingEveryDrawAndClearsWithFrameworkState()
     {
@@ -155,6 +201,16 @@ public sealed class AdsEnableCompatibilityTests
         Assert.False(utility.CancelNpcSale("another-sale"));
         Assert.True(utility.NpcSaleStatus.Running);
         Assert.Null(utility.NpcSaleStatus.Succeeded);
+        Assert.False(utility.IsLocalNpcSaleRunning);
+        var task = typeof(UtilityAutomationService).GetField("activeTask", flags)!;
+        var repairMode = typeof(UtilityAutomationService).GetField("activeNpcRepairMode", flags)!;
+        task.SetValue(utility, Enum.Parse(task.FieldType, "NpcRepair"));
+        repairMode.SetValue(utility, Enum.Parse(repairMode.FieldType, "NoInn"));
+        Assert.False(utility.IsLocalNpcSaleRunning);
+        repairMode.SetValue(utility, Enum.Parse(repairMode.FieldType, "NoTeleportNoInn"));
+        Assert.True(utility.IsLocalNpcSaleRunning);
+        typeof(UtilityAutomationService).GetMethod("FinishNpcSale", flags)!.Invoke(utility, [true, "Verified sale"]);
+        Assert.False(utility.IsLocalNpcSaleRunning);
     }
 
     [Fact]
@@ -234,10 +290,12 @@ public sealed class AdsEnableCompatibilityTests
         public readonly List<string> Messages = [];
         public Delegate? Callback;
         public int Saves;
+        public uint TerritoryType;
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             switch (method!.Name)
             {
+                case "get_TerritoryType": return TerritoryType;
                 case "get_ContentId":
                     return 9UL;
                 case "GetIpcProvider":

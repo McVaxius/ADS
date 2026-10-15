@@ -66,6 +66,9 @@ public sealed unsafe class TreasureFollowerAutoMoveAssistService
             return;
         }
 
+        if (context.IsCutscene && !context.IsUnsafeTransition)
+            return;
+
         if (context.InCombat)
         {
             ResetInactive("Inactive: combat active; automove assist reset.");

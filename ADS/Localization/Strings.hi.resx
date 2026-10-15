@@ -4035,4 +4035,10 @@
   <data name="Moving" xml:space="preserve"><value>गतिमान</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>प्रतीक्षा में</value></data>
   <data name="Interacting" xml:space="preserve"><value>इंटरैक्ट कर रहा है</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>विक्रेता कैटलॉग में खोज जारी है...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>कैटलॉग खोज रद्द: प्रीसेट या मुद्रा बदल गई है।</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>कैटलॉग खोज विफल: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>कटसीन चल रहा है; ADS की गतिविधि और टाइमर रुके हुए हैं।</value>
+  </data>
 </root>

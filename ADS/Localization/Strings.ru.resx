@@ -4409,4 +4409,10 @@
   <data name="Moving" xml:space="preserve"><value>Движение</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>Ожидание</value></data>
   <data name="Interacting" xml:space="preserve"><value>Взаимодействие</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Поиск в каталоге торговцев...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Поиск отменён: изменён набор настроек или валюта.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Ошибка поиска в каталоге: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Идёт кат-сцена; перемещение и таймеры ADS приостановлены.</value>
+  </data>
 </root>

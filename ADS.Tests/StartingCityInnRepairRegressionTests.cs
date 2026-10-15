@@ -352,6 +352,134 @@ public sealed class StartingCityInnRepairRegressionTests
     }
 
     [Fact]
+    public void NpcSaleRejectionIncludesReasonAndDoesNotReplaceAnotherOperation()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.AutoRetainerBusy = true;
+        Assert.False(fixture.Service.StartNpcSale("rejected-sale", true));
+        Assert.Equal("rejected-sale", fixture.Service.NpcSaleStatus.OperationId);
+        Assert.Contains("AutoRetainer already owns work", fixture.Service.NpcSaleStatus.LastStartError);
+        Assert.True(fixture.Service.NpcSaleStatus.Settled);
+        Assert.False(fixture.Service.NpcSaleStatus.CommandSent);
+        Assert.Empty(fixture.Commands);
+
+        fixture.AutoRetainerBusy = false;
+        Assert.True(fixture.Service.StartNpcSale("owned-sale", true));
+        Assert.False(fixture.Service.StartNpcSale("another-sale", true));
+        Assert.Equal("owned-sale", fixture.Service.NpcSaleStatus.OperationId);
+        Assert.True(fixture.Service.NpcSaleStatus.Running);
+        Assert.Contains("already running", fixture.Service.NpcSaleStatus.LastStartError);
+        Assert.Empty(fixture.Commands);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ActualVermaxionSaleFailureReturnsToFishingWithoutEndingItsVoyage(bool acceptedThenFailed)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        string? path = null;
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "VERMAXION", "VERMAXION", "bin", "x64", "Debug", "VERMAXION.dll");
+            if (File.Exists(candidate)) { path = candidate; break; }
+            directory = directory.Parent;
+        }
+        Assert.NotNull(path); // Exercise the actual current product, not a copied policy.
+        var assembly = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(path!);
+        var pluginType = assembly.GetType("VERMAXION.Plugin", true)!;
+        var serviceType = assembly.GetType("VERMAXION.Services.FishingService", true)!;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var piProperty = pluginType.GetProperty("PluginInterface", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previous = piProperty.GetValue(null);
+        var starts = 0;
+        var pi = Fake<IDalamudPluginInterface>((method, args) =>
+        {
+            if (method.Name != "GetIpcSubscriber") return Default(method.ReturnType);
+            return (string)args![0]! switch
+            {
+                "ADS.StartNpcSale" => Fake<ICallGateSubscriber<string, bool, bool>>((call, _) =>
+                {
+                    if (call.Name != "InvokeFunc") return Default(call.ReturnType);
+                    starts++;
+                    return false;
+                }),
+                "ADS.GetNpcSaleStatusJson" => Fake<ICallGateSubscriber<string>>((call, _) => call.Name == "InvokeFunc"
+                    ? "{\"operationId\":\"owned-sale\",\"running\":false,\"done\":true,\"succeeded\":false,\"settled\":true,\"lastStartError\":\"Vendor unavailable\",\"statusMessage\":\"Vendor unavailable\"}"
+                    : Default(call.ReturnType)),
+                _ => throw new InvalidOperationException("Unexpected IPC: " + args[0]),
+            };
+        });
+        try
+        {
+            piProperty.SetValue(null, pi);
+            var service = RuntimeHelpers.GetUninitializedObject(serviceType);
+            Set(service, "log", Fake<IPluginLog>((method, _) => Default(method.ReturnType)));
+            Set(service, "cleanupFeedback", new List<string>());
+            Set(service, "cleanupCommands", Array.CreateInstance(assembly.GetType("VERMAXION.Models.FishingCleanupCommand", true)!, 0));
+            Set(service, "npcSaleFailure", string.Empty);
+            Set(service, "inventoryRecoveryActive", true);
+            Set(service, "inventoryRecoveryReturnPosition", (Vector3?)new Vector3(4, 5, 6));
+            if (acceptedThenFailed) Set(service, "npcSaleOperationId", "owned-sale");
+            var stateField = serviceType.GetField("state", flags)!;
+            stateField.SetValue(service, Enum.Parse(stateField.FieldType, "RunningInventoryCleanup"));
+
+            // Lifecycle/navigation dependencies deliberately remain null: a sale error must not use them.
+            serviceType.GetMethod("TickAdsNpcSale", flags)!.Invoke(service, [TimeSpan.Zero]);
+
+            Assert.Equal("MovingToFishingSpot", Get(service, "state")!.ToString());
+            Assert.True((bool)Get(service, "inventoryRecoveryActive")!);
+            Assert.Equal(new Vector3(4, 5, 6), (Vector3)Get(service, "inventoryRecoveryReturnPosition")!);
+            Assert.Null(Get(service, "npcSaleOperationId"));
+            Assert.True((bool)Get(service, "inventorySaleFailedThisVoyage")!);
+            Assert.Contains("Vendor unavailable", Assert.Single((List<string>)Get(service, "cleanupFeedback")!));
+            Assert.Equal(acceptedThenFailed ? 0 : 1, starts);
+        }
+        finally { piProperty.SetValue(null, previous); }
+    }
+
+    [Fact]
+    public void NpcSaleDoesNotReleaseFishingUntilSellerAndUiSettle()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.StartWorkOnSaleCommand = true;
+        Assert.True(fixture.Service.StartNpcSale("fishing-sale", true));
+        fixture.Service.Update();
+        Assert.True(fixture.Service.NpcSaleStatus.CommandSent);
+        fixture.BlockingUi = "shop";
+        fixture.AutoRetainerBusy = false;
+        fixture.Service.Update();
+        Assert.True(fixture.Service.NpcSaleStatus.Running);
+        Assert.False(fixture.Service.NpcSaleStatus.Settled);
+        fixture.BlockingUi = null;
+        fixture.Service.Update();
+        Assert.True(fixture.Service.NpcSaleStatus.Succeeded);
+        Assert.True(fixture.Service.NpcSaleStatus.Settled);
+        Assert.Single(fixture.Commands, command => command == "/ays itemsell");
+    }
+
+    [Fact]
+    public void CancelledDispatchedSaleRetainsSettlementEvidenceWithoutResettingSeller()
+    {
+        using var fixture = new NpcSaleFixture();
+        fixture.StartWorkOnSaleCommand = true;
+        Assert.True(fixture.Service.StartNpcSale("cancelled-fishing-sale", true));
+        fixture.Service.Update();
+        Assert.True(fixture.Service.CancelNpcSale("cancelled-fishing-sale"));
+        Assert.True(fixture.Service.NpcSaleStatus.Done);
+        Assert.False(fixture.Service.NpcSaleStatus.Succeeded);
+        Assert.True(fixture.Service.NpcSaleStatus.CommandSent);
+        Assert.False(fixture.Service.NpcSaleStatus.Settled);
+        fixture.AutoRetainerBusy = false;
+        fixture.BlockingUi = "confirmation";
+        Assert.False(fixture.Service.NpcSaleStatus.Settled);
+        fixture.BlockingUi = null;
+        Assert.True(fixture.Service.NpcSaleStatus.Settled);
+        Assert.DoesNotContain("/ays reset", fixture.Commands);
+        Assert.DoesNotContain("/vnav stop", fixture.Commands);
+    }
+
+    [Fact]
     public void NpcSaleMatchingCancelStopsAnAcceptedApproachOnceOnTheSameCharacter()
     {
         using var fixture = new NpcSaleFixture();

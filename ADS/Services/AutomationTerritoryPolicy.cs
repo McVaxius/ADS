@@ -17,4 +17,14 @@ internal static class AutomationTerritoryPolicy
                or >= 770 and <= 775 or >= 782 and <= 785 or 780
                or >= 1099 and <= 1108 or 1124
                or >= 1281 and <= 1290 or 1280;
+
+    public static bool IsOceanFishingTerritory(uint territoryTypeId)
+        => territoryTypeId is 900 or 1163;
+
+    public static bool IsNpcSaleExcludedTerritory(uint liveTerritory, uint observedTerritory, bool localOnly)
+        => liveTerritory == 0
+           || (IsAutomationExcludedTerritory(liveTerritory)
+               && (!IsOceanFishingTerritory(liveTerritory) || !localOnly))
+           || (IsAutomationExcludedTerritory(observedTerritory)
+               && !IsOceanFishingTerritory(observedTerritory));
 }

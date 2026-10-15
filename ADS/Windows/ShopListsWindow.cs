@@ -15,6 +15,9 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     private readonly Dictionary<Guid, RowEdit> rowEdits = [];
     private IReadOnlyList<ShopListPreviewRow> previewRows = [];
     private IReadOnlyList<ShopCatalogSearchRow> catalogRows = [];
+    private Task<(ShopCatalogSearchResponse? Result, string? Error)>? catalogSearch;
+    private Guid catalogSearchPresetId;
+    private ShopCurrencyIdentity? catalogSearchCurrency;
     private string previewState = string.Empty;
     private string newPresetName = string.Empty;
     private string renamePresetName = string.Empty;
@@ -50,6 +53,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
     public void Dispose()
     {
+        catalogSearch = null; // The read-only worker cannot apply results after unload.
     }
 
     public override void Draw()
@@ -331,28 +335,63 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             DrawWarnings("Skipped / unresolved import rows", importResult.Warnings);
     }
 
+    private void BeginCatalogSearch(Guid presetId, ShopCurrencyIdentity? currency)
+    {
+        if (catalogSearch != null) return;
+        var query = catalogQuery;
+        var service = plugin.UtilityAutomationService;
+        catalogSearchPresetId = presetId;
+        catalogSearchCurrency = currency;
+        catalogRows = [];
+        status = "Searching vendor catalog...";
+        catalogSearch = Task.Run(() =>
+        {
+            try { return (Result: (ShopCatalogSearchResponse?)service.SearchShopCatalog(query, currency, 100), Error: (string?)null); }
+            catch (Exception ex) { return (Result: (ShopCatalogSearchResponse?)null, Error: (string?)ex.Message); }
+        });
+    }
+
+    private void CompleteCatalogSearch(ShopListPreset active)
+    {
+        if (catalogSearch?.IsCompleted != true) return;
+        var response = catalogSearch.GetAwaiter().GetResult();
+        catalogSearch = null;
+        if (active.PresetId != catalogSearchPresetId || (catalogSearchCurrency.HasValue && active.Currency != catalogSearchCurrency.Value))
+        {
+            status = "Catalog search cancelled: the preset or currency changed.";
+            return;
+        }
+        if (response.Error != null) { status = $"Catalog search failed: {response.Error}"; return; }
+        catalogRows = response.Result!.Rows;
+        status = catalogSearchCurrency.HasValue
+            ? $"Catalog returned {catalogRows.Count} exact-currency offer(s)."
+            : $"Catalog returned {catalogRows.Count} offer(s); use a row's exact currency identity below.";
+    }
+
     private void DrawCatalogSearch()
     {
         var active = plugin.ShopListService.PresetStore.ActivePreset;
+        CompleteCatalogSearch(active);
         MaterialText.Text(Ui.T("Deterministic vendor catalog"));
+        ImGui.BeginDisabled(catalogSearch != null);
         ImGui.SetNextItemWidth(300f);
         WindowLayout.InputText(Ui.L("Item / vendor / NPC / territory / currency"), ref catalogQuery, 120);
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Search exact preset currency")))
         {
-            catalogRows = plugin.UtilityAutomationService.SearchShopCatalog(catalogQuery, active.Currency, 100).Rows;
-            status = $"Catalog returned {catalogRows.Count} exact-currency offer(s).";
+            BeginCatalogSearch(active.PresetId, active.Currency);
         }
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Discover currencies")))
         {
-            catalogRows = plugin.UtilityAutomationService.SearchShopCatalog(catalogQuery, null, 100).Rows;
-            status = $"Catalog returned {catalogRows.Count} offer(s); use a row's exact currency identity below.";
+            BeginCatalogSearch(active.PresetId, null);
         }
+        ImGui.EndDisabled();
 
         if (catalogRows.Count == 0)
         {
-            MaterialText.TextDisabled(Ui.T("Search results appear here. Catalog search and Test never travel or purchase."));
+            MaterialText.TextDisabled(Ui.T(catalogSearch != null ? "Searching vendor catalog..."
+                : "Search results appear here. Catalog search and Test never travel or purchase."));
             return;
         }
 

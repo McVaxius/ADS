@@ -97,7 +97,7 @@ public sealed class HyperFixatedTargetExecutionTests
         private readonly TargetManagerProxy targetManagerProxy;
         private readonly List<TargetFixture> targets = [];
 
-        public Fixture(Vector3 playerPosition)
+        public Fixture(Vector3 playerPosition, bool includeObservationMemory = false)
         {
             var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
             var objectTable = DispatchProxy.Create<IObjectTable, ObjectTableProxy>();
@@ -114,7 +114,11 @@ public sealed class HyperFixatedTargetExecutionTests
             ((CommandManagerProxy)(object)commandManager).Events = Events;
             var keyState = DispatchProxy.Create<IKeyState, NoOpProxy>();
             var ruleService = new ObjectPriorityRuleService(log, null!, tempDirectory.Path);
-            var frontier = new DungeonFrontierService(null!, objectTable, log, ruleService, null!);
+            Memory = includeObservationMemory
+                ? new ObservationMemoryService(objectTable,
+                    DispatchProxy.Create<IPartyList, TreasureCofferObservationPolicyTests.PartyListProxy>(), log, ruleService)
+                : null;
+            Frontier = new DungeonFrontierService(null!, objectTable, log, ruleService, Memory!);
             var lease = new HyperFocusLeaseService(
                 _ =>
                 {
@@ -142,8 +146,8 @@ public sealed class HyperFixatedTargetExecutionTests
                 objectTable,
                 targetManager,
                 commandManager,
-                null!,
-                frontier,
+                Memory!,
+                Frontier,
                 null!,
                 ruleService,
                 lease,
@@ -155,6 +159,8 @@ public sealed class HyperFixatedTargetExecutionTests
         }
 
         public ExecutionService Execution { get; }
+        public DungeonFrontierService Frontier { get; }
+        public ObservationMemoryService? Memory { get; }
         public DateTime Now { get; set; } = new(2026, 8, 28, 12, 0, 0, DateTimeKind.Utc);
         public bool HeartbeatOk { get; set; } = true;
         public int AcquireCalls { get; private set; }

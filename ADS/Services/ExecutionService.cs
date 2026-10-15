@@ -16,6 +16,75 @@ namespace ADS.Services;
 
 public sealed partial class ExecutionService
 {
+    internal Func<DateTime> ReadUtcNow { get; set; } = static () => DateTime.UtcNow;
+    private DateTime? cutscenePausedAtUtc;
+    // New timers created during the hold receive their full budget when UTC deadlines resume.
+    private DateTime TimerUtcNow => cutscenePausedAtUtc ?? ReadUtcNow();
+
+    internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool pluginEnabled)
+    {
+        if (pluginEnabled && context.IsLoggedIn && context.InInstancedDuty
+            && !context.IsUnsafeTransition && context.IsCutscene
+            && (IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving))
+        {
+            cutscenePausedAtUtc ??= ReadUtcNow();
+            StopNavigationIfNeeded();
+            cardinalHoldInputService.Release("cutscene hold");
+            treasureDoorStrafeInputService.Release("cutscene hold");
+            ObserveTreasureFollowerRouteTransit(context, "cutscene hold");
+            SetPhase(ExecutionPhase.TransitionHold, "Cutscene active; ADS movement and timers are paused.");
+            return true;
+        }
+
+        ResumeCutsceneTimers();
+        return false;
+    }
+
+    private void ResumeCutsceneTimers()
+    {
+        if (cutscenePausedAtUtc is not { } pausedAt)
+            return;
+
+        cutscenePausedAtUtc = null;
+        var duration = ReadUtcNow() - pausedAt;
+        if (duration <= TimeSpan.Zero)
+            return;
+
+        ShiftPausedTimer(ref interactionDispatchSettleUntilUtc, duration);
+        ShiftPausedTimer(ref nextInteractAttemptUtc, duration);
+        ShiftPausedTimer(ref nextNavigationCommandUtc, duration);
+        ShiftPausedTimer(ref recoveryTargetReachedUtc, duration);
+        ShiftPausedTimer(ref recoveryNavigationLastProgressUtc, duration);
+        ShiftPausedTimer(ref pendingProgressionInteractResultUntilUtc, duration);
+        ShiftPausedTimer(ref pendingProgressionInteractAfterWaitUntilUtc, duration);
+        ShiftPausedTimer(ref interactArrivalWaitUntilUtc, duration);
+        ShiftPausedTimer(ref treasureCofferRouteStartedUtc, duration);
+        ShiftPausedTimer(ref treasureCofferLastProgressUtc, duration);
+        ShiftPausedTimer(ref treasureCofferLockedNextRetryUtc, duration);
+        ShiftPausedTimer(ref treasureRouteStuckLastProgressUtc, duration);
+        ShiftPausedTimer(ref aquapolisRouteWiggleLastProgressUtc, duration);
+        ShiftPausedTimer(ref aquapolisRouteWiggleUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerDoorFollowThroughReachedUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerPostTransitSettleUntilUtc, duration);
+        ShiftPausedTimer(ref treasureDoorNudgeLastProgressUtc, duration);
+        ShiftPausedTimer(ref treasureDoorNudgeUntilUtc, duration);
+        ShiftPausedTimer(ref manualDestinationLastProgressUtc, duration);
+        ShiftPausedTimer(ref closeRangeInteractFallbackLastProgressUtc, duration);
+        ShiftPausedTimer(ref nextMountedCombatAttemptUtc, duration);
+        ShiftPausedTimer(ref nextLeaveUiAttemptUtc, duration);
+        ShiftPausedTimer(ref leaveLootDistributionWaitUntilUtc, duration);
+        ShiftPausedTimer(ref leaveTreasureSweepClearSinceUtc, duration);
+        ShiftPausedTimer(ref leaveTreasureSweepGraceUntilUtc, duration);
+        ShiftPausedTimer(ref livePartyDamageProgressUntilUtc, duration);
+        ShiftPausedTimer(ref activeCardinalHoldUntilUtc, duration);
+    }
+
+    private static void ShiftPausedTimer(ref DateTime timestamp, TimeSpan duration)
+    {
+        if (timestamp != DateTime.MinValue && timestamp != DateTime.MaxValue)
+            timestamp += duration;
+    }
+
     internal Func<bool> QueryPhoenixDownRecoveryHold { get; set; } = () => false;
     public bool IsPhoenixDownRecoveryHoldActive { get; private set; }
 
@@ -335,7 +404,7 @@ public sealed partial class ExecutionService
     public double? ManualDestinationLastProgressAgeSeconds
         => manualDestinationNoProgressTargetKey is null || manualDestinationLastProgressUtc == DateTime.MinValue
             ? null
-            : Math.Max(0, (DateTime.UtcNow - manualDestinationLastProgressUtc).TotalSeconds);
+            : Math.Max(0, (TimerUtcNow - manualDestinationLastProgressUtc).TotalSeconds);
 
     public bool TreasureFollowerDoorFollowThroughActive
         => treasureFollowerDoorFollowThroughCandidateKey is not null;
@@ -404,7 +473,7 @@ public sealed partial class ExecutionService
             return false;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         ArmTreasureCofferLockedRetry(committedInteractableKey, now, "locked-tight chat");
         observationMemoryService.ClearTreasureCofferSuppression(committedInteractableKey, "locked-tight chat");
         StopMovementAssists();
@@ -660,7 +729,7 @@ public sealed partial class ExecutionService
         ResetLeaveState();
         explicitLeaveRequested = true;
         if (considerTreasureCoffers)
-            BeginLeaveTreasureSweep(DateTime.UtcNow, "manual leave request");
+            BeginLeaveTreasureSweep(TimerUtcNow, "manual leave request");
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(
             ExecutionPhase.LeavingDuty,
@@ -735,7 +804,7 @@ public sealed partial class ExecutionService
         ClearTreasureFollowerPostTransitSettle("duty completion treasure sweep");
         ResetRecoveryHold();
         ResetLeaveState();
-        BeginLeaveTreasureSweep(DateTime.UtcNow, $"DutyCompleted for {dutyName}");
+        BeginLeaveTreasureSweep(TimerUtcNow, $"DutyCompleted for {dutyName}");
         activeCompletionTreasureSweepDuty = duty;
         releaseAfterCompletionSweep = context.CurrentDuty?.ContentTypeRowId == 30
                                       || CompletionTreasureSweepWithoutExitDuty == duty;
@@ -749,6 +818,7 @@ public sealed partial class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        ResumeCutsceneTimers();
         CancelInteractionPause();
         IsPhoenixDownRecoveryHoldActive = false;
         ReleaseHyperFocus("stop");
@@ -801,13 +871,16 @@ public sealed partial class ExecutionService
         string dialogAutomationStatus,
         bool sessionDebugEnabled = false)
     {
+        if (RefreshCutsceneHold(context, pluginEnabled))
+            return;
+
         if (RefreshPhoenixDownRecoveryHold(context, pluginEnabled))
         {
             CancelInteractionPause();
             return;
         }
         if (RefreshInteractionActionHold(context, pluginEnabled,
-                interactionAttemptDispatched && IsNativeInteractionActive(context), DateTime.UtcNow))
+                interactionAttemptDispatched && IsNativeInteractionActive(context), TimerUtcNow))
             return;
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateDebugRuleCommand(context, planner, pluginEnabled, sessionDebugEnabled);
@@ -1399,7 +1472,7 @@ public sealed partial class ExecutionService
         }
 
         StopMovementAssists();
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (!MatchesRecoveryTarget(planner.ObjectiveKind, ghostTarget.Value.Position))
         {
             recoveryTargetObjectiveKind = planner.ObjectiveKind;
@@ -1755,7 +1828,7 @@ public sealed partial class ExecutionService
         string prefix,
         bool preserveMovement)
     {
-        if (DateTime.UtcNow >= nextMountedCombatAttemptUtc)
+        if (TimerUtcNow >= nextMountedCombatAttemptUtc)
             return true;
 
         if (preserveMovement)
@@ -1793,7 +1866,7 @@ public sealed partial class ExecutionService
             lastMountedCombatBlindRearFallbackKey = string.Empty;
         }
 
-        nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
+        nextMountedCombatAttemptUtc = TimerUtcNow + MountedCombatAttemptCooldown;
         ReportMountedCombatAction(prefix, resolution.Action.Name, resolution.Target.Observed.Name, preserveMovement, resolution.TargetSummary);
         return true;
     }
@@ -2084,7 +2157,7 @@ public sealed partial class ExecutionService
         LogMountedCombatBlindRearFallback(fallbackPosition);
         lastMountedCombatRearPreferenceKey = string.Empty;
         lastMountedCombatNoMagitekCannonResolutionKey = string.Empty;
-        nextMountedCombatAttemptUtc = DateTime.UtcNow + MountedCombatAttemptCooldown;
+        nextMountedCombatAttemptUtc = TimerUtcNow + MountedCombatAttemptCooldown;
         ReportMountedCombatAction(
             prefix,
             action.Name,
@@ -2964,7 +3037,7 @@ public sealed partial class ExecutionService
                 var followThroughDistance = Vector3.Distance(followThroughPoint.Position, playerPosition);
                 var followThroughVerticalDelta = MathF.Abs(followThroughPoint.Position.Y - playerPosition.Y);
                 treasureFollowerDoorFollowThroughReached = true;
-                treasureFollowerDoorFollowThroughReachedUtc = DateTime.UtcNow;
+                treasureFollowerDoorFollowThroughReachedUtc = TimerUtcNow;
                 SetPhase(
                     ExecutionPhase.FrontierHint,
                     $"{prefix} Treasure follower door follow-through for passage candidate {candidate.Name} reached {FormatVector(followThroughPoint.Position)} (follow-through XZ {followThroughHorizontalDistance:0.0}y, 3D {followThroughDistance:0.0}y, Y {followThroughVerticalDelta:0.0}y). ADS is holding this committed clear-through until transition, combat, stale-floor evidence, or timeout.{treasureRouteRadiusStatus}");
@@ -3013,7 +3086,7 @@ public sealed partial class ExecutionService
         string treasureRouteRadiusStatus,
         string prefix)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         var reachedUtc = treasureFollowerDoorFollowThroughReachedUtc == DateTime.MinValue
             ? now
             : treasureFollowerDoorFollowThroughReachedUtc;
@@ -3172,7 +3245,7 @@ public sealed partial class ExecutionService
         }
 
         ResetAquapolisRouteWiggleTracking();
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (!string.Equals(treasureRouteStuckTargetKey, frontierPoint.Key, StringComparison.Ordinal)
             || !treasureRouteStuckBaselinePosition.HasValue)
         {
@@ -3246,7 +3319,7 @@ public sealed partial class ExecutionService
         Vector3 playerPosition,
         Vector3 originalDestination)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (!string.Equals(aquapolisRouteWiggleTargetKey, frontierPoint.Key, StringComparison.Ordinal)
             || !aquapolisRouteWiggleBaselinePosition.HasValue)
         {
@@ -3310,7 +3383,7 @@ public sealed partial class ExecutionService
     {
         treasureRouteStuckTargetKey = frontierPoint.Key;
         treasureRouteStuckBaselinePosition = playerPosition;
-        treasureRouteStuckLastProgressUtc = DateTime.UtcNow;
+        treasureRouteStuckLastProgressUtc = TimerUtcNow;
         treasureRouteStuckOffsetAttempt = offsetAttempt;
     }
 
@@ -3396,7 +3469,7 @@ public sealed partial class ExecutionService
         float targetVerticalDelta,
         string prefix)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         currentManualDestinationTarget = frontierPoint.Name;
         currentManualDestinationDistance = isXyzDestination
             ? targetDistance
@@ -3567,7 +3640,7 @@ public sealed partial class ExecutionService
             return;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (TryHoldTreasureCofferLockedRetry(context, observedInteractable, prefix, now))
             return;
 
@@ -3877,7 +3950,7 @@ public sealed partial class ExecutionService
         if (!IsTreasureCofferLockedRetryActive(interactable))
             return false;
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (TryHoldTreasureCofferLockedRetry(context, interactable, prefix, now))
             return true;
 
@@ -4219,7 +4292,7 @@ public sealed partial class ExecutionService
         if (IsTreasureCofferLockedRetryActive(observedInteractable))
             return false;
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (treasureCofferRouteKey != observedInteractable.Key)
         {
             treasureCofferRouteKey = observedInteractable.Key;
@@ -4267,7 +4340,7 @@ public sealed partial class ExecutionService
 
     private bool ShouldUseCloseRangeInteractFallback(ObservedInteractable observedInteractable, float targetHorizontalDistance, float targetVerticalDelta)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         var retryIdentity = BuildInteractableRetryIdentity(observedInteractable);
         if (!string.Equals(closeRangeInteractFallbackKey, retryIdentity, StringComparison.Ordinal))
         {
@@ -4493,7 +4566,7 @@ public sealed partial class ExecutionService
             }
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         var treasureDoorReadyForFollowThrough = isTreasureDoorFollowThrough
             && pendingLiveInteractable is null
             && pendingProgressionInteractAfterWaitUntilUtc <= now;
@@ -4765,7 +4838,7 @@ public sealed partial class ExecutionService
             return new TreasureDoorNavigationDecision(frontierPoint.Position, originalTargetId, string.Empty, StuckRecoveryExhausted: false);
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (!string.Equals(treasureDoorNudgeTargetKey, frontierPoint.Key, StringComparison.Ordinal)
             || !treasureDoorNudgeBaselinePosition.HasValue)
         {
@@ -4937,7 +5010,7 @@ public sealed partial class ExecutionService
     private bool IsInteractMovementSettleActive(ObservedInteractable interactable)
         => interactArrivalWaitIncludesMovementSettle
            && string.Equals(interactArrivalWaitKey, interactable.Key, StringComparison.Ordinal)
-           && DateTime.UtcNow < interactArrivalWaitUntilUtc;
+           && TimerUtcNow < interactArrivalWaitUntilUtc;
 
     private void ResetInteractArrivalWait()
     {
@@ -5052,7 +5125,7 @@ public sealed partial class ExecutionService
         if (TryHandleLeaveRespawn(context))
             return;
 
-        var now = nowUtc ?? DateTime.UtcNow;
+        var now = nowUtc ?? TimerUtcNow;
         var request = releaseAfterCompletionSweep ? "Duty completed." : "Leave requested.";
         var completionAction = releaseAfterCompletionSweep ? "releasing ownership" : "duty exit";
         if (considerTreasureCoffers && !leaveTreasureSweepStarted)
@@ -5338,7 +5411,7 @@ public sealed partial class ExecutionService
         Vector3 playerPosition,
         string prefix)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (recoveryNavigationObjectiveKind != planner.ObjectiveKind
             || !string.Equals(recoveryNavigationTargetKey, ghostTarget.Key, StringComparison.Ordinal)
             || !recoveryNavigationBaselinePosition.HasValue)
@@ -5471,7 +5544,7 @@ public sealed partial class ExecutionService
 
     private bool HasRecentLivePartyDamageProgression()
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         var localPlayer = objectTable.LocalPlayer;
         if (localPlayer == null)
         {
@@ -5593,7 +5666,7 @@ public sealed partial class ExecutionService
             ResetManualDestinationNoProgressTracking(clearStatus: true);
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (navigationActive && !mapFlagNavigationActive && movementTargetGameObjectId == gameObjectId && now < nextNavigationCommandUtc)
             return true;
 
@@ -5631,7 +5704,7 @@ public sealed partial class ExecutionService
             ResetManualDestinationNoProgressTracking(clearStatus: true);
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (navigationActive && mapFlagNavigationActive && movementTargetGameObjectId == targetId && now < nextNavigationCommandUtc)
             return true;
 
@@ -6161,7 +6234,7 @@ public sealed partial class ExecutionService
 
     private unsafe void TrySendLeaveDutyUi()
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (GameInteractionHelper.TryGetSelectYesNoPromptText(Plugin.GameGui, out var selectYesnoPrompt))
         {
             if (!IsLeaveDutyConfirmationPrompt(selectYesnoPrompt))
@@ -6307,7 +6380,7 @@ public sealed partial class ExecutionService
         higherLowerDutyExitHoldLogged = true;
         var lastActivityAge = higherLowerLastActivityUtc == DateTime.MinValue
             ? "none"
-            : Math.Max(0, (DateTime.UtcNow - higherLowerLastActivityUtc).TotalSeconds).ToString("0.0", CultureInfo.InvariantCulture);
+            : Math.Max(0, (ReadUtcNow() - higherLowerLastActivityUtc).TotalSeconds).ToString("0.0", CultureInfo.InvariantCulture);
         log?.Information($"[ADS][HLAUTO] hlauto duty-exit-hold mode=leaving lastActivityAge={lastActivityAge}s");
     }
 
@@ -6400,7 +6473,7 @@ public sealed partial class ExecutionService
 
     private void StartTreasureFollowerPostTransitSettle(string reason, bool cutsceneSeen)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         var delay = cutsceneSeen ? TreasureFollowerPostCutsceneSettleDelay : TreasureFollowerPostTransitSettleDelay;
         treasureFollowerPostTransitSettleUntilUtc = now + delay;
         treasureFollowerPostTransitSettleReason = reason;
@@ -6415,7 +6488,7 @@ public sealed partial class ExecutionService
         if (treasureFollowerPostTransitSettleUntilUtc == DateTime.MinValue)
             return false;
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (now >= treasureFollowerPostTransitSettleUntilUtc)
         {
             var reason = treasureFollowerPostTransitSettleReason;
@@ -6434,7 +6507,7 @@ public sealed partial class ExecutionService
 
     private bool IsTreasureFollowerPostTransitSettleActive()
         => treasureFollowerPostTransitSettleUntilUtc != DateTime.MinValue
-           && DateTime.UtcNow < treasureFollowerPostTransitSettleUntilUtc;
+           && TimerUtcNow < treasureFollowerPostTransitSettleUntilUtc;
 
     private void StopNavigationForTreasureFollowerPostTransitSettle()
     {
@@ -6583,7 +6656,7 @@ public sealed partial class ExecutionService
             return false;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (activeCardinalHold is { } active)
         {
             if (now >= activeCardinalHoldUntilUtc)
@@ -6703,10 +6776,10 @@ public sealed partial class ExecutionService
         return flags.Count == 0 ? "none" : string.Join(", ", flags);
     }
 
-    private static double GetRemainingSeconds(DateTime untilUtc)
+    private double GetRemainingSeconds(DateTime untilUtc)
         => untilUtc == DateTime.MinValue
             ? 0
-            : Math.Max(0, (untilUtc - DateTime.UtcNow).TotalSeconds);
+            : Math.Max(0, (untilUtc - TimerUtcNow).TotalSeconds);
 
     private static string FormatVector(Vector3 value)
         => string.Create(CultureInfo.InvariantCulture, $"{value.X:0.00},{value.Y:0.00},{value.Z:0.00}");

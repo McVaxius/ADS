@@ -10,6 +10,10 @@ Start a purchase with:
 
 ## Shop Lists
 
+Catalog search reads the game's item and offer sheets and resolves only matching candidates. The Shop Lists window loads and searches the catalog in the background; its search controls show progress while the rest of the window remains usable. Changing the originating preset or its selected currency discards the pending result. Searching never travels or purchases.
+
+For Poetics weapons in Revenant's Toll, create an ADS list and select **Tomestone**, currency item **28** (Allagan Tomestones of Poetics). Search the exact weapon name or ID, then select an offer whose territory is **Mor Dhona**. For example, Augmented Ironworks Magitek Sword is item **8933**; the current catalog supplies its vendor, receive quantity and price. Add the chosen item and set **If owned <** and **Refill to >=** to your desired total. Use inventory-only ownership unless you want recorded retainer copies to count; leave Repeatable off for a one-time order. Run the purchase-free Test, then select this saved ADS list in DAD's existing shopping association. DAD selects saved lists; item and vendor search remains in ADS.
+
 Open the dedicated window with `/ads shopper`, compact Controls (`/ads mini`), or Main > Tools > Treasure And Operations > **Shop Lists**. Presets and rows have stable IDs; names can be renamed, and Base64 export/import preserves those IDs. Changing a row's fulfillment semantics, preset mode, or exact currency rotates affected row IDs so an old Dad association cannot suppress changed work. Removing or rotating a row does not make a stale association ID fatal.
 
 Each preset selects one exact currency identity and an inclusive `available >= threshold` trigger, plus one mode:

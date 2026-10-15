@@ -1,3 +1,21 @@
+2026-10-14 - NPC sale handoff and settlement
+
+- Expose exact sale-start rejections without replacing another running operation. Keep the explicit local-only Ocean Fishing exception and existing duty/inn/character protections.
+- Wait for AutoRetainer work and its sale UI to settle before reporting completion. Preserve whether a sale command was dispatched in terminal receipts so callers do not move against an unfinished seller after cancellation.
+
+2026-10-14 - Pause owned timers during cutscenes
+
+- Hold ADS-owned execution and frontier progression during either native cutscene flag. Release owned navigation and directional input, retain objectives and remaining timeout budgets, then resume those budgets after the cutscene. Timers started during the hold retain their full budget. Keep Manual Stop and real zoning authoritative, retain treasure passage evidence, and prevent new follower automove submissions during cutscenes.
+- Keep external interaction-witness freshness and diagnostic timestamps on their native clock. Translate the hold status through all sixteen existing catalogs. Source/local and actual client verification remain separate.
+
+2026-10-14 - Responsive shop catalog search (I565)
+
+- Filter native item, vendor, shop, territory and normalized currency metadata before resolving offers. Preserve currency discovery, receive bundles and exact-currency validation. Run the Shop Lists window's read-only catalog search off the UI thread, apply results only to the originating preset/currency and keep purchase actions separate. Preserve existing DAD saved-list associations.
+
+2026-10-14 - Owned Ocean Fishing NPC selling (I568)
+
+- Permit explicitly requested local-only NPC selling aboard Ocean Fishing and settled post-voyage selling when the cached context still names Ocean Fishing. Keep every other activity exclusion and normal duty/inn/AutoRetainer, character, UI, cancellation and verified-sale checks. Tick only the owned sale inside the otherwise parked activity; no onboard travel or ordinary utility exemption.
+
 2026-10-13 - Scope Higher/Lower diagnostics to treasure dungeons
 
 - Capture Higher/Lower diagnostics only when enabled and inside a supported treasure dungeon. Keep live debug views, forced dumps and traces behind that gate; retain gameplay solver inputs independently.

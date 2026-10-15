@@ -326,6 +326,8 @@ public sealed class Plugin : IDalamudPlugin
             message => Log.Information("[ADS][RelicTest] {Message}", message),
             new SystemShopPurchaseClock());
         Log.Information("[ADS][InnRepair] startup; build=I403-manual-inn-destinations-03; pid={Pid}; utc={Utc}", Environment.ProcessId, DateTime.UtcNow);
+        Log.Information("[ADS][Cutscene] startup; build=devhub-cutscene-pause-20261014-01");
+        Log.Information("[ADS][NpcSale] startup; build=ads-fishing-sale-settlement-20261014-01");
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
@@ -1639,7 +1641,16 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool StartNpcSale(string operationId, bool localOnly)
-        => CanStartManualUtility("NPC selling") && UtilityAutomationService.StartNpcSale(operationId, localOnly);
+    {
+        if (AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(ClientState.TerritoryType,
+                DutyContextService.Current.TerritoryTypeId, localOnly))
+            return UtilityAutomationService.RejectNpcSaleStart(operationId, AutomationTerritoryPolicy.InactiveStatus);
+        if (ExecutionService.IsOwned)
+            return UtilityAutomationService.RejectNpcSaleStart(operationId, "ADS owns active duty execution.");
+        if (InnEntryService.IsRunning)
+            return UtilityAutomationService.RejectNpcSaleStart(operationId, "ADS inn entry is running.");
+        return UtilityAutomationService.StartNpcSale(operationId, localOnly);
+    }
 
     public bool CancelShopPurchase(string operationId)
     {
@@ -2707,6 +2718,17 @@ public sealed class Plugin : IDalamudPlugin
                 DutyContextService.Current.TerritoryTypeId);
             if (automationExcludedTerritory)
             {
+                // Only the explicit NPC-sale receipt can run here. Normal duty and
+                // utility automation remains parked, including travel aboard a voyage.
+                if (UtilityAutomationService.IsNpcSaleRunning
+                    && !AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(ClientState.TerritoryType,
+                        DutyContextService.Current.TerritoryTypeId, UtilityAutomationService.IsLocalNpcSaleRunning))
+                {
+                    UtilityAutomationService.Update();
+                    UpdateDtrBar();
+                    return;
+                }
+
                 if (parkedAutomationExcludedTerritoryId != DutyContextService.Current.TerritoryTypeId)
                 {
                     parkedAutomationExcludedTerritoryId = DutyContextService.Current.TerritoryTypeId;
@@ -3942,9 +3964,9 @@ public sealed class Plugin : IDalamudPlugin
         dtrEntry.OnClick = _ => OpenMainUi();
     }
 
-    private bool CanStartManualUtility(string actionLabel)
+    private bool CanStartManualUtility(string actionLabel, bool npcSale = false, bool localOnly = false)
     {
-        if (RejectAutomationActionInExcludedTerritory(actionLabel))
+        if (RejectAutomationActionInExcludedTerritory(actionLabel, npcSale, localOnly))
             return false;
 
         if (ExecutionService.IsOwned)
@@ -3996,10 +4018,14 @@ public sealed class Plugin : IDalamudPlugin
         return accepted;
     }
 
-    private bool RejectAutomationActionInExcludedTerritory(string actionLabel)
+    private bool RejectAutomationActionInExcludedTerritory(string actionLabel, bool npcSale = false, bool localOnly = false)
     {
-        if (!AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
-            && !AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId))
+        var excluded = npcSale
+            ? AutomationTerritoryPolicy.IsNpcSaleExcludedTerritory(ClientState.TerritoryType,
+                DutyContextService.Current.TerritoryTypeId, localOnly)
+            : AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
+                || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId);
+        if (!excluded)
         {
             return false;
         }

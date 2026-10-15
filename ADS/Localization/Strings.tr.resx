@@ -4051,4 +4051,10 @@
   <data name="Moving" xml:space="preserve"><value>Hareket ediyor</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>Bekliyor</value></data>
   <data name="Interacting" xml:space="preserve"><value>Etkileşiyor</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Satıcı kataloğunda aranıyor...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Katalog araması iptal edildi: ön ayar veya para birimi değişti.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Katalog araması başarısız: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Ara sahne etkin; ADS hareketi ve zamanlayıcıları duraklatıldı.</value>
+  </data>
 </root>

@@ -4051,4 +4051,10 @@
   <data name="Moving" xml:space="preserve"><value>Đang di chuyển</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>Đang chờ</value></data>
   <data name="Interacting" xml:space="preserve"><value>Đang tương tác</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Đang tìm trong danh mục người bán...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Đã hủy tìm kiếm: bộ thiết lập hoặc tiền tệ đã thay đổi.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Tìm kiếm danh mục thất bại: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Đang phát cảnh cắt; di chuyển và bộ hẹn giờ ADS tạm dừng.</value>
+  </data>
 </root>

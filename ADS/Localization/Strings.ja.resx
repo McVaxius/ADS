@@ -11479,4 +11479,10 @@
   <data name="Moving" xml:space="preserve"><value>移動中</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>待機中</value></data>
   <data name="Interacting" xml:space="preserve"><value>操作中</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>販売カタログを検索中...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>プリセットまたは通貨が変更されたため、検索を取り消しました。</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>カタログ検索に失敗しました: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>カットシーン中のため、ADSの移動とタイマーを一時停止しています。</value>
+  </data>
 </root>

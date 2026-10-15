@@ -559,9 +559,10 @@ public sealed class ShopPurchaseRunnerTests
     {
         using var temp = new TempDirectory();
         var store = new ShopListPresetStore(temp.Path);
-        Assert.True(store.Create("Order test", out _));
-        Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out _));
-        Assert.True(store.SetItem(100, 60, 60, false, ShopListOwnershipScope.InventoryOnly, out _));
+        Assert.DoesNotContain("failed", store.LastStatus, StringComparison.OrdinalIgnoreCase);
+        Assert.True(store.Create("Order test", out var createError), createError);
+        Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out var configureError), configureError);
+        Assert.True(store.SetItem(100, 60, 60, false, ShopListOwnershipScope.InventoryOnly, out var itemError), itemError);
         var preset = store.ActivePreset;
         var row = preset.Items.Single();
         var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ItemCount = 2 };
@@ -587,7 +588,7 @@ public sealed class ShopPurchaseRunnerTests
             Assert.Equal(Math.Min(60, 2 + (pass + 1) * 20), progress[row.RowId]);
             Assert.Equal(pass == 2 ? "fulfilled" : pass < 2 ? "partial" : "fulfilled", status.Disposition);
             Assert.False(runtime.ExpectedShopVisible);
-            Assert.True(store.SaveOrderProgress(1, preset.PresetId, progress, out _));
+            Assert.True(store.SaveOrderProgress(1, preset.PresetId, progress, out var progressError), progressError);
             store.Reload();
             Assert.Equal(progress[row.RowId], store.GetOrderProgress(1, preset.PresetId)[row.RowId]);
             Assert.Empty(store.GetOrderProgress(2, preset.PresetId));

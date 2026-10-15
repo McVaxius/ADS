@@ -29,6 +29,7 @@ public sealed class TreasureDoorStrafeInputService
     private string lastStatus = BuildStatus(StrafeDirection.None, SeVirtualKey.NO_KEY);
     private string lastUnavailableLogKey = string.Empty;
     private string lastRawWriterLogKey = string.Empty;
+    internal Action<SeVirtualKey, KeyStateFlags>? WriteDiagnosticInputOverride { get; set; }
 
     public TreasureDoorStrafeInputService(IKeyState keyState, IPluginLog? log = null)
     {
@@ -230,6 +231,12 @@ public sealed class TreasureDoorStrafeInputService
     {
         if (!IsKeyboardKey(key))
             return;
+
+        if (WriteDiagnosticInputOverride is { } write)
+        {
+            write(key, state);
+            return;
+        }
 
         var uiModule = UIModule.Instance();
         if (uiModule == null)

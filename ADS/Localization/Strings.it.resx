@@ -4409,4 +4409,10 @@
   <data name="Moving" xml:space="preserve"><value>In movimento</value></data>
   <data name="Titlebar.Waiting" xml:space="preserve"><value>In attesa</value></data>
   <data name="Interacting" xml:space="preserve"><value>Interazione in corso</value></data>
+  <data name="Searching vendor catalog..." xml:space="preserve"><value>Ricerca nel catalogo dei venditori...</value></data>
+  <data name="Catalog search cancelled: the preset or currency changed." xml:space="preserve"><value>Ricerca annullata: la preimpostazione o la valuta è cambiata.</value></data>
+  <data name="Catalog search failed: {0}" xml:space="preserve"><value>Ricerca nel catalogo non riuscita: {0}</value></data>
+  <data name="Cutscene active; ADS movement and timers are paused." xml:space="preserve">
+    <value>Filmato in corso; movimento e timer di ADS in pausa.</value>
+  </data>
 </root>

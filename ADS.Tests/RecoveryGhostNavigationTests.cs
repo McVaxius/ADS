@@ -10,6 +10,39 @@ namespace ADS.Tests;
 
 public sealed class RecoveryGhostNavigationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CutscenePreservesRemainingRecoveryTimeInsteadOfRetiringOrRestarting(bool arrived)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var execution = fixture.Execution;
+        var now = DateTime.UtcNow;
+        execution.ReadUtcNow = () => now;
+        var ghost = MonsterGhost("paused-ghost", "Recovery ghost", arrived ? Vector3.Zero : new Vector3(40, 0, 0));
+        var known = GetPrivateField<Dictionary<string, ObservedMonster>>(fixture.Memory!, "knownMonsters");
+        known[ghost.Key] = ghost;
+        var planner = Planner(ghost);
+        var observation = Snapshot(ghost);
+        void Update(DutyContextSnapshot context) => execution.Update(context, planner, observation, true, true, "");
+
+        Update(TestDutyContextFactory.Create());
+        now = arrived ? now.AddMilliseconds(400) : now.AddSeconds(7);
+        Update(TestDutyContextFactory.Create(cutscene: true));
+        now = now.AddSeconds(120);
+        Update(TestDutyContextFactory.Create(watchingCutscene: true));
+        Assert.Contains(ghost.Key, known.Keys);
+
+        Update(TestDutyContextFactory.Create());
+        Assert.Contains(ghost.Key, known.Keys);
+        now = arrived ? now.AddMilliseconds(600).AddTicks(-1) : now.AddSeconds(5).AddTicks(-1);
+        Update(TestDutyContextFactory.Create());
+        Assert.Contains(ghost.Key, known.Keys);
+        now = now.AddTicks(1);
+        Update(TestDutyContextFactory.Create());
+        Assert.DoesNotContain(ghost.Key, known.Keys);
+    }
+
     [Fact]
     public void StationaryTargetTimesOutWhileMovementOrTargetChangeRestartsWindow()
     {

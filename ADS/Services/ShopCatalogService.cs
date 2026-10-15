@@ -97,11 +97,10 @@ internal sealed class ShopCatalogService(
         var current = GetSnapshot();
         var normalized = query?.Trim() ?? string.Empty;
         limit = Math.Clamp(limit, 1, 100);
-        // Currency text is evaluated from the resolved offer below. Candidate pruning cannot
-        // safely see that text, so keep the full deterministic item set for both discovery and
-        // exact-currency searches.
+        // Match cheap sheet metadata before resolving vendor placements and routes.
+        // Reuse cost normalization so currency-name discovery is preserved too.
         var candidateIds = itemIdFilter == 0
-            ? FindCandidateItemIds(current, string.Empty)
+            ? FindCandidateItemIds(current, normalized, currency)
             : new[] { itemIdFilter };
         var rows = new List<ShopCatalogSearchRow>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -181,18 +180,11 @@ internal sealed class ShopCatalogService(
             return snapshot ??= sheetSource.BuildSnapshot();
     }
 
-    private static IReadOnlyList<uint> FindCandidateItemIds(ShopCatalogSnapshot snapshot, string query)
+    private static IReadOnlyList<uint> FindCandidateItemIds(ShopCatalogSnapshot snapshot, string query, ShopCurrencyIdentity? currency)
     {
-        var allIds = snapshot.GilShopRows.Select(row => row.ItemId)
-            .Concat(snapshot.SpecialShopRows.SelectMany(row => row.ReceiveItems).Select(item => item.ItemId))
-            .Concat((snapshot.GrandCompanyShopRows ?? []).Select(row => row.ItemId))
-            .Concat((snapshot.FreeCompanyShopRows ?? []).Select(row => row.ItemId))
-            .Where(itemId => itemId != 0)
-            .Distinct()
-            .ToArray();
-        if (string.IsNullOrEmpty(query))
-            return allIds.Order().ToArray();
-
+        var matchingItems = snapshot.Items.Values
+            .Where(item => Contains(item.Name, query) || item.ItemId.ToString().Equals(query, StringComparison.Ordinal))
+            .Select(item => item.ItemId).ToHashSet();
         var matchingShopIds = snapshot.GilShopRows
             .Where(row => Contains(row.ShopName, query) || row.ShopId.ToString().Equals(query, StringComparison.Ordinal))
             .Select(row => (ShopSheetKind.Gil, row.ShopId))
@@ -215,16 +207,33 @@ internal sealed class ShopCatalogService(
         foreach (var link in snapshot.NpcLinks.Where(link => territoryNpcIds.Contains(link.NpcId)))
             matchingShopIds.Add((link.ShopKind, link.ShopId));
 
-        return allIds.Where(itemId =>
-                snapshot.Items.TryGetValue(itemId, out var item)
-                && (Contains(item.Name, query) || itemId.ToString().Equals(query, StringComparison.Ordinal)
-                    || snapshot.GilShopRows.Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.Gil, row.ShopId)))
-                    || snapshot.SpecialShopRows.Any(row => row.ReceiveItems.Any(receive => receive.ItemId == itemId)
-                                                        && matchingShopIds.Contains((ShopSheetKind.Special, row.ShopId)))
-                    || (snapshot.GrandCompanyShopRows ?? []).Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.GrandCompany, row.ShopId)))
-                    || (snapshot.FreeCompanyShopRows ?? []).Any(row => row.ItemId == itemId && matchingShopIds.Contains((ShopSheetKind.FreeCompany, row.ShopId)))))
-            .Order()
-            .ToArray();
+        var candidates = new HashSet<uint>();
+        foreach (var row in snapshot.GilShopRows)
+            Add(row.ItemId, ShopSheetKind.Gil, row.ShopId, new(ShopCurrencyKind.Gil, 1, "Gil", 1));
+        var tomestones = snapshot.Tomestones.GroupBy(row => row.TomestoneId)
+            .ToDictionary(group => group.Key, group => group.First());
+        foreach (var row in snapshot.SpecialShopRows)
+        {
+            if (!ShopCatalogBuilder.TryNormalizeSpecialShopCosts(snapshot, tomestones, row, out _, out var costs) || costs.Count != 1)
+                continue;
+            foreach (var receive in row.ReceiveItems)
+                Add(receive.ItemId, ShopSheetKind.Special, row.ShopId, costs[0]);
+        }
+        foreach (var row in snapshot.GrandCompanyShopRows ?? [])
+            Add(row.ItemId, ShopSheetKind.GrandCompany, row.ShopId,
+                new(ShopCurrencyKind.CompanySeal, (uint)(19 + row.GrandCompanyId), "Company Seals", 1));
+        foreach (var row in snapshot.FreeCompanyShopRows ?? [])
+            Add(row.ItemId, ShopSheetKind.FreeCompany, row.ShopId, new(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", 1));
+        return candidates.Order().ToArray();
+
+        void Add(uint itemId, ShopSheetKind kind, uint shopId, ShopCurrencyCost cost)
+        {
+            if (itemId == 0 || (currency.HasValue && cost.Identity != currency.Value)) return;
+            if (string.IsNullOrEmpty(query) || matchingItems.Contains(itemId) || matchingShopIds.Contains((kind, shopId))
+                || Contains(cost.Name, query) || Contains(ShopOfferSelector.CurrencyKindName(cost.Kind), query)
+                || cost.ItemId.ToString().Equals(query, StringComparison.Ordinal))
+                candidates.Add(itemId);
+        }
     }
 
     private static bool SearchMatches(
@@ -960,7 +969,7 @@ internal static class ShopCatalogBuilder
         => string.Join('+', currencies.Select(currency =>
             $"{currency.Kind}:{currency.ItemId}:{(long)currency.AmountPerTransaction * transactions}"));
 
-    private static bool TryNormalizeSpecialShopCosts(
+    internal static bool TryNormalizeSpecialShopCosts(
         ShopCatalogSnapshot snapshot,
         IReadOnlyDictionary<uint, ShopTomestoneSheetRow> tomestonesById,
         SpecialShopSheetRow row,

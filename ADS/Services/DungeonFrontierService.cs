@@ -98,6 +98,8 @@ public sealed class DungeonFrontierService
     private bool treasureFollowerDoorChaseGateTransitionSeenActive;
     private DateTime treasureFollowerDoorChaseGateSettleUntilUtc = DateTime.MinValue;
     private DateTime treasureFollowerDoorChaseGateInteractionSeenUtc = DateTime.MinValue;
+    // Native witness identity/freshness stays on UTC; only its waiting budget is paused.
+    private DateTime treasureFollowerDoorChaseGateInteractionGraceUntilUtc = DateTime.MinValue;
     private string treasureFollowerDoorChaseGateInteractionSource = string.Empty;
     private string treasureFollowerDoorChaseGateUnblockedKey = string.Empty;
     private string treasureFollowerDoorChaseGateState = "Inactive";
@@ -120,6 +122,54 @@ public sealed class DungeonFrontierService
     private string treasureFollowerLastCofferStagingScanLogKey = string.Empty;
     private int headingScoutSequence;
     private TreasureInteractionWitness? lastTreasureInteractionWitness;
+
+    internal Func<DateTime> ReadUtcNow { get; set; } = static () => DateTime.UtcNow;
+    private DateTime? cutscenePausedAtUtc;
+    private DateTime TimerUtcNow => cutscenePausedAtUtc ?? ReadUtcNow();
+
+    private bool RefreshCutsceneHold(DutyContextSnapshot context)
+    {
+        if (!context.IsUnsafeTransition && context.IsCutscene)
+        {
+            cutscenePausedAtUtc ??= ReadUtcNow();
+            ObserveTreasureFollowerCandidateTransit(context);
+            ObserveTreasureFollowerEntryProofTransit(context, CurrentTarget);
+            if (IsTreasureFollowerPostEntryDoorCycleEnabled()
+                && IsTreasureFollowerDoorOpenTransitionGateArmed(TimerUtcNow))
+                treasureFollowerDoorChaseGateTransitionSeenActive = true;
+            CurrentLabelStatus = "Cutscene active; ADS movement and timers are paused.";
+            return true;
+        }
+
+        ResumeCutsceneTimers();
+        return false;
+    }
+
+    private void ResumeCutsceneTimers()
+    {
+        if (cutscenePausedAtUtc is not { } pausedAt)
+            return;
+
+        cutscenePausedAtUtc = null;
+        var duration = ReadUtcNow() - pausedAt;
+        if (duration <= TimeSpan.Zero)
+            return;
+
+        ShiftPausedTimer(ref treasureFollowerCandidateSwitchSettleUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerCofferSeekStartedUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerCofferSeekLastProgressUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerDoorChaseGateSettleUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerDoorChaseGateInteractionGraceUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerDoorSeekCombatGateSettleUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerRoomRetryCooldownUntilUtc, duration);
+        ShiftPausedTimer(ref treasureFollowerSuppressHeadingScoutUntilUtc, duration);
+    }
+
+    private static void ShiftPausedTimer(ref DateTime timestamp, TimeSpan duration)
+    {
+        if (timestamp != DateTime.MinValue && timestamp != DateTime.MaxValue)
+            timestamp += duration;
+    }
 
     private readonly record struct TreasureFollowerRoomRouteFloor(int RoomIndex, Vector3 DoorCenter);
 
@@ -168,7 +218,7 @@ public sealed class DungeonFrontierService
         if (witness is null)
             return;
 
-        if (DateTime.UtcNow - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
+        if (ReadUtcNow() - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
             return;
 
         if (lastTreasureInteractionWitness is not null
@@ -311,13 +361,13 @@ public sealed class DungeonFrontierService
                || treasureFollowerDoorChaseHoldActive
                || TreasureFollowerCofferSeekActive
                || (heldTreasureFollowerCandidateKey is not null && heldTreasureFollowerCandidateTransitObserved)
-               || DateTime.UtcNow < treasureFollowerCandidateSwitchSettleUntilUtc
-               || DateTime.UtcNow < treasureFollowerRoomRetryCooldownUntilUtc);
+               || TimerUtcNow < treasureFollowerCandidateSwitchSettleUntilUtc
+               || TimerUtcNow < treasureFollowerRoomRetryCooldownUntilUtc);
 
     public double TreasureFollowerRoomRetryCooldownRemainingSeconds
         => treasureFollowerRoomRetryCooldownUntilUtc == DateTime.MinValue
             ? 0
-            : Math.Max(0, (treasureFollowerRoomRetryCooldownUntilUtc - DateTime.UtcNow).TotalSeconds);
+            : Math.Max(0, (treasureFollowerRoomRetryCooldownUntilUtc - TimerUtcNow).TotalSeconds);
 
     public int TreasureFollowerCofferSeekRoomIndex
         => treasureFollowerActiveStagingRoomIndex;
@@ -361,6 +411,7 @@ public sealed class DungeonFrontierService
 
     public void HoldUnsafeTransition(DutyContextSnapshot context)
     {
+        ResumeCutsceneTimers();
         if (!context.PluginEnabled || !context.IsLoggedIn)
         {
             if (activeDutyKey != 0)
@@ -412,6 +463,7 @@ public sealed class DungeonFrontierService
     {
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
         {
+            ResumeCutsceneTimers();
             if (activeDutyKey != 0)
             {
                 Reset();
@@ -427,6 +479,9 @@ public sealed class DungeonFrontierService
             Reset();
             activeDutyKey = dutyKey;
         }
+
+        if (RefreshCutsceneHold(context))
+            return;
 
         var previousTarget = CurrentTarget;
         RememberManualDestination(previousTarget);
@@ -661,6 +716,7 @@ public sealed class DungeonFrontierService
 
     public void Reset()
     {
+        ResumeCutsceneTimers();
         visitedFrontierKeys.Clear();
         CurrentTarget = null;
         CurrentMode = FrontierMode.None;
@@ -831,7 +887,7 @@ public sealed class DungeonFrontierService
 
     private void ObserveTreasureFollowerDoorChaseGateTransition(DutyContextSnapshot context)
     {
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (!IsTreasureFollowerPostEntryDoorCycleEnabled()
             || !IsTreasureFollowerDoorOpenTransitionGateArmed(now)
             || !IsTreasureFollowerDoorChaseGateTransitionActive(context))
@@ -867,7 +923,7 @@ public sealed class DungeonFrontierService
         if (roomIndex <= 0)
             return;
 
-        ObserveTreasureFollowerDoorSeekCombatGate(context, roomIndex, DateTime.UtcNow);
+        ObserveTreasureFollowerDoorSeekCombatGate(context, roomIndex, TimerUtcNow);
     }
 
     private void ObserveTreasureFollowerDoorSeekCombatGate(
@@ -2131,7 +2187,7 @@ public sealed class DungeonFrontierService
 
         if (markedCount > 0)
         {
-            var now = DateTime.UtcNow;
+            var now = TimerUtcNow;
             if (now >= nextTreasureFollowerCatchUpLogUtc)
             {
                 nextTreasureFollowerCatchUpLogUtc = now + TreasureFollowerCatchUpLogCooldown;
@@ -2175,7 +2231,7 @@ public sealed class DungeonFrontierService
         if (markedCount <= 0)
             return;
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (now < nextTreasureFollowerCatchUpLogUtc)
             return;
 
@@ -2328,7 +2384,7 @@ public sealed class DungeonFrontierService
             return null;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (IsTreasureFollowerDoorChaseGateTransitionActive(context))
         {
             ReleaseTreasureFollowerCofferSeek(roomIndex, "RouteTransitionStarted");
@@ -2713,10 +2769,10 @@ public sealed class DungeonFrontierService
     private static bool IsWithinTreasureFollowerCandidateVerticalCap(DungeonFrontierPoint point, Vector3 playerPosition)
         => MathF.Abs(point.Position.Y - playerPosition.Y) <= TreasureFollowerCandidateVerticalCap;
 
-    private static double GetRemainingSeconds(DateTime untilUtc)
+    private double GetRemainingSeconds(DateTime untilUtc)
         => untilUtc == DateTime.MinValue
             ? 0
-            : Math.Max(0, (untilUtc - DateTime.UtcNow).TotalSeconds);
+            : Math.Max(0, (untilUtc - TimerUtcNow).TotalSeconds);
 
     private bool TryHoldTreasureFollowerDoorChaseGate(DutyContextSnapshot context, int roomIndex, out string status)
     {
@@ -2737,7 +2793,7 @@ public sealed class DungeonFrontierService
             ClearTreasureFollowerDoorChaseInteractionGate();
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (TryHoldTreasureFollowerDoorSeekCombatGate(context, roomIndex, now, out status))
             return true;
 
@@ -2815,7 +2871,7 @@ public sealed class DungeonFrontierService
                 return true;
             }
 
-            var interactionGraceUntilUtc = treasureFollowerDoorChaseGateInteractionSeenUtc + TreasureFollowerDoorInteractionTransitionGrace;
+            var interactionGraceUntilUtc = treasureFollowerDoorChaseGateInteractionGraceUntilUtc;
             if (now < interactionGraceUntilUtc)
             {
                 var remaining = Math.Max(0, (interactionGraceUntilUtc - now).TotalSeconds);
@@ -2849,7 +2905,7 @@ public sealed class DungeonFrontierService
     private void TryLatchTreasureFollowerDoorInteractionWitness(DateTime now)
     {
         if (lastTreasureInteractionWitness is not { } witness
-            || now - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
+            || ReadUtcNow() - witness.CapturedUtc > TreasureFollowerDoorInteractionWitnessTtl)
         {
             return;
         }
@@ -2858,6 +2914,8 @@ public sealed class DungeonFrontierService
             return;
 
         treasureFollowerDoorChaseGateInteractionSeenUtc = witness.CapturedUtc;
+        treasureFollowerDoorChaseGateInteractionGraceUntilUtc = now + TreasureFollowerDoorInteractionTransitionGrace
+            - (ReadUtcNow() - witness.CapturedUtc);
         treasureFollowerDoorChaseGateInteractionSource = string.IsNullOrWhiteSpace(witness.Source)
             ? witness.EventKind
             : witness.Source;
@@ -2896,7 +2954,7 @@ public sealed class DungeonFrontierService
             return false;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (now >= treasureFollowerCandidateSwitchSettleUntilUtc)
         {
             ClearTreasureFollowerCandidateSwitchSettle();
@@ -2918,7 +2976,7 @@ public sealed class DungeonFrontierService
         treasureFollowerCandidateSwitchSettleRoomIndex = point.TreasureRoomIndex;
         treasureFollowerCandidateSwitchSettleCandidateKey = point.Key;
         treasureFollowerCandidateSwitchSettleReason = reason;
-        treasureFollowerCandidateSwitchSettleUntilUtc = DateTime.UtcNow + TreasureFollowerDoorChaseSettleDelay;
+        treasureFollowerCandidateSwitchSettleUntilUtc = TimerUtcNow + TreasureFollowerDoorChaseSettleDelay;
         treasureFollowerDoorChaseGateState = "SettlingAfterFailedCandidate";
         treasureFollowerDoorChaseHoldActive = true;
     }
@@ -2956,7 +3014,7 @@ public sealed class DungeonFrontierService
             return false;
         }
 
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (now >= treasureFollowerRoomRetryCooldownUntilUtc)
         {
             ClearTreasureFollowerRoomRetryCooldown();
@@ -2978,7 +3036,7 @@ public sealed class DungeonFrontierService
 
         ClearTreasureFollowerCandidateSwitchSettle();
         treasureFollowerRoomRetryCooldownRoomIndex = roomIndex;
-        treasureFollowerRoomRetryCooldownUntilUtc = DateTime.UtcNow + TreasureFollowerRoomRetryCooldown;
+        treasureFollowerRoomRetryCooldownUntilUtc = TimerUtcNow + TreasureFollowerRoomRetryCooldown;
         treasureFollowerDoorChaseGateState = "RoomRetryCooldown";
         treasureFollowerDoorChaseHoldActive = true;
         log.Information(
@@ -3001,6 +3059,7 @@ public sealed class DungeonFrontierService
     private void ClearTreasureFollowerDoorChaseInteractionGate()
     {
         treasureFollowerDoorChaseGateInteractionSeenUtc = DateTime.MinValue;
+        treasureFollowerDoorChaseGateInteractionGraceUntilUtc = DateTime.MinValue;
         treasureFollowerDoorChaseGateInteractionSource = string.Empty;
         treasureFollowerDoorChaseGateUnblockedKey = string.Empty;
     }
@@ -3039,7 +3098,7 @@ public sealed class DungeonFrontierService
 
         ClearTreasureFollowerFailedPassageGroups(roomIndex);
         TreasureFollowerRetryCycle++;
-        var now = DateTime.UtcNow;
+        var now = TimerUtcNow;
         if (now >= nextTreasureFollowerRetryCycleLogUtc)
         {
             nextTreasureFollowerRetryCycleLogUtc = now + TreasureFollowerRetryCycleLogCooldown;
@@ -3268,7 +3327,7 @@ public sealed class DungeonFrontierService
         treasureFollowerStagingReached = true;
         treasureFollowerStagingAttempted = true;
         treasureFollowerCofferSeekLastReason = reason;
-        treasureFollowerCofferSeekLastProgressUtc = DateTime.UtcNow;
+        treasureFollowerCofferSeekLastProgressUtc = TimerUtcNow;
 
         if (!wasReached)
         {
@@ -3314,7 +3373,7 @@ public sealed class DungeonFrontierService
     }
 
     private void SuppressTreasureFollowerHeadingScoutAfterSuccess()
-        => treasureFollowerSuppressHeadingScoutUntilUtc = DateTime.UtcNow + TreasureFollowerHeadingScoutSuccessSuppressDuration;
+        => treasureFollowerSuppressHeadingScoutUntilUtc = TimerUtcNow + TreasureFollowerHeadingScoutSuccessSuppressDuration;
 
     public void SuppressTreasureFollowerHeadingScoutForPostTransitSettle(string reason)
     {
@@ -3333,13 +3392,13 @@ public sealed class DungeonFrontierService
         if (treasureFollowerActiveDoorCycleRoomIndex > 0
             || heldTreasureFollowerCandidateKey is not null
             || treasureFollowerDoorChaseHoldActive
-            || DateTime.UtcNow < treasureFollowerCandidateSwitchSettleUntilUtc
+            || TimerUtcNow < treasureFollowerCandidateSwitchSettleUntilUtc
             || treasureFollowerRoomRetryCooldownUntilUtc != DateTime.MinValue)
         {
             return true;
         }
 
-        return DateTime.UtcNow < treasureFollowerSuppressHeadingScoutUntilUtc;
+        return TimerUtcNow < treasureFollowerSuppressHeadingScoutUntilUtc;
     }
 
     private DungeonFrontierPoint? SelectCurrentTarget(IReadOnlyList<DungeonFrontierPoint> points, Vector3? playerPosition, DungeonFrontierPoint? previousTarget)
@@ -3545,7 +3604,7 @@ public sealed class DungeonFrontierService
     private void RememberGhostedManualDestination(DungeonFrontierPoint point, string reason)
     {
         LastGhostedManualDestination = point;
-        LastGhostedManualDestinationUtc = DateTime.UtcNow;
+        LastGhostedManualDestinationUtc = ReadUtcNow();
         LastGhostedManualDestinationReason = reason;
     }
 
