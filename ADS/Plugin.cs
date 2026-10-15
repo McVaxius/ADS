@@ -328,7 +328,7 @@ public sealed class Plugin : IDalamudPlugin
             new SystemShopPurchaseClock());
         Log.Information("[ADS][InnRepair] startup; build=I403-manual-inn-destinations-03; pid={Pid}; utc={Utc}", Environment.ProcessId, DateTime.UtcNow);
         Log.Information("[ADS][Cutscene] startup; build=devhub-cutscene-pause-20261014-01");
-        Log.Information("[ADS][NpcSale] startup; build=ads-inventory-sale-20261015-04");
+        Log.Information("[ADS][NpcSale] startup; build=ads-inventory-ipc-20261015-05");
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
             .GetIpcSubscriber<string, string>("XA.Database.SearchCurrentCharacterItemsJson");
@@ -382,6 +382,8 @@ public sealed class Plugin : IDalamudPlugin
             StartGearSale,
             GetGearSaleStatusJson,
             UtilityAutomationService.CancelGearSale,
+            StartGearMove,
+            StartAutoEquip,
             StartGuardedShopPurchase,
             CancelShopPurchase,
             SetShopKeepOpen,

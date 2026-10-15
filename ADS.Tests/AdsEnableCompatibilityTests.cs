@@ -247,6 +247,7 @@ public sealed class AdsEnableCompatibilityTests
                 _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, _ => false, (_, _, _) => false,
                 (_, _) => false, () => "{}", _ => false,
                 _ => "{}", (_, _, _) => false, _ => "{}", _ => false,
+                _ => false, () => false,
                 (_, _) => false, _ => false, _ => false, () => false,
                 () => false, () => false, () => false, () => "{}", () => "{}", () => "{}", Invoke,
                 plugin.GetConfigurationJson, Patch, () => "{}", () => "{}", () => "{}", () => "{}",
@@ -286,6 +287,54 @@ public sealed class AdsEnableCompatibilityTests
         }
     }
 
+    [Fact]
+    public void InventoryUtilityEndpointsForwardModesAndAdmissionResultsAndUnregisterOnDispose()
+    {
+        var pi = DispatchProxy.Create<IDalamudPluginInterface, IpcProxy>();
+        var proxy = (IpcProxy)(object)pi;
+        var moves = new List<bool>();
+        var equips = 0;
+        var allowed = false;
+        bool Move(bool allUnprotected) { moves.Add(allUnprotected); return allowed; }
+        bool Equip() { equips++; return allowed; }
+        var ipc = new AdsIpcService(pi,
+            () => false, () => false, () => false, () => false, () => false, () => false,
+            _ => false, () => false, _ => false, (_, _) => false, (_, _, _) => false, _ => false, (_, _, _) => false,
+            (_, _) => false, () => "{}", _ => false,
+            _ => "{}", (_, _, _) => false, _ => "{}", _ => false,
+            Move, Equip,
+            (_, _) => false, _ => false, _ => false, () => false,
+            () => false, () => false, () => false, () => "{}", () => "{}", () => "{}", (_, _) => "{}",
+            () => "{}", _ => "{}", () => "{}", () => "{}", () => "{}", () => "{}",
+            _ => "{}", _ => "{}", _ => "{}", _ => false, _ => "{}", () => false,
+            DispatchProxy.Create<IPluginLog, IpcProxy>());
+        try
+        {
+            Assert.Empty(moves); // Registration never dispatches an inventory action.
+            Assert.Equal(0, equips);
+            var move = Assert.IsType<Func<bool, bool>>(proxy.Providers["ADS.StartGearMove"].Callback);
+            var equip = Assert.IsType<Func<bool>>(proxy.Providers["ADS.StartAutoEquip"].Callback);
+            foreach (var admission in new[] { false, true })
+            {
+                allowed = admission;
+                Assert.Equal(admission, move(false));
+                Assert.Equal(admission, move(true));
+                Assert.Equal(admission, equip());
+            }
+            Assert.Equal(new[] { false, true, false, true }, moves);
+            Assert.Equal(2, equips);
+            var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+            using var capabilities = JsonDocument.Parse(new AdsOperatorApiService(plugin).GetCapabilitiesJson());
+            Assert.Equal(1, capabilities.RootElement.GetProperty("equipmentMoving").GetInt32());
+            Assert.Equal(1, capabilities.RootElement.GetProperty("autoEquip").GetInt32());
+            Assert.Equal(new[] { "ADS.StartGearMove", "ADS.StartAutoEquip", "ADS.GetStatusJson", "ADS.CancelUtility" },
+                capabilities.RootElement.GetProperty("equipmentUtilityIpc").EnumerateArray().Select(item => item.GetString()));
+        }
+        finally { ipc.Dispose(); }
+        Assert.Null(proxy.Providers["ADS.StartGearMove"].Callback);
+        Assert.Null(proxy.Providers["ADS.StartAutoEquip"].Callback);
+    }
+
     public class IpcProxy : DispatchProxy
     {
         public readonly Dictionary<string, IpcProxy> Providers = [];
@@ -305,6 +354,7 @@ public sealed class AdsEnableCompatibilityTests
                     Providers[(string)args![0]!] = (IpcProxy)provider;
                     return provider;
                 case "RegisterFunc": Callback = (Delegate)args![0]!; return null;
+                case "UnregisterFunc": Callback = null; return null;
                 case "SavePluginConfig": ++Saves; return null;
                 case "Information":
                 case "Warning": Messages.Add((string)args![0]!); return null;

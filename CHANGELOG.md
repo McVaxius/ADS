@@ -1,3 +1,7 @@
+2026-10-15 - Inventory movement and Auto Equip IPC
+
+- Expose `ADS.StartGearMove(bool allUnprotected)` and `ADS.StartAutoEquip()` through the existing guarded manual action wrappers. Advertise them in capabilities and reuse shared utility status/cancellation. Document the developer signatures, movement scopes and accepted-versus-completed behavior beside equipment-sale IPC.
+
 2026-10-15 - Continue equipment sales past failed items
 
 - Match native HQ sale transaction IDs to the selected item's quality, preserving exact item, slot, quantity and vendor checks.

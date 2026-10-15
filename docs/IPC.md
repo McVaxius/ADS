@@ -29,6 +29,8 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartGearSale(string operationId, string scope, bool localOnly) -> bool`
 - `ADS.GetGearSaleStatusJson(string operationId) -> string`
 - `ADS.CancelGearSale(string operationId) -> bool`
+- `ADS.StartGearMove(bool allUnprotected) -> bool`
+- `ADS.StartAutoEquip() -> bool`
 - `ADS.StartGuardedShopPurchase(string requestJson, Func<string, bool> authorize) -> bool`
 - `ADS.CancelShopPurchase(string operationId) -> bool`
 - `ADS.SetShopKeepOpen(bool enabled) -> bool`
@@ -48,11 +50,43 @@ Existing ADS IPC endpoints remain available.
 
 `ADS.OpenPlayerObjectExplorer` opens the existing object explorer, clears its search, level, targetable, and same-map filters, and selects Player. Player rows show a whitelist action only while the loaded DhogNav plugin exposes `DhogNav.AddWhitelistedPlayer(string identity) -> bool`; parasite mode may be off. The action resolves the live player by object ID and sends a complete `Name@HomeServer` identity. DhogNav rejects incomplete identities and active whitelist edits, deduplicates accepted entries, and returns false if saving fails. Save failures can leave the entry in memory; check DhogNav's save status.
 
+## Inventory equipment IPC reference
+
+| Endpoint | Return | Purpose |
+| --- | --- | --- |
+| `ADS.StartGearMove(bool allUnprotected)` | `bool` | Move eligible unequipped gear from the Armoury Chest into carried inventory. Pass `false` for white-name equipment, including HQ; `true` also includes coloured equipment. Equipped and saved-gearset items remain protected. |
+| `ADS.StartAutoEquip()` | `bool` | Use the game's Recommended Gear for the current job, verify the result, and update the active saved gearset when it still matches that job. |
+| `ADS.GetStatusJson()` | `string` | Shared utility progress and terminal status for movement and Auto Equip. |
+| `ADS.CancelUtility()` | `bool` | Cancel ADS's currently active utility, including movement or Auto Equip. This is not operation-ID scoped. |
+| `ADS.PreviewGearSaleJson(string scope)` | `string` | Read-only eligible white-equipment preview. |
+| `ADS.StartGearSale(string operationId, string scope, bool localOnly)` | `bool` | Start selling that scope using the existing protected selection and vendor route. |
+| `ADS.GetGearSaleStatusJson(string operationId)` | `string` | Sale progress/results for the caller's operation ID. |
+| `ADS.CancelGearSale(string operationId)` | `bool` | Cancel only that matching active equipment sale. |
+
+`ADS.GetCapabilitiesJson()` advertises `equipmentMoving: 1`, `autoEquip: 1`, and `equipmentUtilityIpc` for the new movement/equip endpoints. These use the same guarded action wrappers as the manual buttons and commands, without adding a job change, travel step, queue or persistent settings. Call action IPC on the Dalamud framework thread.
+
+The start Boolean means **accepted**, not completed. For movement and Auto Equip, capture `utilityCompletedAtUtc` from `GetStatusJson` before starting. After acceptance, observe `utilityRunning`, `utilityMode` (`gear-move` or `auto-equip`), `utilityStatus`, and the new terminal `utilityCompletedAtUtc`, `utilityLastSuccess` or `utilityLastFailure`. A rejected start does not identify a new completion. The shared status/cancel endpoints are not caller-scoped; coordinate with other users of ADS and do not cancel unrelated work. Movement verifies each source/destination pair and reports partial completion if bags fill. Auto Equip keeps its character/job/gearset checks through verification and saving.
+
+```csharp
+// The last generic type is the return type.
+var moveGear = pi.GetIpcSubscriber<bool, bool>("ADS.StartGearMove");
+var autoEquip = pi.GetIpcSubscriber<bool>("ADS.StartAutoEquip");
+var status = pi.GetIpcSubscriber<string>("ADS.GetStatusJson");
+var cancelUtility = pi.GetIpcSubscriber<bool>("ADS.CancelUtility");
+
+// One start, on the framework thread. Use true for all unprotected gear.
+bool accepted = moveGear.InvokeFunc(false);
+// Track completion with status.InvokeFunc().
+// For a separate Auto Equip action, use autoEquip.InvokeFunc().
+```
+
+Wait for the accepted action to finish before starting the next one. Invoke `cancelUtility.InvokeFunc()` only when intentionally stopping the current utility.
+
 `equipmentSelling: 1` in capabilities advertises the white-equipment endpoints. `scope` must be `inventory`, `armoury` or `both` (case-insensitive, without numeric enum values). Preview is purchase/sale-free and returns `available`, `scope`, `message` and exact eligible item/container/slot/quantity/quality rows. It does not replace another utility's status. Equipped items and saved gearsets remain protected.
 
 `StartGearSale` is an explicit, noninteractive authorization to capture and sell the eligible white equipment in that scope. It does not open the human preview popup. Use a new nonempty operation ID of at most 128 characters; ADS rejects a reused latest ID and concurrent utility/duty/inn ownership. `localOnly: true` forbids teleport travel and requires an existing nearby vendor. `false` permits the existing vendor route. Admission is distinct from a successful sale. Manual commands/buttons continue to use the saved preview preference.
 
-Poll `GetGearSaleStatusJson` with the same ID. The receipt contains `operationId`, `scope`, `running`, `done`, nullable `succeeded`, `requestedCount`, verified `soldCount`, `gilEarned`, `commandSent`, `settled`, `statusMessage` and `lastStartError`. A different ID returns an unmatched result rather than another caller's receipt. Only the latest equipment-sale receipt is retained; there is no saved queue or receipt history. `done` means ADS ended its run; wait for `settled` before starting incompatible work. Unknown UI, changed protection/slots or an unverified gil result fail visibly without repeating the sale callback. A failed or cancelled dispatched operation may remain unsettled while its UI is open; do not blindly restart it.
+Poll `GetGearSaleStatusJson` with the same ID. The receipt contains `operationId`, `scope`, `running`, `done`, nullable `succeeded`, `requestedCount`, verified `soldCount`, `skippedCount`, `gilEarned`, `commandSent`, `settled`, `statusMessage` and `lastStartError`. A different ID returns an unmatched result rather than another caller's receipt. Only the latest equipment-sale receipt is retained; there is no saved queue or receipt history. `done` means ADS ended its run; wait for `settled` before starting incompatible work. Unavailable callbacks, items that changed or gained protection, and unsuccessful/unverified receipts after the native transaction finishes are skipped without replay; the rest of the frozen selection continues. A finished batch with skipped items reports `succeeded: false` and its verified sold/skipped counts. Unknown UI or unresolved native ownership still stops the run. A failed or cancelled dispatched operation may remain unsettled while its UI is open; do not blindly restart it.
 
 `CancelGearSale` cancels only its matching active equipment sale. Existing `StartNpcSale`/status/cancel still operate AutoRetainer's configured list and remain compatible with fishing. Their backend/UI-settlement receipt is separate from the exact equipment item/gil verification above.
 

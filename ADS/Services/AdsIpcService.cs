@@ -30,6 +30,8 @@ public sealed class AdsIpcService : IDisposable
         Func<string, string, bool, bool> startGearSale,
         Func<string, string> getGearSaleStatus,
         Func<string, bool> cancelGearSale,
+        Func<bool, bool> startGearMove,
+        Func<bool> startAutoEquip,
         Func<string, Func<string, bool>, bool> startGuardedShopPurchase,
         Func<string, bool> cancelShopPurchase,
         Func<bool, bool> setShopKeepOpen,
@@ -75,6 +77,8 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.StartGearSale", startGearSale);
         Register(pluginInterface, "ADS.GetGearSaleStatusJson", getGearSaleStatus);
         Register(pluginInterface, "ADS.CancelGearSale", cancelGearSale);
+        Register(pluginInterface, "ADS.StartGearMove", startGearMove);
+        Register(pluginInterface, "ADS.StartAutoEquip", startAutoEquip);
         Register(pluginInterface, "ADS.StartGuardedShopPurchase", startGuardedShopPurchase);
         Register(pluginInterface, "ADS.CancelShopPurchase", cancelShopPurchase);
         Register(pluginInterface, "ADS.SetShopKeepOpen", setShopKeepOpen);
