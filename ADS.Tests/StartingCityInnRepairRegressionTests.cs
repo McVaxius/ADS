@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Collections.Frozen;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Dalamud.Game.ClientState.Aetherytes;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -171,6 +172,122 @@ public sealed class StartingCityInnRepairRegressionTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GearMoveDoesNotAdvanceFromLocalSlotsBeforeItsNativeOperationSettles(bool reused)
+    {
+        using var fixture = new NpcSaleFixture { GearMoveNativePending = true };
+        fixture.GearItems.AddRange([GearItem(1681, InventoryType.ArmoryHead), GearItem(1682, InventoryType.ArmoryBody)]);
+        Assert.True(fixture.Service.StartGearMove());
+        fixture.Service.Update(); // Both slots already look moved.
+        Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-20));
+        for (var tick = 0; tick < 3; tick++) fixture.Service.Update();
+        Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
+        Assert.Contains("Waiting", fixture.Service.StatusMessage);
+        Assert.Single(fixture.GearMoved);
+        Assert.Equal(0, (int)Get(fixture.Service, "gearCleanupIndex")!);
+        fixture.SettleNativeGearMove(reused: reused);
+        fixture.Service.Update();
+        Assert.Equal(1, (int)Get(fixture.Service, "gearCleanupIndex")!);
+        fixture.Service.Update();
+        Assert.Equal(2, fixture.GearMoved.Count);
+        fixture.Service.Cancel("test Stop with native transfer still pending");
+        fixture.Service.Update();
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Equal(2, fixture.GearMoved.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GearMoveDoesNotAcceptRollbackOrMismatchedNativeOperation(bool mismatch)
+    {
+        using var fixture = new NpcSaleFixture { GearMoveNativePending = true, GearCompleteOperations = false };
+        fixture.GearItems.AddRange([GearItem(1681, InventoryType.ArmoryHead), GearItem(1682, InventoryType.ArmoryBody)]);
+        Assert.True(fixture.Service.StartGearMove());
+        fixture.Service.Update();
+        fixture.SettleNativeGearMove(mismatch: mismatch);
+        fixture.Service.Update();
+        if (!mismatch)
+        {
+            Assert.True(fixture.Service.IsRunning);
+            Set(fixture.Service, "gearCleanupSettlementReadyUtc", DateTime.UtcNow.AddSeconds(-2));
+            fixture.Service.Update();
+        }
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Single(fixture.GearMoved);
+        Assert.Equal(0, (int)Get(fixture.Service, "gearCleanupIndex")!);
+        Assert.Contains("did not observe", fixture.Service.LastFailureMessage);
+    }
+
+    private static int nativeMoveSubmissionCase;
+    private static bool nativeMoveOption;
+
+    [UnmanagedCallersOnly]
+    private static unsafe int SubmitNativeGearMove(InventoryManager* manager, InventoryType source, ushort sourceSlot,
+        InventoryType destination, ushort destinationSlot, byte option)
+    {
+        nativeMoveOption = option != 0;
+        if (nativeMoveSubmissionCase == 1) return 7;
+        if (nativeMoveSubmissionCase == 2 || nativeMoveSubmissionCase == 3) return 0;
+        var operation = new InventoryManager.InventoryOperation
+        {
+            ContextId = 21, SourceInventoryType = source, SourceInventorySlot = (short)sourceSlot,
+            SourceItemId = 1681, SourceItemQuantity = 1,
+            DestinationInventoryType = destination, DestinationInventorySlot = (short)destinationSlot,
+        };
+        manager->PendingOperations[0] = operation;
+        if (nativeMoveSubmissionCase == 4)
+        { operation.ContextId++; manager->PendingOperations[1] = operation; }
+        if (nativeMoveSubmissionCase == 5) manager->PendingOperations[0].SourceItemId++;
+        return 0;
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    public unsafe void GearMoveSubmissionRequiresNativeSuccessAndOneNewExactOperation(int submissionCase, bool accepted)
+    {
+        var previous = InventoryManager.Addresses.MoveItemSlot.Value;
+        try
+        {
+            InventoryManager.Addresses.MoveItemSlot.Value = (nint)(delegate* unmanaged<InventoryManager*, InventoryType,
+                ushort, InventoryType, ushort, byte, int>)&SubmitNativeGearMove;
+            nativeMoveSubmissionCase = submissionCase;
+            nativeMoveOption = false;
+            var manager = new InventoryManager();
+            foreach (ref var operation in manager.PendingOperations) operation.IsEmpty = true;
+            var item = GearItem(1681, InventoryType.ArmoryHead, 12);
+            if (submissionCase == 3)
+                manager.PendingOperations[0] = new InventoryManager.InventoryOperation
+                {
+                    ContextId = 20, SourceInventoryType = item.Container, SourceInventorySlot = (short)item.Slot,
+                    SourceItemId = item.Item.ItemId, SourceItemQuantity = 1,
+                    DestinationInventoryType = InventoryType.Inventory2, DestinationInventorySlot = 8,
+                };
+            Assert.Equal(accepted, DalamudShopPurchaseRuntime.TrySubmitNativeGearMove(&manager, item,
+                InventoryType.Inventory2, 8, out var index, out var context, out var result));
+            Assert.True(nativeMoveOption);
+            Assert.Equal(submissionCase == 1 ? 7 : 0, result);
+            if (accepted)
+            {
+                Assert.Equal(0, index);
+                Assert.Equal(21u, context);
+                Assert.Equal(GearMoveState.Pending, DalamudShopPurchaseRuntime.ReadNativeGearMoveState(&manager,
+                    index, context, item, InventoryType.Inventory2, 8));
+                manager.PendingOperations[index].IsEmpty = true;
+                Assert.Equal(GearMoveState.Ready, DalamudShopPurchaseRuntime.ReadNativeGearMoveState(&manager,
+                    index, context, item, InventoryType.Inventory2, 8));
+            }
+        }
+        finally { InventoryManager.Addresses.MoveItemSlot.Value = previous; }
+    }
+
+    [Theory]
     [MemberData(nameof(NativeGearMoveBatchCases))]
     public void GearMoveContinuesAcrossNativeSlotUpdateOrders(bool allUnprotected, int receiptOrder, InventoryType bag)
     {
@@ -239,7 +356,7 @@ public sealed class StartingCityInnRepairRegressionTests
         fixture.Service.Update();
         Assert.True(fixture.Service.IsRunning, fixture.Service.StatusMessage);
         Assert.Single(fixture.GearMoved);
-        Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-2));
+        Set(fixture.Service, "gearCleanupSettlementReadyUtc", DateTime.UtcNow.AddSeconds(-2));
         fixture.Service.Update();
         Assert.False(fixture.Service.IsRunning);
         Assert.Contains("could not verify its exact destination item", fixture.Service.LastFailureMessage);
@@ -791,7 +908,8 @@ public sealed class StartingCityInnRepairRegressionTests
         Assert.True(fixture.Service.StartGearMove());
         fixture.Service.Update();
         Assert.Single(fixture.GearMoved);
-        Set(fixture.Service, "lastActionUtc", DateTime.UtcNow.AddSeconds(-2));
+        fixture.Service.Update(); // Observe native readiness before expiring slot settlement.
+        Set(fixture.Service, "gearCleanupSettlementReadyUtc", DateTime.UtcNow.AddSeconds(-2));
         fixture.Service.Update();
         Assert.False(fixture.Service.IsRunning);
         Assert.Single(fixture.GearMoved);
@@ -1941,6 +2059,9 @@ public sealed class StartingCityInnRepairRegressionTests
         public int GearBagCapacity { get; set; } = 35;
         public InventoryType GearBagContainer { get; set; } = InventoryType.Inventory1;
         public bool GearMoveChangesNativeBytes { get; set; }
+        public bool GearMoveNativePending { get; set; }
+        private InventoryManager nativeGearMove;
+        private uint gearMoveContext;
         private ushort gearMoveDestinationSlot;
         public int GearInteractions { get; private set; }
         public bool GearUseMenu { get; set; }
@@ -2071,6 +2192,7 @@ public sealed class StartingCityInnRepairRegressionTests
                 "TryCaptureGearCleanup" => CaptureGear(args!),
                 "TryReadGearCleanupSlot" => ReadGear(args!),
                 "TryMoveGearCleanupItem" => MoveGear(args!),
+                "GetGearMoveState" => ReadNativeGearMove(args!),
                 "SubmitGearCleanupItem" => SubmitGear(args!),
                 "get_GearSaleGil" => GearGil,
                 "get_GearSaleUnitPrice" => GearQuotedPrice,
@@ -2116,6 +2238,15 @@ public sealed class StartingCityInnRepairRegressionTests
             args[3] = target < 0;
             if (target < 0) return false;
             gearMoveDestinationSlot = (ushort)target;
+            var operation = new InventoryManager.InventoryOperation
+            {
+                ContextId = ++gearMoveContext,
+                SourceInventoryType = item.Container, SourceInventorySlot = (short)item.Slot,
+                SourceItemId = item.Item.ItemId, SourceItemQuantity = (int)item.Item.Quantity,
+                DestinationInventoryType = GearBagContainer, DestinationInventorySlot = (short)gearMoveDestinationSlot,
+                IsEmpty = !GearMoveNativePending,
+            };
+            fixed (InventoryManager* state = &nativeGearMove) state->PendingOperations[0] = operation;
             GearMoved.Add(item);
             if (GearCompleteOperations)
             {
@@ -2123,6 +2254,24 @@ public sealed class StartingCityInnRepairRegressionTests
                 PublishGearMoveDestination();
             }
             return true;
+        }
+
+        private GearMoveState ReadNativeGearMove(object?[] args)
+        {
+            fixed (InventoryManager* state = &nativeGearMove)
+                return DalamudShopPurchaseRuntime.ReadNativeGearMoveState(state, 0, gearMoveContext,
+                    (GearCleanupCandidate)args[0]!, (InventoryType)args[1]!, (ushort)args[2]!);
+        }
+
+        public void SettleNativeGearMove(bool reused = false, bool mismatch = false)
+        {
+            fixed (InventoryManager* state = &nativeGearMove)
+            {
+                ref var operation = ref state->PendingOperations[0];
+                operation.IsEmpty = !reused && !mismatch;
+                if (reused) operation.ContextId++;
+                if (mismatch) operation.DestinationInventorySlot++;
+            }
         }
 
         public void PublishGearMoveSourceRemoval()

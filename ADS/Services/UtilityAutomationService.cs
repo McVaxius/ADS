@@ -990,6 +990,14 @@ public sealed unsafe class UtilityAutomationService
         {
             if (!shopRuntime.TryReadGearCleanupSlot(item.Container, item.Slot, out var source))
             { Fail("Equipment cleanup could not verify the submitted inventory slot."); return; }
+            if (!gearCleanupSelling)
+            {
+                var moveState = shopRuntime.GetGearMoveState(item, gearCleanupDestination, gearCleanupDestinationSlot);
+                if (moveState == GearMoveState.Unsupported)
+                { Fail("Equipment cleanup did not observe the exact submitted operation finish."); return; }
+                if (moveState == GearMoveState.Pending)
+                { StatusMessage = "Waiting for the exact equipment operation to finish."; return; }
+            }
             var saleState = gearCleanupSelling
                 ? shopRuntime.GetGearSaleState(gearCleanupVendor!.NpcId, gearCleanupVendor.ShopId, item) : GearSaleState.Ready;
             if (saleState == GearSaleState.Unsupported)
@@ -1005,7 +1013,7 @@ public sealed unsafe class UtilityAutomationService
                 StatusMessage = "Waiting for the exact equipment sale confirmation to settle.";
                 return;
             }
-            if (gearCleanupSelling && saleState == GearSaleState.Ready && gearCleanupSettlementReadyUtc == default)
+            if (saleState == GearSaleState.Ready && gearCleanupSettlementReadyUtc == default)
                 gearCleanupSettlementReadyUtc = DateTime.UtcNow;
             var sourceEmpty = source.ItemId == 0 && !source.IsSymbolic;
             if (sourceEmpty && saleState == GearSaleState.Ready)
@@ -1030,7 +1038,7 @@ public sealed unsafe class UtilityAutomationService
                     var readable = shopRuntime.TryReadGearCleanupSlot(gearCleanupDestination, gearCleanupDestinationSlot, out var moved);
                     if (!readable || !GearCleanupPolicy.Matches(moved, item.Item, allowMovedSlot: true))
                     {
-                        if (DateTime.UtcNow - lastActionUtc <= UiSettleCooldown)
+                        if (DateTime.UtcNow - gearCleanupSettlementReadyUtc <= UiSettleCooldown)
                         { StatusMessage = "Waiting for the exact equipment operation to finish."; return; }
                         log.Warning("[ADS][GearMove] Destination did not settle; from={SourceInventory}/{SourceSlot} to={DestinationInventory}/{DestinationSlot} readable={Readable}; expected item={ExpectedItem} quantity={ExpectedQuantity} flags={ExpectedFlags}; actual item={ActualItem} quantity={ActualQuantity} flags={ActualFlags}",
                             item.Container, item.Slot, gearCleanupDestination, gearCleanupDestinationSlot, readable,
@@ -1046,7 +1054,7 @@ public sealed unsafe class UtilityAutomationService
                 return;
             }
             if ((sourceEmpty ? saleState != GearSaleState.Pending : !GearCleanupPolicy.Matches(source, item.Item))
-                || (DateTime.UtcNow - (gearCleanupSelling ? gearCleanupSettlementReadyUtc : lastActionUtc) > UiSettleCooldown
+                || (DateTime.UtcNow - gearCleanupSettlementReadyUtc > UiSettleCooldown
                     && saleState != GearSaleState.Pending))
             { Fail("Equipment cleanup did not observe the exact submitted operation finish."); return; }
             StatusMessage = "Waiting for the exact equipment operation to finish.";

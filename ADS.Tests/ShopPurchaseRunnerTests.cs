@@ -801,6 +801,117 @@ public sealed class ShopPurchaseRunnerTests
             [new(100, 1, "Fixture territory", Vector3.Zero, 1)], [], [new(1, 28, "Poetics")]);
     }
 
+    [Theory]
+    [InlineData(ShopListMode.TargetedRefill, 2000, false)]
+    [InlineData(ShopListMode.TargetedRefill, 900, false)]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, 900, false)]
+    [InlineData(ShopListMode.TargetedRefill, 2000, true)]
+    public void UserCreatedTomeListKeepsChosenItemsAndQuantitiesAcrossVendorsFundsRepeatAndStop(
+        ShopListMode mode, long balance, bool stop)
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.True(store.Create("My chosen tome items", out var error), error);
+        Assert.True(store.ConfigureActive(mode, ShopCurrencyKind.Tomestone, 28, 0, out error), error);
+        foreach (var item in new uint[] { 32546, 32547, 8876, 13582 })
+            Assert.True(store.SetItem(item, 1, 1, false, ShopListOwnershipScope.InventoryOnly, out error), error);
+        Assert.True(store.SetItem(13582, 3, 3, false, ShopListOwnershipScope.InventoryOnly, out error), error);
+        var selected = store.ActivePreset;
+        var originalRows = selected.Items.Select(row => row.RowId).ToArray();
+        store.Reload();
+        Assert.Equal(selected.PresetId, store.ActivePresetId);
+        Assert.Equal(3, store.ActivePreset.Items.Single(row => row.ItemId == 13582).RefillToAtLeast);
+
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CurrentTerritoryId = 820,
+            ArriveOnMove = true };
+        runtime.SetItemCount(32546, 1); // An owned unique piece must never be bought again.
+        runtime.SetCurrency(Poetics, balance);
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var catalog = new ShopCatalogService(new TomeVendorSheets());
+        var clock = new FakeClock();
+        var utility = new UtilityAutomationService(catalog, runtime, clock, log);
+        var service = new ShopListService(store, null!, utility, _ => throw new InvalidOperationException("Inventory-only list queried retainers"), log);
+        Assert.Equal(32547u, Assert.Single(catalog.Search("32547", Poetics, 10).Rows).ItemId);
+        var eulmoreOffer = Assert.Single(catalog.Resolve(32547, 1).Offers);
+        Assert.Equal(new[] { 6 }, eulmoreOffer.MenuPath);
+        Assert.Equal(510u, Assert.Single(eulmoreOffer.Currencies).AmountPerTransaction);
+        Assert.Equal(ShopOfferKind.SpecialShopTomestone, eulmoreOffer.Kind);
+        Assert.Single(eulmoreOffer.AllOutputs); // Empty sheet receive slots can still contain a count of one.
+
+        string Start(string id) => service.StartShopListPresetJson(System.Text.Json.JsonSerializer.Serialize(new
+        { version = 1, operationId = id, presetId = selected.PresetId, supportsFiniteOrderProgress = true }));
+        Assert.Contains("\"accepted\":true", Start("custom-tomes"));
+        for (var tick = 0; tick < 250 && utility.IsRunning; tick++)
+        {
+            utility.Update();
+            clock.Advance(TimeSpan.FromMilliseconds(250));
+            if (stop && runtime.SubmitCount == 1) utility.Cancel("user Stop");
+        }
+        Assert.False(utility.IsRunning, utility.StatusMessage);
+        Assert.Equal(stop ? 1 : balance == 900 ? 2 : 3, runtime.SubmitCount);
+        Assert.Equal(1, runtime.GetItemCount(32546));
+        Assert.Equal(0, runtime.GetItemCount(8892)); // Offered gear outside the user's list stays untouched.
+        Assert.Equal(stop ? balance - 510 : balance == 900 ? 45 : 695,
+            runtime.GetAvailableCurrency(new(ShopCurrencyKind.Tomestone, 28, "Poetics", 1)));
+        Assert.Contains(1027564u, runtime.SubmittedNpcIds);
+        if (!stop) Assert.Contains(1008119u, runtime.SubmittedNpcIds);
+        if (mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            Assert.True(utility.ShopListBatchStatus.Succeeded, utility.ShopListBatchStatus.FailureMessage);
+            Assert.Equal("partial", utility.ShopListBatchStatus.Disposition);
+        }
+        runtime.SetCurrency(Poetics, 2000);
+        var before = runtime.SubmitCount;
+        var remainingResponse = Start("custom-tomes-remaining");
+        if (stop || balance == 900) Assert.Contains("\"accepted\":true", remainingResponse);
+        else Assert.Contains("\"disposition\":\"fulfilled\"", remainingResponse);
+        for (var tick = 0; tick < 250 && utility.IsRunning; tick++)
+        { utility.Update(); clock.Advance(TimeSpan.FromMilliseconds(250)); }
+        Assert.True(utility.ShopListBatchStatus.Succeeded, utility.ShopListBatchStatus.FailureMessage);
+        Assert.Equal(stop ? before + 2 : balance == 900 ? before + 1 : before, runtime.SubmitCount);
+        Assert.Equal(3, runtime.GetItemCount(13582));
+        Assert.Equal(originalRows, store.ActivePreset.Items.Select(row => row.RowId));
+        var completed = runtime.SubmitCount;
+        Start("custom-tomes-already-satisfied");
+        for (var tick = 0; tick < 20 && utility.IsRunning; tick++) utility.Update();
+        Assert.Equal(completed, runtime.SubmitCount);
+        Assert.False(runtime.ExpectedShopVisible);
+    }
+
+    private sealed class TomeVendorSheets : IShopSheetSource
+    {
+        public ShopCatalogSnapshot BuildSnapshot()
+        {
+            // Current sheet identities/costs: Aymark's IL530 healing shop and Auriana's Poetics shops.
+            // Positions are fixture coordinates; this is compatibility coverage, not live travel proof.
+            var shops = new HashSet<uint> { 1770320, 1769533, 1769781 };
+            var links = ShopNpcLinkBuilder.Build(new HashSet<uint>(), shops,
+                [new(1027564, "Aymark", [new(ShopNpcEventKind.Unsupported, 0),
+                    new(ShopNpcEventKind.Unsupported, 0), new(ShopNpcEventKind.Unsupported, 0),
+                    new(ShopNpcEventKind.Unsupported, 0), new(ShopNpcEventKind.Unsupported, 0),
+                    new(ShopNpcEventKind.Unsupported, 0), new(ShopNpcEventKind.SpecialShop, 1770320)]),
+                 new(1008119, "Auriana", [new(ShopNpcEventKind.SpecialShop, 1769533),
+                    new(ShopNpcEventKind.Unsupported, 0), new(ShopNpcEventKind.SpecialShop, 1769781)])], [], []);
+            return new(new Dictionary<uint, ShopItemSheetRow>
+                {
+                    [32546] = new(32546, "Augmented Cryptlurker's Helm of Healing", 1, 0, true),
+                    [32547] = new(32547, "Augmented Cryptlurker's Robe of Healing", 1, 0, true),
+                    [8876] = new(8876, "Augmented Ironworks Helm of Fending", 1, 0, true),
+                    [8892] = new(8892, "Augmented Ironworks Visor of Striking", 1, 0, true),
+                    [13582] = new(13582, "Unidentifiable Bone", 999, 0, false),
+                    [28] = new(28, "Allagan Tomestones of Poetics", 2000, 0, false),
+                }, [],
+                [new(1770320, "Allagan Tomestones of Poetics (DoM, IL 530)", 0, [(32546u, 1u, false), (0u, 1u, false)], [new(1, 345, 0, 2)], 4, [], false),
+                 new(1770320, "Allagan Tomestones of Poetics (DoM, IL 530)", 1, [(32547u, 1u, false), (0u, 1u, false)], [new(1, 510, 0, 2)], 4, [], false),
+                 new(1769533, "Allagan Tomestones of Poetics (DoW)", 0, [(8876u, 1u, false), (0u, 1u, false)], [new(1, 345, 0, 2)], 4, [], false),
+                 new(1769533, "Allagan Tomestones of Poetics (DoW)", 1, [(8892u, 1u, false)], [new(1, 345, 0, 2)], 4, [], false),
+                 new(1769781, "Allagan Tomestones of Poetics (Special Arms)", 0, [(13582u, 1u, false)], [new(1, 150, 0, 2)], 4, [], false)],
+                links, [new(1027564, 820, "Eulmore", Vector3.Zero, 1), new(1008119, 156, "Mor Dhona", Vector3.Zero, 2)],
+                [new(134, "Eulmore", 820, Vector3.Zero), new(24, "Revenant's Toll", 156, Vector3.Zero)],
+                [new(1, 28, "Allagan Tomestones of Poetics")]);
+        }
+    }
+
     [Fact]
     public void RegularGilValidationReturnsTheUniqueVisibleCallbackRow()
     {
@@ -2494,11 +2605,13 @@ public sealed class ShopPurchaseRunnerTests
         public long Capacity { get; set; } = 100_000;
         public void SetCurrency(ShopCurrencyIdentity currency, long amount) => currencies[currency] = amount;
         private readonly Dictionary<uint, long> additionalItemCounts = [];
+        public void SetItemCount(uint itemId, long quantity) => additionalItemCounts[itemId] = quantity;
         public int SubmitCount { get; private set; }
         public int TeleportCount { get; private set; }
         public int AethernetTransfers { get; private set; }
         public bool AethernetArrives { get; set; } = true;
         public int MoveCount { get; private set; }
+        public bool ArriveOnMove { get; set; }
         public int StopNavigationCount { get; private set; }
         public bool? NavigationRunning { get; set; }
         public int CloseUiCount { get; private set; }
@@ -2562,7 +2675,9 @@ public sealed class ShopPurchaseRunnerTests
             MoveCount++;
             MoveDestinations.Add(destination);
             Events.Add($"move:{label}");
-            return MoveResults.Count == 0 || MoveResults.Dequeue();
+            var accepted = MoveResults.Count == 0 || MoveResults.Dequeue();
+            if (accepted && ArriveOnMove) PlayerPosition = destination;
+            return accepted;
         }
         public ShopNavigationStopResult TryStopNavigation()
         {

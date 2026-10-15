@@ -16,6 +16,7 @@ public sealed record GearSaleStatusSnapshot(string? OperationId, string Scope, b
     bool CommandSent = false, bool Settled = true, string LastStartError = "");
 
 internal enum GearSaleState { Ready, Pending, Unsupported, NotReady, Confirmation }
+internal enum GearMoveState { Ready, Pending, Unsupported }
 
 internal static class GearCleanupPolicy
 {
