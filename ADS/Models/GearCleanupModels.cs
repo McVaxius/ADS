@@ -13,10 +13,9 @@ public sealed record GearCleanupSelection(
 
 public sealed record GearSaleStatusSnapshot(string? OperationId, string Scope, bool Running, bool Done,
     bool? Succeeded, int RequestedCount, int SoldCount, long GilEarned, string StatusMessage,
-    bool CommandSent = false, bool Settled = true, string LastStartError = "");
+    bool CommandSent = false, bool Settled = true, string LastStartError = "", int SkippedCount = 0);
 
-internal enum GearSaleState { Ready, Pending, Unsupported, NotReady, Confirmation }
-internal enum GearMoveState { Ready, Pending, Unsupported }
+internal enum GearSaleState { Ready, Pending, Unsupported, NotReady, Confirmation, Unavailable }
 
 internal static class GearCleanupPolicy
 {

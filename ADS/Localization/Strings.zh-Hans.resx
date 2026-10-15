@@ -11571,4 +11571,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>正在等待Shop窗口完成设置。</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>正在等待商店的原生NPC标识。</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>装备出售：{0} 已出售 {1}/{2} 件；剩余 {3} 件。</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>跳过出售装备 {0}：{1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>装备出售结束：已出售 {0} 件；已跳过 {1} 件。</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>所选装备没有可用的出售操作。</value></data>
 </root>

@@ -11571,4 +11571,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shopウィンドウの初期設定完了を待っています。</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>ショップのネイティブNPC識別情報を待っています。</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>装備売却: {0} 売却済み {1}/{2} 個、残り {3} 個。</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>装備品「{0}」の売却をスキップ：{1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>装備品の売却完了：{0}個売却、{1}個スキップ。</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>選択した装備品には実行可能な売却操作がありません。</value></data>
 </root>

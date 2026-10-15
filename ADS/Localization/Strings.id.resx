@@ -4143,4 +4143,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Menunggu persiapan jendela Shop selesai.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Menunggu identitas NPC native toko.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Penjualan perlengkapan: {0} Terjual {1}/{2}; tersisa {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Penjualan perlengkapan {0} dilewati: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Penjualan perlengkapan selesai: {0} terjual; {1} dilewati.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>Perlengkapan yang dipilih tidak memiliki tindakan penjualan yang tersedia.</value></data>
 </root>

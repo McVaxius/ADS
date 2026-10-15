@@ -11571,4 +11571,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop 창 설정 완료를 기다리는 중입니다.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>상점의 네이티브 NPC 식별 정보를 기다리는 중입니다.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>장비 판매: {0} {1}/{2}개 판매, {3}개 남음.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>장비 {0} 판매 건너뜀: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>장비 판매 완료: {0}개 판매, {1}개 건너뜀.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>선택한 장비에는 사용 가능한 판매 동작이 없습니다.</value></data>
 </root>

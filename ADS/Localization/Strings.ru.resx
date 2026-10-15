@@ -4501,4 +4501,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Ожидание завершения настройки окна Shop.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Ожидание нативного идентификатора NPC магазина.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Продажа снаряжения: {0} Продано {1}/{2}; осталось {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Продажа снаряжения {0} пропущена: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Продажа снаряжения завершена: продано {0}; пропущено {1}.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>Для выбранного снаряжения нет доступного действия продажи.</value></data>
 </root>

@@ -4501,4 +4501,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>In attesa del completamento della preparazione di Shop.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>In attesa dell'identità nativa del PNG del negozio.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Vendita equipaggiamento: {0} Venduti {1}/{2}; rimanenti {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Vendita dell’equipaggiamento {0} saltata: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Vendita equipaggiamento terminata: {0} venduti; {1} saltati.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>L’equipaggiamento selezionato non dispone di un’azione di vendita disponibile.</value></data>
 </root>

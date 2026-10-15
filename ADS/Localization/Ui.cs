@@ -235,6 +235,7 @@ public static class Ui
     private static readonly Dictionary<string, int[]> NestedStatusArguments = new(StringComparer.Ordinal)
     {
         ["Equipment selling stopped: {0}"] = [0],
+        ["Equipment selling skipped {0}: {1}"] = [1],
         ["Equipment sale: {0} Sold {1}/{2}; {3} remaining."] = [0],
         ["Equipment selling timed out: {0}"] = [0],
         ["ADS is already running {0}."] = [0],

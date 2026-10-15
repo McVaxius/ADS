@@ -4127,4 +4127,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop विंडो सेटअप पूरा होने की प्रतीक्षा है।</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>दुकान की नेटिव NPC पहचान की प्रतीक्षा है।</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>उपकरण बिक्री: {0} {1}/{2} बेचे गए; {3} शेष।</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>उपकरण {0} की बिक्री छोड़ी गई: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>उपकरण बिक्री पूरी हुई: {0} बेचे गए; {1} छोड़े गए।</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>चुने गए उपकरण के लिए कोई बिक्री कार्रवाई उपलब्ध नहीं है।</value></data>
 </root>

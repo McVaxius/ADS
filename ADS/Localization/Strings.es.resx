@@ -11571,4 +11571,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Esperando que termine la preparación de la ventana Shop.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Esperando la identidad nativa del PNJ de la tienda.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Venta de equipo: {0} Vendidos {1}/{2}; quedan {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Venta de equipo omitida para {0}: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Venta de equipo finalizada: {0} vendidos; {1} omitidos.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>El equipo seleccionado no tiene ninguna acción de venta disponible.</value></data>
 </root>

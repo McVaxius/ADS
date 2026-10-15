@@ -1,10 +1,15 @@
+2026-10-15 - Continue equipment sales past failed items
+
+- Match native HQ sale transaction IDs to the selected item's quality, preserving exact item, slot, quantity and vendor checks.
+- Skip unavailable sale callbacks, items that changed or gained protection during the batch, and settled unsuccessful or unverified receipts. Keep trying the remaining frozen items without retrying a skipped callback or selling replacements. Report sold and skipped totals in the result and equipment-sale IPC; retain Stop and ownership of unfinished transactions.
+
 2026-10-14 - Inventory utility mini and equipment selling
 
 - Add `/ads inv` and an Inventory shortcut in ADS Mini. Group current-job Auto Equip, protected armoury moves, white-equipment selling, AutoRetainer-list selling, repairs, materia extraction and existing desynthesis/shopping controls. Share AethertekUI appearance and compact density, and translate controls, help and new utility statuses through all sixteen catalogs.
 - Label each inventory/armoury/both equipment-sale button explicitly as white-only; keep Sell AR list separate.
 - Add `/ads gear equip`, a separate `/ads gear move-all`, and `/ads sell` for the existing AutoRetainer-list handoff. Keep `/ads gear move` white-only. Verify recommended gear before updating the active saved gearset; keep moves protected and report partial completion when bags fill.
 - Continue armoury moves through independently updated source and bag slots within the existing settlement window. Verify moved item data without comparing native pointers or padding; retain quality, materia, dyes and item-state checks, gear protections and full-bag stopping without replaying a move.
-- Check the native transfer result and correlate its new inventory operation before reporting a move. Wait for that operation to settle before checking both slots and counting progress; local inventory changes alone no longer complete a pending move.
+- Use the native container-transfer request and check its return value, then verify the empty source and exact destination item before advancing. Continue the full batch when a successful request exposes no matching pending-operation entry; do not mistake the absence of that entry for submission failure or replay an uncertain move.
 - Wait for the owned equipment shop and context menu to initialize, recognize the native vendor after the ordinary target clears, and accept only confirmations tied to the exact submitted sale. Verify the removed item and gil result without replaying an uncertain callback; retain the separately accepted fishing sale handoff.
 - Wait for the native item-sheet read after submitting an equipment sale before checking committed transaction fields. Keep exact confirmation/settlement checks and log the expected and actual fields when they disagree.
 - Keep tracking a submitted sale when the game clears its action code during completion. Read its exact quote and verify both inventory and gil, including updates arriving on separate frames, within the existing settlement window before advancing to the next item.

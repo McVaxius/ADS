@@ -310,7 +310,6 @@ internal interface IShopPurchaseRuntime
     { item = default; return false; }
     bool TryMoveGearCleanupItem(GearCleanupCandidate item, out InventoryType destination, out ushort slot, out bool full)
     { destination = default; slot = 0; full = false; return false; }
-    GearMoveState GetGearMoveState(GearCleanupCandidate item, InventoryType destination, ushort slot) => GearMoveState.Unsupported;
     GearSaleState GetGearSaleState(uint npcId, uint shopId, GearCleanupCandidate? pending) => GearSaleState.Unsupported;
     string GearSaleDiagnostic => "The native equipment shop state is unsupported.";
     long GearSaleGil => -1;
@@ -318,6 +317,7 @@ internal interface IShopPurchaseRuntime
     bool GearSaleUiSettled => !IsAnyShopVisible && !HasUnexpectedConfirmation && !IsInventoryContextVisible
         && !IsSelectionMenuVisible && !IsTalkVisible;
     GearSaleState SubmitGearCleanupItem(uint npcId, uint shopId, GearCleanupCandidate item) => GearSaleState.Unsupported;
+    bool TrySkipGearSaleItem(uint npcId, uint shopId, GearCleanupCandidate item) => false;
     bool TryAcceptGearSaleConfirmation(uint npcId, uint shopId, GearCleanupCandidate item) => false;
     bool TryAdvanceGearSaleTalk(uint npcId) => false;
     bool TrySelectGearSaleMenu(uint npcId, IReadOnlyList<ShopMenuPathStep> path, uint previousHandler, out uint selectedHandler)
@@ -351,7 +351,6 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private ulong shopUiCharacter;
     private ulong shopUiNpc;
     private GearCleanupCandidate? gearSaleContextItem;
-    private (int Index, uint ContextId)? gearMoveOperation;
     private uint gearSaleConfirmedAddon;
     private string? gearSaleConfirmedPrompt;
     public string GearSaleDiagnostic { get; private set; } = string.Empty;
@@ -628,19 +627,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 if (target->ItemId != 0 || target->IsSymbolic) continue;
                 destination = type;
                 slot = (ushort)index;
-                if (gearMoveOperation is { } previous)
-                {
-                    var previousOperation = manager->PendingOperations[previous.Index];
-                    if (!previousOperation.IsEmpty && previousOperation.ContextId == previous.ContextId)
-                        return false; // Stop never replays or overlaps an unsettled native request.
-                }
-                var accepted = TrySubmitNativeGearMove(manager, item, destination, slot,
-                    out var operationIndex, out var contextId, out var nativeResult);
-                log.Information("[ADS][GearMove] Native transfer result={Result}; correlated={Correlated}; context={Context}; from={Source}/{SourceSlot}; to={Destination}/{DestinationSlot}",
-                    nativeResult, accepted, contextId, item.Container, item.Slot, destination, slot);
-                if (!accepted) return false;
-                gearMoveOperation = (operationIndex, contextId);
-                return true;
+                var accepted = TrySubmitNativeGearMove(manager, item, destination, slot, out var nativeResult);
+                log.Information("[ADS][GearMove] Native transfer result={Result}; accepted={Accepted}; from={Source}/{SourceSlot}; to={Destination}/{DestinationSlot}",
+                    nativeResult, accepted, item.Container, item.Slot, destination, slot);
+                return accepted;
             }
         }
         full = true;
@@ -648,52 +638,15 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     }
 
     internal static bool TrySubmitNativeGearMove(InventoryManager* manager, GearCleanupCandidate item,
-        InventoryType destination, ushort slot, out int operationIndex, out uint contextId, out int nativeResult)
+        InventoryType destination, ushort slot, out int nativeResult)
     {
-        operationIndex = -1;
-        contextId = 0;
         nativeResult = -1;
         if (manager == null) return false;
-        var operations = manager->PendingOperations;
-        Span<uint> oldContexts = stackalloc uint[operations.Length];
-        Span<bool> oldEmpty = stackalloc bool[operations.Length];
-        for (var index = 0; index < operations.Length; index++)
-        { oldContexts[index] = operations[index].ContextId; oldEmpty[index] = operations[index].IsEmpty; }
         // Use the explicit native option used by the suite's container transfers.
-        // Its name is undocumented; correlation, settlement and slots prove progress.
+        // A successful call need not expose a matching PendingOperations entry.
+        // The runner verifies both slots before advancing, without replaying this call.
         nativeResult = manager->MoveItemSlot(item.Container, item.Slot, destination, slot, true);
-        if (nativeResult != 0) return false;
-        for (var index = 0; index < operations.Length; index++)
-        {
-            var operation = operations[index];
-            if (operation.IsEmpty || (!oldEmpty[index] && oldContexts[index] == operation.ContextId)
-                || operation.SourceInventoryType != item.Container || operation.SourceInventorySlot != item.Slot
-                || operation.SourceItemId != item.Item.ItemId || operation.SourceItemQuantity != item.Item.Quantity
-                || operation.DestinationInventoryType != destination || operation.DestinationInventorySlot != slot)
-                continue;
-            if (operationIndex >= 0) { operationIndex = -1; contextId = 0; return false; }
-            operationIndex = index;
-            contextId = operation.ContextId;
-        }
-        return operationIndex >= 0;
-    }
-
-    public GearMoveState GetGearMoveState(GearCleanupCandidate item, InventoryType destination, ushort slot)
-        => gearMoveOperation is { } operation
-            ? ReadNativeGearMoveState(InventoryManager.Instance(), operation.Index, operation.ContextId, item, destination, slot)
-            : GearMoveState.Unsupported;
-
-    internal static GearMoveState ReadNativeGearMoveState(InventoryManager* manager, int operationIndex,
-        uint contextId, GearCleanupCandidate item, InventoryType destination, ushort slot)
-    {
-        if (manager == null || operationIndex < 0 || operationIndex >= manager->PendingOperations.Length)
-            return GearMoveState.Unsupported;
-        var operation = manager->PendingOperations[operationIndex];
-        if (operation.IsEmpty || operation.ContextId != contextId) return GearMoveState.Ready;
-        return operation.SourceInventoryType == item.Container && operation.SourceInventorySlot == item.Slot
-            && operation.SourceItemId == item.Item.ItemId && operation.SourceItemQuantity == item.Item.Quantity
-            && operation.DestinationInventoryType == destination && operation.DestinationInventorySlot == slot
-            ? GearMoveState.Pending : GearMoveState.Unsupported;
+        return nativeResult == 0;
     }
 
     private GearSaleState ValidateOwnedGearShop(uint npcId, uint shopId, out ShopEventHandler* handler)
@@ -760,6 +713,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         => (handler->TransactionType == 2
                 || (handler->TransactionType == 0 && !handler->WaitingForSellConfirm && !handler->StartingSell))
             && handler->TransactionItemId == DesynthPolicyService.NormalizeBaseItemId(item.Item.ItemId)
+                + ((item.Item.Flags & InventoryItem.ItemFlags.HighQuality) != 0 ? 1_000_000u : 0)
             && handler->TransactionItemCount == 1 && handler->SellInventoryType == item.Container
             && handler->SellInventorySlot == item.Slot;
 
@@ -862,7 +816,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 return GearState(GearSaleState.Unsupported, "The equipment shop exposes multiple sale callbacks.");
             match = callback;
         }
-        if (match == null || GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
+        if (match == null)
+            return GearState(GearSaleState.Unavailable, "The selected equipment has no available sale callback.");
+        if (GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready
             || !TryReadGearCleanupSlot(item.Container, item.Slot, out current) || !GearCleanupPolicy.Matches(current, item.Item))
             return GearState(GearSaleState.Unsupported, "The equipment sale callback or confirmed slot is no longer valid.");
         // Use the active shop's exact inventory callback and its native parameter.
@@ -873,6 +829,23 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (context->TargetInventoryId == item.Container && context->TargetInventorySlotId == item.Slot)
             GameInteractionHelper.TryCloseAddon("ContextMenu", log);
         return GearSaleState.Pending;
+    }
+
+    public bool TrySkipGearSaleItem(uint npcId, uint shopId, GearCleanupCandidate item)
+    {
+        if (GetGearSaleState(npcId, shopId, null) != GearSaleState.Ready) return false;
+        if (gearSaleContextItem != null && gearSaleContextItem != item) return false;
+        if (IsInventoryContextVisible)
+        {
+            var context = AgentInventoryContext.Instance();
+            var proxy = ShopEventHandler.AgentProxy.Instance();
+            if (gearSaleContextItem != item || context == null || proxy == null
+                || context->OwnerAddonId != proxy->AddonId || context->TargetInventoryId != item.Container
+                || context->TargetInventorySlotId != item.Slot
+                || !GameInteractionHelper.TryCloseAddon("ContextMenu", log)) return false;
+        }
+        gearSaleContextItem = null;
+        return true;
     }
 
     public bool TryAcceptGearSaleConfirmation(uint npcId, uint shopId, GearCleanupCandidate item)

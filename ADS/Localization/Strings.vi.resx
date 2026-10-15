@@ -4143,4 +4143,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Đang chờ cửa sổ Shop chuẩn bị xong.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Đang chờ định danh NPC gốc của cửa hàng.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Bán trang bị: {0} Đã bán {1}/{2}; còn lại {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Bỏ qua bán trang bị {0}: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Đã kết thúc bán trang bị: bán {0}; bỏ qua {1}.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>Trang bị đã chọn không có thao tác bán khả dụng.</value></data>
 </root>

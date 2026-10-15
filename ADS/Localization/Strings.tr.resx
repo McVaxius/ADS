@@ -4143,4 +4143,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Shop penceresi kurulumunun bitmesi bekleniyor.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Dükkânın yerel NPC kimliği bekleniyor.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Ekipman satışı: {0} Satılan {1}/{2}; kalan {3}.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>{0} ekipmanının satışı atlandı: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Ekipman satışı tamamlandı: {0} satıldı; {1} atlandı.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>Seçilen ekipman için kullanılabilir bir satış işlemi yok.</value></data>
 </root>

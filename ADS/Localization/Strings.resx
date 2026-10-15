@@ -11571,4 +11571,7 @@
   <data name="Waiting for the Shop addon setup to finish." xml:space="preserve"><value>Waiting for the Shop addon setup to finish.</value></data>
   <data name="Waiting for the shop's native NPC identity." xml:space="preserve"><value>Waiting for the shop's native NPC identity.</value></data>
   <data name="Equipment sale: {0} Sold {1}/{2}; {3} remaining." xml:space="preserve"><value>Equipment sale: {0} Sold {1}/{2}; {3} remaining.</value></data>
+  <data name="Equipment selling skipped {0}: {1}" xml:space="preserve"><value>Equipment selling skipped {0}: {1}</value></data>
+  <data name="Equipment selling finished: {0} sold; {1} skipped." xml:space="preserve"><value>Equipment selling finished: {0} sold; {1} skipped.</value></data>
+  <data name="The selected equipment has no available sale callback." xml:space="preserve"><value>The selected equipment has no available sale callback.</value></data>
 </root>
