@@ -1,3 +1,8 @@
+2026-10-17 - Automatic inactivity protection (DDuck I598)
+
+- Reset native inactivity timers automatically while ADS is enabled and the character is logged in, including while duty execution is stopped. Reuse the existing framework update; no saved setting or BMR dependency is added.
+- Disabling ADS or unloading the plugin stops these timer updates. Duty ownership, Start/Resume behavior and version 1.2.0.2 remain unchanged.
+
 2026-10-15 - Expansion Poetics gear examples
 
 - Add editable Poetics gear examples for 21 combat jobs across ARR Ironworks, HW Shire, SB Scaevan, ShB Cryptlurker and EW Credendum. Choose Expansion and Job in Shop Lists, then Add gear example. Existing lists and separate relic/material examples remain intact; adding an example never starts purchasing.

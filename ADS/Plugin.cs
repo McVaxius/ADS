@@ -2760,8 +2760,13 @@ public sealed class Plugin : IDalamudPlugin
         public long Poetics => Utility.GetAvailableShopCurrency(RelicPurchaseTestService.Currency);
     }
 
-    private void OnFrameworkUpdate(IFramework framework)
+    private unsafe void OnFrameworkUpdate(IFramework framework)
     {
+        if (Configuration.PluginEnabled && PlayerState.IsLoaded)
+        {
+            var timers = FFXIVClientStructs.FFXIV.Client.UI.Misc.InputTimerModule.Instance();
+            if (timers != null) timers->AfkTimer = timers->ContentInputTimer = timers->InputTimer = 0;
+        }
         var utcNow = DateTime.UtcNow;
         if (utcNow >= nextRemoteJsonStaleCheckUtc)
         {

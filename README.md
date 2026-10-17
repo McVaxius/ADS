@@ -4,6 +4,8 @@ AI Duty Solver (ADS) is an operator-controlled Dalamud plugin for observing, pla
 
 ADS is observer-first. Entering a duty does not automatically grant ADS ownership unless the operator starts or resumes execution.
 
+Inactivity-kick protection is automatic while ADS is enabled and you are logged in, including while execution is stopped. Disabling ADS or unloading the plugin ends this protection.
+
 ## Appearance and language
 
 The first load of this update applies Compact mode once and hides Main's Compact and Transparency controls. Settings > Window appearance keeps density, transparency and each main-control visibility choice available; later loads preserve changes made there.
