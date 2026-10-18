@@ -127,10 +127,19 @@ public sealed class DungeonFrontierService
     private DateTime? cutscenePausedAtUtc;
     private DateTime TimerUtcNow => cutscenePausedAtUtc ?? ReadUtcNow();
 
-    private bool RefreshCutsceneHold(DutyContextSnapshot context)
+    internal bool RefreshCutsceneHold(DutyContextSnapshot context)
     {
-        if (!context.IsUnsafeTransition && context.IsCutscene)
+        if (context.PluginEnabled && context.IsLoggedIn && !context.IsUnsafeTransition && context.IsCutscene
+            && (context.InInstancedDuty || context.CurrentDuty is not null || context.TerritoryTypeId == 0))
         {
+            // A positive different duty still resets the run; absent fields do not.
+            var knownDutyKey = context.ContentFinderConditionId != 0
+                ? context.ContentFinderConditionId : context.CurrentDuty?.ContentFinderConditionId ?? 0;
+            if (knownDutyKey != 0 && activeDutyKey != 0 && knownDutyKey != activeDutyKey)
+            {
+                Reset();
+                activeDutyKey = knownDutyKey;
+            }
             cutscenePausedAtUtc ??= ReadUtcNow();
             ObserveTreasureFollowerCandidateTransit(context);
             ObserveTreasureFollowerEntryProofTransit(context, CurrentTarget);
@@ -423,7 +432,8 @@ public sealed class DungeonFrontierService
             return;
         }
 
-        var dutyKey = GetDutyKey(context);
+        var dutyKey = context.ContentFinderConditionId != 0
+            ? context.ContentFinderConditionId : context.CurrentDuty?.ContentFinderConditionId ?? 0;
         if (dutyKey != 0 && dutyKey != activeDutyKey)
         {
             Reset();
@@ -461,6 +471,9 @@ public sealed class DungeonFrontierService
 
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
     {
+        if (RefreshCutsceneHold(context))
+            return;
+
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
         {
             ResumeCutsceneTimers();
@@ -479,9 +492,6 @@ public sealed class DungeonFrontierService
             Reset();
             activeDutyKey = dutyKey;
         }
-
-        if (RefreshCutsceneHold(context))
-            return;
 
         var previousTarget = CurrentTarget;
         RememberManualDestination(previousTarget);
@@ -903,8 +913,7 @@ public sealed class DungeonFrontierService
 
     private static bool IsTreasureFollowerDoorChaseGateTransitionActive(DutyContextSnapshot context)
         => context.Occupied33
-           || context.OccupiedInCutSceneEvent
-           || context.WatchingCutscene
+           || context.IsCutscene
            || context.BetweenAreas
            || context.BetweenAreas51;
 
@@ -3591,6 +3600,8 @@ public sealed class DungeonFrontierService
             flags.Add("OccupiedInCutSceneEvent");
         if (context.WatchingCutscene)
             flags.Add("WatchingCutscene");
+        if (context.WatchingCutscene78)
+            flags.Add("WatchingCutscene78");
 
         return flags.Count == 0 ? "TreasureRouteTransitHold" : string.Join("/", flags);
     }

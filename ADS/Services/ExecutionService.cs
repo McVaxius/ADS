@@ -23,7 +23,8 @@ public sealed partial class ExecutionService
 
     internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool pluginEnabled)
     {
-        if (pluginEnabled && context.IsLoggedIn && context.InInstancedDuty
+        if (pluginEnabled && context.IsLoggedIn
+            && (context.InInstancedDuty || context.CurrentDuty is not null || context.TerritoryTypeId == 0)
             && !context.IsUnsafeTransition && context.IsCutscene
             && (IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving))
         {
@@ -3311,8 +3312,7 @@ public sealed partial class ExecutionService
     private static bool IsAquapolisRouteWiggleHoldActive(DutyContextSnapshot context)
         => context.BetweenAreas
            || context.BetweenAreas51
-           || context.OccupiedInCutSceneEvent
-           || context.WatchingCutscene;
+           || context.IsCutscene;
 
     private TreasureRouteNavigationDecision ResolveAquapolisRouteWiggleNavigationDecision(
         DungeonFrontierPoint frontierPoint,
@@ -6439,7 +6439,7 @@ public sealed partial class ExecutionService
         {
             ObserveTreasureFollowerRouteTransit(context, "route transit latch");
             treasureFollowerRouteTransitHoldLatched = true;
-            if (context.OccupiedInCutSceneEvent || context.WatchingCutscene)
+            if (context.IsCutscene)
                 treasureFollowerRouteTransitCutsceneSeen = true;
             return;
         }

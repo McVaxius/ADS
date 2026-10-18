@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "AethertekUI/0.3.0": {
+        "runtime": {
+          "AethertekUI.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "AethertekUI/0.3.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

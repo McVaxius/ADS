@@ -53,20 +53,41 @@ public sealed class DutyContextService
 
     public unsafe void Update(bool pluginEnabled)
     {
-        uint territoryTypeId = clientState.TerritoryType;
+        var gameMain = GameMain.Instance();
+        Update(pluginEnabled,
+            gameMain is not null ? gameMain->CurrentTerritoryTypeId : 0u,
+            gameMain is not null ? gameMain->CurrentMapId : 0u,
+            gameMain is not null ? gameMain->CurrentContentFinderConditionId : 0u);
+    }
+
+    internal void Update(bool pluginEnabled, uint gameMainTerritoryId, uint gameMainMapId, uint contentFinderConditionId)
+    {
+        var territoryTypeId = gameMainTerritoryId != 0 ? gameMainTerritoryId : clientState.TerritoryType;
         var clientStateMapId = clientState.MapId;
         uint mapId = clientStateMapId;
-        uint gameMainMapId = 0;
-        uint contentFinderConditionId = 0;
         var isLoggedIn = clientState.IsLoggedIn;
         var betweenAreas = condition[ConditionFlag.BetweenAreas];
         var betweenAreas51 = condition[ConditionFlag.BetweenAreas51];
-        var gameMain = GameMain.Instance();
-        if (gameMain is not null)
+        var boundByDuty = condition[ConditionFlag.BoundByDuty];
+        var boundByDuty56 = condition[ConditionFlag.BoundByDuty56];
+        var occupiedInCutSceneEvent = condition[ConditionFlag.OccupiedInCutSceneEvent];
+        var watchingCutscene = condition[ConditionFlag.WatchingCutscene];
+        var watchingCutscene78 = condition[ConditionFlag.WatchingCutscene78];
+        var transitHold = betweenAreas || betweenAreas51 || occupiedInCutSceneEvent || watchingCutscene || watchingCutscene78;
+
+        // Missing native fields during a held run are not a new duty. Retaining
+        // the identity here also keeps authored destination keys consistent.
+        if (pluginEnabled && isLoggedIn && Current.PluginEnabled && Current.IsLoggedIn
+            && (boundByDuty || boundByDuty56 || transitHold)
+            && (Current.InInstancedDuty || Current.IsCutscene || Current.IsUnsafeTransition)
+            && Current.TerritoryTypeId != 0 && Current.ContentFinderConditionId != 0
+            && (territoryTypeId == 0 || territoryTypeId == Current.TerritoryTypeId)
+            && (contentFinderConditionId == 0 || contentFinderConditionId == Current.ContentFinderConditionId))
         {
-            territoryTypeId = gameMain->CurrentTerritoryTypeId;
-            gameMainMapId = gameMain->CurrentMapId;
-            contentFinderConditionId = gameMain->CurrentContentFinderConditionId;
+            if (territoryTypeId == 0 && transitHold)
+                territoryTypeId = Current.TerritoryTypeId;
+            if (territoryTypeId == Current.TerritoryTypeId && contentFinderConditionId == 0)
+                contentFinderConditionId = Current.ContentFinderConditionId;
         }
 
         // ClientState.MapId has proven to settle faster across Praetorium layer swaps.
@@ -82,8 +103,8 @@ public sealed class DutyContextService
         {
             PluginEnabled = pluginEnabled,
             IsLoggedIn = isLoggedIn,
-            BoundByDuty = condition[ConditionFlag.BoundByDuty],
-            BoundByDuty56 = condition[ConditionFlag.BoundByDuty56],
+            BoundByDuty = boundByDuty,
+            BoundByDuty56 = boundByDuty56,
             BetweenAreas = betweenAreas,
             BetweenAreas51 = betweenAreas51,
             Jumping = condition[ConditionFlag.Jumping],
@@ -91,8 +112,9 @@ public sealed class DutyContextService
             Occupied33 = condition[ConditionFlag.Occupied33],
             OccupiedInQuestEvent = condition[ConditionFlag.OccupiedInQuestEvent],
             OccupiedInEvent = condition[ConditionFlag.OccupiedInEvent],
-            OccupiedInCutSceneEvent = condition[ConditionFlag.OccupiedInCutSceneEvent],
-            WatchingCutscene = condition[ConditionFlag.WatchingCutscene],
+            OccupiedInCutSceneEvent = occupiedInCutSceneEvent,
+            WatchingCutscene = watchingCutscene,
+            WatchingCutscene78 = watchingCutscene78,
             InCombat = condition[ConditionFlag.InCombat],
             Mounted = condition[ConditionFlag.Mounted],
             Casting = condition[ConditionFlag.Casting] || condition[ConditionFlag.Casting87],

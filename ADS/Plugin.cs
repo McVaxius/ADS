@@ -327,7 +327,7 @@ public sealed class Plugin : IDalamudPlugin
             message => Log.Information("[ADS][RelicTest] {Message}", message),
             new SystemShopPurchaseClock());
         Log.Information("[ADS][InnRepair] startup; build=I403-manual-inn-destinations-03; pid={Pid}; utc={Utc}", Environment.ProcessId, DateTime.UtcNow);
-        Log.Information("[ADS][Cutscene] startup; build=devhub-cutscene-pause-20261014-01");
+        Log.Information("[ADS][Cutscene] startup; build=ads-cutscene-route-20261018-01");
         Log.Information("[ADS][NpcSale] startup; build=ads-poetics-examples-20261015-06");
         DesynthContextMenuService = new DesynthContextMenuService(ContextMenu, DataManager, Configuration, DesynthPresetStore, Log);
         var searchCurrentCharacterItemsJson = PluginInterface
@@ -2791,6 +2791,15 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            if (ExecutionService.RefreshCutsceneHold(DutyContextService.Current, Configuration.PluginEnabled))
+            {
+                DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current);
+                CameraRecoveryService.Release("cutscene hold");
+                UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "cutscene-hold", ref slowestSection, ref slowestMs);
+                return;
+            }
             if (ExecutionService.RefreshPhoenixDownRecoveryHold(DutyContextService.Current, Configuration.PluginEnabled))
             {
                 ObjectivePlannerService.HoldPhoenixDownRecovery();

@@ -1,3 +1,8 @@
+2026-10-18 - Preserve teleport route progress through boss cutscenes
+
+- Hold owned execution and frontier state before duty housekeeping or observation can clear completed destinations. Retain the same duty's known identity when native fields disappear during a cutscene or transition, keeping destination keys stable and preventing the first teleport rule from becoming eligible again.
+- Recognize WatchingCutscene78 alongside the other cutscene flags. Preserve remaining timer budgets, unfinished force-march commitments, Stop, and real zoning; do not change preset timing, debug-command activation semantics, saved settings, or release versions. Game acceptance remains user-operated.
+
 2026-10-17 - Automatic inactivity protection (DDuck I598)
 
 - Reset native inactivity timers automatically while ADS is enabled and the character is logged in, including while duty execution is stopped. Reuse the existing framework update; no saved setting or BMR dependency is added.

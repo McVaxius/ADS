@@ -85,8 +85,10 @@ public sealed class CameraRecoveryServiceTests
         Assert.Equal(2, runtime.TapCalls);
     }
 
-    [Fact]
-    public void InjectedKeyReleasesOnNextTickAndBeforeGateChecks()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InjectedKeyReleasesOnNextTickAndBeforeGateChecks(bool cutscene)
     {
         var runtime = new FakeRuntime { State = new CameraRecoveryState(true, false) };
         var service = new CameraRecoveryService(runtime, new FakeClock());
@@ -94,10 +96,11 @@ public sealed class CameraRecoveryServiceTests
         service.Update(TestDutyContextFactory.Create(), executionOwned: true);
         Assert.True(runtime.Injected);
 
-        service.Update(TestDutyContextFactory.Create(pluginEnabled: false), executionOwned: false);
+        service.Update(TestDutyContextFactory.Create(pluginEnabled: cutscene, watchingCutscene78: cutscene), executionOwned: cutscene);
 
         Assert.False(runtime.Injected);
         Assert.Equal(1, runtime.ReleaseCalls);
+        Assert.Equal("Camera recovery gated.", service.Status);
     }
 
     [Fact]

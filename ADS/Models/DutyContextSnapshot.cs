@@ -15,6 +15,7 @@ public sealed class DutyContextSnapshot
     public required bool OccupiedInEvent { get; init; }
     public required bool OccupiedInCutSceneEvent { get; init; }
     public required bool WatchingCutscene { get; init; }
+    public bool WatchingCutscene78 { get; init; }
     public required bool InCombat { get; init; }
     public required bool Mounted { get; init; }
     public bool Casting { get; init; }
@@ -33,13 +34,13 @@ public sealed class DutyContextSnapshot
         => BetweenAreas || BetweenAreas51;
 
     public bool IsCutscene
-        => OccupiedInCutSceneEvent || WatchingCutscene;
+        => OccupiedInCutSceneEvent || WatchingCutscene || WatchingCutscene78;
 
     public bool IsInteractionOccupied
         => OccupiedInQuestEvent || OccupiedInEvent;
 
     public bool IsInteractionActionActive
-        => IsInteractionOccupied || Casting || Occupied39 || OccupiedInCutSceneEvent || WatchingCutscene;
+        => IsInteractionOccupied || Casting || Occupied39 || IsCutscene;
 
     public bool IsTreasureRouteTransitHold
         => BetweenAreas
@@ -47,8 +48,7 @@ public sealed class DutyContextSnapshot
            || Jumping
            || Jumping61
            || Occupied33
-           || OccupiedInCutSceneEvent
-           || WatchingCutscene;
+           || IsCutscene;
 
     public bool HasCatalogMetadata
         => CurrentDuty is not null;

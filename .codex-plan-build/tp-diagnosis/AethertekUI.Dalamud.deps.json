@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "AethertekUI.Dalamud/0.3.0": {
+        "dependencies": {
+          "AethertekUI": "0.3.0"
+        },
+        "runtime": {
+          "AethertekUI.Dalamud.dll": {}
+        }
+      },
+      "AethertekUI/0.3.0": {
+        "runtime": {
+          "AethertekUI.dll": {
+            "assemblyVersion": "0.3.0.0",
+            "fileVersion": "0.3.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "AethertekUI.Dalamud/0.3.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "AethertekUI/0.3.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

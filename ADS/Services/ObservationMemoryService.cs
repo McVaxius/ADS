@@ -84,6 +84,13 @@ public sealed class ObservationMemoryService
 
     public void Update(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
+        if (context.PluginEnabled && context.IsLoggedIn && !context.IsUnsafeTransition && context.IsCutscene
+            && (context.InInstancedDuty || context.CurrentDuty is not null || context.TerritoryTypeId == 0))
+        {
+            Current = ObservationSnapshot.Empty;
+            return;
+        }
+
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty)
         {
             if (!loggedReset

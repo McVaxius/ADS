@@ -743,8 +743,7 @@ public sealed class LootAutomationService
 
     private static bool IsSafeForLoot(DutyContextSnapshot context)
         => !context.IsUnsafeTransition
-           && !context.OccupiedInCutSceneEvent
-           && !context.WatchingCutscene;
+           && !context.IsCutscene;
 
     private static uint NormalizeItemId(uint itemId)
         => itemId >= 1_000_000 ? itemId - 1_000_000 : itemId;

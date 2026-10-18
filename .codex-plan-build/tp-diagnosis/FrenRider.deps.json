@@ -1,0 +1,72 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "FrenRider/2.1.0.6": {
+        "dependencies": {
+          "AethertekUI": "0.3.0",
+          "AethertekUI.Dalamud": "0.3.0",
+          "ECommons": "3.2.0.17"
+        },
+        "runtime": {
+          "FrenRider.dll": {}
+        }
+      },
+      "ECommons/3.2.0.17": {
+        "runtime": {
+          "lib/net10.0-windows7.0/ECommons.dll": {
+            "assemblyVersion": "3.2.0.17",
+            "fileVersion": "3.2.0.17"
+          }
+        }
+      },
+      "AethertekUI/0.3.0": {
+        "runtime": {
+          "AethertekUI.dll": {
+            "assemblyVersion": "0.3.0.0",
+            "fileVersion": "0.3.0.0"
+          }
+        }
+      },
+      "AethertekUI.Dalamud/0.3.0": {
+        "dependencies": {
+          "AethertekUI": "0.3.0"
+        },
+        "runtime": {
+          "AethertekUI.Dalamud.dll": {
+            "assemblyVersion": "0.3.0.0",
+            "fileVersion": "0.3.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "FrenRider/2.1.0.6": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ECommons/3.2.0.17": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-B6l4Sb6anZh4ttLsEklx4LTE5DDxbEicZgqYNz5sgDb9y2wR5sVebYEWSrPgwSVPanx+UxQcocTtBrqBQfmN8g==",
+      "path": "ecommons/3.2.0.17",
+      "hashPath": "ecommons.3.2.0.17.nupkg.sha512"
+    },
+    "AethertekUI/0.3.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "AethertekUI.Dalamud/0.3.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

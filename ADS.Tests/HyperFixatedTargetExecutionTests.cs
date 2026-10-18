@@ -97,7 +97,7 @@ public sealed class HyperFixatedTargetExecutionTests
         private readonly TargetManagerProxy targetManagerProxy;
         private readonly List<TargetFixture> targets = [];
 
-        public Fixture(Vector3 playerPosition, bool includeObservationMemory = false)
+        public Fixture(Vector3 playerPosition, bool includeObservationMemory = false, ObjectPriorityRuleManifest? initialRules = null)
         {
             var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
             var objectTable = DispatchProxy.Create<IObjectTable, ObjectTableProxy>();
@@ -113,6 +113,9 @@ public sealed class HyperFixatedTargetExecutionTests
             ((CommandManagerProxy)(object)commandManager).Commands = Commands;
             ((CommandManagerProxy)(object)commandManager).Events = Events;
             var keyState = DispatchProxy.Create<IKeyState, NoOpProxy>();
+            if (initialRules is not null)
+                File.WriteAllText(Path.Combine(tempDirectory.Path, ObjectRuleShardStore.LegacyFileName),
+                    System.Text.Json.JsonSerializer.Serialize(initialRules));
             var ruleService = new ObjectPriorityRuleService(log, null!, tempDirectory.Path);
             Memory = includeObservationMemory
                 ? new ObservationMemoryService(objectTable,

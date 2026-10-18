@@ -129,8 +129,7 @@ internal sealed class CameraRecoveryService : IDisposable
            && !context.Occupied33
            && !context.OccupiedInQuestEvent
            && !context.OccupiedInEvent
-           && !context.OccupiedInCutSceneEvent
-           && !context.WatchingCutscene;
+           && !context.IsCutscene;
 
     private void LogUnavailableOnce(string reason)
     {
