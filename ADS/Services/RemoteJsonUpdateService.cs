@@ -235,7 +235,16 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
             var problems = new List<string>();
             var territoriesPath = Path.GetDirectoryName(indexPath)!;
-            foreach (var fileName in index.Files)
+            var store = new ObjectRuleShardStore(configDirectory, dutyCatalog);
+            var files = index.Files.ToList();
+            foreach (var preset in index.Presets ?? [])
+            {
+                // A personal-name collision is left alone rather than repeatedly forcing refresh.
+                if (Directory.Exists(store.GetPresetDirectoryPath(preset.Name)) && !store.IsManagedPreset(preset.Name))
+                    continue;
+                files.AddRange(preset.Files.Select(file => $"{preset.Name}/{file}"));
+            }
+            foreach (var fileName in files)
             {
                 var relativePath = $"{ObjectRuleShardStore.DirectoryName}/{fileName}";
                 var path = Path.Combine(territoriesPath, fileName);
@@ -244,7 +253,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
                     problems.Add(relativePath);
                     continue;
                 }
-                if (!ObjectRuleShardStore.TryValidateShardJson(File.ReadAllText(path), fileName, dutyCatalog, out _, out _))
+                if (!ObjectRuleShardStore.TryValidateShardJson(File.ReadAllText(path), Path.GetFileName(fileName), dutyCatalog, out _, out _))
                     problems.Add(relativePath);
             }
 
@@ -268,29 +277,38 @@ public sealed class RemoteJsonUpdateService : IDisposable
         index = new ObjectPriorityRuleShardIndex();
         if (!ObjectRuleShardStore.TryParseIndexJson(indexJson, out index, out status))
             return false;
-        foreach (var fileName in index.Files)
+        if (index.InstalledPresetName is not null)
+        {
+            status = "A remote root index cannot declare local installation ownership.";
+            return false;
+        }
+        var indexedFiles = PackageShardFiles(index).ToList();
+        foreach (var fileName in indexedFiles)
         {
             if (!shardJson.TryGetValue(fileName, out var json))
             {
                 status = $"Indexed remote object-rule shard {fileName} was not downloaded.";
                 return false;
             }
-            if (!ObjectRuleShardStore.TryValidateShardJson(json, fileName, dutyCatalog, out _, out status))
+            if (!ObjectRuleShardStore.TryValidateShardJson(json, Path.GetFileName(fileName), dutyCatalog, out _, out status))
                 return false;
         }
-        var indexedFiles = index.Files;
         if (shardJson.Keys.Any(file => !indexedFiles.Contains(file, StringComparer.Ordinal)))
         {
             status = "Remote object-rule package included an unindexed shard.";
             return false;
         }
-        status = $"Validated complete remote object-rule package with {index.Files.Count} shard(s).";
+        status = $"Validated complete remote object-rule package with {indexedFiles.Count} shard(s).";
         return true;
     }
+
+    private static IEnumerable<string> PackageShardFiles(ObjectPriorityRuleShardIndex index)
+        => index.Files.Concat((index.Presets ?? []).SelectMany(preset => preset.Files.Select(file => $"{preset.Name}/{file}")));
 
     private async Task RunUpdateAsync(string reason, bool manualUpdate, RemoteJsonOwnedDutyRestart? ownedDutyRestart)
     {
         var tempPaths = new List<string>();
+        var createdPresetDirectories = new List<string>();
         var objectRuleApplyStarted = false;
         try
         {
@@ -303,7 +321,9 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
             var shardBytes = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             var shardJson = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var fileName in index.Files)
+            if (index.InstalledPresetName is not null)
+                throw new InvalidDataException("A remote root index cannot declare local installation ownership.");
+            foreach (var fileName in PackageShardFiles(index))
             {
                 var relativePath = $"{ObjectRuleShardStore.DirectoryName}/{fileName}";
                 var bytes = await FetchAsync(relativePath, cacheBustToken).ConfigureAwait(false);
@@ -322,8 +342,34 @@ public sealed class RemoteJsonUpdateService : IDisposable
             }
 
             var pendingWrites = new List<(string RelativePath, string TargetPath, string TempPath)>();
+            var collisions = new List<string>();
+            var managedPresets = new List<(ObjectRulePublishedPreset Preset, ObjectPriorityRuleShardIndex Previous)>();
+            var store = new ObjectRuleShardStore(configDirectory, dutyCatalog);
+            foreach (var preset in index.Presets ?? [])
+            {
+                var presetPath = store.GetPresetDirectoryPath(preset.Name);
+                var exists = Directory.Exists(presetPath);
+                var managed = store.TryGetManagedPresetIndex(preset.Name, out var previous);
+                if (exists && !managed)
+                {
+                    collisions.Add(preset.Name);
+                    continue;
+                }
+                if (!exists)
+                    createdPresetDirectories.Add(presetPath);
+                managedPresets.Add((preset, previous));
+                // Publish the ownership declaration before its shards. If an OS write fails,
+                // the existing cache validation can repair this updater-owned partial package.
+                var installedIndex = new ObjectPriorityRuleShardIndex { InstalledPresetName = preset.Name, Files = preset.Files };
+                StageIfChanged($"{ObjectRuleShardStore.DirectoryName}/{preset.Name}/{ObjectRuleShardStore.IndexFileName}",
+                    Encoding.UTF8.GetBytes(JsonSerializer.Serialize(installedIndex, JsonOptions)), pendingWrites, tempPaths);
+            }
             foreach (var pair in shardBytes)
+            {
+                if (collisions.Any(name => pair.Key.StartsWith(name + "/", StringComparison.Ordinal)))
+                    continue;
                 StageIfChanged($"{ObjectRuleShardStore.DirectoryName}/{pair.Key}", pair.Value, pendingWrites, tempPaths);
+            }
             foreach (var pair in flatBytes)
                 StageIfChanged(pair.Key.FileName, pair.Value, pendingWrites, tempPaths);
 
@@ -345,6 +391,18 @@ public sealed class RemoteJsonUpdateService : IDisposable
             var keep = index.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var territoriesPath = Path.Combine(configDirectory, ObjectRuleShardStore.DirectoryName);
             var removedFiles = new List<string>();
+            foreach (var (preset, previous) in managedPresets)
+            {
+                foreach (var oldFile in previous.Files.Except(preset.Files, StringComparer.Ordinal))
+                {
+                    var relativePath = $"{ObjectRuleShardStore.DirectoryName}/{preset.Name}/{oldFile}";
+                    var path = GetConfigPath(relativePath);
+                    if (!File.Exists(path)) continue;
+                    objectRuleApplyStarted = true;
+                    File.Delete(path);
+                    removedFiles.Add(relativePath);
+                }
+            }
             if (Directory.Exists(territoriesPath))
             {
                 foreach (var existing in Directory.EnumerateFiles(territoriesPath, "*_rule_objects.json", SearchOption.TopDirectoryOnly))
@@ -370,6 +428,8 @@ public sealed class RemoteJsonUpdateService : IDisposable
             LastUpdateStatus = changedFiles.Count == 0
                 ? $"Remote config update complete: validated {index.Files.Count} object-rule shard(s); downloaded data matched the local cache."
                 : $"Remote config update complete: validated {index.Files.Count} object-rule shard(s), changed {changedShardCount} shard/index file(s) and {changedFlatCount} other config file(s).";
+            if (collisions.Count > 0)
+                LastUpdateStatus += $" Preserved personal preset name collision(s): {string.Join(", ", collisions)}. Rename the personal copy before a later update to install the published preset.";
             PublishCompletion(new RemoteJsonUpdateCompletion(true, false, changedFiles, manualUpdate)
             {
                 OwnedDutyRestart = ownedDutyRestart,
@@ -399,6 +459,16 @@ public sealed class RemoteJsonUpdateService : IDisposable
                     // Best-effort cleanup; each update uses unique temp names.
                 }
             }
+            foreach (var path in createdPresetDirectories)
+            {
+                // Only remove an empty directory created by this attempt; never personal data.
+                try
+                {
+                    if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+                        Directory.Delete(path);
+                }
+                catch { /* Match the existing best-effort temporary-file cleanup. */ }
+            }
         }
     }
 
@@ -413,7 +483,8 @@ public sealed class RemoteJsonUpdateService : IDisposable
 
     private async Task<byte[]> FetchAsync(string relativePath, string cacheBustToken)
     {
-        var url = $"{RemoteBaseUrl}{relativePath}?adsCacheBust={Uri.EscapeDataString(cacheBustToken)}";
+        var encodedPath = string.Join('/', relativePath.Split('/').Select(Uri.EscapeDataString));
+        var url = $"{RemoteBaseUrl}{encodedPath}?adsCacheBust={Uri.EscapeDataString(cacheBustToken)}";
         log.Debug($"[ADS] Remote config fetching {relativePath} from {url}.");
         return await httpClient.GetByteArrayAsync(url).ConfigureAwait(false);
     }

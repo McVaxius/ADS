@@ -191,6 +191,12 @@ public sealed class LootAutomationService
         var decision = hasItem
             ? ResolveDecision(lootItem, itemId, item)
             : ResolveMissingItemDecision(lootItem);
+        var emptySlots = ReadMainBagEmptySlots();
+        decision = decision with
+        {
+            Result = ApplyInventoryCapacity(decision.Result, emptySlots),
+            Reason = $"beforeCapacity=({decision.Reason}), mainBagEmptySlots={emptySlots?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}, final={FormatRollResult(ApplyInventoryCapacity(decision.Result, emptySlots))}",
+        };
         if (TryRoll(decision.Result, index))
         {
             lastAttemptItemId = itemId;
@@ -365,6 +371,28 @@ public sealed class LootAutomationService
 
     internal static RollResult MissingDesired(RollResult configured, bool enabled, AethertekUI.Dalamud.XaItemOwnershipState ownership)
         => enabled && ownership == AethertekUI.Dalamud.XaItemOwnershipState.Missing ? RollResult.Needed : configured;
+
+    internal static RollResult ApplyInventoryCapacity(RollResult desired, int? emptySlots)
+        => emptySlots == 0 ? RollResult.Passed : desired;
+
+    private static unsafe int? ReadMainBagEmptySlots()
+    {
+        try
+        {
+            var inventory = InventoryManager.Instance();
+            if (inventory == null)
+                return null;
+            foreach (var type in new[] { InventoryType.Inventory1, InventoryType.Inventory2,
+                         InventoryType.Inventory3, InventoryType.Inventory4 })
+            {
+                var bag = inventory->GetInventoryContainer(type);
+                if (bag == null || !bag->IsLoaded || bag->Items == null || bag->Size != 35)
+                    return null;
+            }
+            return checked((int)inventory->GetEmptySlotsInBag());
+        }
+        catch { return null; }
+    }
 
     private AethertekUI.Dalamud.XaItemOwnershipState ResolveItemOwnership(uint itemId, bool requiresRegistration, out string reason)
     {

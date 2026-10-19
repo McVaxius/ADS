@@ -422,7 +422,7 @@ public sealed class Plugin : IDalamudPlugin
         lootWindow = new LootWindow(this);
         lazyLootWarningWindow = new LazyLootWarningWindow(this);
         objectRuleEditorWindow = new ObjectRuleEditorWindow(this);
-        ruleGuideWindow = new RuleGuideWindow(Configuration.UiCompact);
+        ruleGuideWindow = new RuleGuideWindow(this, Configuration.UiCompact);
         dialogRuleEditorWindow = new DialogRuleEditorWindow(this);
         dutyMaturityEditorWindow = new DutyMaturityEditorWindow(this);
         higherLowerWindow = new HigherLowerWindow(this);
@@ -518,6 +518,7 @@ public sealed class Plugin : IDalamudPlugin
         ChatGui.ChatMessage -= OnChatMessage;
 
         InnEntryService.Cancel("plugin dispose");
+        ExecutionService.CancelDebugReturn();
         RelicPurchaseTestService.Stop("Plugin unloaded; saved progress is retained.");
         UtilityAutomationService.Cancel("plugin dispose");
         DesynthContextMenuService.Dispose();
@@ -812,7 +813,10 @@ public sealed class Plugin : IDalamudPlugin
         => objectRuleEditorWindow.OpenForDuty(duty);
 
     public void OpenRuleGuideUi()
-        => ruleGuideWindow.IsOpen = true;
+        => ruleGuideWindow.OpenForTool(ToolGuide.Rules);
+
+    public void OpenObjectExplorerGuideUi()
+        => ruleGuideWindow.OpenForTool(ToolGuide.ObjectExplorer);
 
     public void ToggleDialogRuleEditorUi()
         => dialogRuleEditorWindow.IsOpen = !dialogRuleEditorWindow.IsOpen;
@@ -1349,6 +1353,14 @@ public sealed class Plugin : IDalamudPlugin
         if (AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
             || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(context.TerritoryTypeId))
             return AutomationTerritoryPolicy.InactiveStatus;
+        if (action is "Start Outside" or "Start Inside" or "Resume")
+        {
+            var liveType = DutyCatalogService?.ResolveContentType(0, ClientState.TerritoryType) ?? 0;
+            if (AutomationTerritoryPolicy.GetPolicy(ClientState.TerritoryType, liveType) == ActivityOwnershipPolicy.ExplicitOnly
+                && (ClientState.TerritoryType != context.TerritoryTypeId || action == "Start Outside"))
+                return AutomationTerritoryPolicy.GetReason(ActivityOwnershipPolicy.ExplicitOnly);
+            return ExecutionService.GetStartBlocker(context, action == "Start Outside");
+        }
         if (!context.InInstancedDuty)
             return action switch
             {
@@ -1359,11 +1371,19 @@ public sealed class Plugin : IDalamudPlugin
         return null;
     }
 
+    private bool RejectDutyOwnershipRequest(string action)
+    {
+        if (GetDutyUiActionBlocker(action) is not { } blocker)
+            return false;
+        PrintStatus($"{action} is unavailable: {blocker}");
+        return true;
+    }
+
     public bool StartDutyFromOutside()
     {
-        pendingRemoteJsonOwnedDutyRestart?.Cancel();
-        if (RejectAutomationActionInExcludedTerritory("Duty start"))
+        if (RejectDutyOwnershipRequest("Start Outside"))
             return false;
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
 
         DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
@@ -1384,9 +1404,9 @@ public sealed class Plugin : IDalamudPlugin
 
     internal bool StartDutyFromInside(bool sweepWithoutExit)
     {
-        pendingRemoteJsonOwnedDutyRestart?.Cancel();
-        if (RejectAutomationActionInExcludedTerritory("Duty start"))
+        if (RejectDutyOwnershipRequest("Start Inside"))
             return false;
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
 
         DisableAutoDutyForDutyStart();
         QueueDutyOwnershipRemoteUpdate();
@@ -1442,9 +1462,9 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool ResumeDutyFromInside()
     {
-        pendingRemoteJsonOwnedDutyRestart?.Cancel();
-        if (RejectAutomationActionInExcludedTerritory("Duty resume"))
+        if (RejectDutyOwnershipRequest("Resume"))
             return false;
+        pendingRemoteJsonOwnedDutyRestart?.Cancel();
 
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside resume", preserveRecentDirectOpener: true);
@@ -2791,28 +2811,6 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
-            if (ExecutionService.RefreshCutsceneHold(DutyContextService.Current, Configuration.PluginEnabled))
-            {
-                DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current);
-                CameraRecoveryService.Release("cutscene hold");
-                UpdateDtrBar();
-                if (frameworkHitchProfilerEnabled)
-                    RecordFrameworkSection(sectionStartedAt, "cutscene-hold", ref slowestSection, ref slowestMs);
-                return;
-            }
-            if (ExecutionService.RefreshPhoenixDownRecoveryHold(DutyContextService.Current, Configuration.PluginEnabled))
-            {
-                ObjectivePlannerService.HoldPhoenixDownRecovery();
-                UpdateDtrBar();
-                if (frameworkHitchProfilerEnabled)
-                    RecordFrameworkSection(sectionStartedAt, "phoenix-recovery-hold", ref slowestSection, ref slowestMs);
-                return;
-            }
-            pendingRemoteJsonOwnedDutyRestart?.Observe(DutyContextService.Current, ExecutionService.CurrentMode);
-            ExecutionService.ObserveDutyCompletion(DutyContextService.Current);
-            RelicPurchaseTestService.Update();
-            if (frameworkHitchProfilerEnabled)
-                RecordFrameworkSection(sectionStartedAt, "duty-context", ref slowestSection, ref slowestMs);
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
                 DutyContextService.Current.TerritoryTypeId);
             if (automationExcludedTerritory)
@@ -2838,6 +2836,40 @@ public sealed class Plugin : IDalamudPlugin
             }
 
             parkedAutomationExcludedTerritoryId = 0;
+            if (ExecutionService.ReleaseDisallowedActivityOwnership(DutyContextService.Current))
+                StopOwnership(ExecutionService.LastStatus);
+
+            if (ExecutionService.RefreshDebugReturn(DutyContextService.Current, DebugStrafeService.Enabled))
+            {
+                CameraRecoveryService.Release("debug Return settle");
+                UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "debug-return-settle", ref slowestSection, ref slowestMs);
+                return;
+            }
+
+            if (ExecutionService.RefreshCutsceneHold(DutyContextService.Current, Configuration.PluginEnabled))
+            {
+                DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current);
+                CameraRecoveryService.Release("cutscene hold");
+                UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "cutscene-hold", ref slowestSection, ref slowestMs);
+                return;
+            }
+            if (ExecutionService.RefreshPhoenixDownRecoveryHold(DutyContextService.Current, Configuration.PluginEnabled))
+            {
+                ObjectivePlannerService.HoldPhoenixDownRecovery();
+                UpdateDtrBar();
+                if (frameworkHitchProfilerEnabled)
+                    RecordFrameworkSection(sectionStartedAt, "phoenix-recovery-hold", ref slowestSection, ref slowestMs);
+                return;
+            }
+            pendingRemoteJsonOwnedDutyRestart?.Observe(DutyContextService.Current, ExecutionService.CurrentMode);
+            ExecutionService.ObserveDutyCompletion(DutyContextService.Current);
+            RelicPurchaseTestService.Update();
+            if (frameworkHitchProfilerEnabled)
+                RecordFrameworkSection(sectionStartedAt, "duty-context", ref slowestSection, ref slowestMs);
             TreasureHighLowDiagnosticService.BeginFrameworkTick();
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
@@ -3402,12 +3434,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnDutyStarted(IDutyStateEventArgs args)
     {
+        ExecutionService.CancelDebugReturn();
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         ExecutionService.ResetDutyCompletion();
     }
 
     private void OnLogout(int type, int code)
     {
+        ExecutionService.CancelDebugReturn();
         ExecutionService.CancelInteractionPause();
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         gearSalePreviewWindow?.CloseSelection();
@@ -3418,6 +3452,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnTerritoryChanged(uint territoryType)
     {
+        ExecutionService.ObserveDebugReturnTerritory(territoryType);
         pendingRemoteJsonOwnedDutyRestart?.ObserveTerritory(territoryType);
         QstCompanionWarningService.HandleTerritoryChanged();
     }
@@ -4028,6 +4063,14 @@ public sealed class Plugin : IDalamudPlugin
             PrintStatus(result.Status);
     }
 
+    internal void SetDebugModeEnabled(bool enabled, string reason)
+    {
+        if (!enabled) ExecutionService.CancelDebugReturn();
+        PrintStatus(enabled ? DebugStrafeService.Enable() : DebugStrafeService.Disable(reason));
+        Configuration.DebugModeEnabled = enabled;
+        Configuration.Save();
+    }
+
     private void HandleDebugCommand(string trimmed)
     {
         var mode = trimmed.Equals("debug", StringComparison.OrdinalIgnoreCase)
@@ -4036,17 +4079,13 @@ public sealed class Plugin : IDalamudPlugin
 
         if (mode.Equals("on", StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus(DebugStrafeService.Enable());
-            Configuration.DebugModeEnabled = true;
-            Configuration.Save();
+            SetDebugModeEnabled(true, "command");
             return;
         }
 
         if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
         {
-            PrintStatus(DebugStrafeService.Disable("command"));
-            Configuration.DebugModeEnabled = false;
-            Configuration.Save();
+            SetDebugModeEnabled(false, "command");
             return;
         }
 

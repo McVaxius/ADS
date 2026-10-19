@@ -9,6 +9,24 @@ namespace ADS.Tests;
 public sealed class LootOwnershipTests
 {
     [Theory]
+    [InlineData(RollResult.Needed, 0, RollResult.Passed)]
+    [InlineData(RollResult.Greeded, 0, RollResult.Passed)]
+    [InlineData(RollResult.Passed, 0, RollResult.Passed)]
+    [InlineData(RollResult.Needed, 1, RollResult.Needed)]
+    [InlineData(RollResult.Greeded, null, RollResult.Greeded)]
+    [InlineData(RollResult.Needed, null, RollResult.Needed)]
+    public void OnlyConfirmedZeroMainBagCapacityForcesPass(RollResult desired, int? emptySlots, RollResult expected)
+        => Assert.Equal(expected, LootAutomationService.ApplyInventoryCapacity(desired, emptySlots));
+
+    [Fact]
+    public void FullBagWinsAfterMissingCollectibleOrGlamourNeedOverride()
+    {
+        var desired = LootAutomationService.MissingDesired(RollResult.Passed, true, XaItemOwnershipState.Missing);
+        Assert.Equal(RollResult.Needed, desired);
+        Assert.Equal(RollResult.Passed, LootAutomationService.ApplyInventoryCapacity(desired, 0));
+    }
+
+    [Theory]
     [InlineData(RollResult.Passed, true, XaItemOwnershipState.Unknown, RollResult.Passed)]
     [InlineData(RollResult.Greeded, true, XaItemOwnershipState.Unknown, RollResult.Greeded)]
     [InlineData(RollResult.Needed, true, XaItemOwnershipState.Unknown, RollResult.Needed)]

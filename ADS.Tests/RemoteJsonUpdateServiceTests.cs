@@ -10,6 +10,141 @@ namespace ADS.Tests;
 
 public sealed class RemoteJsonUpdateServiceTests
 {
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("DEFAULT")]
+    [InlineData("DEFAULT - ../escape")]
+    [InlineData("DEFAULT - invalid.")]
+    [InlineData("Personal")]
+    public void PublishedPackageRejectsUnsafeOrNoncanonicalPresetNames(string name)
+    {
+        var index = new ObjectPriorityRuleShardIndex
+        {
+            Presets = [new() { Name = name, Files = ["1037_rule_objects.json"] }],
+        };
+        Assert.False(ObjectRuleShardStore.TryParseIndexJson(JsonSerializer.Serialize(index), out _, out _));
+    }
+
+    [Fact]
+    public void PublishedDeclarationsRejectDuplicateNamesAndUnsafeShardPaths()
+    {
+        var preset = new ObjectRulePublishedPreset { Name = "DEFAULT - Test", Files = ["1037_rule_objects.json"] };
+        Assert.False(ObjectRuleShardStore.TryParseIndexJson(JsonSerializer.Serialize(new ObjectPriorityRuleShardIndex
+        { Presets = [preset, preset] }), out _, out _));
+        preset.Files = ["../1037_rule_objects.json"];
+        Assert.False(ObjectRuleShardStore.TryParseIndexJson(JsonSerializer.Serialize(new ObjectPriorityRuleShardIndex
+        { Presets = [preset] }), out _, out _));
+    }
+
+    [Fact]
+    public void PublishedPackageValidatesEveryDeclaredContextBeforeApply()
+    {
+        const string name = "DEFAULT - Test";
+        var index = JsonSerializer.Serialize(new ObjectPriorityRuleShardIndex
+        { Presets = [new() { Name = name, Files = ["1037_rule_objects.json"] }] });
+        Assert.False(RemoteJsonUpdateService.TryValidateObjectRulePackage(index,
+            new Dictionary<string, string>(), [], out _, out _));
+        var json = JsonSerializer.Serialize(new ObjectPriorityRuleManifest
+        { Rules = [new ObjectPriorityRule { TerritoryTypeId = 1038, ObjectName = "wrong territory" }] });
+        Assert.False(RemoteJsonUpdateService.TryValidateObjectRulePackage(index,
+            new Dictionary<string, string> { [$"{name}/1037_rule_objects.json"] = json }, [], out _, out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishedPresetsInstallRefreshAndProtectOnlyUpdaterOwnedDestinations(bool personalCollision)
+    {
+        using var directory = new TempDirectory();
+        var log = DispatchProxy.Create<IPluginLog, AdsRulePrecedenceTests.NoOpProxy>();
+        const string name = "DEFAULT - UNSYNC - Crystal Tower x 3";
+        const string shard = "1037_rule_objects.json";
+        var store = new ObjectRuleShardStore(directory.Path, []);
+        var personalPath = store.GetShardPath(name, shard);
+        if (personalCollision)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(personalPath)!);
+            File.WriteAllText(personalPath, "personal content must survive");
+        }
+        var index = new ObjectPriorityRuleShardIndex
+        {
+            Files = [ObjectRuleShardStore.GlobalFileName],
+            Presets = [new() { Name = name, Files = [shard] }],
+        };
+        string Shard(string objectName) => JsonSerializer.Serialize(new ObjectPriorityRuleManifest
+        { Rules = [new ObjectPriorityRule { TerritoryTypeId = 1037, ObjectName = objectName }] });
+        var files = new Dictionary<string, string>
+        {
+            [RemoteJsonUpdateService.TerritoriesIndexFileName] = JsonSerializer.Serialize(index),
+            ["territories/" + ObjectRuleShardStore.GlobalFileName] = "{\"SchemaVersion\":1,\"Rules\":[]}",
+            [$"territories/{name}/{shard}"] = Shard("first published rule"),
+            [RemoteJsonUpdateService.DialogRulesFileName] = "{\"SchemaVersion\":1,\"Rules\":[]}",
+            [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
+            [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+        };
+        var config = new Configuration { ActiveObjectRulePreset = "Personal" };
+        Assert.True(store.TryWriteFullPreset("DEFAULT", new ObjectPriorityRuleManifest(), out _));
+        Assert.True(store.TryWriteFullPreset("Personal", new ObjectPriorityRuleManifest(), out _));
+        var rules = new ObjectPriorityRuleService(log, null!, directory.Path, [], config, null, null);
+        Assert.Equal("Personal", rules.ActivePresetName);
+        using var updater = new RemoteJsonUpdateService(log, directory.Path);
+        var field = typeof(RemoteJsonUpdateService).GetField("httpClient", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        ((HttpClient)field.GetValue(updater)!).Dispose();
+        field.SetValue(updater, new HttpClient(new RemoteFilesHandler(files, false)));
+        async Task Update()
+        {
+            Assert.True(updater.TryStartUpdate(true, "published test"));
+            await ((Task)typeof(RemoteJsonUpdateService).GetField("activeUpdateTask", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(updater)!).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(updater.TryConsumeCompletedUpdate(out var completion));
+            Assert.True(completion.Success, updater.LastUpdateStatus);
+            Assert.True(rules.Reload(), rules.LastLoadStatus);
+            Assert.Equal("Personal", rules.ActivePresetName);
+            Assert.Equal("Personal", config.ActiveObjectRulePreset);
+        }
+        await Update();
+        Assert.Equal("Personal", config.ActiveObjectRulePreset);
+        if (personalCollision)
+        {
+            Assert.False(store.IsManagedPreset(name));
+            Assert.Contains("collision", updater.LastUpdateStatus);
+            Assert.Equal("personal content must survive", File.ReadAllText(personalPath));
+            return;
+        }
+        Assert.True(store.IsManagedPreset(name));
+        Assert.True(store.IsManagedPreset(name.ToLowerInvariant()));
+        Assert.True(store.IsManagedPreset(name.Replace(" - ", "  -  ")));
+        Assert.Contains("first published rule", File.ReadAllText(personalPath));
+        var manifest = new ObjectPriorityRuleManifest();
+        Assert.False(store.TryWriteFullPreset(name, manifest, out _));
+        Assert.False(store.TryWriteFullPreset(name.ToLowerInvariant(), manifest, out _));
+        Assert.False(store.TryWriteFullPreset(name.Replace(" - ", "  -  "), manifest, out _));
+        Assert.False(store.TryWriteChangedContexts(name, manifest, [shard], out _));
+        Assert.False(store.TryDeletePreset(name, out _));
+        Assert.False(store.TryDeleteOverrides(name, [shard], out _, out _, out _));
+        var transfer = new ObjectRulePresetTransfer { PresetName = name, Contexts = { [shard] = manifest } };
+        Assert.False(store.TryWritePresetTransfer(transfer, store.CaptureContextState(name, [shard]), out _));
+        Assert.True(store.TryLoadEffectivePreset(name, out var copy, out _, out _));
+        Assert.True(store.TryWriteFullPreset("Personal copy", copy, out _));
+        var personalCopy = File.ReadAllText(store.GetShardPath("Personal copy", shard));
+        files[$"territories/{name}/{shard}"] = Shard("updated published rule");
+        await Update();
+        Assert.Contains("updated published rule", File.ReadAllText(personalPath));
+        Assert.Equal(personalCopy, File.ReadAllText(store.GetShardPath("Personal copy", shard)));
+        var unlistedPath = Path.Combine(store.GetPresetDirectoryPath(name), "personal-note.txt");
+        File.WriteAllText(unlistedPath, "preserve unrelated data");
+        index.Presets![0].Files = ["1038_rule_objects.json"];
+        files[RemoteJsonUpdateService.TerritoriesIndexFileName] = JsonSerializer.Serialize(index);
+        files[$"territories/{name}/1038_rule_objects.json"] = JsonSerializer.Serialize(new ObjectPriorityRuleManifest
+        { Rules = [new ObjectPriorityRule { TerritoryTypeId = 1038, ObjectName = "replacement context" }] });
+        await Update();
+        Assert.False(File.Exists(personalPath));
+        Assert.True(File.Exists(store.GetShardPath(name, "1038_rule_objects.json")));
+        Assert.Equal("preserve unrelated data", File.ReadAllText(unlistedPath));
+        Assert.Equal(personalCopy, File.ReadAllText(store.GetShardPath("Personal copy", shard)));
+        Assert.True(RemoteJsonUpdateService.InspectLocalObjectRuleCache(directory.Path, []).IsValid);
+    }
+
     [Fact]
     public void SharedRemoteFilesUseTerritoryIndexAndExcludeLegacyMonoliths()
     {
@@ -380,7 +515,7 @@ public sealed class RemoteJsonUpdateServiceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var file = request.RequestUri!.AbsolutePath.Split("/ads/", 2)[1];
+            var file = Uri.UnescapeDataString(request.RequestUri!.AbsolutePath.Split("/ads/", 2)[1]);
             return Task.FromResult(new HttpResponseMessage(failDownload ? HttpStatusCode.BadGateway : HttpStatusCode.OK)
             {
                 Content = new StringContent(files[file]),

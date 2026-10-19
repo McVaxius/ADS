@@ -11582,4 +11582,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Augmented Scaevan (Lv. 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Augmented Cryptlurker (Lv. 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Augmented Credendum (Lv. 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>Activity policies</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>Inspect activity ownership permissions. Manual and IPC requests use the same policy.</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>search name, content type, territory, or CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>All activity policies</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>Explicit request only</value></data>
+  <data name="Excluded" xml:space="preserve"><value>Excluded</value></data>
+  <data name="Instance" xml:space="preserve"><value>Instance</value></data>
+  <data name="Territory" xml:space="preserve"><value>Territory</value></data>
+  <data name="Game content type" xml:space="preserve"><value>Game content type</value></data>
+  <data name="Automatic" xml:space="preserve"><value>Automatic</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>Manual / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>Unnamed instance</value></data>
+  <data name="Allowed" xml:space="preserve"><value>Allowed</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked.</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>Ordinary duty ownership rules apply.</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>Published presets are protected and updated automatically. Use New Preset to create a personal copy.</value></data>
+  <data name="Guide" xml:space="preserve"><value>Guide</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>Rules guide</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>Object Explorer guide</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>Open this tool&apos;s guide? You can always use its Guide button later.</value></data>
+  <data name="Open guide" xml:space="preserve"><value>Open guide</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Dismiss</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>Class and field reference</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>Use a preset</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>Create a first rule</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>Choose class and scope</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>Why a rule does not win</value></data>
+  <data name="Save and share" xml:space="preserve"><value>Save and share</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>Crystal Tower presets</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>Choose a task</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids.</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry.</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified.</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection.</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>Filters and selection</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>Distances and rule matches</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>Coordinates and map flags</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>Exports and explicit actions</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>ADS Guide</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win.</value></data>
+  <data name="Debug" xml:space="preserve"><value>Debug</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>Integrations &amp; regular duties</value></data>
+  <data name="Updates" xml:space="preserve"><value>Updates</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>Object rules &amp; presets</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>Dialog rules &amp; duty metadata</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>Debug mode</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>Enable debug mode</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>Debug tools and rule authoring.</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>Death &amp; Return</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>Restart from entrance</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>After death + Return</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>Restart ADS progression after Return. Raise keeps current progress.</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>Resume existing progression after Return. Raise keeps current progress.</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>Available while debug mode is on.</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Debug Return: waiting for stable living duty state.</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Debug Return: ADS progression restarted from the returned position.</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Debug Return: existing progression retained; replanning from the returned position.</value></data>
 </root>

@@ -23,6 +23,8 @@ public sealed partial class ExecutionService
 
     internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool pluginEnabled)
     {
+        if (ReleaseDisallowedActivityOwnership(context))
+            return false;
         if (pluginEnabled && context.IsLoggedIn
             && (context.InInstancedDuty || context.CurrentDuty is not null || context.TerritoryTypeId == 0)
             && !context.IsUnsafeTransition && context.IsCutscene
@@ -91,6 +93,8 @@ public sealed partial class ExecutionService
 
     internal bool RefreshPhoenixDownRecoveryHold(DutyContextSnapshot context, bool pluginEnabled)
     {
+        if (ReleaseDisallowedActivityOwnership(context))
+            return false;
         var requested = false;
         if (pluginEnabled && context.IsLoggedIn && context.InInstancedDuty && !context.IsUnsafeTransition
             && (IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving && !explicitLeaveRequested))
@@ -639,8 +643,43 @@ public sealed partial class ExecutionService
     private string BuildTreasureRoleStatus()
         => $"Treasure role: {TreasureDungeonRoleDisplayName} ({TreasureDungeonRoleSource}).";
 
+    private (uint Territory, uint Cfc)? explicitActivityDuty;
+
+    internal bool ReleaseDisallowedActivityOwnership(DutyContextSnapshot context)
+    {
+        var policy = AutomationTerritoryPolicy.GetPolicy(context);
+        var sameInstance = explicitActivityDuty == (context.TerritoryTypeId, context.ContentFinderConditionId);
+        if (IsOwned && (policy == ActivityOwnershipPolicy.Excluded
+            || policy == ActivityOwnershipPolicy.ExplicitOnly && !sameInstance))
+        {
+            Stop(context, AutomationTerritoryPolicy.GetReason(policy));
+            return true;
+        }
+        if (!context.IsUnsafeTransition && !context.IsCutscene && context.TerritoryTypeId != 0
+            && (!sameInstance || !context.InInstancedDuty))
+            explicitActivityDuty = null;
+        return false;
+    }
+
+    internal static string? GetStartBlocker(DutyContextSnapshot context, bool fromOutside)
+    {
+        var policy = AutomationTerritoryPolicy.GetPolicy(context);
+        if (policy == ActivityOwnershipPolicy.Excluded)
+            return AutomationTerritoryPolicy.GetReason(policy);
+        if (fromOutside && policy == ActivityOwnershipPolicy.ExplicitOnly)
+            return AutomationTerritoryPolicy.GetReason(policy);
+        if (!fromOutside && !context.InInstancedDuty)
+            return "Start inside requires being inside instanced duty.";
+        if (!fromOutside && policy == ActivityOwnershipPolicy.ExplicitOnly
+            && (!context.IsLoggedIn || context.IsUnsafeTransition || context.TerritoryTypeId == 0 || context.ContentFinderConditionId == 0))
+            return "Wait for the current instance identity before starting this activity.";
+        return null;
+    }
+
     public bool StartDutyFromOutside()
     {
+        CancelDebugReturn();
+        explicitActivityDuty = null;
         CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("outside start");
@@ -656,6 +695,12 @@ public sealed partial class ExecutionService
 
     public bool StartDutyFromInside(DutyContextSnapshot context, bool sweepWithoutExit = false)
     {
+        if (GetStartBlocker(context, fromOutside: false) is { } blocker)
+        {
+            SetPhase(CurrentPhase, blocker);
+            return false;
+        }
+        CancelDebugReturn();
         CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside start");
@@ -675,6 +720,7 @@ public sealed partial class ExecutionService
         }
 
         CurrentMode = OwnershipMode.OwnedStartInside;
+        explicitActivityDuty = (context.TerritoryTypeId, context.ContentFinderConditionId);
         if (sweepWithoutExit)
             CompletionTreasureSweepWithoutExitDuty = (context.TerritoryTypeId, context.ContentFinderConditionId);
         SetPhase(
@@ -685,6 +731,12 @@ public sealed partial class ExecutionService
 
     public bool ResumeDutyFromInside(DutyContextSnapshot context)
     {
+        if (GetStartBlocker(context, fromOutside: false) is { } blocker)
+        {
+            SetPhase(CurrentPhase, blocker);
+            return false;
+        }
+        CancelDebugReturn();
         CancelInteractionPause();
         ResetCompletionTreasureSweep();
         InterruptCardinalHold("inside resume");
@@ -703,6 +755,7 @@ public sealed partial class ExecutionService
         }
 
         CurrentMode = OwnershipMode.OwnedResumeInside;
+        explicitActivityDuty = (context.TerritoryTypeId, context.ContentFinderConditionId);
         SetPhase(
             ExecutionPhase.WaitingForTruth,
             $"Resumed ownership inside {context.CurrentDuty?.EnglishName}. ADS execution phases are active. {BuildTreasureRoleStatus()}");
@@ -711,6 +764,7 @@ public sealed partial class ExecutionService
 
     public bool LeaveDuty(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
+        CancelDebugReturn();
         IsPhoenixDownRecoveryHoldActive = false;
         InterruptCardinalHold("leave request");
         if (!context.InInstancedDuty)
@@ -819,6 +873,8 @@ public sealed partial class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        CancelDebugReturn();
+        explicitActivityDuty = null;
         ResumeCutsceneTimers();
         CancelInteractionPause();
         IsPhoenixDownRecoveryHoldActive = false;
@@ -844,6 +900,7 @@ public sealed partial class ExecutionService
 
     public void CompleteDuty(string dutyName)
     {
+        CancelDebugReturn();
         CancelInteractionPause();
         ReleaseHyperFocus("duty complete");
         ResetCardinalHolds("duty complete");
@@ -872,6 +929,8 @@ public sealed partial class ExecutionService
         string dialogAutomationStatus,
         bool sessionDebugEnabled = false)
     {
+        if (ReleaseDisallowedActivityOwnership(context))
+            return;
         if (RefreshCutsceneHold(context, pluginEnabled))
             return;
 

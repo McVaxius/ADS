@@ -28,7 +28,7 @@ Main keeps six controls visible above every tab:
 
 | Control | Use | Availability |
 |---|---|---|
-| **Start Outside** | Queue ADS ownership before entering a duty | Always available |
+| **Start Outside** | Queue ADS ownership before entering a duty | Available outside excluded or explicit-request-only activities |
 | **Start Inside** | Claim ownership while already inside | Requires instanced-duty truth |
 | **Resume** | Reclaim ownership after stop/reload while inside | Requires instanced-duty truth |
 | **Leave** | Request ADS-managed duty exit | Requires ADS ownership |
@@ -41,7 +41,7 @@ For an immediate chat stop, use `/ads stop`.
 
 When Fren Rider requests recovery in a regular four-player dungeon, ADS reports **Phoenix Down recovery; duty progression paused**, stops its movement once, and retains the current owned run. It acknowledges the hold through `ADS.IsPhoenixDownRecoveryHoldActive` before Fren Rider approaches a party corpse or attempts item use. The planner displays **Wait for party revival** while the hold is active.
 
-Fren Rider's Profile settings enable Phoenix Down recovery and nearby outdoor revival by default; combat use defaults off. A living healer within 20 yalms of a corpse blocks item attempts. Missing items, medicine cooldown, combat waiting, unreachable corpses, and pending revival keep party progression held. Inspect Fren Rider's **Phoenix Down** status for the blocker.
+Fren Rider's **Recovery** tab enables Phoenix Down recovery and nearby outdoor revival by default; combat use defaults off. Limited recovery defaults to five actual started Phoenix Down casts; the alternate time limit is 30 seconds. On exhaustion, Fren Rider releases its recovery hold until a new death is observed. Full stickiness is off by default. A living party healer within 20 yalms of a corpse yields item recovery. The separate give-up switches for no item, unreachable corpse and unavailable ADS acknowledgement default off. Inspect Fren Rider's **Phoenix Down** status for the current blocker or exhausted limit.
 
 After revival, ADS observes the current duty and chooses a fresh objective without automatically stopping or resuming ownership. **Stop** still releases ownership, and explicit **Leave** still takes precedence. If Fren Rider reports that the recovery acknowledgement IPC is unavailable, use an ADS build supporting this contract before expecting coordinated recovery. Live acceptance requires a real Phoenix Down cast, revival, and resumed ADS progression; mcvaxius controls live testing and deployment.
 
@@ -130,7 +130,8 @@ Clicking the ADS DTR entry opens Main.
 
 ### Automation
 
-- Enable BMRAI/VBM in regular duties.
+- Integration controls: Disable AutoDuty on ADS start; Enable BMRAI/VBM in regular duties.
+- Equipment cleanup: Preview equipment before selling.
 - Consider treasure coffers in planner.
 - Treasure door frame recovery.
 - Process dialog rules outside owned duties.
@@ -144,16 +145,121 @@ The BMRAI/VBM setting is enabled by default. When enabled, entering a regular du
 - Open/reload JSON files.
 - Open Object Rules, Dialog Rules, and Frontier Labels.
 
-Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the permanent checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless debug mode is enabled through `/ads debug on`; this setting is remembered until `/ads debug off`. Dialog Rules retain their separate parked-preset model.
+Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the expandable PR-ready checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless debug mode is enabled through `/ads debug on`; this setting is remembered until `/ads debug off`. Dialog Rules retain their separate parked-preset model.
 
-### Advanced
+### Debug
 
-**Show debug sections in the Main window** enables Diagnostics JSON preview and observation samples.
+**Enable debug mode** uses the same state and input cleanup as `/ads debug on|off`.
+Debug mode defaults off. **After death + Return** defaults to **Restart from
+entrance**; **Resume** preserves ADS progression tracking. The selector remains
+visible but inactive with debug off, retaining your saved selection.
+
+ADS waits for a confirmed death, the exact localized native Return prompt, native
+revival with an area transition, and stable living state in the same owned duty.
+A callback attempt, arbitrary relocation, Raise or Phoenix revival alone does not
+trigger this processing. Restart clears ADS's transient attempts/navigation,
+recovery memory, visited/frontier and consumed-rule tracking, then rebuilds from
+the returned position. It preserves the selected preset, user rules/settings,
+actual dungeon progress and completed/exit intent. Resume invalidates stale
+immediate commitments and replans while retaining progression history. Stop,
+Leave, debug off, logout, character/duty changes and unload cancel pending work;
+this feature never takes ownership or accepts Return itself.
+
+Independent **Show debug sections in the Main window** and **Enable framework
+hitch profiler** controls remain available with debug off. The former enables
+Diagnostics JSON preview and observation samples; the profiler remains opt-in.
+
+### Appearance
+
+The existing language, colour, density, transparency, titlebar-status and
+main-window visibility options retain their saved values and behavior.
 
 ### About
 
 Shows version, product summary, pilot summary, support links, feedback location, and **Open Setup Wizards**.
 
+## Crystal Tower presets
+
+Choose **DEFAULT - SYNC - Crystal Tower x 3** for normal synced/full-alliance or
+roulette entry, and **DEFAULT - UNSYNC - Crystal Tower x 3** for a deliberately
+configured unrestricted private alliance. Each preset contains separate contexts
+for the Labyrinth of the Ancients (CFC 92 / territory 174), Syrcus Tower (102 / 372)
+and the World of Darkness (111 / 151). The `x 3` name groups the three raids; select
+and queue each intended duty through your existing workflow.
+
+The synced preset gives nearby mechanic adds ordinary kill priority ahead of main
+bosses. The unsynced preset adds boss-focus rules for burst play while keeping
+ordinary mechanic-add rules. Labyrinth has optional, position-matched nearby
+shortcuts, with a two-second arrival wait in SYNC and no extra wait in UNSYNC.
+Atomos uses a nearby-lane target rule in both. These are source-reviewed target and
+shortcut rules; neither preset supplies a complete alliance choreography or a
+verified unattended clear. They inherit missing DEFAULT contexts. Unsynced entry
+changes level restrictions; alliance entry requirements, Atomos/pad requirements
+and other surviving mechanics still need the appropriate participants/actions.
+
+1. Use the existing **Update JSON** action after the new package is published, or
+   allow the normal 24-hour refresh. Select the desired named preset in Rules;
+   downloading it retains your current selection and starts no automation.
+2. Configure the selected combat provider's encounter/rotation setup before the
+   run. ADS owns progression and targeting when started. The combat provider and
+   participants handle encounter movement, attacks and mechanics; give each
+   character one movement owner at a time.
+3. If using Fren Rider's ADS handoff, enable its **Alliance** family and an honest
+   maturity threshold for the live duty. Fren Rider requires a matching ADS
+   catalog identity and clearance before handing over. While ADS owns execution,
+   Fren Rider yields its local follow/navigation and combat-state changes. A
+   character intended only to follow a leader should remain on its selected Fren
+   Rider duty-follow setup instead of also acquiring ADS progression ownership.
+4. DAD may coordinate only the profiles and run actions you have explicitly
+   configured in its existing workflow. These rule presets do not configure DAD,
+   form parties, choose queue modes or add a repetition sequence. Match the actual
+   entry mode, party/alliance roles and active ADS preset before each run.
+5. Keep each alliance in its assigned lane and arrange Atomos pads, Phlegethon
+   platforms, Cerberus roles and other required mechanics with participants or
+   the selected encounter provider. Stop ADS when manual movement must take over;
+   Resume is an explicit return of progression ownership.
+
+Published presets are protected even with debug enabled. For personal edits or
+sharing, select **New Preset** to create a custom copy; the copy has its own
+complete-context overrides and remains separate from managed updates. If a
+pre-existing personal preset has the same published name, ADS preserves it and
+reports the collision. Rename that personal preset before a later update to
+install the managed one.
+
+The selected rules use public encounter object IDs from
+[BossMod](https://github.com/awgil/ffxiv_bossmod/tree/master/BossMod.Modules/RealmReborn/Alliance)
+and [BossMod Reborn](https://github.com/FFXIV-CombatReborn/BossModReborn/tree/main/BossMod/Modules/RealmReborn/Alliance),
+and Labyrinth shortcut IDs/positions from
+[AutoDuty's Labyrinth path](https://github.com/ffxivcode/AutoDuty/blob/master/AutoDuty/Paths/%28174%29%20The%20Labyrinth%20of%20the%20Ancients.json),
+reviewed on 2026-10-18. The public sheet identities agree with the scopes above.
+No synced/unsynced gameplay or client acceptance was performed in this change.
+## Rules and Object Explorer guides
+
+Rules and `/ads obj` keep a small labeled **Guide** button in their main toolbar,
+including compact mode. The first eligible opening offers **Open guide** or
+**Dismiss** once per tool. Dismissal, the close button and Escape consume that
+one-time offer. Opening the actual guide records a visit; neither showing nor
+dismissing an offer completes a wizard. Guide buttons remain available for replay.
+
+Rules help offers tasks for using presets, creating a first rule, class/scope,
+understanding a rule that does not win, saving/sharing and the concrete
+[Crystal Tower setup](#crystal-tower-presets). Expand **Class and field reference**
+for the existing generated class matrix and glossary. Published presets are
+read-only; use **New Preset** for personal authoring. Saving changes the complete
+context, including rows hidden by filters. Missing custom contexts inherit
+DEFAULT, while an intentional empty override suppresses that context's inherited
+rows; Revert deletes the saved override.
+
+Object Explorer's guide explains that filters change the viewer. Dist is 3D
+player distance and Y is absolute height difference; rule-hit counts precede layer
+filtering. Same-map-only remains best-effort. Map/table selection pins an object,
+while filtering or disappearance can clear it. **RULE** creates an editor draft:
+choose a class and save/activate a personal preset to make it executable. The
+position-pin option seeds object XYZ and a radius; the observed BaseId remains in
+Notes rather than becoming the match automatically. Map flags and Copy XYZ are
+separate from explicit Move/Fly/DNav actions. **Export All JSON** includes all
+loaded object-table entries and buffered server events regardless of viewer
+filters. Help navigation itself starts no movement, teleport or rule save.
 ## Guided Setup
 
 The wizard hub contains five separately completed, always-replayable flows: Duty Operations, Rules & Data, Utilities, Treasure & Follow, and Diagnostics & Recovery. Each has overview, prerequisites/safety, and commands/UI steps. Wizard buttons only navigate to existing windows or copy commands; they do not start duties, purchases, updates, or automation. A new installation opens the hub once. Existing version-20 configurations migrate without a forced popup.

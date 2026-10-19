@@ -52,6 +52,8 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     }
     private string selectionStatus = "Click a marker or row to pin it.";
     private ulong? rulePopupObjectId;
+    private bool guideOfferRequested;
+    private bool guideOfferVisible;
 
     public ObjectExplorerWindow(Plugin plugin)
         : base("ADS Object Explorer###ADSObjectExplorer")
@@ -70,7 +72,14 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         flagPlacementArmed = false;
     }
 
-    public override void OnClose() => flagPlacementArmed = false;
+    public override void OnOpen()
+        => guideOfferRequested = WizardCatalog.ShouldOfferToolGuide(plugin.Configuration, ToolGuide.ObjectExplorer);
+
+    public override void OnClose()
+    {
+        flagPlacementArmed = false;
+        CloseToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.ObjectExplorer, ref guideOfferRequested, ref guideOfferVisible);
+    }
 
     public override unsafe void PostDraw()
     {
@@ -101,6 +110,9 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        DrawToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.ObjectExplorer, ref guideOfferRequested, ref guideOfferVisible, plugin.OpenObjectExplorerGuideUi);
+        if (WindowLayout.SmallButton(Ui.L("Guide###ADSExplorerToolbarGuide")))
+            plugin.OpenObjectExplorerGuideUi();
         using var spacing = new MaterialStyleScope();
         spacing.Style(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 4 * MaterialTheme.Metrics.Scale));
         var localPlayer = Plugin.ObjectTable.LocalPlayer;

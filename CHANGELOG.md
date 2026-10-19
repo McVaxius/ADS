@@ -1,3 +1,25 @@
+2026-10-18 - Debug Return recovery and Settings organization
+
+- Add the saved Restart from entrance / Resume post-Return choice, defaulting to Restart while debug mode remains off by default. Require a confirmed owned-duty death, exact localized native Return prompt, native revival with area transition and stable living state in the same character/duty before applying once. No callback-only or position-jump inference and no new Return accept loop.
+- Restart clears ADS's transient movement/interaction, recovery memory, visited/frontier and consumed-rule state; Resume retains progress and clears stale immediate commitments. Preserve presets, saved settings, real dungeon progress, completed-duty and explicit exit intent. Stop, Leave, debug off, logout, identity change and unload cancel pending processing without reacquiring ownership.
+- Organize Settings into General, Automation, Data & Rules, Debug, Appearance and About. Keep a visible inactive Return selector while debug is off; retain independent diagnostics, all existing actions/values and native IDs. Reuse existing debug command side effects for the UI master, group integrations/cleanup/treasure/dialogs and updates/presets/metadata, and put checkout preparation in its existing expandable section.
+2026-10-18 - Rules and Object Explorer guidance (I603)
+
+- Keep a small labeled Guide button visible in each tool's main toolbar, including compact mode. Offer Open guide or Dismiss once on the actual window-open lifecycle; close and Escape consume the offer. Store each tool's offer/visit state separately from wizard completion, preserving older configuration and replay/reset behavior.
+- Reuse the existing guide window for task-based Rules help, its generated class/field reference, and dedicated Object Explorer guidance for filters, selection, distances/rule hits, RULE drafts, coordinates/flags, exports and manual actions. Add the concrete Crystal Tower preset page and managed-preset/personal-copy guidance. Guide navigation only opens help; it starts no automation. Translate the new controls/content across all 16 UI catalogs.
+2026-10-18 - Published object-rule preset distribution (I601)
+
+- Extend the existing territory index with explicitly declared published presets and canonical shard lists. Download and validate the whole package through the existing 24-hour/manual updater, reload affected rules and preserve the active selection. Folder names and shard paths are validated; a folder alone is not a distribution contract.
+- Protect updater-installed presets across rule saves, import destinations, delete and revert, including Windows case/sanitized-name aliases. The Rules editor offers New Preset for personal copies. Preserve pre-existing personal name collisions and report them in update status; never infer ownership from the DEFAULT - prefix. Refresh only updater-owned content and retain unrelated custom copies/data.
+- Prepare separate SYNC/UNSYNC Crystal Tower packages in BotologyUpdates with source-reviewed targeting and nearby Labyrinth shortcut rules across all three raids. The existing Operator Guide explains mode selection, ADS/Fren Rider/combat/DAD roles, manual alliance-mechanic requirements and personal copies. Native clear behavior remains unverified.
+2026-10-18 - Activity ownership policy (I587)
+
+- Fully exclude Triple Triad Battlehall territories 579, 940 and 941. PvP, other Gold Saucer minigames, Hall of the Novice and seasonal instances require a deliberate Start Inside/Resume request for the current instance; older ownership cannot carry over. Apply the same decision before cutscene and Phoenix recovery holds and before startup side effects.
+- Add a searchable, read-only Activity policies view to Duty Manager with installed-sheet names, every CFC/territory combination, actual game content type and automatic/manual/IPC permissions. Preserve ordinary duties without catalog metadata, outdoor utilities and the Ocean Fishing local-sale exception.
+2026-10-18 - Full-inventory loot passing (I595)
+
+- Pass eligible pending loot when all four loaded main bags confirm zero empty slots, including stackable items and rows with missing item metadata. Apply this after collectible/glamour Need overrides while preserving native eligibility and unknown-capacity behavior. No new setting.
+
 2026-10-18 - Preserve teleport route progress through boss cutscenes
 
 - Hold owned execution and frontier state before duty housekeeping or observation can clear completed destinations. Retain the same duty's known identity when native fields disappear during a cutscene or transition, keeping destination keys stable and preventing the first teleport rule from becoming eligible again.

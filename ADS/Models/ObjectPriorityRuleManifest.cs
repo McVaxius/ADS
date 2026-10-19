@@ -13,6 +13,17 @@ public sealed class ObjectPriorityRuleShardIndex
 {
     public int SchemaVersion { get; set; } = 1;
     public List<string> Files { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ObjectRulePublishedPreset>? Presets { get; set; }
+    // Written only by the updater inside an installed managed preset's index.json.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InstalledPresetName { get; set; }
+}
+
+public sealed class ObjectRulePublishedPreset
+{
+    public string Name { get; set; } = string.Empty;
+    public List<string> Files { get; set; } = [];
 }
 
 internal sealed class ObjectRulePresetTransfer

@@ -11582,4 +11582,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 詩学装備 (Lv. 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 詩学装備 (Lv. 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 詩学装備 (Lv. 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>アクティビティ方針</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>アクティビティの制御権限を確認します。手動とIPCの要求には同じ方針が適用されます。</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>名前、コンテンツ種別、テリトリー、CFCを検索</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>すべての方針</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>明示的な要求のみ</value></data>
+  <data name="Excluded" xml:space="preserve"><value>対象外</value></data>
+  <data name="Instance" xml:space="preserve"><value>インスタンス</value></data>
+  <data name="Territory" xml:space="preserve"><value>テリトリー</value></data>
+  <data name="Game content type" xml:space="preserve"><value>ゲームのコンテンツ種別</value></data>
+  <data name="Automatic" xml:space="preserve"><value>自動</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>手動 / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>名称のないインスタンス</value></data>
+  <data name="Allowed" xml:space="preserve"><value>許可</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>このアクティビティは現在のインスタンス内での開始または再開が必要です。自動引き継ぎは禁止されています。</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>通常のコンテンツ制御ルールが適用されます。</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>公開プリセットは保護され、自動更新されます。新規プリセットで個人用コピーを作成してください。</value></data>
+  <data name="Guide" xml:space="preserve"><value>ガイド</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>ルールガイド</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>オブジェクトエクスプローラーガイド</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>このツールのガイドを開きますか？ガイドボタンからいつでも開けます。</value></data>
+  <data name="Open guide" xml:space="preserve"><value>ガイドを開く</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>閉じる</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>クラスとフィールドの参照</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>プリセットを使う</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>最初のルールを作る</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>クラスと適用範囲を選ぶ</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>ルールが選ばれない理由</value></data>
+  <data name="Save and share" xml:space="preserve"><value>保存と共有</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>クリスタルタワーのプリセット</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>目的を選ぶ</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNCは通常の増援優先度、UNSYNCはボス集中です。参加モードは別に選択します。x 3は3つのレイドをまとめた名称です。</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADSが進行を制御し、引き継ぎ中はFren Riderがローカル追従を譲ります。参加前に戦闘と明示的なDADタスクを設定してください。</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>アライアンスの担当レーンと必須ギミックを割り当ててください。このルールは対象選択とショートカットを補助します。無人クリアは未検証です。</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>公開プリセットは公開後にUpdate JSONまたは通常の24時間更新で取得されます。ダウンロード後も現在の選択を維持します。</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>フィルターと選択</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>距離とルール一致</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>座標と地図フラグ</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>エクスポートと明示的な操作</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>ADSガイド</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>同じオブジェクトでは、より具体的に一致する範囲とセレクターが優先され、同順位では優先度の小さい値が選ばれます。候補が拒否されると次の有効なルールに進みます。</value></data>
+  <data name="Debug" xml:space="preserve"><value>デバッグ</value></data>
+  <data name="Appearance" xml:space="preserve"><value>外観</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>連携と通常コンテンツ</value></data>
+  <data name="Updates" xml:space="preserve"><value>更新</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>オブジェクトルールとプリセット</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>ダイアログルールとコンテンツ情報</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>デバッグモード</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>デバッグモードを有効化</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>デバッグツールとルール作成。</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>死亡とデジョン</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>入口からやり直す</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>死亡後のデジョン</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>デジョン後にADSの進行をやり直します。蘇生では現在の進行を維持します。</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>デジョン後も現在の進行を続けます。蘇生では現在の進行を維持します。</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>デバッグモードが有効な間に利用できます。</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>デバッグデジョン：生存状態とコンテンツの安定を待機中。</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>デバッグデジョン：帰還位置からADSの進行をやり直しました。</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>デバッグデジョン：進行を維持し、帰還位置から再計画します。</value></data>
 </root>

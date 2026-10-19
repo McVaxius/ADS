@@ -11582,4 +11582,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 诗学装备 (等级 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 诗学装备 (等级 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 诗学装备 (等级 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>活动策略</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>查看活动控制权限。手动和IPC请求使用相同的策略。</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>搜索名称、内容类型、区域或CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>所有活动策略</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>仅限明确请求</value></data>
+  <data name="Excluded" xml:space="preserve"><value>已排除</value></data>
+  <data name="Instance" xml:space="preserve"><value>副本</value></data>
+  <data name="Territory" xml:space="preserve"><value>区域</value></data>
+  <data name="Game content type" xml:space="preserve"><value>游戏内容类型</value></data>
+  <data name="Automatic" xml:space="preserve"><value>自动</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>手动 / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>未命名副本</value></data>
+  <data name="Allowed" xml:space="preserve"><value>允许</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>此活动需要在当前副本内选择内部开始或继续；禁止自动接管。</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>适用普通任务的控制规则。</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>已发布的预设受到保护并自动更新。使用新建预设创建个人副本。</value></data>
+  <data name="Guide" xml:space="preserve"><value>指南</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>规则指南</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>对象浏览器指南</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>打开此工具的指南？之后仍可随时使用指南按钮。</value></data>
+  <data name="Open guide" xml:space="preserve"><value>打开指南</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>关闭</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>类别与字段参考</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>使用预设</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>创建第一条规则</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>选择类别和范围</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>规则未被选中的原因</value></data>
+  <data name="Save and share" xml:space="preserve"><value>保存与分享</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>水晶塔预设</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>选择任务</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC使用常规小怪优先级，UNSYNC集中首领。排队模式需单独选择；x 3表示三个团队副本。</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS负责推进；交接时Fren Rider让出本地跟随。进入前配置战斗和明确的DAD任务。</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>分配各联盟路线并处理必要机制。这些规则辅助选敌与捷径；尚未验证无人值守通关。</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>发布后通过Update JSON或常规24小时刷新获取已发布预设。下载保留当前选择。</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>筛选与选择</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>距离与规则匹配</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>坐标与地图旗标</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>导出与明确操作</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>ADS指南</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>对于同一对象，匹配更具体的范围和选择条件优先；相同级别时数值更低的优先级胜出。候选被拒绝后会尝试下一条可用规则。</value></data>
+  <data name="Debug" xml:space="preserve"><value>调试</value></data>
+  <data name="Appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>集成与普通任务</value></data>
+  <data name="Updates" xml:space="preserve"><value>更新</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>对象规则与预设</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>对话规则与任务元数据</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>调试模式</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>启用调试模式</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>调试工具和规则编写。</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>死亡与返回</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>从入口重新开始</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>死亡并返回后</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>返回后重新开始ADS推进。复活保留当前进度。</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>返回后继续现有推进。复活保留当前进度。</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>启用调试模式时可用。</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>调试返回：等待副本内稳定的存活状态。</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>调试返回：已从返回位置重新开始ADS推进。</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>调试返回：保留现有进度，从返回位置重新规划。</value></data>
 </root>

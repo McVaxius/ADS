@@ -4154,4 +4154,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Perlengkapan Poetics (Lv. 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Perlengkapan Poetics (Lv. 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Perlengkapan Poetics (Lv. 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>Kebijakan aktivitas</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>Lihat izin kendali aktivitas. Permintaan manual dan IPC memakai kebijakan yang sama.</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>cari nama, jenis konten, wilayah, atau CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>Semua kebijakan aktivitas</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>Hanya permintaan eksplisit</value></data>
+  <data name="Excluded" xml:space="preserve"><value>Dikecualikan</value></data>
+  <data name="Instance" xml:space="preserve"><value>Instansi</value></data>
+  <data name="Territory" xml:space="preserve"><value>Wilayah</value></data>
+  <data name="Game content type" xml:space="preserve"><value>Jenis konten game</value></data>
+  <data name="Automatic" xml:space="preserve"><value>Otomatis</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>Manual / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>Instansi tanpa nama</value></data>
+  <data name="Allowed" xml:space="preserve"><value>Diizinkan</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>Aktivitas ini memerlukan Mulai di dalam atau Lanjutkan pada instansi saat ini; pengalihan otomatis diblokir.</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>Aturan kendali tugas biasa berlaku.</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>Preset terbitan dilindungi dan diperbarui otomatis. Gunakan Preset Baru untuk membuat salinan pribadi.</value></data>
+  <data name="Guide" xml:space="preserve"><value>Panduan</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>Panduan aturan</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>Panduan penjelajah objek</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>Buka panduan alat ini? Tombol Panduan selalu tersedia nanti.</value></data>
+  <data name="Open guide" xml:space="preserve"><value>Buka panduan</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Tutup</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>Referensi kelas dan bidang</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>Gunakan preset</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>Buat aturan pertama</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>Pilih kelas dan cakupan</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>Mengapa aturan tidak terpilih</value></data>
+  <data name="Save and share" xml:space="preserve"><value>Simpan dan bagikan</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>Preset Crystal Tower</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>Pilih tugas</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: prioritas musuh tambahan biasa. UNSYNC: fokus bos. Pilih mode antrean secara terpisah; x 3 mencakup tiga raid.</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS mengendalikan kemajuan; Fren Rider menyerahkan pengikutan lokal saat serah terima. Siapkan pertempuran dan tugas DAD eksplisit sebelum masuk.</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>Tetapkan jalur aliansi dan mekanik wajib. Aturan ini membantu sasaran dan pintasan; penyelesaian tanpa pengawasan belum diverifikasi.</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>Preset terbitan tiba lewat Update JSON atau pembaruan biasa 24 jam setelah diterbitkan. Unduhan mempertahankan pilihan aktif.</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>Filter dan pilihan</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>Jarak dan kecocokan aturan</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>Koordinat dan penanda peta</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>Ekspor dan tindakan eksplisit</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>Panduan ADS</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>Untuk objek yang sama, cakupan dan pemilih cocok yang lebih spesifik didahulukan; prioritas lebih rendah memecah seri. Kandidat yang ditolak memberi kesempatan pada aturan layak berikutnya.</value></data>
+  <data name="Debug" xml:space="preserve"><value>Debug</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Tampilan</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>Integrasi dan tugas biasa</value></data>
+  <data name="Updates" xml:space="preserve"><value>Pembaruan</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>Aturan objek dan preset</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>Aturan dialog dan metadata tugas</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>Mode debug</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>Aktifkan mode debug</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>Alat debug dan penulisan aturan.</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>Kematian dan Kembali</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>Mulai ulang dari pintu masuk</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>Setelah mati + Kembali</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>Mulai ulang kemajuan ADS setelah Kembali. Kebangkitan mempertahankan kemajuan.</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>Lanjutkan kemajuan lama setelah Kembali. Kebangkitan mempertahankan kemajuan.</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>Tersedia saat mode debug aktif.</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Kembali debug: menunggu keadaan hidup yang stabil dalam tugas.</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Kembali debug: kemajuan ADS dimulai ulang dari posisi kembali.</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Kembali debug: kemajuan dipertahankan; rencana ulang dari posisi kembali.</value></data>
 </root>

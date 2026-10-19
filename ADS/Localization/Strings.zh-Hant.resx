@@ -11582,4 +11582,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - 詩學裝備 (等級 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - 詩學裝備 (等級 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - 詩學裝備 (等級 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>活動策略</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>查看活動控制權限。手動與IPC請求使用相同策略。</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>搜尋名稱、內容類型、區域或CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>所有活動策略</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>僅限明確請求</value></data>
+  <data name="Excluded" xml:space="preserve"><value>已排除</value></data>
+  <data name="Instance" xml:space="preserve"><value>副本</value></data>
+  <data name="Territory" xml:space="preserve"><value>區域</value></data>
+  <data name="Game content type" xml:space="preserve"><value>遊戲內容類型</value></data>
+  <data name="Automatic" xml:space="preserve"><value>自動</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>手動 / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>未命名副本</value></data>
+  <data name="Allowed" xml:space="preserve"><value>允許</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>此活動需要在目前副本內選擇內部開始或繼續；禁止自動接管。</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>適用一般任務的控制規則。</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>已發佈的預設受到保護並自動更新。使用新增預設建立個人副本。</value></data>
+  <data name="Guide" xml:space="preserve"><value>指南</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>規則指南</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>物件瀏覽器指南</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>開啟此工具的指南？之後仍可隨時使用指南按鈕。</value></data>
+  <data name="Open guide" xml:space="preserve"><value>開啟指南</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>關閉</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>類別與欄位參考</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>使用預設</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>建立第一條規則</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>選擇類別與範圍</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>規則未被選中的原因</value></data>
+  <data name="Save and share" xml:space="preserve"><value>儲存與分享</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>水晶塔預設</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>選擇工作</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC使用一般小怪優先級，UNSYNC集中首領。排隊模式需另外選擇；x 3代表三個團隊副本。</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS負責推進；交接時Fren Rider讓出本機跟隨。進入前設定戰鬥與明確的DAD工作。</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>分配各聯盟路線並處理必要機制。這些規則輔助選敵與捷徑；尚未驗證無人值守通關。</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>發佈後透過Update JSON或一般24小時更新取得已發佈預設。下載會保留目前選擇。</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>篩選與選擇</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>距離與規則匹配</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>座標與地圖旗標</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>匯出與明確操作</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>ADS指南</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>對於同一物件，匹配更具體的範圍與選擇條件優先；相同級別時數值較低的優先級勝出。候選被拒絕後會嘗試下一條可用規則。</value></data>
+  <data name="Debug" xml:space="preserve"><value>除錯</value></data>
+  <data name="Appearance" xml:space="preserve"><value>外觀</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>整合與一般任務</value></data>
+  <data name="Updates" xml:space="preserve"><value>更新</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>物件規則與預設</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>對話規則與任務中繼資料</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>除錯模式</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>啟用除錯模式</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>除錯工具與規則編寫。</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>死亡與返回</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>從入口重新開始</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>死亡並返回後</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>返回後重新開始ADS推進。復活保留目前進度。</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>返回後繼續現有推進。復活保留目前進度。</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>啟用除錯模式時可用。</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>除錯返回：等待副本內穩定的存活狀態。</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>除錯返回：已從返回位置重新開始ADS推進。</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>除錯返回：保留現有進度，從返回位置重新規劃。</value></data>
 </root>

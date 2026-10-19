@@ -29,12 +29,15 @@ public sealed class DutyCatalogService
     private readonly List<DutyCatalogEntry> entries = [];
     private readonly Dictionary<uint, DutyCatalogEntry> entriesByCfc = [];
     private readonly Dictionary<uint, DutyCatalogEntry> entriesByTerritory = [];
+    private readonly Dictionary<uint, uint> contentTypesByTerritory = [];
     private readonly IPluginLog log;
+    private readonly IDataManager dataManager;
     private readonly string maturityPath;
 
     public DutyCatalogService(IDataManager dataManager, IPluginLog log, string configDirectory)
     {
         this.log = log;
+        this.dataManager = dataManager;
         Directory.CreateDirectory(configDirectory);
         maturityPath = Path.Combine(configDirectory, MaturityFileName);
 
@@ -50,6 +53,8 @@ public sealed class DutyCatalogService
 
         foreach (var row in contentFinderSheet)
         {
+            if (row.TerritoryType.RowId != 0 && row.ContentType.RowId != 0)
+                contentTypesByTerritory[row.TerritoryType.RowId] = row.ContentType.RowId;
             var isQuestBattle = TryGetLinkedQuestId(row, out var linkedQuestId);
             var contentType = row.ContentType.ValueNullable;
             if (!isQuestBattle && contentType is null)
@@ -145,6 +150,44 @@ public sealed class DutyCatalogService
 
     public IReadOnlyList<DutyCatalogEntry> Entries
         => entries;
+
+    internal uint ResolveContentType(uint contentFinderConditionId, uint territoryId)
+    {
+        // Read the installed sheets even when the broad duty catalog omits this activity.
+        var cfc = dataManager?.GetExcelSheet<ContentFinderCondition>()?.GetRowOrDefault(contentFinderConditionId);
+        if (cfc is { } row && row.RowId != 0 && row.TerritoryType.RowId == territoryId)
+            return row.ContentType.RowId;
+        return contentTypesByTerritory?.GetValueOrDefault(territoryId) ?? 0;
+    }
+
+    internal IEnumerable<(string Name, uint Cfc, uint Territory, string ContentType, uint ContentTypeId)> GetActivityPolicyRows()
+    {
+        var cfcs = dataManager.GetExcelSheet<ContentFinderCondition>();
+        var territories = dataManager.GetExcelSheet<TerritoryType>();
+        if (territories is null || cfcs is null)
+            yield break;
+        var represented = new HashSet<uint>();
+        foreach (var row in cfcs)
+        {
+            var territoryId = row.TerritoryType.RowId;
+            if (territoryId == 0 || AutomationTerritoryPolicy.GetPolicy(territoryId, row.ContentType.RowId) == ActivityOwnershipPolicy.Automatic)
+                continue;
+            represented.Add(territoryId);
+            var name = NormalizeName(row.Name.ToString());
+            if (string.IsNullOrWhiteSpace(name))
+                name = row.TerritoryType.ValueNullable?.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty;
+            yield return (name, row.RowId, territoryId, row.ContentType.ValueNullable?.Name.ToString() ?? string.Empty, row.ContentType.RowId);
+        }
+        foreach (var row in territories)
+        {
+            if (represented.Contains(row.RowId) || !AutomationTerritoryPolicy.IsAutomationExcludedTerritory(row.RowId))
+                continue;
+            var cfc = row.ContentFinderCondition.ValueNullable;
+            yield return (row.PlaceName.ValueNullable?.Name.ToString() ?? string.Empty,
+                cfc?.RowId ?? 0, row.RowId, cfc?.ContentType.ValueNullable?.Name.ToString() ?? string.Empty,
+                cfc?.ContentType.RowId ?? 0);
+        }
+    }
 
     public string MaturityConfigPath
         => maturityPath;

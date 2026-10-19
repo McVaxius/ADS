@@ -4512,4 +4512,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Снаряжение за Поэтику (ур. 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Снаряжение за Поэтику (ур. 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Снаряжение за Поэтику (ур. 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>Правила активностей</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>Просмотр разрешений управления активностями. Ручные запросы и IPC используют одни правила.</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>поиск по имени, типу контента, территории или CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>Все правила активностей</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>Только по явному запросу</value></data>
+  <data name="Excluded" xml:space="preserve"><value>Исключено</value></data>
+  <data name="Instance" xml:space="preserve"><value>Инстанс</value></data>
+  <data name="Territory" xml:space="preserve"><value>Территория</value></data>
+  <data name="Game content type" xml:space="preserve"><value>Тип игрового контента</value></data>
+  <data name="Automatic" xml:space="preserve"><value>Автоматически</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>Вручную / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>Безымянный инстанс</value></data>
+  <data name="Allowed" xml:space="preserve"><value>Разрешено</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>Эта активность требует запуска внутри или возобновления в текущем инстансе; автоматический перенос управления запрещён.</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>Действуют обычные правила управления заданиями.</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>Опубликованные профили защищены и обновляются автоматически. Создайте личную копию через Новый профиль.</value></data>
+  <data name="Guide" xml:space="preserve"><value>Руководство</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>Руководство по правилам</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>Руководство по обозревателю объектов</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>Открыть руководство этого инструмента? Кнопка руководства всегда доступна.</value></data>
+  <data name="Open guide" xml:space="preserve"><value>Открыть руководство</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Закрыть</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>Справочник классов и полей</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>Использовать профиль</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>Создать первое правило</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>Выбрать класс и область</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>Почему правило не побеждает</value></data>
+  <data name="Save and share" xml:space="preserve"><value>Сохранить и поделиться</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>Профили Кристальной башни</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>Выберите задачу</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: обычные приоритеты дополнительных врагов. UNSYNC: фокус босса. Режим очереди выбирается отдельно; x 3 объединяет три рейда.</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS управляет продвижением; Fren Rider уступает локальное следование при передаче. Подготовьте бой и явные задачи DAD до входа.</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>Назначьте линии альянса и обязательные механики. Правила помогают с целями и срезами; прохождения без присмотра не проверены.</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>Опубликованные профили загружаются через Update JSON или обычное обновление раз в 24 часа после публикации. Активный выбор сохраняется.</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>Фильтры и выбор</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>Расстояния и совпадения правил</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>Координаты и отметки карты</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>Экспорт и явные действия</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>Руководство ADS</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>Для одного объекта сначала идут более конкретные совпавшие области и селекторы; меньший приоритет разрешает равенство. После отклонения кандидата может победить следующее допустимое правило.</value></data>
+  <data name="Debug" xml:space="preserve"><value>Отладка</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Внешний вид</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>Интеграции и обычные задания</value></data>
+  <data name="Updates" xml:space="preserve"><value>Обновления</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>Правила объектов и профили</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>Правила диалогов и данные заданий</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>Режим отладки</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>Включить режим отладки</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>Средства отладки и создание правил.</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>Смерть и Возврат</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>Начать заново от входа</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>После смерти + Возврат</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>Перезапуск продвижения ADS после Возврата. Воскрешение сохраняет прогресс.</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>Продолжить прежнее продвижение после Возврата. Воскрешение сохраняет прогресс.</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>Доступно при включённом режиме отладки.</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Отладочный Возврат: ожидание стабильного живого состояния в задании.</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Отладочный Возврат: продвижение ADS перезапущено от позиции возврата.</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Отладочный Возврат: прогресс сохранён; новый план от позиции возврата.</value></data>
 </root>

@@ -25,7 +25,7 @@ Capture evidence while failure state is still visible:
 - Relevant Frontier Labels state for map/layer issues
 - Analysis JSON `rawLiveMonsterCount`, `eligibleMonsterBlockerCount`, and `gateSuppressedMonsterNames`
 
-Enable Settings > Advanced > **Show debug sections in the Main window** for formatted Analysis JSON preview and short live-object samples.
+Enable Settings > Debug > **Show debug sections in the Main window** for formatted Analysis JSON preview and short live-object samples.
 
 ## Stuck-State Inspection
 

@@ -20,6 +20,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     private string? focusedKey;
     private int bulkMaturityIndex;
     private string editorStatus = "Duty Manager ready.";
+    private bool showActivityPolicies;
+    private int activityPolicyFilter;
 
     public DutyMaturityEditorWindow(Plugin plugin)
         : base("ADS Duty Manager###ADSDutyMaturityEditor")
@@ -48,6 +50,16 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        if (WindowLayout.SmallButton(Ui.L("Duties")))
+            showActivityPolicies = false;
+        ImGui.SameLine();
+        if (WindowLayout.SmallButton(Ui.L("Activity policies")))
+            showActivityPolicies = true;
+        if (showActivityPolicies)
+        {
+            DrawActivityPolicies();
+            return;
+        }
         EnsureDraftRowsLoaded();
 
         var currentContext = plugin.DutyContextService.Current;
@@ -99,6 +111,47 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         DrawDutyTable(visibleRows, coverage, 320f);
         ImGui.Spacing();
         DrawDetails(focusedRow, focusedCoverage);
+    }
+
+    private void DrawActivityPolicies()
+    {
+        MaterialText.TextWrapped(Ui.T("Inspect activity ownership permissions. Manual and IPC requests use the same policy."));
+        ImGui.SetNextItemWidth(-1f);
+        var search = filters.Search;
+        if (WindowLayout.InputTextWithHint("##ADSDutyManagerActivitySearch", Ui.T("search name, content type, territory, or CFC"), ref search, 160))
+            filters.Search = search;
+        string[] labels = [Ui.T("All activity policies"), Ui.T("Explicit request only"), Ui.T("Excluded")];
+        ImGui.SetNextItemWidth(240f);
+        WindowLayout.Combo(Ui.L("Policy"), ref activityPolicyFilter, labels, labels.Length);
+        if (!ImGui.BeginTable("ADSDutyManagerActivityPolicies", 7,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY
+                | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp, new Vector2(0, -1)))
+            return;
+        foreach (var label in new[] { "Instance", "CFC", "Territory", "Game content type", "Automatic", "Manual / IPC", "Reason" })
+            ImGui.TableSetupColumn(Ui.L(label));
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableHeadersRow();
+        foreach (var row in plugin.DutyCatalogService.GetActivityPolicyRows())
+        {
+            var policy = AutomationTerritoryPolicy.GetPolicy(row.Territory, row.ContentTypeId);
+            if (activityPolicyFilter == 1 && policy != ActivityOwnershipPolicy.ExplicitOnly
+                || activityPolicyFilter == 2 && policy != ActivityOwnershipPolicy.Excluded)
+                continue;
+            var reason = Ui.T(AutomationTerritoryPolicy.GetReason(policy));
+            if (!string.IsNullOrWhiteSpace(search)
+                && !$"{row.Name} {row.Cfc} {row.Territory} {row.ContentType} {row.ContentTypeId} {reason}"
+                    .Contains(search, StringComparison.OrdinalIgnoreCase))
+                continue;
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn(); MaterialText.TextWrapped(string.IsNullOrWhiteSpace(row.Name) ? Ui.T("Unnamed instance") : row.Name);
+            ImGui.TableNextColumn(); MaterialText.Text(row.Cfc == 0 ? Ui.T("None") : row.Cfc.ToString());
+            ImGui.TableNextColumn(); MaterialText.Text(row.Territory.ToString());
+            ImGui.TableNextColumn(); MaterialText.TextWrapped($"{row.ContentType} ({row.ContentTypeId})");
+            ImGui.TableNextColumn(); MaterialText.Text(Ui.T("Blocked"));
+            ImGui.TableNextColumn(); MaterialText.Text(Ui.T(policy == ActivityOwnershipPolicy.Excluded ? "Blocked" : "Allowed"));
+            ImGui.TableNextColumn(); MaterialText.TextWrapped(reason);
+        }
+        ImGui.EndTable();
     }
 
     private void EnsureDraftRowsLoaded()

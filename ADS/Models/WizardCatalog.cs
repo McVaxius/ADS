@@ -1,5 +1,7 @@
 namespace ADS.Models;
 
+internal enum ToolGuide { Rules, ObjectExplorer }
+
 public sealed record WizardPage(
     string Id,
     string Title,
@@ -137,6 +139,27 @@ public static class WizardCatalog
 
     public static bool ShouldAutoOpen(bool loadedExistingConfiguration, Configuration configuration)
         => !loadedExistingConfiguration && !configuration.WizardHubSeen;
+
+    internal static bool ShouldOfferToolGuide(Configuration configuration, ToolGuide tool)
+        => tool == ToolGuide.Rules
+            ? !configuration.RulesGuideOfferConsumed && !configuration.RulesGuideVisited
+            : !configuration.ObjectExplorerGuideOfferConsumed && !configuration.ObjectExplorerGuideVisited;
+
+    internal static bool ConsumeToolGuideOffer(Configuration configuration, ToolGuide tool)
+    {
+        var changed = tool == ToolGuide.Rules ? !configuration.RulesGuideOfferConsumed : !configuration.ObjectExplorerGuideOfferConsumed;
+        if (tool == ToolGuide.Rules) configuration.RulesGuideOfferConsumed = true;
+        else configuration.ObjectExplorerGuideOfferConsumed = true;
+        return changed;
+    }
+
+    internal static bool MarkToolGuideVisited(Configuration configuration, ToolGuide tool)
+    {
+        var changed = tool == ToolGuide.Rules ? !configuration.RulesGuideVisited : !configuration.ObjectExplorerGuideVisited;
+        if (tool == ToolGuide.Rules) configuration.RulesGuideVisited = true;
+        else configuration.ObjectExplorerGuideVisited = true;
+        return ConsumeToolGuideOffer(configuration, tool) || changed;
+    }
 
     private static WizardPage Page(
         string id,

@@ -4138,4 +4138,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Poetics उपकरण (स्तर 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Poetics उपकरण (स्तर 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Poetics उपकरण (स्तर 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>गतिविधि नीतियाँ</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>गतिविधि नियंत्रण की अनुमतियाँ देखें। मैन्युअल और IPC अनुरोध एक ही नीति का उपयोग करते हैं।</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>नाम, सामग्री प्रकार, क्षेत्र या CFC खोजें</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>सभी गतिविधि नीतियाँ</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>केवल स्पष्ट अनुरोध</value></data>
+  <data name="Excluded" xml:space="preserve"><value>बाहर रखा गया</value></data>
+  <data name="Instance" xml:space="preserve"><value>इंस्टेंस</value></data>
+  <data name="Territory" xml:space="preserve"><value>क्षेत्र</value></data>
+  <data name="Game content type" xml:space="preserve"><value>गेम सामग्री प्रकार</value></data>
+  <data name="Automatic" xml:space="preserve"><value>स्वचालित</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>मैन्युअल / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>बिना नाम का इंस्टेंस</value></data>
+  <data name="Allowed" xml:space="preserve"><value>अनुमति है</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>इस गतिविधि के लिए वर्तमान इंस्टेंस में अंदर शुरू करें या जारी रखें चुनना होगा; स्वचालित नियंत्रण हस्तांतरण बंद है।</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>सामान्य ड्यूटी नियंत्रण नियम लागू होते हैं।</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>प्रकाशित प्रीसेट सुरक्षित हैं और अपने आप अपडेट होते हैं। निजी कॉपी बनाने के लिए नया प्रीसेट चुनें।</value></data>
+  <data name="Guide" xml:space="preserve"><value>मार्गदर्शिका</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>नियम मार्गदर्शिका</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>ऑब्जेक्ट एक्सप्लोरर मार्गदर्शिका</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>इस टूल की मार्गदर्शिका खोलें? इसका मार्गदर्शिका बटन बाद में भी उपलब्ध रहेगा।</value></data>
+  <data name="Open guide" xml:space="preserve"><value>मार्गदर्शिका खोलें</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>क्लास और फ़ील्ड संदर्भ</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>प्रीसेट उपयोग करें</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>पहला नियम बनाएँ</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>क्लास और दायरा चुनें</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>नियम क्यों नहीं चुना जाता</value></data>
+  <data name="Save and share" xml:space="preserve"><value>सहेजें और साझा करें</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>क्रिस्टल टावर प्रीसेट</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>कार्य चुनें</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: अतिरिक्त शत्रुओं की सामान्य प्राथमिकता। UNSYNC: बॉस पर ध्यान। कतार मोड अलग चुनें; x 3 तीन रेड को साथ रखता है।</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS प्रगति नियंत्रित करता है; हैंडऑफ पर Fren Rider स्थानीय पीछा छोड़ता है। प्रवेश से पहले युद्ध और स्पष्ट DAD कार्य तैयार करें।</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>अलायंस की लेन और आवश्यक मैकेनिक बाँटें। ये नियम लक्ष्य और शॉर्टकट में मदद करते हैं; बिना निगरानी की जीत सत्यापित नहीं है।</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>प्रकाशित प्रीसेट प्रकाशन के बाद Update JSON या सामान्य 24 घंटे के रिफ्रेश से आते हैं। डाउनलोड सक्रिय चयन बनाए रखता है।</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>फ़िल्टर और चयन</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>दूरी और नियम मिलान</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>निर्देशांक और मानचित्र फ़्लैग</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>निर्यात और स्पष्ट क्रियाएँ</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>ADS मार्गदर्शिका</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>एक ही ऑब्जेक्ट के लिए अधिक विशिष्ट मिलते दायरे और चयनकर्ता पहले आते हैं; बराबरी पर कम प्राथमिकता मान जीतता है। उम्मीदवार अस्वीकार होने पर अगला योग्य नियम चुना जा सकता है।</value></data>
+  <data name="Debug" xml:space="preserve"><value>डिबग</value></data>
+  <data name="Appearance" xml:space="preserve"><value>रूप-रंग</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>एकीकरण और सामान्य ड्यूटी</value></data>
+  <data name="Updates" xml:space="preserve"><value>अपडेट</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>ऑब्जेक्ट नियम और प्रीसेट</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>संवाद नियम और ड्यूटी मेटाडेटा</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>डिबग मोड</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>डिबग मोड सक्षम करें</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>डिबग टूल और नियम बनाना।</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>मृत्यु और वापसी</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>प्रवेश से फिर शुरू करें</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>मृत्यु + वापसी के बाद</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>वापसी के बाद ADS की प्रगति फिर शुरू करें। पुनर्जीवन वर्तमान प्रगति रखता है।</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>वापसी के बाद मौजूदा प्रगति जारी रखें। पुनर्जीवन वर्तमान प्रगति रखता है।</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>डिबग मोड चालू होने पर उपलब्ध।</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>डिबग वापसी: ड्यूटी में स्थिर जीवित स्थिति की प्रतीक्षा।</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>डिबग वापसी: लौटने की जगह से ADS प्रगति फिर शुरू हुई।</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>डिबग वापसी: प्रगति बनी रही; लौटने की जगह से दोबारा योजना।</value></data>
 </root>

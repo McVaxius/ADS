@@ -4512,4 +4512,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Equipaggiamento Poetica (liv. 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Equipaggiamento Poetica (liv. 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Equipaggiamento Poetica (liv. 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>Politiche delle attività</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>Consulta i permessi di controllo delle attività. Le richieste manuali e IPC usano la stessa politica.</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>cerca nome, tipo di contenuto, territorio o CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>Tutte le politiche</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>Solo richiesta esplicita</value></data>
+  <data name="Excluded" xml:space="preserve"><value>Escluso</value></data>
+  <data name="Instance" xml:space="preserve"><value>Istanza</value></data>
+  <data name="Territory" xml:space="preserve"><value>Territorio</value></data>
+  <data name="Game content type" xml:space="preserve"><value>Tipo di contenuto del gioco</value></data>
+  <data name="Automatic" xml:space="preserve"><value>Automatico</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>Manuale / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>Istanza senza nome</value></data>
+  <data name="Allowed" xml:space="preserve"><value>Consentito</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>Questa attività richiede Avvia dentro o Riprendi nell’istanza attuale; il passaggio automatico è bloccato.</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>Si applicano le normali regole di controllo dei doveri.</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>I preset pubblicati sono protetti e aggiornati automaticamente. Usa Nuovo preset per creare una copia personale.</value></data>
+  <data name="Guide" xml:space="preserve"><value>Guida</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>Guida alle regole</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>Guida all’esploratore oggetti</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>Aprire la guida di questo strumento? Il pulsante Guida rimane sempre disponibile.</value></data>
+  <data name="Open guide" xml:space="preserve"><value>Apri guida</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Ignora</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>Riferimento di classi e campi</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>Usare un preset</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>Creare la prima regola</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>Scegliere classe e ambito</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>Perché una regola non prevale</value></data>
+  <data name="Save and share" xml:space="preserve"><value>Salvare e condividere</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>Preset della Torre di Cristallo</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>Scegli un’attività</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: priorità normali ai nemici aggiuntivi. UNSYNC: focus sui boss. Scegli la coda separatamente; x 3 raggruppa tre raid.</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS controlla l’avanzamento; Fren Rider cede il seguito locale durante il passaggio. Prepara combattimento e attività DAD esplicite prima di entrare.</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>Assegna corsie dell’alleanza e meccaniche necessarie. Queste regole aiutano con bersagli e scorciatoie; i completamenti incustoditi restano non verificati.</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>I preset pubblicati arrivano tramite Update JSON o l’aggiornamento normale ogni 24 ore dopo la pubblicazione. Il download conserva la selezione attiva.</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>Filtri e selezione</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>Distanze e corrispondenze delle regole</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>Coordinate e segnalini mappa</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>Esportazioni e azioni esplicite</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>Guida ADS</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>Per lo stesso oggetto, ambiti e selettori corrispondenti più specifici vengono prima; la priorità minore risolve le parità. Dopo un candidato rifiutato può prevalere la regola idonea successiva.</value></data>
+  <data name="Debug" xml:space="preserve"><value>Debug</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Aspetto</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>Integrazioni e doveri normali</value></data>
+  <data name="Updates" xml:space="preserve"><value>Aggiornamenti</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>Regole oggetti e preset</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>Regole dialogo e metadati doveri</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>Modalità debug</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>Attiva modalità debug</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>Strumenti di debug e creazione di regole.</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>Morte e Ritorno</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>Ricomincia dall’ingresso</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>Dopo morte + Ritorno</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>Riavvia l’avanzamento ADS dopo Ritorno. La resurrezione conserva i progressi.</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>Riprendi l’avanzamento esistente dopo Ritorno. La resurrezione conserva i progressi.</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>Disponibile con la modalità debug attiva.</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Ritorno debug: in attesa di uno stato vivo stabile nel dovere.</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Ritorno debug: avanzamento ADS riavviato dalla posizione di ritorno.</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Ritorno debug: progressi conservati; nuovo piano dalla posizione di ritorno.</value></data>
 </root>

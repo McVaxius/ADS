@@ -58,6 +58,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowDebugSections { get; set; }
     public RelicPurchaseTestState RelicPurchaseTest { get; set; } = new();
     public bool DebugModeEnabled { get; set; } = false;
+    private DebugReturnPolicy debugReturnPolicy = DebugReturnPolicy.RestartFromEntrance;
+    public DebugReturnPolicy DebugReturnPolicy
+    {
+        get => debugReturnPolicy;
+        set => debugReturnPolicy = Enum.IsDefined(value) ? value : DebugReturnPolicy.RestartFromEntrance;
+    }
     public bool FrameworkHitchProfilerEnabled { get; set; } = false;
     public bool ConsiderTreasureCoffers { get; set; } = true;
     public bool EnableBmraiVbmInRegularDuties { get; set; } = true;
@@ -111,6 +117,10 @@ public sealed class Configuration : IPluginConfiguration
     public bool DesynthContextMenuEnabled { get; set; } = true;
     public bool GearSaleConfirmationEnabled { get; set; } = true;
     public bool WizardHubSeen { get; set; }
+    public bool RulesGuideOfferConsumed { get; set; }
+    public bool RulesGuideVisited { get; set; }
+    public bool ObjectExplorerGuideOfferConsumed { get; set; }
+    public bool ObjectExplorerGuideVisited { get; set; }
     public bool DutyOperationsWizardCompleted { get; set; }
     public bool RulesDataWizardCompleted { get; set; }
     public bool UtilitiesWizardCompleted { get; set; }

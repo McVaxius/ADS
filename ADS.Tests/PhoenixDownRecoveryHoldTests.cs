@@ -10,6 +10,156 @@ namespace ADS.Tests;
 
 public sealed class PhoenixDownRecoveryHoldTests
 {
+    [Theory]
+    [InlineData(DebugReturnPolicy.RestartFromEntrance)]
+    [InlineData(DebugReturnPolicy.Resume)]
+    public void ConfirmedReturnAppliesOnceAfterStableLifeWithoutReacquiringOrChangingSettings(DebugReturnPolicy policy)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true,
+            initialRules: new ObjectPriorityRuleManifest { Rules = [new ObjectPriorityRule { ObjectName = "fixture global", Classification = "Ignored" }] });
+        var context = TestDutyContextFactory.Create();
+        fixture.Configuration.DebugReturnPolicy = policy;
+        fixture.Configuration.ActiveObjectRulePreset = "Personal";
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        var rules = (ObjectPriorityRuleService)typeof(ExecutionService)
+            .GetField("objectPriorityRuleService", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture.Execution)!;
+        Assert.True(rules.SaveManifest("Personal", rules.CreateEditableCopy()), rules.LastLoadStatus);
+        var visited = (HashSet<string>)typeof(DungeonFrontierService)
+            .GetField("visitedFrontierKeys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture.Frontier)!;
+        visited.Add("before-death-waypoint");
+        var observed = fixture.AddMonster(51, "Observed hostile", new Vector3(8, 0, 0)).Observed;
+        var known = (Dictionary<string, ObservedMonster>)typeof(ObservationMemoryService)
+            .GetField("knownMonsters", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture.Memory)!;
+        known[observed.Key] = observed;
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, prompt: true));
+        Assert.False(fixture.Execution.RefreshDebugReturn(context, true));
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, reviving: true));
+        Assert.False(fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(betweenAreas: true), true));
+        SetDebugReturnFrame(fixture.Execution, DebugFrame());
+        Assert.True(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.Single(visited);
+        Assert.False(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.False(fixture.Execution.DebugReturnPending);
+        Assert.Equal(OwnershipMode.OwnedStartInside, fixture.Execution.CurrentMode);
+        Assert.Equal("Personal", fixture.Configuration.ActiveObjectRulePreset);
+        Assert.Equal("Personal", rules.ActivePresetName);
+        Assert.False(fixture.Configuration.ConsiderTreasureCoffers);
+        if (policy == DebugReturnPolicy.RestartFromEntrance)
+        {
+            Assert.Empty(visited);
+            Assert.Empty(known);
+        }
+        else
+        {
+            Assert.Single(visited);
+            Assert.NotEmpty(known);
+        }
+        visited.Add("after-return-waypoint");
+        for (var frame = 0; frame < 3; frame++)
+            Assert.False(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.Contains("after-return-waypoint", visited);
+    }
+
+    [Theory]
+    [InlineData("raise")]
+    [InlineData("phoenix")]
+    [InlineData("callback-only")]
+    [InlineData("no-prompt")]
+    [InlineData("no-native-revival")]
+    [InlineData("other-dialog")]
+    public void RevivalsCallbacksAndRelocationWithoutReturnProofPreserveProgress(string kind)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        var visited = (HashSet<string>)typeof(DungeonFrontierService)
+            .GetField("visitedFrontierKeys", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture.Frontier)!;
+        visited.Add("keep");
+        var startWithPrompt = kind is "callback-only" or "no-native-revival" or "other-dialog";
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, prompt: startWithPrompt));
+        fixture.Execution.RefreshDebugReturn(context, true);
+        if (kind == "other-dialog")
+        {
+            SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true) with { PromptVisible = true });
+            fixture.Execution.RefreshDebugReturn(context, true);
+        }
+        if (kind != "callback-only")
+        {
+            SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, reviving: kind != "no-native-revival"));
+            fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(betweenAreas: kind is not "raise" and not "phoenix"), true);
+        }
+        SetDebugReturnFrame(fixture.Execution, DebugFrame());
+        for (var frame = 0; frame < 4; frame++) fixture.Execution.RefreshDebugReturn(context, true);
+        Assert.Single(visited);
+        Assert.False(fixture.Execution.DebugReturnPending);
+    }
+
+    [Theory]
+    [InlineData("stop")]
+    [InlineData("leave")]
+    [InlineData("debug-off")]
+    [InlineData("logout")]
+    [InlineData("character")]
+    [InlineData("territory")]
+    [InlineData("cfc")]
+    [InlineData("completed")]
+    public void ExplicitCancellationIdentityChangeAndCompletionCannotReviveDebugReturn(string cancellation)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, prompt: true));
+        fixture.Execution.RefreshDebugReturn(context, true);
+        Assert.True(fixture.Execution.DebugReturnPending);
+        switch (cancellation)
+        {
+            case "stop": fixture.Execution.Stop(context); break;
+            case "leave": fixture.Execution.LeaveDuty(context, false); break;
+            case "debug-off": fixture.Execution.RefreshDebugReturn(context, false); break;
+            case "logout": fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(loggedIn: false), true); break;
+            case "character":
+                SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, prompt: true) with { CharacterId = 2 });
+                fixture.Execution.RefreshDebugReturn(context, true);
+                break;
+            case "territory": fixture.Execution.ObserveDebugReturnTerritory(778); break;
+            case "cfc": fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(cfcId: 889), true); break;
+            case "completed":
+                fixture.Execution.MarkDutyCompleted(context, context.TerritoryTypeId, context.ContentFinderConditionId);
+                fixture.Execution.RefreshDebugReturn(context, true);
+                break;
+        }
+        Assert.False(fixture.Execution.DebugReturnPending);
+        SetDebugReturnFrame(fixture.Execution, DebugFrame());
+        for (var frame = 0; frame < 3; frame++) Assert.False(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.False(fixture.Execution.DebugReturnPending);
+        if (cancellation == "stop") Assert.Equal(OwnershipMode.Observing, fixture.Execution.CurrentMode);
+        if (cancellation == "leave") Assert.Equal(OwnershipMode.Leaving, fixture.Execution.CurrentMode);
+        if (cancellation == "completed")
+            Assert.NotNull(typeof(ExecutionService).GetField("completedDuty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture.Execution));
+    }
+
+    [Fact]
+    public void UnknownTransitionFramesDoNotFabricateReturnOrLoseKnownEpisode()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, prompt: true));
+        fixture.Execution.RefreshDebugReturn(context, true);
+        SetDebugReturnFrame(fixture.Execution, DebugFrame(dead: true, reviving: true));
+        fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(betweenAreas: true), true);
+        SetDebugReturnFrame(fixture.Execution, default);
+        fixture.Execution.RefreshDebugReturn(TestDutyContextFactory.Create(betweenAreas: true, territoryId: 0, cfcId: 0), true);
+        Assert.True(fixture.Execution.DebugReturnPending);
+        SetDebugReturnFrame(fixture.Execution, DebugFrame());
+        Assert.True(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.False(fixture.Execution.RefreshDebugReturn(context, true));
+        Assert.False(fixture.Execution.DebugReturnPending);
+    }
+
+    private static DebugReturnFrame DebugFrame(bool dead = false, bool prompt = false, bool reviving = false)
+        => new(1, true, dead, true, reviving, !dead && !reviving, true, prompt, prompt);
+
+    private static void SetDebugReturnFrame(ExecutionService service, DebugReturnFrame frame)
+        => service.ReadDebugReturnFrame = () => frame;
+
     [Fact]
     public void AccountsOneThroughFourRecoverWithoutSelectingAnotherPullOrCyclingOwnership()
     {
@@ -66,10 +216,12 @@ public sealed class PhoenixDownRecoveryHoldTests
         actors[2] = actors[2] with { PhoenixCast = false, CastTarget = 0 };
         ready.Update(3000);
         actors[1] = actors[1] with { Dead = false, PendingRaise = false };
-        // The living healer now blocks item use for the remaining corpse.
+        // The now-living party healer is within 20y of the survivor: yield recovery.
         ready.Update(4000);
         Assert.Single(readyRuntime.Attempts);
-        Assert.True(ready.PartyRecoveryActive);
+        Assert.False(ready.PartyRecoveryActive);
+        Assert.False(ready.HoldMovement);
+        Assert.False(readyRuntime.ActionsHeld);
         actors[3] = actors[3] with { Dead = false };
         ready.Update(5000);
         Assert.False(ready.HoldMovement);

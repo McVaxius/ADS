@@ -82,6 +82,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private readonly Dictionary<string, ObjectRulePresetFileState> loadedContextFileStates = new(StringComparer.OrdinalIgnoreCase);
     private DateTime nextPresetFilePollUtc;
     private string selectedPresetName = ObjectPriorityRuleService.DefaultPresetName;
+    private bool selectedPresetIsManaged;
+    private bool guideOfferRequested;
+    private bool guideOfferVisible;
     private string pendingPresetName = string.Empty;
     private string pendingPresetSwitchName = string.Empty;
     private string diskTransferPath = string.Empty;
@@ -133,6 +136,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
     }
 
+    public override void OnOpen()
+        => guideOfferRequested = WizardCatalog.ShouldOfferToolGuide(plugin.Configuration, ToolGuide.Rules);
+
+    public override void OnClose()
+        => CloseToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.Rules, ref guideOfferRequested, ref guideOfferVisible);
+
     public void OpenForDuty(DutyCatalogEntry duty)
     {
         EnsureDraftLoaded();
@@ -153,6 +162,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        DrawToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.Rules, ref guideOfferRequested, ref guideOfferVisible, plugin.OpenRuleGuideUi);
         EnsureDraftLoaded();
         TryFinalizePendingRuleEdit();
         draftStructureChangedThisDraw = false;
@@ -189,12 +199,17 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawToolbar(IReadOnlyList<int> visibleRuleIndices)
     {
+        if (WindowLayout.SmallButton(Ui.L("Guide###ADSRulesToolbarGuide")))
+            plugin.OpenRuleGuideUi();
+        ImGui.SameLine();
+        if (ImGui.GetContentRegionAvail().X < MaterialText.Measure(Ui.T("Preset management")).X + 220f + ImGui.GetStyle().ItemSpacing.X)
+            ImGui.NewLine();
         DrawPresetSelector();
         if (draftStructureChangedThisDraw)
             return;
 
         SameLineIfFits("+ Row");
-        var addRowBlocked = selectedContextFileNames.Count > 1;
+        var addRowBlocked = selectedPresetIsManaged || selectedContextFileNames.Count > 1;
         using (new ImGuiDisabledBlock(addRowBlocked))
         {
             if (ActionButton(
@@ -213,7 +228,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             return;
 
         SameLineIfFits("Save");
-        var saveBlocked = !dirty && string.IsNullOrWhiteSpace(presetFileConflictStatus);
+        var saveBlocked = selectedPresetIsManaged || !dirty && string.IsNullOrWhiteSpace(presetFileConflictStatus);
         using (new ImGuiDisabledBlock(saveBlocked))
         {
             if (ActionButton("Save", saveBlocked ? "Nothing has changed in the editor draft." : "Save every changed context as a complete shard."))
@@ -537,7 +552,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private void DrawContextActions()
     {
         var selected = GetSelectedContextDescriptors();
-        var customPreset = !plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName);
+        var customPreset = !selectedPresetIsManaged && !plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName);
         var revertEligible = selected.Where(descriptor => descriptor.HasCustomOverride).ToList();
         var revertSkipped = selected.Count - revertEligible.Count;
         var revertUnmet = new List<string>();
@@ -888,6 +903,11 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void RequestSaveDraft()
     {
+        if (plugin.ObjectPriorityRuleService.IsManagedPreset(selectedPresetName))
+        {
+            editorStatus = Ui.T("Published presets are protected and updated automatically. Use New Preset to create a personal copy.");
+            return;
+        }
         if (!plugin.ObjectPriorityRuleService.TryGetChangedContextFiles(loadedDraft, draft, out var changedFiles, out var changedStatus))
         {
             editorStatus = changedStatus;
@@ -1508,7 +1528,8 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         if (SmallActionButton("New Preset", "Create and activate a new custom preset from the current draft."))
         {
-            pendingPresetName = plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
+            pendingPresetName = selectedPresetIsManaged ? "Personal - " + selectedPresetName["DEFAULT - ".Length..]
+                : plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)
                 ? "Preset"
                 : plugin.ObjectPriorityRuleService.SanitizePresetName(selectedPresetName);
             ImGui.OpenPopup("ADSCreatePreset");
@@ -1516,7 +1537,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         SameLineIfFits("Delete Preset");
         using (new ImGuiDisabledBlock(
-                   plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
+                   selectedPresetIsManaged || plugin.ObjectPriorityRuleService.IsDefaultPreset(selectedPresetName)))
         {
             if (SmallActionButton(
                     "Delete Preset",
@@ -1577,6 +1598,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void ApplyLoadedDraft(ObjectPriorityRuleManifest loadedDraft, string status)
     {
+        selectedPresetIsManaged = plugin.ObjectPriorityRuleService.IsManagedPreset(selectedPresetName);
         pendingRuleEditRefresh = false;
         draft = loadedDraft;
         this.loadedDraft = CloneManifest(loadedDraft);
@@ -1602,7 +1624,9 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             alignedRuntimeRules = null;
         InvalidateVisibleRuleCache();
         draftStructureChangedThisDraw = true;
-        editorStatus = status;
+        editorStatus = selectedPresetIsManaged
+            ? Ui.T("Published presets are protected and updated automatically. Use New Preset to create a personal copy.") + " " + status
+            : status;
         RefreshContextDescriptors();
         SyncDiskTransferPath();
         RememberSelectedPresetFileBaseline();
@@ -1615,6 +1639,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             return;
 
         nextPresetFilePollUtc = now + PresetFilePollInterval;
+        selectedPresetIsManaged = plugin.ObjectPriorityRuleService.IsManagedPreset(selectedPresetName);
         if (!TryCaptureSelectedPresetFileState(out var currentState, out var stateStatus))
         {
             presetFileConflictStatus = $"Disk conflict: {stateStatus} The current in-memory draft was kept.";
@@ -1820,6 +1845,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             {
                 for (var displayIndex = clipper.DisplayStart; displayIndex < clipper.DisplayEnd; displayIndex++)
                 {
+                    using var publishedReadOnly = new ImGuiDisabledBlock(selectedPresetIsManaged);
                     var ruleIndex = visibleRuleIndices[displayIndex];
                     var rule = draft.Rules[ruleIndex];
                     var isActiveRule = ReferenceEquals(rule, activeDraftRule);
@@ -3026,7 +3052,10 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             WindowLayout.NativeCheckbox(Ui.L("Confirm intentional empty overrides"), ref confirmImportedEmptyOverrides);
         }
         var blocked = dirty || !string.IsNullOrWhiteSpace(presetFileConflictStatus)
-                      || presetImportDestinationState is null || (hasEmptyOverrides && !confirmImportedEmptyOverrides);
+                      || presetImportDestinationState is null || (hasEmptyOverrides && !confirmImportedEmptyOverrides)
+                      || plugin.ObjectPriorityRuleService.IsManagedPreset(transfer.PresetName);
+        if (plugin.ObjectPriorityRuleService.IsManagedPreset(transfer.PresetName))
+            MaterialText.TextWrapped(Ui.T("Published presets are protected and updated automatically. Use New Preset to create a personal copy."));
         using (new ImGuiDisabledBlock(blocked))
         {
             if (ActionButton("Import and Save", "Requires a clean draft, no disk conflict, and confirmation of any empty overrides. Only included contexts are written."))

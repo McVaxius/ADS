@@ -140,6 +140,9 @@ public sealed class ObjectPriorityRuleService
     public bool IsDefaultPreset(string presetName)
         => string.Equals(presetName, DefaultPresetName, StringComparison.OrdinalIgnoreCase);
 
+    public bool IsManagedPreset(string presetName)
+        => shardStore.IsManagedPreset(presetName);
+
     public IReadOnlyList<string> GetPresetNames()
         => shardStore.GetPresetNames();
 

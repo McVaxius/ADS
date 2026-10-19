@@ -122,11 +122,13 @@ public static class GameInteractionHelper
     }
 
     internal static bool TryAcceptReturnToEntrance(IPluginLog? log)
+        => IsReturnToEntrancePromptVisible() && ClickYesIfVisible(log);
+
+    internal static bool IsReturnToEntrancePromptVisible()
         => TryGetSelectYesNoPromptText(Plugin.GameGui, out var prompt, preserveVisibleSpacing: true)
            && IsReturnToEntrancePrompt(prompt, Plugin.ClientState.ClientLanguage,
                row => Plugin.DataManager.GetExcelSheet<Addon>(Plugin.ClientState.ClientLanguage).GetRow(row).Text.ToMacroString(),
-               Plugin.SeStringEvaluator)
-           && ClickYesIfVisible(log);
+               Plugin.SeStringEvaluator);
 
     internal static bool IsReturnToEntrancePrompt(string prompt, ClientLanguage language,
         Func<uint, string?> getMacro, ISeStringEvaluator evaluator)

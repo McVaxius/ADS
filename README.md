@@ -8,13 +8,13 @@ Inactivity-kick protection is automatic while ADS is enabled and you are logged 
 
 ## Appearance and language
 
-The first load of this update applies Compact mode once and hides Main's Compact and Transparency controls. Settings > Window appearance keeps density, transparency and each main-control visibility choice available; later loads preserve changes made there.
+The first load of this update applies Compact mode once and hides Main's Compact and Transparency controls. Settings > Appearance keeps density, transparency and each main-control visibility choice available; later loads preserve changes made there.
 
 Hindi uses installed shaping fonts. The source now leaves other languages usable when the Hindi menu caption is unavailable, showing a disabled ASCII `Hindi (unavailable)` option. Required text for a selected Hindi UI still requires full validation; on failure, the readable status offers **Use English**, saving English only after an explicit press. Native verification and Linux/Wine acceptance remain pending for this change.
 
 Use Settings for shared colour, language, compact spacing and window transparency/fade; titlebar appearance actions change the same saved preferences. Main branding and Main/Quick Controls titles use the packaged ADS icon, keeping its colours and proportions when the title is collapsed. Duty automation remains in Guided Setup and the existing Start, Resume and Stop actions; appearance choices do not change duty ownership or rules.
 
-Titlebars use the packaged icon and a single live status line. **Show titlebar status** and **Detailed titlebar status** in Window appearance default on; turn details off to keep concise state and progress, or hide the status entirely. Hover the title for full details. Object Explorer shows its object count and selected name.
+Titlebars use the packaged icon and a single live status line. **Show titlebar status** and **Detailed titlebar status** in Appearance default on; turn details off to keep concise state and progress, or hide the status entirely. Hover the title for full details. Object Explorer shows its object count and selected name.
 
 Titled windows expose language, compact spacing, transparency and colour actions in their titlebars, including while collapsed. Settings retains the full editors and saved main-control visibility choices. Full and compact layouts retain the same actions and saved choices. Sixteen language choices retain Brazilian Portuguese and Traditional Chinese and include Vietnamese, Indonesian, Polish, Turkish and Hindi. Embedded catalogues cover authored controls, ownership, execution, planner statuses and displayed service diagnostics. Commands, schema identifiers, editable data, external game/plugin names and exception details keep their original values. Managed font preparation includes the selected catalogue, English and non-Hindi native language names; Hindi menu coverage is checked separately. Hindi uses the shared shaped-text renderer across retained controls, editors, tabs and expanded/collapsed window titles; game, GPU, managed-font and IME acceptance remains separate from the offline checks.
 
@@ -148,7 +148,7 @@ Share the ZIP manually and remove old exports when no longer needed. A log at
 or above 100 MiB may have stopped recording recent activity; ADS warns before
 exporting it, so it may be unsuitable for diagnosing the current issue.
 
-For slow frames, enable **Settings > Advanced > Enable framework hitch profiler**
+For slow frames, enable **Settings > Debug > Enable framework hitch profiler**
 briefly. This existing opt-in setting measures ADS framework work and UI drawing
 separately, reporting samples from 10 ms with at most one log entry per five
 seconds for each category. Framework entries identify the slowest section; both
@@ -166,3 +166,35 @@ when you want to change its loaded state. These actions do not change that prefe
 - [Ko-fi](https://ko-fi.com/mcvaxius)
 
 When XA Slave is loaded, **Open XA Slave log tools** opens its **Utility > XA Mods** panel, which contains Dalamud Log Cleaner. The existing **Copy / ZIP Dalamud log** action remains separate. Opening the panel does not run cleanup or change XA Slave settings.
+
+### Published object-rule presets
+
+The existing remote updater reads `ads/territories/index.json`. Its optional
+`Presets` declarations list each published preset name and its canonical territory
+shards; publishing an undeclared folder does not download it. Automatic refresh
+uses the existing 24-hour interval, with the existing manual Update JSON action
+for an earlier refresh. Updates reload rules and retain the active preset.
+
+Published names use `DEFAULT - `, but the name alone does not grant updater
+ownership. ADS writes an installation declaration into each newly installed
+preset's `index.json`. An existing unrelated folder with a conflicting name is
+preserved and reported in update status; rename the personal preset before a
+later update to install the published version.
+
+Updater-installed presets are protected, including with debug enabled. Select
+**New Preset** to create a personal copy for edits, sharing or imports. That copy
+keeps its own overrides and remains separate from published updates. Missing
+contexts inherit the current base DEFAULT shards as in existing custom presets.
+
+Duty Manager's **Activity policies** view lists special activities and exclusions
+from installed game data, including names, every CFC/territory variant, actual
+content type and automatic/manual/IPC permissions. Battlehall is always excluded.
+Other Gold Saucer instances, PvP, seasonal instances and Hall of the Novice require
+**Start Inside** or **Resume** in the current instance; an older run cannot carry
+ownership into them automatically.
+Rules and Object Explorer keep a small **Guide** button visible in regular and
+compact toolbars. Each tool offers its guide once; dismissal/close/Escape is
+remembered independently of actual guide visits and wizard completion. Rules help
+has task choices plus the existing class/field reference; Object Explorer has its
+own guide. See the [Operator Guide](GUIDE.md#rules-and-object-explorer-guides) and
+[Crystal Tower setup](GUIDE.md#crystal-tower-presets).

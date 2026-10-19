@@ -1,9 +1,188 @@
 using ADS.Models;
+using ADS.Windows;
+using ADS.Localization;
+using System.Numerics;
+using System.Reflection;
+using Dalamud.Bindings.ImGui;
+using AethertekUI;
 
 namespace ADS.Tests;
 
+[CollectionDefinition("ADS guide native UI", DisableParallelization = true)]
+public sealed class GuideNativeUiCollection;
+
+[Collection("ADS guide native UI")]
 public sealed class WizardCatalogTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public unsafe void NativeGuidesAndDebugSettingsRenderAtBothDensitiesAndGuideOffersDismissWithEscape(bool compact)
+    {
+        var previous = ImGui.GetCurrentContext();
+        var language = Ui.Language;
+        var context = ImGui.CreateContext();
+        try
+        {
+            Ui.SetLanguage(UiLanguage.English);
+            var io = ImGui.GetIO();
+            io.IniFilename = null;
+            io.LogFilename = null;
+            io.DisplaySize = new(1280, 900);
+            io.DeltaTime = 1f / 60;
+            io.Fonts.AddFontDefault();
+            byte* pixels = null;
+            int width = 0, height = 0;
+            io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
+            io.Fonts.SetTexID(0, new ImTextureID((nint)1));
+            var theme = AdsPresentation.Theme(AdsPresentation.ReferenceAccent);
+            theme.Density = compact ? MaterialDensity.Compact : MaterialDensity.Standard;
+            using var themeScope = MaterialTheme.Push(theme, 1, MaterialStyleMode.ColorsOnly);
+            var drawOffer = typeof(PositionedWindow).GetMethod("DrawToolGuideOffer", BindingFlags.Static | BindingFlags.NonPublic)!;
+            foreach (var tool in new[] { ToolGuide.Rules, ToolGuide.ObjectExplorer })
+            {
+                var configuration = new Configuration();
+                var saves = 0;
+                var guideOpens = 0;
+                object[] args = [configuration, (Action)(() => ++saves), tool, true, false, (Action)(() => ++guideOpens)];
+                for (var frame = 0; frame < 5; frame++)
+                {
+                    if (frame == 2) io.AddKeyEvent(ImGuiKey.Escape, true);
+                    if (frame == 3) io.AddKeyEvent(ImGuiKey.Escape, false);
+                    ImGui.NewFrame();
+                    ImGui.SetNextWindowSize(compact ? new(760, 560) : new(1100, 800));
+                    ImGui.Begin("ADS actual guide offer test", ImGuiWindowFlags.NoSavedSettings);
+                    try { drawOffer.Invoke(null, args); }
+                    finally { ImGui.End(); }
+                    ImGui.Render();
+                }
+                Assert.False(WizardCatalog.ShouldOfferToolGuide(configuration, tool));
+                Assert.Equal(1, saves);
+                Assert.Equal(0, guideOpens);
+                Assert.False(configuration.RulesGuideVisited);
+                Assert.False(configuration.ObjectExplorerGuideVisited);
+                Assert.False(configuration.RulesDataWizardCompleted);
+            }
+
+            using var guide = new RuleGuideWindow(compact);
+            var task = typeof(RuleGuideWindow).GetField("rulesTask", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            foreach (var tool in new[] { ToolGuide.Rules, ToolGuide.ObjectExplorer })
+            {
+                guide.OpenForTool(tool);
+                for (var selectedTask = 0; selectedTask < (tool == ToolGuide.Rules ? 6 : 1); selectedTask++)
+                {
+                    task.SetValue(guide, selectedTask);
+                    for (var frame = 0; frame < 2; frame++)
+                    {
+                        ImGui.NewFrame();
+                        ImGui.SetNextWindowSize(compact ? new(760, 560) : new(1100, 800));
+                        ImGui.Begin(guide.WindowName, ImGuiWindowFlags.NoSavedSettings);
+                        try { guide.Draw(); }
+                        finally { ImGui.End(); }
+                        ImGui.Render();
+                        Assert.True(ImGui.GetDrawData().CmdListsCount > 0);
+                    }
+                }
+            }
+            foreach (var enabled in new[] { false, true })
+            {
+                var configuration = new Configuration
+                {
+                    DebugModeEnabled = enabled,
+                    DebugReturnPolicy = DebugReturnPolicy.Resume,
+                    ShowDebugSections = true,
+                    FrameworkHitchProfilerEnabled = true,
+                };
+                for (var frame = 0; frame < 3; frame++)
+                {
+                    ImGui.NewFrame();
+                    ImGui.SetNextWindowSize(compact ? new(640, 740) : new(760, 860));
+                    ImGui.Begin("ADS actual Debug settings test", ImGuiWindowFlags.NoSavedSettings);
+                    var changed = false;
+                    try { ConfigWindow.DrawDebugSettings(configuration, enabled, _ => Assert.Fail("Unexpected user toggle"), ref changed); }
+                    finally { ImGui.End(); }
+                    ImGui.Render();
+                    Assert.False(changed);
+                    Assert.Equal(DebugReturnPolicy.Resume, configuration.DebugReturnPolicy);
+                    Assert.Equal(enabled, configuration.DebugModeEnabled);
+                    Assert.True(configuration.ShowDebugSections);
+                    Assert.True(configuration.FrameworkHitchProfilerEnabled);
+                    Assert.True(ImGui.GetDrawData().CmdListsCount > 0);
+                }
+            }
+        }
+        finally
+        {
+            Ui.SetLanguage(language);
+            ImGui.DestroyContext(context);
+            ImGui.SetCurrentContext(previous);
+        }
+    }
+
+    [Fact]
+    public void DebugReturnDefaultsAndNativeStoragePreserveExplicitPolicyAndIndependentDiagnostics()
+    {
+        var configuration = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>("""{"Version":25}""")!;
+        Assert.False(configuration.DebugModeEnabled);
+        Assert.Equal(DebugReturnPolicy.RestartFromEntrance, configuration.DebugReturnPolicy);
+        configuration.DebugReturnPolicy = DebugReturnPolicy.Resume;
+        configuration.FrameworkHitchProfilerEnabled = true;
+        configuration.ShowDebugSections = true;
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(configuration))!;
+        Assert.False(restored.DebugModeEnabled);
+        Assert.Equal(DebugReturnPolicy.Resume, restored.DebugReturnPolicy);
+        Assert.True(restored.FrameworkHitchProfilerEnabled);
+        Assert.True(restored.ShowDebugSections);
+        Assert.Equal(25, restored.Version);
+        restored.DebugReturnPolicy = (DebugReturnPolicy)99;
+        Assert.Equal(DebugReturnPolicy.RestartFromEntrance, restored.DebugReturnPolicy);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ToolGuideOfferDismissalAndActualVisitsRemainIndependent(int toolIndex)
+    {
+        var tool = (ToolGuide)toolIndex;
+        var other = tool == ToolGuide.Rules ? ToolGuide.ObjectExplorer : ToolGuide.Rules;
+        var configuration = new Configuration { WizardHubSeen = true, RulesDataWizardCompleted = true };
+        Assert.True(WizardCatalog.ShouldOfferToolGuide(configuration, tool));
+        Assert.True(WizardCatalog.ShouldOfferToolGuide(configuration, other));
+        Assert.True(WizardCatalog.ConsumeToolGuideOffer(configuration, tool)); // Dismiss, close or Escape.
+        Assert.False(WizardCatalog.ConsumeToolGuideOffer(configuration, tool));
+        Assert.False(WizardCatalog.ShouldOfferToolGuide(configuration, tool));
+        Assert.True(WizardCatalog.ShouldOfferToolGuide(configuration, other));
+        Assert.False(configuration.RulesGuideVisited);
+        Assert.False(configuration.ObjectExplorerGuideVisited);
+        Assert.True(WizardCatalog.MarkToolGuideVisited(configuration, tool));
+        Assert.False(WizardCatalog.MarkToolGuideVisited(configuration, tool));
+        Assert.True(tool == ToolGuide.Rules ? configuration.RulesGuideVisited : configuration.ObjectExplorerGuideVisited);
+        Assert.True(configuration.RulesDataWizardCompleted);
+        Assert.False(configuration.DutyOperationsWizardCompleted);
+        Assert.False(configuration.UtilitiesWizardCompleted);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ManualToolGuideVisitSuppressesTheOfferAndPersistsWithoutCompletingAWizard(int toolIndex)
+    {
+        var tool = (ToolGuide)toolIndex;
+        var configuration = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            """{"Version":25,"WizardHubSeen":true,"UiWindowOpacityPercent":73}""")!;
+        Assert.True(WizardCatalog.ShouldOfferToolGuide(configuration, tool));
+        Assert.True(WizardCatalog.MarkToolGuideVisited(configuration, tool));
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(configuration))!;
+        Assert.False(WizardCatalog.ShouldOfferToolGuide(restored, tool));
+        Assert.True(WizardCatalog.ShouldOfferToolGuide(restored, tool == ToolGuide.Rules ? ToolGuide.ObjectExplorer : ToolGuide.Rules));
+        Assert.False(restored.RulesDataWizardCompleted);
+        Assert.False(restored.DiagnosticsRecoveryWizardCompleted);
+        Assert.Equal(73, restored.UiWindowOpacityPercent);
+        Assert.Equal(25, restored.Version);
+    }
+
     [Fact]
     public void CompactDefaultsMigrateOnceThroughNativeJsonAndPreserveLaterOverrides()
     {

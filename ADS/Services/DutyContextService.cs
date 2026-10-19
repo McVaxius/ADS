@@ -122,6 +122,7 @@ public sealed class DutyContextService
             TerritoryTypeId = territoryTypeId,
             MapId = mapId,
             ContentFinderConditionId = contentFinderConditionId,
+            ContentTypeRowId = dutyCatalogService.ResolveContentType(contentFinderConditionId, territoryTypeId),
             CurrentMapId = isLoggedIn && !betweenAreas && !betweenAreas51 && territoryTypeId != 0 && mapId != 0
                 ? mapId : null,
             Alliance = automationExcludedTerritory ? null : TryResolveAlliance(),

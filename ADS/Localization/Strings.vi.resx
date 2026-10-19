@@ -4154,4 +4154,62 @@
   <data name="SB - Augmented Scaevan (Lv. 70 / IL 400)" xml:space="preserve"><value>SB - Trang bị Poetics (cấp 70 / IL 400)</value></data>
   <data name="ShB - Augmented Cryptlurker (Lv. 80 / IL 530)" xml:space="preserve"><value>ShB - Trang bị Poetics (cấp 80 / IL 530)</value></data>
   <data name="EW - Augmented Credendum (Lv. 90 / IL 660)" xml:space="preserve"><value>EW - Trang bị Poetics (cấp 90 / IL 660)</value></data>
+  <data name="Activity policies" xml:space="preserve"><value>Chính sách hoạt động</value></data>
+  <data name="Inspect activity ownership permissions. Manual and IPC requests use the same policy." xml:space="preserve"><value>Xem quyền điều khiển hoạt động. Yêu cầu thủ công và IPC dùng cùng chính sách.</value></data>
+  <data name="search name, content type, territory, or CFC" xml:space="preserve"><value>tìm tên, loại nội dung, lãnh thổ hoặc CFC</value></data>
+  <data name="All activity policies" xml:space="preserve"><value>Tất cả chính sách</value></data>
+  <data name="Explicit request only" xml:space="preserve"><value>Chỉ yêu cầu rõ ràng</value></data>
+  <data name="Excluded" xml:space="preserve"><value>Bị loại trừ</value></data>
+  <data name="Instance" xml:space="preserve"><value>Phụ bản</value></data>
+  <data name="Territory" xml:space="preserve"><value>Lãnh thổ</value></data>
+  <data name="Game content type" xml:space="preserve"><value>Loại nội dung trò chơi</value></data>
+  <data name="Automatic" xml:space="preserve"><value>Tự động</value></data>
+  <data name="Manual / IPC" xml:space="preserve"><value>Thủ công / IPC</value></data>
+  <data name="Unnamed instance" xml:space="preserve"><value>Phụ bản chưa có tên</value></data>
+  <data name="Allowed" xml:space="preserve"><value>Được phép</value></data>
+  <data name="This activity requires Start Inside or Resume in the current instance; automatic carry-over is blocked." xml:space="preserve"><value>Hoạt động này yêu cầu Bắt đầu bên trong hoặc Tiếp tục trong phụ bản hiện tại; việc tự chuyển quyền bị chặn.</value></data>
+  <data name="Ordinary duty ownership rules apply." xml:space="preserve"><value>Áp dụng quy tắc điều khiển nhiệm vụ thông thường.</value></data>
+  <data name="Published presets are protected and updated automatically. Use New Preset to create a personal copy." xml:space="preserve"><value>Bộ thiết lập đã xuất bản được bảo vệ và tự cập nhật. Dùng Bộ thiết lập mới để tạo bản sao cá nhân.</value></data>
+  <data name="Guide" xml:space="preserve"><value>Hướng dẫn</value></data>
+  <data name="Rules guide" xml:space="preserve"><value>Hướng dẫn quy tắc</value></data>
+  <data name="Object Explorer guide" xml:space="preserve"><value>Hướng dẫn trình khám phá đối tượng</value></data>
+  <data name="Open this tool&apos;s guide? You can always use its Guide button later." xml:space="preserve"><value>Mở hướng dẫn của công cụ này? Bạn luôn có thể dùng nút Hướng dẫn sau.</value></data>
+  <data name="Open guide" xml:space="preserve"><value>Mở hướng dẫn</value></data>
+  <data name="Dismiss" xml:space="preserve"><value>Bỏ qua</value></data>
+  <data name="Class and field reference" xml:space="preserve"><value>Tham chiếu lớp và trường</value></data>
+  <data name="Use a preset" xml:space="preserve"><value>Dùng bộ thiết lập</value></data>
+  <data name="Create a first rule" xml:space="preserve"><value>Tạo quy tắc đầu tiên</value></data>
+  <data name="Choose class and scope" xml:space="preserve"><value>Chọn lớp và phạm vi</value></data>
+  <data name="Why a rule does not win" xml:space="preserve"><value>Vì sao quy tắc không được chọn</value></data>
+  <data name="Save and share" xml:space="preserve"><value>Lưu và chia sẻ</value></data>
+  <data name="Crystal Tower presets" xml:space="preserve"><value>Bộ thiết lập Tháp Pha lê</value></data>
+  <data name="Choose a task" xml:space="preserve"><value>Chọn tác vụ</value></data>
+  <data name="SYNC: normal add priorities. UNSYNC: boss focus. Choose queue mode separately; x 3 groups three raids." xml:space="preserve"><value>SYNC: ưu tiên quái phụ thông thường. UNSYNC: tập trung trùm. Chọn chế độ xếp hàng riêng; x 3 gồm ba raid.</value></data>
+  <data name="ADS owns progression; Fren Rider yields local following during handoff. Prepare combat and explicit DAD tasks before entry." xml:space="preserve"><value>ADS điều khiển tiến trình; Fren Rider nhường theo dõi cục bộ khi bàn giao. Chuẩn bị chiến đấu và tác vụ DAD rõ ràng trước khi vào.</value></data>
+  <data name="Assign alliance lanes and required mechanics. These rules assist targeting/shortcuts; unattended clears remain unverified." xml:space="preserve"><value>Phân công làn liên minh và cơ chế bắt buộc. Quy tắc hỗ trợ chọn mục tiêu và đường tắt; chưa xác minh hoàn thành không giám sát.</value></data>
+  <data name="Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection." xml:space="preserve"><value>Bộ thiết lập đã xuất bản đến qua Update JSON hoặc lần làm mới 24 giờ thông thường sau khi xuất bản. Tải xuống giữ lựa chọn đang hoạt động.</value></data>
+  <data name="Filters and selection" xml:space="preserve"><value>Bộ lọc và lựa chọn</value></data>
+  <data name="Distances and rule matches" xml:space="preserve"><value>Khoảng cách và khớp quy tắc</value></data>
+  <data name="Coordinates and map flags" xml:space="preserve"><value>Tọa độ và cờ bản đồ</value></data>
+  <data name="Exports and explicit actions" xml:space="preserve"><value>Xuất dữ liệu và hành động rõ ràng</value></data>
+  <data name="ADS Guide" xml:space="preserve"><value>Hướng dẫn ADS</value></data>
+  <data name="For the same object, more specific matching scopes and selectors rank first; lower priority breaks ties. A rejected candidate lets the next eligible rule win." xml:space="preserve"><value>Với cùng đối tượng, phạm vi và bộ chọn khớp cụ thể hơn được xếp trước; ưu tiên nhỏ hơn phân xử khi bằng nhau. Khi ứng viên bị loại, quy tắc hợp lệ tiếp theo có thể được chọn.</value></data>
+  <data name="Debug" xml:space="preserve"><value>Gỡ lỗi</value></data>
+  <data name="Appearance" xml:space="preserve"><value>Giao diện</value></data>
+  <data name="Integrations &amp; regular duties" xml:space="preserve"><value>Tích hợp và nhiệm vụ thường</value></data>
+  <data name="Updates" xml:space="preserve"><value>Cập nhật</value></data>
+  <data name="Object rules &amp; presets" xml:space="preserve"><value>Quy tắc đối tượng và bộ thiết lập</value></data>
+  <data name="Dialog rules &amp; duty metadata" xml:space="preserve"><value>Quy tắc hội thoại và dữ liệu nhiệm vụ</value></data>
+  <data name="Debug mode" xml:space="preserve"><value>Chế độ gỡ lỗi</value></data>
+  <data name="Enable debug mode" xml:space="preserve"><value>Bật chế độ gỡ lỗi</value></data>
+  <data name="Debug tools and rule authoring." xml:space="preserve"><value>Công cụ gỡ lỗi và soạn quy tắc.</value></data>
+  <data name="Death &amp; Return" xml:space="preserve"><value>Tử trận và Trở về</value></data>
+  <data name="Restart from entrance" xml:space="preserve"><value>Bắt đầu lại từ cửa vào</value></data>
+  <data name="After death + Return" xml:space="preserve"><value>Sau tử trận + Trở về</value></data>
+  <data name="Restart ADS progression after Return. Raise keeps current progress." xml:space="preserve"><value>Bắt đầu lại tiến trình ADS sau Trở về. Hồi sinh giữ tiến trình hiện tại.</value></data>
+  <data name="Resume existing progression after Return. Raise keeps current progress." xml:space="preserve"><value>Tiếp tục tiến trình cũ sau Trở về. Hồi sinh giữ tiến trình hiện tại.</value></data>
+  <data name="Available while debug mode is on." xml:space="preserve"><value>Khả dụng khi bật chế độ gỡ lỗi.</value></data>
+  <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Trở về gỡ lỗi: đợi trạng thái sống ổn định trong nhiệm vụ.</value></data>
+  <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Trở về gỡ lỗi: đã bắt đầu lại tiến trình ADS từ vị trí trở về.</value></data>
+  <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Trở về gỡ lỗi: giữ tiến trình; lập kế hoạch lại từ vị trí trở về.</value></data>
 </root>

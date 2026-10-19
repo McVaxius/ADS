@@ -1,5 +1,7 @@
 namespace ADS.Models;
 
+public enum DebugReturnPolicy { RestartFromEntrance, Resume }
+
 public sealed class DutyContextSnapshot
 {
     public required bool PluginEnabled { get; init; }
@@ -23,6 +25,7 @@ public sealed class DutyContextSnapshot
     public required uint TerritoryTypeId { get; init; }
     public required uint MapId { get; init; }
     public required uint ContentFinderConditionId { get; init; }
+    public uint ContentTypeRowId { get; init; }
     public uint? CurrentMapId { get; init; }
     public string? Alliance { get; init; }
     public required DutyCatalogEntry? CurrentDuty { get; init; }

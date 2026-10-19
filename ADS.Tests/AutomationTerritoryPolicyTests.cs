@@ -1,9 +1,78 @@
 using ADS.Services;
+using ADS.Models;
+using System.Numerics;
 
 namespace ADS.Tests;
 
 public sealed class AutomationTerritoryPolicyTests
 {
+    [Theory]
+    [InlineData(579u)]
+    [InlineData(940u)]
+    [InlineData(941u)]
+    public void BattlehallRejectsInsideResumeAndOutsideBeforePreparation(uint territory)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(territoryId: territory, contentTypeId: 19);
+        Assert.False(fixture.Execution.StartDutyFromInside(context));
+        Assert.False(fixture.Execution.ResumeDutyFromInside(context));
+        Assert.NotNull(ExecutionService.GetStartBlocker(context, fromOutside: true));
+        Assert.Empty(fixture.Events);
+        Assert.True(fixture.Execution.ReleaseDisallowedActivityOwnership(context));
+        Assert.False(fixture.Execution.IsOwned);
+    }
+
+    [Theory]
+    [InlineData(6u)]
+    [InlineData(19u)]
+    [InlineData(20u)]
+    [InlineData(22u)]
+    public void AutomaticCarryOverIsReleasedBeforeCutsceneOrPhoenixHold(uint contentType)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(contentTypeId: contentType, cutscene: true);
+        fixture.Execution.StartDutyFromOutside();
+        var queried = false;
+        fixture.Execution.QueryPhoenixDownRecoveryHold = () => { queried = true; return true; };
+        Assert.False(fixture.Execution.RefreshCutsceneHold(context, true));
+        Assert.False(fixture.Execution.RefreshPhoenixDownRecoveryHold(context, true));
+        Assert.False(queried);
+        Assert.Equal(OwnershipMode.Idle, fixture.Execution.CurrentMode);
+        Assert.Contains("automatic carry-over", fixture.Execution.LastStatus);
+    }
+
+    [Theory]
+    [InlineData(6u, false)]
+    [InlineData(19u, true)]
+    [InlineData(20u, false)]
+    [InlineData(22u, true)]
+    public void DeliberateStartOrResumePermitsOnlyTheRequestedInstance(uint contentType, bool resume)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(contentTypeId: contentType);
+        Assert.True(resume ? fixture.Execution.ResumeDutyFromInside(context) : fixture.Execution.StartDutyFromInside(context));
+        Assert.False(fixture.Execution.ReleaseDisallowedActivityOwnership(context));
+        Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(contentTypeId: contentType, cutscene: true), true));
+        fixture.Execution.QueryPhoenixDownRecoveryHold = () => true;
+        Assert.True(fixture.Execution.RefreshPhoenixDownRecoveryHold(context, true));
+        Assert.True(fixture.Execution.ReleaseDisallowedActivityOwnership(
+            TestDutyContextFactory.Create(contentTypeId: contentType, cfcId: 889)));
+        Assert.False(fixture.Execution.IsOwned);
+        Assert.False(fixture.Execution.ReleaseDisallowedActivityOwnership(context));
+        Assert.Equal(OwnershipMode.Idle, fixture.Execution.CurrentMode); // No silent re-arm on return.
+    }
+
+    [Fact]
+    public void OrdinaryDutyWithoutCatalogMetadataRetainsOutsideAndInsideCompatibility()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(category: null, contentTypeId: 0);
+        fixture.Execution.StartDutyFromOutside();
+        Assert.False(fixture.Execution.ReleaseDisallowedActivityOwnership(context));
+        Assert.True(fixture.Execution.StartDutyFromInside(context));
+        Assert.True(fixture.Execution.ResumeDutyFromInside(context));
+    }
+
     [Theory]
     [InlineData(512u)]
     [InlineData(514u)]

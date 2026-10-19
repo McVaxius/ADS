@@ -1,6 +1,7 @@
 using System.Numerics;
 using AethertekUI;
 using ADS.Localization;
+using ADS.Models;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
@@ -76,6 +77,46 @@ public abstract class PositionedWindow : Window
         pendingPositionConditionReset = false;
         Position = null;
         PositionCondition = ImGuiCond.None;
+    }
+
+    private protected static void CloseToolGuideOffer(Configuration configuration, Action save, ToolGuide tool, ref bool requested, ref bool visible)
+    {
+        if (visible && WizardCatalog.ConsumeToolGuideOffer(configuration, tool))
+            save();
+        requested = visible = false;
+    }
+
+    private protected static void DrawToolGuideOffer(Configuration configuration, Action save, ToolGuide tool, ref bool requested, ref bool visible, Action openGuide)
+    {
+        var title = Ui.L(tool == ToolGuide.Rules
+            ? "Rules guide###ADSRuleGuideOffer" : "Object Explorer guide###ADSExplorerGuideOffer");
+        if (requested)
+        {
+            requested = false;
+            ImGui.OpenPopup(title);
+        }
+        var open = true;
+        var launch = false;
+        if (ImGui.BeginPopupModal(title, ref open, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            visible = true;
+            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 440 * MaterialTheme.Metrics.Scale);
+            MaterialText.TextWrapped(Ui.T("Open this tool's guide? You can always use its Guide button later."));
+            ImGui.PopTextWrapPos();
+            if (WindowLayout.Button(Ui.L("Open guide")))
+            {
+                launch = true;
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (WindowLayout.Button(Ui.L("Dismiss")) || ImGui.IsKeyPressed(ImGuiKey.Escape))
+                ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+        if (!open || visible && !ImGui.IsPopupOpen(title))
+            CloseToolGuideOffer(configuration, save, tool, ref requested, ref visible);
+        if (launch)
+            openGuide();
     }
 
     private void QueueWindowPosition(Vector2 position)

@@ -67,6 +67,32 @@ internal sealed partial class ObjectRuleShardStore
         return cleaned;
     }
 
+    internal static bool IsValidPublishedPresetName(string name)
+        => !string.IsNullOrWhiteSpace(name) && name.Length <= 100
+           && name.StartsWith("DEFAULT - ", StringComparison.Ordinal)
+           && !name.Contains("..", StringComparison.Ordinal)
+           && string.Equals(name, SanitizePresetName(name), StringComparison.Ordinal);
+
+    public bool IsManagedPreset(string presetName)
+        => TryGetManagedPresetIndex(presetName, out _);
+
+    internal bool TryGetManagedPresetIndex(string presetName, out ObjectPriorityRuleShardIndex index)
+    {
+        index = new();
+        return TryLoadIndex(Path.Combine(GetPresetDirectoryPath(presetName), IndexFileName), out index, out _)
+            && index.InstalledPresetName is not null
+            && string.Equals(index.InstalledPresetName, SanitizePresetName(presetName), StringComparison.OrdinalIgnoreCase)
+            && index.Presets is not { Count: > 0 };
+    }
+
+    private bool RejectManagedWrite(string presetName, out string status)
+    {
+        status = IsManagedPreset(presetName)
+            ? $"Published preset {presetName} is protected and updated automatically. Use New Preset to create a personal copy."
+            : string.Empty;
+        return status.Length != 0;
+    }
+
     public bool TryLoadEffectivePreset(
         string presetName,
         out ObjectPriorityRuleManifest manifest,
@@ -147,6 +173,8 @@ internal sealed partial class ObjectRuleShardStore
         IReadOnlyCollection<string> changedFiles,
         out string status)
     {
+        if (RejectManagedWrite(presetName, out status))
+            return false;
         status = "No object-rule contexts were saved.";
         if (changedFiles.Count == 0)
             return true;
@@ -288,6 +316,8 @@ internal sealed partial class ObjectRuleShardStore
         ObjectRulePresetFileState expectedState,
         out string status)
     {
+        if (RejectManagedWrite(transfer.PresetName, out status))
+            return false;
         // Validate every incoming context before creating a directory or writing any shard.
         if (!TryValidatePresetTransfer(transfer, out status))
             return false;
@@ -317,6 +347,8 @@ internal sealed partial class ObjectRuleShardStore
 
     public bool TryWriteFullPreset(string presetName, ObjectPriorityRuleManifest manifest, out string status)
     {
+        if (RejectManagedWrite(presetName, out status))
+            return false;
         if (!TrySplitManifest(manifest, out var split, out status))
             return false;
 
@@ -336,7 +368,9 @@ internal sealed partial class ObjectRuleShardStore
                         File.Delete(existing);
                 }
 
-                WriteIndexAtomic(IndexPath, new ObjectPriorityRuleShardIndex { Files = SortFileNames(split.Keys).ToList() });
+                var index = TryLoadIndex(IndexPath, out var existingIndex, out _) ? existingIndex : new ObjectPriorityRuleShardIndex();
+                index.Files = SortFileNames(split.Keys).ToList();
+                WriteIndexAtomic(IndexPath, index);
             }
             else
             {
@@ -379,6 +413,8 @@ internal sealed partial class ObjectRuleShardStore
 
     public bool TryDeletePreset(string presetName, out string status)
     {
+        if (RejectManagedWrite(presetName, out status))
+            return false;
         status = "Preset was not deleted.";
         var path = GetPresetDirectoryPath(presetName);
         try
@@ -421,6 +457,8 @@ internal sealed partial class ObjectRuleShardStore
     {
         deletedFiles = [];
         skippedFiles = [];
+        if (RejectManagedWrite(presetName, out status))
+            return false;
         if (string.Equals(presetName, ObjectPriorityRuleService.DefaultPresetName, StringComparison.OrdinalIgnoreCase))
         {
             status = "DEFAULT contexts cannot be reverted to DEFAULT.";
@@ -797,6 +835,18 @@ internal sealed partial class ObjectRuleShardStore
             var sorted = SortFileNames(index.Files);
             if (!index.Files.SequenceEqual(sorted, StringComparer.Ordinal))
                 throw new InvalidDataException("Territory index filenames are not in canonical Global-first numeric order.");
+            if (index.InstalledPresetName is { } installed && !IsValidPublishedPresetName(installed))
+                throw new InvalidDataException("Invalid installed published-preset name.");
+            var presets = index.Presets ?? [];
+            if (presets.Any(preset => preset is null || !IsValidPublishedPresetName(preset.Name) || preset.Files is null || preset.Files.Count == 0)
+                || presets.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != presets.Count)
+                throw new InvalidDataException("Published preset declarations contain an invalid or duplicate name, or no canonical shards.");
+            foreach (var preset in presets)
+            {
+                // Reuse the exact flat-index validation; no arbitrary paths are accepted.
+                if (!TryParseIndexJson(JsonSerializer.Serialize(new ObjectPriorityRuleShardIndex { Files = preset.Files }, JsonOptions), out _, out var presetStatus))
+                    throw new InvalidDataException($"Published preset {preset.Name}: {presetStatus}");
+            }
             status = $"Validated territory index with {index.Files.Count} shard(s).";
             return true;
         }

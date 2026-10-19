@@ -156,12 +156,13 @@ public sealed class HyperFixatedTargetExecutionTests
                 lease,
                 new TreasureDoorStrafeInputService(keyState, log),
                 new CardinalHoldInputService(keyState, log),
-                new Configuration(),
+                Configuration,
                 log);
             SetPrivateSetProperty(Execution, nameof(ExecutionService.CurrentMode), OwnershipMode.OwnedStartInside);
         }
 
         public ExecutionService Execution { get; }
+        public Configuration Configuration { get; } = new();
         public DungeonFrontierService Frontier { get; }
         public ObservationMemoryService? Memory { get; }
         public DateTime Now { get; set; } = new(2026, 8, 28, 12, 0, 0, DateTimeKind.Utc);
