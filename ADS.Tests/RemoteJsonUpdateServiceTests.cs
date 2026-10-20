@@ -10,6 +10,49 @@ namespace ADS.Tests;
 
 public sealed class RemoteJsonUpdateServiceTests
 {
+    [Fact]
+    public async Task DialogDefaultRefreshPreservesCustomSelectionContentsAndDisabledRules()
+    {
+        using var directory = new TempDirectory();
+        var log = DispatchProxy.Create<IPluginLog, AdsRulePrecedenceTests.NoOpProxy>();
+        var config = new Configuration();
+        var rules = new DialogYesNoRuleService(log, directory.Path, config);
+        Assert.True(rules.SaveManifest("Personal", new DialogYesNoRuleManifest
+        {
+            Rules = [new() { PromptPattern = "Shared prompt", MatchMode = "Exact", Enabled = false }],
+        }));
+        Assert.True(rules.TryActivatePreset("Personal", out _));
+        var customBefore = File.ReadAllText(rules.ActivePresetPath);
+        var files = new Dictionary<string, string>
+        {
+            [RemoteJsonUpdateService.TerritoriesIndexFileName] = "{\"SchemaVersion\":1,\"Files\":[\"1037_rule_objects.json\"]}",
+            ["territories/1037_rule_objects.json"] = JsonSerializer.Serialize(new ObjectPriorityRuleManifest
+            { Rules = [new() { TerritoryTypeId = 1037, ObjectName = "Fixture" }] }),
+            [RemoteJsonUpdateService.DialogRulesFileName] = JsonSerializer.Serialize(new DialogYesNoRuleManifest
+            { Rules = [new() { PromptPattern = "Shared prompt", MatchMode = "Exact" }] }),
+            [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
+            [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+        };
+        using var updater = new RemoteJsonUpdateService(log, directory.Path);
+        var field = typeof(RemoteJsonUpdateService).GetField("httpClient", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        ((HttpClient)field.GetValue(updater)!).Dispose();
+        field.SetValue(updater, new HttpClient(new RemoteFilesHandler(files, false)));
+        Assert.True(updater.TryStartUpdate(true, "dialog preset fixture"));
+        await ((Task)typeof(RemoteJsonUpdateService).GetField("activeUpdateTask", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(updater)!).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(updater.TryConsumeCompletedUpdate(out var completion));
+        Assert.True(completion.Success, updater.LastUpdateStatus);
+        Assert.Contains(RemoteJsonUpdateService.DialogRulesFileName, completion.ChangedFiles);
+        Assert.True(rules.Reload(), rules.LastLoadStatus); // The production update-completion reload entry point.
+        Assert.Equal("Personal", rules.ActivePresetName);
+        Assert.Equal("Personal", config.ActiveDialogRulePreset);
+        Assert.Equal(customBefore, File.ReadAllText(rules.ActivePresetPath));
+        Assert.False(Assert.Single(rules.Current.Rules).Enabled);
+        Assert.Null(rules.MatchRule("Shared prompt"));
+        Assert.True(rules.TryActivatePreset("DEFAULT", out _));
+        Assert.NotNull(rules.MatchRule("Shared prompt"));
+    }
+
     [Theory]
     [InlineData("../escape")]
     [InlineData("DEFAULT")]

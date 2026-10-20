@@ -145,7 +145,7 @@ The BMRAI/VBM setting is enabled by default. When enabled, entering a regular du
 - Open/reload JSON files.
 - Open Object Rules, Dialog Rules, and Frontier Labels.
 
-Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the expandable PR-ready checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless debug mode is enabled through `/ads debug on`; this setting is remembered until `/ads debug off`. Dialog Rules retain their separate parked-preset model.
+Object Rules executes the persisted active preset and shows one combined effective table rather than one backing JSON file. Custom presets are sparse: missing Global/territory shards inherit `DEFAULT`, while present shards replace the whole context, including intentionally empty overrides. Its searchable checklist can filter and batch-revert/promote multiple checked contexts, and the expandable PR-ready checkout section only prepares local PR-ready files. Ordinary `DEFAULT` saves are protected unless debug mode is enabled through `/ads debug on`; this setting is remembered until `/ads debug off`. Dialog Rules executes its own persisted selected preset as a complete manifest. Selecting or creating a dialog preset activates its saved rules; Save applies edits to that preset. Remote updates refresh DEFAULT without changing the selection or custom files. A missing or invalid selected custom dialog file reports an error and leaves dialog rules inactive until repaired or another preset is selected.
 
 ### Debug
 
@@ -334,7 +334,7 @@ Field cues are class-specific: red is required, amber recommended, normal option
 | Ghost Inspector | Inspect monster/interactable ghosts and manual-destination recovery state |
 | Frontier Labels | Inspect active-map labels, game-authored area-boundary markers, and map resolution |
 | Object Rules | Author executable inherited presets in a responsive/compact table; search and check multiple labeled contexts; batch-revert overrides or batch-promote clean saved shards to a configured BotologyUpdates checkout |
-| Dialog Rules | Author live/parked yes/no dialog manifests |
+| Dialog Rules | Select, persist and author the active yes/no dialog manifest |
 | Loot Controls | Open with `/ads loot` or `/ads l`; configure base rolling and the default-off XA Database glamour option, which requests Need for missing equippable gear while preserving live Greed/Pass caps and the selected base mode on incomplete IPC data |
 | Shop Lists | Open with `/ads shopper`; manage persisted desired-total vendor lists, import TeamCraft/Crafting as a Service/Artisan clipboard data, inspect live and retainer ownership, and run sequential purchases |
 | Higher / Lower | Calibrate and inspect treasure Higher/Lower behavior |

@@ -28,7 +28,7 @@ Object Rules use inherited executable presets:
 - Promotion follows the context label literally: with checked contexts it promotes their saved overrides, while **All contexts** (no checks) promotes every saved override in the active custom preset. Inherited DEFAULT and no-file contexts are excluded because they have no custom shard to copy.
 - Empty overrides require confirmation; disabling rows is normally safer because it preserves authoring intent.
 - Ordinary `DEFAULT` saves are protected and offer the create-preset flow. `/ads debug on` permits direct DEFAULT shard saving and is remembered across reloads; `/ads debug off` restores protection.
-- Dialog Rules retain their existing separate DEFAULT/parked-preset behavior.
+- Dialog Rules has its own persisted runtime selection and complete manifests, described below.
 
 Object Rules groups preset management, sharing, and draft editing on labeled rows. Compact mode retains its reduced secondary-control layout. Common editor controls:
 
@@ -280,6 +280,10 @@ The in-plugin `[GUIDE]` window is the authoritative class/field matrix. It lists
 ## Dialog Yes/No Rules
 
 Dialog rules are global prompt matches, not duty-scoped object rules.
+
+The dialog preset selector controls runtime. Selecting or creating a preset activates its saved rules and remembers the choice across plugin reloads. Save applies the selected preset's draft, including disabled rules. Unsaved edits remain drafts; switching presets keeps the editor's existing discard behavior. Settings shows and opens the active dialog file.
+
+`DEFAULT` remains the initial choice and the remote updater's cache. Custom dialog presets are complete manifests under `dialog-rule-presets`; they do not inherit rules from DEFAULT. BotologyUpdates refreshes DEFAULT without switching selection or overwriting custom data. Polling and explicit reload read the selected preset. A missing or invalid selected custom file leaves dialog automation inactive and reports its error, without copying DEFAULT into that preset or silently selecting it. Repair the file or select another preset. Explicitly deleting the active custom preset selects and persists DEFAULT.
 
 Important fields:
 

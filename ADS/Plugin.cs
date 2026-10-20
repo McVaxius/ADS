@@ -257,7 +257,7 @@ public sealed class Plugin : IDalamudPlugin
         RemoteJsonUpdateService = new RemoteJsonUpdateService(Log, configDirectory, DutyCatalogService.Entries);
         RemoteJsonUpdateService.TryStartStartupRefresh("startup");
         nextRemoteJsonStaleCheckUtc = DateTime.UtcNow + RemoteJsonStaleCheckInterval;
-        DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory);
+        DialogYesNoRuleService = new DialogYesNoRuleService(Log, configDirectory, Configuration, Configuration.Save);
         ObservationMemoryService = new ObservationMemoryService(ObjectTable, PartyList, Log, ObjectPriorityRuleService);
         DungeonFrontierService = new DungeonFrontierService(DataManager, ObjectTable, Log, ObjectPriorityRuleService, ObservationMemoryService);
         ObjectivePlannerService = new ObjectivePlannerService(ObjectTable, ObjectPriorityRuleService, DungeonFrontierService, ObservationMemoryService);

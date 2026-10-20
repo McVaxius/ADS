@@ -1,3 +1,13 @@
+2026-10-19 - Allow five seconds for repair completion
+
+- Increase only the existing Self and NPC post-submission completion delay from 1.4 seconds to 5 seconds. Restore the original repair flow, completion outcomes and durability reader; other UI delays and the overall utility/travel timeouts are unchanged.
+- Remove the superseded durability-wait implementation, its build marker and its twelve added test cases/fixture. Preserve version 1.3.0.0 and unrelated ADS work. Verified the two-line production diff, restored test file and scoped whitespace check; unrelated tracked ADS diffs are unchanged. No new build or deployment was performed.
+
+2026-10-19 - Persist active dialog-rule presets (I605)
+
+- Selecting or creating a dialog preset now activates its saved rules and persists the choice across reloads. Saving the selected custom preset updates runtime immediately; disabled custom rules stay disabled.
+- Watch and open the active dialog file in the editor and Settings. BotologyUpdates still refreshes only DEFAULT and reloads the selected runtime preset without replacing custom files or switching selection. A missing or invalid selected custom file leaves dialog rules inactive and reports the error; explicit deletion of the active custom preset selects DEFAULT.
+
 2026-10-18 - Debug Return recovery and Settings organization
 
 - Add the saved Restart from entrance / Resume post-Return choice, defaulting to Restart while debug mode remains off by default. Require a confirmed owned-duty death, exact localized native Return prompt, native revival with area transition and stable living state in the same character/duty before applying once. No callback-only or position-jump inference and no new Return accept loop.

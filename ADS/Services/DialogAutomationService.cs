@@ -33,6 +33,7 @@ public sealed class DialogAutomationService
     private readonly IGameGui gameGui;
     private readonly DialogYesNoRuleService ruleService;
     private readonly IPluginLog log;
+    private DialogYesNoRuleManifest observedRuleManifest;
     private DateTime lastDialogCheckUtc = DateTime.MinValue;
     private string pendingActionKey = string.Empty;
     private DateTime pendingActionFirstSeenUtc = DateTime.MinValue;
@@ -56,6 +57,7 @@ public sealed class DialogAutomationService
         this.gameGui = gameGui;
         this.ruleService = ruleService;
         this.log = log;
+        observedRuleManifest = ruleService.Current;
     }
 
     public bool DialogVisible { get; private set; }
@@ -129,6 +131,21 @@ public sealed class DialogAutomationService
 
     private void TryHandleDialogRules(DutyContextSnapshot context, DateTime now)
     {
+        if (!ReferenceEquals(observedRuleManifest, ruleService.Current))
+        {
+            observedRuleManifest = ruleService.Current;
+            ResetPendingAction();
+            // A response from the previous manifest must not retry after switching
+            // presets or disabling its rule, including an invalid-file reload.
+            if (!IsTreasurePassageActionKey(pendingSelectYesNoActionKey))
+                ClearPendingSelectYesNoResponse();
+            if (!IsTreasurePassageActionKey(suppressedSelectYesNoActionKey))
+            {
+                suppressedSelectYesNoActionKey = string.Empty;
+                suppressedSelectYesNoPrompt = string.Empty;
+            }
+        }
+
         ClearSuppressedSelectYesNoIfDialogChanged();
 
         if (TryHandlePendingSelectYesNoResponse(now))

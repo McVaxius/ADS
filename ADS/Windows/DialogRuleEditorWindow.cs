@@ -42,6 +42,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         : base("ADS Dialog Rules###ADSDialogRules")
     {
         this.plugin = plugin;
+        selectedPresetName = plugin.DialogYesNoRuleService.ActivePresetName;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(980f, 420f),
@@ -64,8 +65,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         MaterialText.TextWrapped(Ui.T("Processing scope follows Settings > Process dialog rules outside owned duties."));
         MaterialText.TextWrapped(Ui.T("Default Addon is SelectYesno. Optional Notification/NotificationCB can restore minimized prompts before ADS clicks."));
         MaterialText.TextWrapped(Ui.T("Preset: {0} -> {1}", selectedPresetName, plugin.DialogYesNoRuleService.GetPresetPath(selectedPresetName)));
-        if (!plugin.DialogYesNoRuleService.IsDefaultPreset(selectedPresetName))
-            MaterialText.TextWrapped(Ui.T("Runtime ADS still reads DEFAULT/live dialog rules. Non-default dialog presets are parked datasets until you import or copy them back into DEFAULT."));
+        MaterialText.TextWrapped(Ui.T("Active preset: {0}", plugin.DialogYesNoRuleService.ActivePresetName));
         MaterialText.TextWrapped(Ui.Display(editorStatus) + (string.IsNullOrEmpty(editorStatusDetail) ? string.Empty : " " + Ui.Display(editorStatusDetail)));
         if (dirty)
         {
@@ -100,6 +100,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         if (WindowLayout.Button(Ui.L("Reload From Disk")))
         {
+            plugin.DialogYesNoRuleService.Reload();
             RefreshDraft($"Dialog-rule preset {selectedPresetName} reloaded from disk.");
         }
 
@@ -209,7 +210,12 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
         var previousPreset = selectedPresetName;
         var discardedDirtyDraft = dirty;
-        selectedPresetName = presetName;
+        if (!plugin.DialogYesNoRuleService.TryActivatePreset(presetName, out var activationStatus))
+        {
+            editorStatus = activationStatus;
+            return;
+        }
+        selectedPresetName = plugin.DialogYesNoRuleService.ActivePresetName;
         RefreshDraft(
             discardedDirtyDraft
                 ? $"Switched from {previousPreset} to {selectedPresetName}; unsaved edits in the previous draft were discarded."
@@ -232,7 +238,8 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
             {
                 editorStatus = "DEFAULT is reserved; choose a different dialog preset name.";
             }
-            else if (plugin.DialogYesNoRuleService.SaveManifest(sanitizedName, draft))
+            else if (plugin.DialogYesNoRuleService.SaveManifest(sanitizedName, draft)
+                && plugin.DialogYesNoRuleService.TryActivatePreset(sanitizedName, out _))
             {
                 selectedPresetName = sanitizedName;
                 draft = CloneManifest(draft);

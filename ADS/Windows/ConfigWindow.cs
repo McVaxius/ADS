@@ -258,15 +258,15 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         ImGui.Separator();
         MaterialText.Text(Ui.T("Dialog rules & duty metadata"));
         MaterialText.Text(Ui.T("Dialog Yes/No Rules: {0} active", plugin.DialogYesNoRuleService.ActiveRuleCount));
-        MaterialText.TextWrapped(plugin.DialogYesNoRuleService.ConfigPath);
+        MaterialText.TextWrapped(Ui.T("Active preset: {0}", plugin.DialogYesNoRuleService.ActivePresetName));
+        MaterialText.TextWrapped(plugin.DialogYesNoRuleService.ActivePresetPath);
         DrawActionGrid(
             "ADSDialogRuleActions",
-            ("Open dialog rules JSON", () => plugin.OpenPath(plugin.DialogYesNoRuleService.ConfigPath)),
+            ("Open dialog rules JSON", () => plugin.OpenPath(plugin.DialogYesNoRuleService.ActivePresetPath)),
             ("Open dialog rules table", plugin.OpenDialogRuleEditorUi),
             ("Reload dialog rules JSON", () => plugin.DialogYesNoRuleService.Reload()));
         MaterialText.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastSyncStatus));
         MaterialText.TextWrapped(Ui.Display(plugin.DialogYesNoRuleService.LastLoadStatus));
-        MaterialText.TextDisabled(Ui.T("Only saving or importing into DEFAULT changes runtime dialog behavior."));
 
         ImGui.Spacing();
         ImGui.Separator();

@@ -1945,7 +1945,7 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (now - lastActionUtc < UiSettleCooldown)
+        if (now - lastActionUtc < TimeSpan.FromSeconds(5))
         {
             StatusMessage = "Waiting for self-repair to settle.";
             return;
@@ -2160,7 +2160,7 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        if (now - lastActionUtc < UiSettleCooldown)
+        if (now - lastActionUtc < TimeSpan.FromSeconds(5))
         {
             StatusMessage = $"Waiting for NPC repair with {targetNpcName} to settle.";
             return;

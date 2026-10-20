@@ -23,12 +23,19 @@ public sealed class DialogYesNoRuleService
     private readonly IPluginLog log;
     private readonly string configPath;
     private readonly string presetDirectoryPath;
+    private readonly Configuration? configuration;
+    private readonly Action? saveConfiguration;
+    private string activePresetName;
     private DateTime lastObservedRulesWriteUtc;
     private DateTime nextReloadPollUtc;
 
-    public DialogYesNoRuleService(IPluginLog log, string configDirectory)
+    public DialogYesNoRuleService(IPluginLog log, string configDirectory,
+        Configuration? configuration = null, Action? saveConfiguration = null)
     {
         this.log = log;
+        this.configuration = configuration;
+        this.saveConfiguration = saveConfiguration;
+        activePresetName = NormalizePresetName(configuration?.ActiveDialogRulePreset);
         Directory.CreateDirectory(configDirectory);
         configPath = Path.Combine(configDirectory, FileName);
         presetDirectoryPath = Path.Combine(configDirectory, PresetDirectoryName);
@@ -44,6 +51,10 @@ public sealed class DialogYesNoRuleService
 
     public string PresetDirectoryPath
         => presetDirectoryPath;
+
+    public string ActivePresetName => activePresetName;
+
+    public string ActivePresetPath => GetPresetPath(activePresetName);
 
     public string LastLoadStatus { get; private set; } = "Dialog rules not loaded yet.";
 
@@ -111,7 +122,8 @@ public sealed class DialogYesNoRuleService
         try
         {
             EnsureSeeded();
-            if (!TryLoadManifestFromPath(configPath, out var manifest, out var status, persistMigrations: true))
+            RememberCurrentRulesWriteTime();
+            if (!TryLoadManifestFromPath(ActivePresetPath, out var manifest, out var status, persistMigrations: true))
             {
                 Current = new DialogYesNoRuleManifest();
                 LastLoadStatus = status;
@@ -120,7 +132,7 @@ public sealed class DialogYesNoRuleService
             }
 
             Current = manifest;
-            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            RememberCurrentRulesWriteTime();
             LastLoadStatus = status;
             log.Information($"[ADS] {LastLoadStatus}");
             return true;
@@ -129,7 +141,7 @@ public sealed class DialogYesNoRuleService
         {
             RememberCurrentRulesWriteTime();
             Current = new DialogYesNoRuleManifest();
-            LastLoadStatus = $"Failed to load {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to load dialog preset {activePresetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
         }
@@ -146,7 +158,7 @@ public sealed class DialogYesNoRuleService
         try
         {
             EnsureSeeded();
-            var currentWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            var currentWriteUtc = File.GetLastWriteTimeUtc(ActivePresetPath);
             if (currentWriteUtc == lastObservedRulesWriteUtc)
                 return false;
 
@@ -155,7 +167,7 @@ public sealed class DialogYesNoRuleService
         catch (Exception ex)
         {
             RememberCurrentRulesWriteTime();
-            LastLoadStatus = $"Failed to check {FileName}: {ex.Message}";
+            LastLoadStatus = $"Failed to check dialog preset {activePresetName}: {ex.Message}";
             log.Warning(ex, $"[ADS] {LastLoadStatus}");
             return false;
         }
@@ -163,6 +175,48 @@ public sealed class DialogYesNoRuleService
 
     public bool SaveManifest(DialogYesNoRuleManifest manifest)
         => SaveManifest(DefaultPresetName, manifest);
+
+    public bool TryActivatePreset(string presetName, out string status)
+    {
+        status = "Dialog preset was not activated.";
+        try
+        {
+            var name = NormalizePresetName(presetName);
+            if (IsDefaultPreset(name)) EnsureSeeded();
+            // Selection must never create a missing custom file from DEFAULT.
+            if (!TryLoadManifestFromPath(GetPresetPath(name), out var manifest, out status, persistMigrations: true))
+            {
+                LastLoadStatus = status;
+                return false;
+            }
+
+            if (configuration != null && !string.Equals(configuration.ActiveDialogRulePreset, name, StringComparison.Ordinal))
+            {
+                var previous = configuration.ActiveDialogRulePreset;
+                configuration.ActiveDialogRulePreset = name;
+                try { saveConfiguration?.Invoke(); }
+                catch
+                {
+                    configuration.ActiveDialogRulePreset = previous;
+                    throw;
+                }
+            }
+
+            activePresetName = name;
+            Current = manifest;
+            RememberCurrentRulesWriteTime();
+            nextReloadPollUtc = DateTime.MinValue;
+            LastLoadStatus = status;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to activate dialog preset {presetName}: {ex.Message}";
+            LastLoadStatus = status;
+            log.Warning(ex, $"[ADS] {status}");
+            return false;
+        }
+    }
 
     public bool SaveManifest(string presetName, DialogYesNoRuleManifest manifest)
     {
@@ -172,7 +226,7 @@ public sealed class DialogYesNoRuleService
             NormalizeManifest(manifest);
             var path = EnsurePresetSeeded(presetName);
             WriteManifestToPath(path, manifest);
-            if (!IsDefaultPreset(presetName))
+            if (!string.Equals(NormalizePresetName(presetName), activePresetName, StringComparison.OrdinalIgnoreCase))
             {
                 LastLoadStatus = $"Saved {manifest.Rules.Count(x => x.Enabled)} active dialog rule(s) to preset {presetName} at {path}.";
                 log.Information($"[ADS] {LastLoadStatus}");
@@ -196,7 +250,8 @@ public sealed class DialogYesNoRuleService
 
         try
         {
-            var path = EnsurePresetSeeded(presetName);
+            if (IsDefaultPreset(presetName)) EnsureSeeded();
+            var path = GetPresetPath(presetName);
             return TryLoadManifestFromPath(path, out manifest, out status, persistMigrations: true);
         }
         catch (Exception ex)
@@ -240,6 +295,10 @@ public sealed class DialogYesNoRuleService
                 status = $"Dialog preset {presetName} did not exist on disk.";
                 return false;
             }
+
+            if (string.Equals(NormalizePresetName(presetName), activePresetName, StringComparison.OrdinalIgnoreCase)
+                && !TryActivatePreset(DefaultPresetName, out status))
+                return false;
 
             File.Delete(path);
             status = $"Deleted dialog preset {presetName}.";
@@ -376,13 +435,18 @@ public sealed class DialogYesNoRuleService
     {
         try
         {
-            if (File.Exists(configPath))
-                lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(configPath);
+            lastObservedRulesWriteUtc = File.GetLastWriteTimeUtc(ActivePresetPath);
         }
         catch
         {
             // Best effort only.
         }
+    }
+
+    private string NormalizePresetName(string? presetName)
+    {
+        var name = presetName?.Trim();
+        return string.IsNullOrEmpty(name) || IsDefaultPreset(name) ? DefaultPresetName : SanitizePresetName(name);
     }
 
     private bool TryLoadManifestFromPath(string path, out DialogYesNoRuleManifest manifest, out string status, bool persistMigrations)

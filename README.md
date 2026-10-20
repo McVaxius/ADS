@@ -84,7 +84,7 @@ While ADS owns a duty, native cutscenes hold execution and pause its existing na
 | Guided Setup | Five independent Duty, Rules, Utilities, Treasure/Follow, and Diagnostics/Recovery walkthroughs |
 | Settings | General, automation, data/rules, advanced display, about/support |
 | Compact Controls | Full-label primary actions, tool shortcuts, concise live status |
-| Rules Editors | Executable inherited object-rule presets, protected `DEFAULT` shards, searchable multi-context filtering/revert/promotion, responsive compact editing, dialog presets, partial imports, bulk editing, and duty deep-links |
+| Rules Editors | Executable inherited object-rule presets, protected `DEFAULT` shards, searchable multi-context filtering/revert/promotion, responsive compact editing, persisted active dialog presets, partial imports, bulk editing, and duty deep-links |
 | Specialist Tools | Object, ghost, frontier, event, VFX, Higher/Lower, treasure, loot, reflection |
 
 Higher/Lower diagnostics default off for new settings. Configuration schema 25 also switches existing diagnostics off once; later saved choices are retained. Enable Diagnostics explicitly and enter a supported treasure dungeon to capture live probes, dumps, traces or addon texture exports. The gameplay solver remains independent of this diagnostic setting. VFX datamining has its own opt-in switch and also operates only in treasure dungeons.

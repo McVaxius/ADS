@@ -75,6 +75,7 @@ public sealed class Configuration : IPluginConfiguration
     public int RuleEditorFilterMode { get; set; } = 0;
     public bool RuleEditorSeedObjectPosition { get; set; } = false;
     public string ActiveObjectRulePreset { get; set; } = "DEFAULT";
+    public string ActiveDialogRulePreset { get; set; } = "DEFAULT";
     public string BotologyUpdatesCheckoutPath { get; set; } = string.Empty;
     public List<string> ObjectRuleSelectedContextFileNames { get; set; } = [];
     public bool ObjectRuleEditorCompactMode { get; set; }
