@@ -16,6 +16,9 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
     private readonly Dictionary<string, MaterialWindowOpacity> windowOpacities = new();
     private uint appliedAccent;
     private Vector3 accentDraft;
+    private MaterialColorSettings colorDraft = new();
+    private MaterialColorSettings? appliedColors;
+    private MaterialColorSettings? appliedSavedColors;
     private bool fontErrorLogged;
 
     internal void Draw()
@@ -24,10 +27,17 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         if (!plugin.WindowSystem.Windows.Any(window => window.IsOpen)) return;
         shapedText ??= new(Plugin.TextureProvider);
         using var text = shapedText.Push();
-        if (theme is null || appliedAccent != (plugin.Configuration.UiAccentRgb & 0xFFFFFF))
+        var savedColors = plugin.Configuration.UiColors ?? new MaterialColorSettings();
+        if (savedColors != appliedSavedColors)
+        {
+            colorDraft = savedColors;
+            appliedSavedColors = savedColors;
+        }
+        if (theme is null || appliedAccent != (plugin.Configuration.UiAccentRgb & 0xFFFFFF) || colorDraft != appliedColors)
         {
             appliedAccent = plugin.Configuration.UiAccentRgb & 0xFFFFFF;
-            theme = AdsPresentation.Theme(appliedAccent);
+            appliedColors = colorDraft;
+            theme = AdsPresentation.Theme(appliedAccent, colorDraft);
             var rgb = AdsPresentation.Rgb(appliedAccent);
             accentDraft = new(rgb.X, rgb.Y, rgb.Z);
         }
@@ -147,13 +157,9 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
             ImGui.SameLine();
         }
         using var controls = MaterialControls.Push(AdsPresentation.Controls(28));
-        var change = MaterialAppearanceSelector.Draw("ADSUiAppearance", ref accentDraft,
-            new(Ui.T("Color"), Ui.T("Language"), Ui.T("Teal"), Ui.T("Blue"), Ui.T("Pink"), Ui.T("Custom RGB")), DrawLanguage);
-        if (change.AccentChanged)
-            plugin.Configuration.UiAccentRgb = ((uint)Math.Clamp((int)MathF.Round(accentDraft.X * 255), 0, 255) << 16)
-                | ((uint)Math.Clamp((int)MathF.Round(accentDraft.Y * 255), 0, 255) << 8)
-                | (uint)Math.Clamp((int)MathF.Round(accentDraft.Z * 255), 0, 255);
-        if (change.AccentChanged) plugin.SaveConfiguration();
+        if (DrawColourEditor("ADSUiAppearance")) plugin.SaveConfiguration();
+        MaterialText.Text(Ui.T("Language"));
+        DrawLanguage();
     }
 
     internal void DrawLanguageSelector()
@@ -257,12 +263,23 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     private void DrawTitleBarColour()
     {
-        if (!MaterialAppearanceSelector.DrawPalette("ADSUiAppearance", ref accentDraft,
-                new(Ui.T("Color"), Ui.T("Language"), Ui.T("Teal"), Ui.T("Blue"), Ui.T("Pink"), Ui.T("Custom RGB")))) return;
-        plugin.Configuration.UiAccentRgb = ((uint)Math.Clamp((int)MathF.Round(accentDraft.X * 255), 0, 255) << 16)
-            | ((uint)Math.Clamp((int)MathF.Round(accentDraft.Y * 255), 0, 255) << 8)
-            | (uint)Math.Clamp((int)MathF.Round(accentDraft.Z * 255), 0, 255);
-        plugin.SaveConfiguration();
+        using var controls = MaterialControls.Push(AdsPresentation.Controls(28));
+        if (DrawColourEditor("ADSUiAppearance")) plugin.SaveConfiguration();
+    }
+
+    private bool DrawColourEditor(string id)
+    {
+        var changed = MaterialAppearanceSelector.DrawColors(id, ref colorDraft, ref accentDraft,
+            new(Ui.T("Color"), Ui.T("Language"), Ui.T("Teal"), Ui.T("Blue"), Ui.T("Pink"), Ui.T("Custom RGB")),
+            new(Ui.T("Auto"), Ui.T("Picker"), Ui.T("Default"), Ui.T("Background, controls and text follow your theme."),
+                Ui.T("Theme colour"), Ui.T("Choose each colour independently."), Ui.T("Background"), Ui.T("Controls"),
+                Ui.T("Text"), Ui.T("Aa  Preview text"), Ui.T("Control"),
+                Ui.T("Switch to Picker to set each colour yourself."), Ui.T("Switch back to Auto to use the automatic theme.")),
+            plugin.Configuration.UiCompact ? 298 : 316);
+        if (!changed) return false;
+        plugin.Configuration.UiColors = colorDraft;
+        plugin.Configuration.UiAccentRgb = MaterialColorSettings.ToRgb(accentDraft);
+        return true;
     }
 
     private void DrawTransparencySettings()

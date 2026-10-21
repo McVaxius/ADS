@@ -11640,4 +11640,16 @@
   <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>除錯返回：等待副本內穩定的存活狀態。</value></data>
   <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>除錯返回：已從返回位置重新開始ADS推進。</value></data>
   <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>除錯返回：保留現有進度，從返回位置重新規劃。</value></data>
+  <data name="Picker" xml:space="preserve"><value>選色器</value></data>
+  <data name="Caption.DefaultTitle" xml:space="preserve"><value>預設</value></data>
+  <data name="Background, controls and text follow your theme." xml:space="preserve"><value>背景、控制項和文字跟隨主題。</value></data>
+  <data name="Theme colour" xml:space="preserve"><value>主題顏色</value></data>
+  <data name="Choose each colour independently." xml:space="preserve"><value>分別選擇每種顏色。</value></data>
+  <data name="Background" xml:space="preserve"><value>背景</value></data>
+  <data name="Controls" xml:space="preserve"><value>控制項</value></data>
+  <data name="Text" xml:space="preserve"><value>文字</value></data>
+  <data name="Aa  Preview text" xml:space="preserve"><value>Aa  文字預覽</value></data>
+  <data name="Control" xml:space="preserve"><value>控制項</value></data>
+  <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>切換至選色器以自行設定每種顏色。</value></data>
+  <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>切換回自動以使用自動主題。</value></data>
 </root>

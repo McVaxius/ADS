@@ -1,3 +1,7 @@
+2026-10-20 - Independent UI colour choices
+
+- Add the Auto/Picker colour editor to native titlebar Colour popups and Appearance settings. Auto retains ADS's existing accent palette; Picker saves independent Background, Controls and Text choices globally and retains them when returning to Auto. Translate the editor across all 16 UI languages while preserving language ordinals and existing save paths.
+
 2026-10-19 - Allow five seconds for repair completion
 
 - Increase only the existing Self and NPC post-submission completion delay from 1.4 seconds to 5 seconds. Restore the original repair flow, completion outcomes and durability reader; other UI delays and the overall utility/travel timeouts are unchanged.

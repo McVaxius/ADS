@@ -71,6 +71,7 @@ public static class Ui
         "Current duty" => "Caption.CurrentDutySentence",
         "Duty" => "Caption.DutyTitle",
         "duty" => "Caption.DutyLower",
+        "Default" => "Caption.DefaultTitle",
         "enabled" => "Enabled",
         "deep dungeon" => "Caption.DeepDungeonLower",
         "Dialog rules" => "Caption.DialogRulesSentence",

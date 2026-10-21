@@ -14,6 +14,166 @@ public sealed class GuideNativeUiCollection;
 [Collection("ADS guide native UI")]
 public sealed class WizardCatalogTests
 {
+    [Fact]
+    public void ColourPreferencesPreserveLegacyThemeLanguageOrdinalsAndUnknownSettings()
+    {
+        var configuration = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            """{"Version":25,"UiAccentRgb":1193046,"UiLanguage":5,"UnrelatedFixture":17}""")!;
+        Assert.Equal(MaterialColorMode.Auto, configuration.UiColors.Mode);
+        Assert.Equal(UiLanguage.TraditionalChinese, configuration.UiLanguage);
+        Assert.Null(new Configuration().UiLanguage);
+        Assert.Equal(Enumerable.Range(0, 16), Enum.GetValues<UiLanguage>().Select(language => (int)language));
+        Assert.Equal(5, (int)UiLanguage.TraditionalChinese);
+        Assert.Equal(15, (int)UiLanguage.Hindi);
+        var automatic = AdsPresentation.Theme(AdsPresentation.ReferenceAccent).Colors;
+        Assert.Equal(AdsPresentation.Rgb(0x0C1A26), automatic.Background);
+        Assert.Equal(AdsPresentation.Rgb(0xF2F4F9), automatic.OnSurface);
+        Assert.Equal(AdsPresentation.Rgb(0x0067FF), automatic.Primary);
+        Assert.Equal(AdsPresentation.Rgb(0x203344), automatic.SecondaryContainer);
+        configuration.UiColors = new() { Mode = MaterialColorMode.Picker,
+            BackgroundRgb = 0x010203, ControlsRgb = 0x040506, TextRgb = 0x070809 };
+        var storage = typeof(Dalamud.Plugin.IDalamudPluginInterface).Assembly.GetType("Dalamud.Configuration.PluginConfigurations", true)!;
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        var saved = (string)storage.GetMethod("SerializeConfig", flags)!.Invoke(null, [configuration])!;
+        var restored = (Configuration)storage.GetMethod("DeserializeConfig", flags)!.Invoke(null, [saved])!;
+        Assert.Equal(configuration.UiColors, restored.UiColors);
+        Assert.Equal(25, restored.Version);
+        Assert.Equal(0x123456u, restored.UiAccentRgb);
+        Assert.Equal(UiLanguage.TraditionalChinese, restored.UiLanguage);
+        Assert.Equal(17, (int)restored.AdditionalSettings!["UnrelatedFixture"]);
+        var manual = AdsPresentation.Theme(restored.UiAccentRgb, restored.UiColors).Colors;
+        Assert.Equal(AdsPresentation.Rgb(0x010203), manual.Background);
+        Assert.Equal(AdsPresentation.Rgb(0x040506), manual.Primary);
+        Assert.Equal(AdsPresentation.Rgb(0x070809), manual.OnSurface);
+        Assert.Equal(automatic.Error, manual.Error);
+    }
+
+    [Fact]
+    public void AllSixteenCompiledCatalogsContainTheColourEditorLabels()
+    {
+        string[] keys = ["Auto", "Picker", "Default", "Background, controls and text follow your theme.", "Theme colour",
+            "Choose each colour independently.", "Background", "Controls", "Text", "Aa  Preview text", "Control",
+            "Switch to Picker to set each colour yourself.", "Switch back to Auto to use the automatic theme."];
+        var previous = Ui.Language;
+        try
+        {
+            foreach (var language in Enum.GetValues<UiLanguage>())
+            {
+                Ui.SetLanguage(language);
+                var resources = Ui.Resources.GetResourceSet(Ui.CultureFor(language), true, false)!;
+                foreach (var key in keys)
+                {
+                    var translated = resources.GetString(key == "Default" ? "Caption.DefaultTitle" : key);
+                    Assert.False(string.IsNullOrWhiteSpace(translated), language + ": " + key);
+                    Assert.Equal(translated, Ui.T(key));
+                }
+            }
+        }
+        finally { Ui.SetLanguage(previous); }
+    }
+
+    [Theory]
+    [InlineData(false, 1f)]
+    [InlineData(true, 1.5f)]
+    public unsafe void NativeColourCallbackCommitsIndependentFieldsAndRetainsThemWhenReturningToAuto(bool compact, float scale)
+    {
+        var interfaceProperty = typeof(Plugin).GetProperty("PluginInterface", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+        var previousInterface = interfaceProperty.GetValue(null);
+        var previousContext = ImGui.GetCurrentContext();
+        var language = Ui.Language;
+        var context = ImGui.CreateContext();
+        try
+        {
+            var pluginInterface = DispatchProxy.Create<Dalamud.Plugin.IDalamudPluginInterface, AdsEnableCompatibilityTests.IpcProxy>();
+            var proxy = (AdsEnableCompatibilityTests.IpcProxy)(object)pluginInterface;
+            interfaceProperty.SetValue(null, pluginInterface);
+            Ui.SetLanguage(UiLanguage.English);
+            var configuration = new Configuration { UiCompact = compact, UiLanguage = UiLanguage.TraditionalChinese };
+            var plugin = (Plugin)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+            typeof(Plugin).GetField("<Configuration>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(plugin, configuration);
+            var appearance = new UiAppearance(plugin);
+            typeof(UiAppearance).GetField("accentDraft", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(appearance, MaterialColorSettings.Rgb(configuration.UiAccentRgb));
+            var draw = typeof(UiAppearance).GetMethod("DrawTitleBarColour", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var io = ImGui.GetIO(); io.IniFilename = null; io.LogFilename = null;
+            io.DisplaySize = new(1200 * scale, 900 * scale); io.DeltaTime = 1f / 60; io.FontGlobalScale = scale;
+            io.Fonts.AddFontDefault();
+            byte* pixels = null; int width = 0, height = 0;
+            io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
+            io.Fonts.SetTexID(0, new ImTextureID((nint)1));
+            ImDrawListPtr list = default;
+            void Frame()
+            {
+                ImGui.NewFrame();
+                var theme = AdsPresentation.Theme(configuration.UiAccentRgb, configuration.UiColors);
+                theme.Density = compact ? MaterialDensity.Compact : MaterialDensity.Standard;
+                using var palette = MaterialTheme.Push(theme, scale, MaterialStyleMode.ColorsOnly);
+                ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(600 * scale, 800 * scale));
+                ImGui.Begin("ADS Colour callback", ImGuiWindowFlags.NoSavedSettings);
+                try { draw.Invoke(appearance, null); list = ImGui.GetWindowDrawList(); }
+                finally { ImGui.End(); }
+                ImGui.Render();
+            }
+            void Click(string caption)
+            {
+                var point = Center(caption);
+                io.AddMousePosEvent(point.X, point.Y); Frame();
+                io.AddMouseButtonEvent(0, true); Frame();
+                io.AddMouseButtonEvent(0, false); Frame();
+            }
+            Vector2 Center(string caption)
+            {
+                for (var index = 0; index + caption.Length * 4 <= list.VtxBuffer.Size; index++)
+                {
+                    var matched = true;
+                    for (var character = 0; character < caption.Length; character++)
+                    {
+                        var glyph = ImGui.FindGlyphNoFallback(ImGui.GetFont(), caption[character]);
+                        if (list.VtxBuffer[index + character * 4].Uv != new Vector2(glyph.Handle->U0, glyph.Handle->V0)
+                            || list.VtxBuffer[index + character * 4 + 2].Uv != new Vector2(glyph.Handle->U1, glyph.Handle->V1))
+                        { matched = false; break; }
+                    }
+                    if (matched) return (list.VtxBuffer[index].Pos + list.VtxBuffer[index + caption.Length * 4 - 2].Pos) / 2;
+                }
+                throw new InvalidOperationException("Actual colour callback did not show " + caption);
+            }
+            Frame(); Frame(); Click("Picker");
+            Assert.Equal(1, proxy.Saves);
+            Assert.Equal(MaterialColorMode.Picker, configuration.UiColors.Mode);
+            var replacements = new[] { "#193149", "#3579BD", "#EDF5FD" };
+            for (var field = 0; field < 3; field++)
+            {
+                var before = configuration.UiColors;
+                var current = field == 0 ? before.BackgroundRgb : field == 1 ? before.ControlsRgb : before.TextRgb;
+                Click("#" + current.ToString("X6"));
+                io.AddKeyEvent(ImGuiKey.ModCtrl, true); io.AddKeyEvent(ImGuiKey.A, true); Frame();
+                io.AddKeyEvent(ImGuiKey.A, false); io.AddKeyEvent(ImGuiKey.ModCtrl, false); Frame();
+                foreach (var character in replacements[field]) io.AddInputCharacter(character);
+                Frame();
+                Assert.Equal(1 + field, proxy.Saves);
+                Assert.Equal(before, configuration.UiColors);
+                io.AddKeyEvent(ImGuiKey.Enter, true); Frame();
+                io.AddKeyEvent(ImGuiKey.Enter, false); Frame();
+                Assert.Equal(2 + field, proxy.Saves);
+                var expected = Convert.ToUInt32(replacements[field][1..], 16);
+                Assert.Equal(field == 0 ? expected : before.BackgroundRgb, configuration.UiColors.BackgroundRgb);
+                Assert.Equal(field == 1 ? expected : before.ControlsRgb, configuration.UiColors.ControlsRgb);
+                Assert.Equal(field == 2 ? expected : before.TextRgb, configuration.UiColors.TextRgb);
+                Assert.Equal(UiLanguage.TraditionalChinese, configuration.UiLanguage);
+            }
+            var manual = configuration.UiColors;
+            Click("Auto");
+            Assert.Equal(5, proxy.Saves);
+            Assert.Equal(manual with { Mode = MaterialColorMode.Auto }, configuration.UiColors);
+            Assert.Equal(AdsPresentation.ReferenceAccent, configuration.UiAccentRgb);
+        }
+        finally
+        {
+            interfaceProperty.SetValue(null, previousInterface);
+            Ui.SetLanguage(language);
+            ImGui.DestroyContext(context); ImGui.SetCurrentContext(previousContext);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

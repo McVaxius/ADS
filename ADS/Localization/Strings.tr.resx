@@ -4212,4 +4212,16 @@
   <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Hata ayıklama dönüşü: görevde kararlı canlı durum bekleniyor.</value></data>
   <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Hata ayıklama dönüşü: ADS ilerlemesi dönüş konumundan yeniden başlatıldı.</value></data>
   <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Hata ayıklama dönüşü: ilerleme korundu; dönüş konumundan yeniden planlanıyor.</value></data>
+  <data name="Picker" xml:space="preserve"><value>Seçici</value></data>
+  <data name="Caption.DefaultTitle" xml:space="preserve"><value>Varsayılan</value></data>
+  <data name="Background, controls and text follow your theme." xml:space="preserve"><value>Arka plan, denetimler ve metin temanızı izler.</value></data>
+  <data name="Theme colour" xml:space="preserve"><value>Tema rengi</value></data>
+  <data name="Choose each colour independently." xml:space="preserve"><value>Her rengi bağımsız olarak seçin.</value></data>
+  <data name="Background" xml:space="preserve"><value>Arka plan</value></data>
+  <data name="Controls" xml:space="preserve"><value>Denetimler</value></data>
+  <data name="Text" xml:space="preserve"><value>Metin</value></data>
+  <data name="Aa  Preview text" xml:space="preserve"><value>Aa  Metin önizlemesi</value></data>
+  <data name="Control" xml:space="preserve"><value>Denetim</value></data>
+  <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Her rengi ayarlamak için Seçici&apos;ye geçin.</value></data>
+  <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Otomatik temayı kullanmak için Otomatik&apos;e dönün.</value></data>
 </root>

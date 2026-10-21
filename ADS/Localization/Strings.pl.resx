@@ -4212,4 +4212,16 @@
   <data name="Debug Return: waiting for stable living duty state." xml:space="preserve"><value>Powrót debugowania: oczekiwanie na stabilny stan żywej postaci w zadaniu.</value></data>
   <data name="Debug Return: ADS progression restarted from the returned position." xml:space="preserve"><value>Powrót debugowania: postęp ADS rozpoczęty ponownie od miejsca powrotu.</value></data>
   <data name="Debug Return: existing progression retained; replanning from the returned position." xml:space="preserve"><value>Powrót debugowania: postęp zachowany; nowe planowanie od miejsca powrotu.</value></data>
+  <data name="Picker" xml:space="preserve"><value>Wybór</value></data>
+  <data name="Caption.DefaultTitle" xml:space="preserve"><value>Domyślny</value></data>
+  <data name="Background, controls and text follow your theme." xml:space="preserve"><value>Tło, elementy sterujące i tekst korzystają z motywu.</value></data>
+  <data name="Theme colour" xml:space="preserve"><value>Kolor motywu</value></data>
+  <data name="Choose each colour independently." xml:space="preserve"><value>Wybierz każdy kolor niezależnie.</value></data>
+  <data name="Background" xml:space="preserve"><value>Tło</value></data>
+  <data name="Controls" xml:space="preserve"><value>Elementy sterujące</value></data>
+  <data name="Text" xml:space="preserve"><value>Tekst</value></data>
+  <data name="Aa  Preview text" xml:space="preserve"><value>Aa  Podgląd tekstu</value></data>
+  <data name="Control" xml:space="preserve"><value>Przycisk</value></data>
+  <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Przejdź do opcji Wybór, aby ustawić każdy kolor.</value></data>
+  <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Wróć do Auto, aby używać motywu automatycznego.</value></data>
 </root>
