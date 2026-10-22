@@ -4606,4 +4606,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Torre di Cristallo: mantenimento della posizione nell'area assegnata della nube ipercarica finché non si libera.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Torre di Cristallo: percorso verificato dell'incursione in corso.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Torre di Cristallo: in attesa di conferma dell’attivazione della scorciatoia e dell’arrivo.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Altre azioni</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Ordine e anteprima</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Preimpostazioni e importazione</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Controlli dei plugin associati</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Tema e lingua</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Controlli della finestra principale</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Opacità della finestra</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>Quando non è in primo piano</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>Scegli un gruppo di strumenti</value></data>
 </root>

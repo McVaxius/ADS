@@ -554,6 +554,23 @@ public sealed class ShopPurchaseRunnerTests
             1, character, 1016804, targetNpc, shopNpc, selectorNpc));
     }
 
+    [Theory]
+    [InlineData(7, 100, 35, 200, true, false, true)]
+    [InlineData(0, 100, 35, 200, true, false, false)]
+    [InlineData(8, 100, 35, 200, true, false, false)]
+    [InlineData(7, 101, 35, 200, true, false, false)]
+    [InlineData(7, 100, 36, 200, true, false, false)]
+    [InlineData(7, 100, 35, 201, true, false, false)]
+    [InlineData(7, 0, 35, 200, true, false, false)]
+    [InlineData(7, 100, 0, 200, true, false, false)]
+    [InlineData(7, 100, 35, 0, true, false, false)]
+    [InlineData(7, 100, 35, 200, false, false, false)]
+    [InlineData(7, 100, 35, 200, true, true, false)]
+    public void MgpCleanupRequiresTheSameValidatedExchangeSession(ulong character, long addon, uint addonId,
+        long receiver, bool exactOffer, bool foreignTarget, bool owns)
+        => Assert.Equal(owns, DalamudShopPurchaseRuntime.MatchesExchangeCleanupSession(
+            7, character, 100, (nint)addon, 35, addonId, 200, (nint)receiver, exactOffer, foreignTarget));
+
     [Fact]
     public void FiniteOrderCreditsOnlyVerifiedPurchasesAcrossCurrencyLimitedPassesAndReload()
     {

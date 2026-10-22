@@ -1,3 +1,16 @@
+2026-10-22 - Approved ADS window layout and density
+
+- Present duty ownership and primary actions together; flatten overview cards and use separate Settings navigation with grouped appearance controls.
+- Align Shop order/catalog rows and keep secondary item drafts, vendor and retainer details in the same Shop Lists window. Preserve saved purchase modes/currencies, row Save/refresh behavior and existing Test/Run gates.
+- Tighten selected toolbars and editable lists, group companion/desynthesis controls and simplify guide headings. Keep all independent windows and the existing Rules grid; only reduce its Advanced wrapper padding.
+- Native compilation, interaction and visual acceptance remain pending.
+
+2026-10-22 - Retain the validated MGP exchange through purchase cleanup
+
+- Close the same validated MGP exchange after its NPC target clears, so a completed Verminion minion purchase can proceed to inventory registration. Retain the native window and receiver identity only for the owned transaction; reject changed characters, foreign targets, hidden or replaced windows, an agent bound to another window and changed shop/item/cost data. Existing NPC and selector ownership checks remain in place.
+- Native evidence identified the leftover Zu exchange and verified registration after one explicit test cleanup. The production cleanup change and isolated client deployment remain under verification; no unrelated ADS source is deployed by this change.
+- Validation: 197 focused shop tests passed against the installed 1.3.0.1 source with the isolated cleanup repair, final agent/window guard and diagnostic marker. Native deployment and verification of the patched cleanup remain pending.
+
 2026-10-22 - Crystal Tower native mechanic integration (I617, partial)
 
 - Distinguish Bone Dragon's revival deaths from its verified director completion signal. Use observed comet and ice-cage positions/radii for Behemoth and Amon cover, retaining the player's actual floor. Scope Labyrinth handlers to their authored rooms and clear an owned Atomos target when it loses eligibility; retain four stable preferred pad holders until the supported lane clears.

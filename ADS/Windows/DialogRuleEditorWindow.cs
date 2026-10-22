@@ -60,6 +60,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 
         MaterialText.TextWrapped(Ui.T("Spreadsheet-style editor for dialog-yesno-rules.json. These rules are global dialog matches, not duty-scoped."));
         MaterialText.TextWrapped(Ui.T("Processing scope follows Settings > Process dialog rules outside owned duties."));
@@ -382,6 +383,8 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawRulesTable()
     {
+        using var controls = MaterialTable.PushControls();
+        using var rows = MaterialTable.PushTightRows();
         const ImGuiTableFlags tableFlags =
             ImGuiTableFlags.Borders
             | ImGuiTableFlags.RowBg

@@ -169,8 +169,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             });
             while (columns > 1 && ImGui.GetContentRegionAvail().X / columns < widest) columns /= 2;
         }
-        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(7, 0) * ImGuiHelpers.GlobalScale);
-        if (!ImGui.BeginTable("ADSPrimaryState", columns, ImGuiTableFlags.SizingStretchSame))
+        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(AdsPresentation.Compact ? 8 : 14, AdsPresentation.Compact ? 6 : 10) * ImGuiHelpers.GlobalScale);
+        if (!ImGui.BeginTable("ADSPrimaryState", columns, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersOuter | ImGuiTableFlags.BordersInnerV))
         {
             ImGui.PopStyleVar();
             return;
@@ -179,8 +179,10 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         {
             if (index % columns == 0) ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(index % columns);
-            var (icon, caption, value) = summaries[index];
-            AdsPresentation.Summary(plugin.Fonts.Push, icon, caption, value);
+            var (_, caption, value) = summaries[index];
+            ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, MaterialCanvas.Color(MaterialTheme.Current.Colors.SurfaceContainerLow));
+            using (plugin.Fonts.Push(UiFontRole.Caption)) MaterialText.TextDisabled(caption);
+            using (plugin.Fonts.Push(UiFontRole.BodyStrong)) MaterialText.TextWrapped(value);
         }
         ImGui.EndTable();
         ImGui.PopStyleVar();
@@ -293,6 +295,19 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         ImGui.TableSetColumnIndex(0);
         DrawCard("ADSActiveOptionsCard", MaterialIcon.Sliders, T("Active Options"), T("Key options currently in effect."), () =>
         {
+            string[] optionLabels = [T("Active preset"), T("Consider treasure coffers in planner"), T("Treasure door frame recovery"),
+                T("Enable BMRAI/VBM in regular duties"), T("Preview equipment before selling")];
+            if (BeginDetailTable("ADSActiveOptionSummary", .5f, optionLabels))
+            {
+                DrawDetailRow(optionLabels[0], plugin.ObjectPriorityRuleService.ActivePresetName);
+                DrawDetailRow(optionLabels[1], T(plugin.Configuration.ConsiderTreasureCoffers ? "ON" : "OFF"));
+                DrawDetailRow(optionLabels[2], T(plugin.Configuration.TreasureDoorJiggleRecoveryEnabled ? "ON" : "OFF"));
+                DrawDetailRow(optionLabels[3], T(plugin.Configuration.EnableBmraiVbmInRegularDuties ? "ON" : "OFF"));
+                DrawDetailRow(optionLabels[4], T(plugin.Configuration.GearSaleConfirmationEnabled ? "ON" : "OFF"));
+                ImGui.EndTable();
+            }
+            if (WindowLayout.SmallButton(L("Settings"))) plugin.OpenConfigUi();
+            if (!MaterialText.CollapsingHeader(L("Details"))) return;
             string[] labels = [T("Treasure coffers"), T("Loot"), T("Object rules"), T("Dialog rules"), T("Layer")];
             if (!BeginDetailTable("ADSOverviewOptions", AdsPresentation.Compact ? 0.395f : 0.38f, labels))
                 return;
@@ -320,7 +335,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 MaterialText.TextWrapped(T("Start/Resume stay enabled even without catalog metadata. ADS trusts instanced-duty truth and treats catalog rows as maturity metadata only."));
             }
             if (!context.InInstancedDuty || execution.IsOwned)
-                AdsPresentation.NoOwnershipWarning(plugin.Fonts.Push, T("No ownership warning."));
+                MaterialText.TextWrapped(T("No ownership warning."));
         }, trailingGap: false);
         ImGui.EndTable();
     }
@@ -337,17 +352,15 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             {
                 ImGui.TableNextRow();
                 ImGui.TableSetColumnIndex(0);
-                var height = id is "ADSCurrentDutyCard" or "ADSPlannerCard"
-                    ? AdsPresentation.Compact ? 276 : 320
-                    : AdsPresentation.Compact ? 212 : 252;
                 AdsPresentation.Panel(() =>
                 {
-                    AdsPresentation.Heading(plugin.Fonts.Push, icon, title, description);
-                    ImGui.Dummy(new Vector2(0, AdsPresentation.Compact ? 8 : 12) * MaterialTheme.Metrics.Scale);
+                    using (plugin.Fonts.Push(UiFontRole.BodyStrong)) MaterialText.Text(title);
+                    if (ImGui.IsItemHovered()) MaterialText.SetTooltip(description);
+                    ImGui.Dummy(new Vector2(0, AdsPresentation.Compact ? 4 : 8) * MaterialTheme.Metrics.Scale);
                     ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(8f, AdsPresentation.Compact ? 2 : 4) * ImGuiHelpers.GlobalScale);
-                    try { AdsPresentation.Inset(draw, ImGui.GetID(""), Math.Max(0, height - (AdsPresentation.Compact ? 80 : 92))); }
+                    try { draw(); }
                     finally { ImGui.PopStyleVar(); }
-                }, ImGui.GetID(""), height);
+                }, ImGui.GetID(""));
             }
             finally { ImGui.EndTable(); }
         }
@@ -361,8 +374,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private static bool BeginDetailTable(string id, float labelWeight, string[] labels)
     {
         var available = Math.Max(1, ImGui.GetContentRegionAvail().X - ImGui.GetStyle().CellPadding.X * 4);
-        var labelWidth = labels.Max(label => MaterialText.Measure(label).X) + 2 * MaterialTheme.Metrics.Scale;
-        if (!ImGui.BeginTable(id, 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerH))
+        var labelWidth = Math.Min(labels.Max(label => MaterialText.Measure(label).X) + 2 * MaterialTheme.Metrics.Scale, available * .52f);
+        if (!ImGui.BeginTable(id, 2, ImGuiTableFlags.SizingStretchProp))
             return false;
         var measured = labelWidth > available * labelWeight;
         ImGui.TableSetupColumn("Label", measured ? ImGuiTableColumnFlags.WidthFixed : ImGuiTableColumnFlags.WidthStretch, measured ? labelWidth : labelWeight);
@@ -378,7 +391,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         {
             ImGui.TableSetColumnIndex(0);
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + MaterialTheme.Metrics.Scale);
-            MaterialText.Text(label);
+            ImGui.PushTextWrapPos(0);
+            try { MaterialText.TextWrapped(label); }
+            finally { ImGui.PopTextWrapPos(); }
             ImGui.TableSetColumnIndex(1);
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + MaterialTheme.Metrics.Scale);
             ImGui.PushTextWrapPos(0);
@@ -403,7 +418,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Object Explorer", plugin.ToggleObjectExplorerUi),
             ("Object Rules", plugin.ToggleRuleEditorUi),
             ("Dialog Rules", plugin.ToggleDialogRuleEditorUi),
-            ("Frontier Labels", plugin.ToggleFrontierLabelUi));
+            ("Frontier Labels", plugin.ToggleFrontierLabelUi),
+            ("Duty Manager", plugin.OpenDutyMaturityEditorUi));
 
         ImGui.Spacing();
         MaterialText.Text(T("Treasure And Operations"));
@@ -415,7 +431,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ("Reflection", plugin.ToggleReflectionUi),
             ("Shop Lists", plugin.OpenShopListsUi),
             ("Desynth Controls", plugin.OpenDesynthConfigUi),
-            ("Extract Materia", () => plugin.StartExtractMateria()));
+            ("Extract Materia", () => plugin.StartExtractMateria()),
+            ("Inventory", plugin.ToggleInventoryUi));
 
         ImGui.Spacing();
         MaterialText.Text(T("Diagnostics"));
@@ -433,7 +450,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         DrawLauncherGrid(
             "ADSWindowTools",
             ("Settings", plugin.OpenConfigUi),
-            ("Compact Controls", plugin.ToggleQuickControlUi));
+            ("Compact Controls", plugin.ToggleQuickControlUi),
+            ("Guided Setup", plugin.OpenWizardUi));
 
         ImGui.Spacing();
         MaterialText.Text(T("Data Update"));
@@ -578,56 +596,72 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     private void DrawActionRow()
     {
         var inInstancedDuty = plugin.DutyContextService.Current.InInstancedDuty;
-        var blue = MaterialTheme.Current.Colors.Primary;
-        var red = AdsPresentation.Rgb(0xBE172A);
-        var labels = new[] { T("Start Outside"), T("Start Inside"), T("Resume"), T("Leave"), T("Stop"), T("Guided Setup") };
-        var captions = new[] { T("Prepare and start"), T("Start in current duty"), T("Continue execution"),
-            T("Leave current duty"), T("Halt execution"), T("Step-by-step help") };
-        var scale = ImGuiHelpers.GlobalScale;
-        var minima = labels.Select((label, index) => AdsPresentation.ActionMinimum(plugin.Fonts.Push, label, captions[index]) + 8 * scale).ToArray();
-        var available = ImGui.GetContentRegionAvail().X;
-        var columns = minima.Sum() <= available ? 6 : Math.Clamp((int)(available / minima.Max()), 1, 6);
-        using var actionGridStyle = new MaterialStyleScope();
-        actionGridStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(4 * scale, 0));
-        if (ImGui.BeginTable("ADSPrimaryActions", columns, ImGuiTableFlags.SizingStretchProp))
+        var execution = plugin.ExecutionService;
+        AdsPresentation.Panel(() =>
         {
-            for (var column = 0; column < columns; column++)
-                ImGui.TableSetupColumn("Action" + column, ImGuiTableColumnFlags.WidthStretch,
-                    columns == 6 ? minima[column] : minima.Max());
-            ImGui.TableNextColumn();
-            if (DrawActionButton(T("Start Outside"), T("Prepare and start"), "Start Outside", blue))
-                plugin.StartDutyFromOutside();
-
-            ImGui.TableNextColumn();
-            using (new ImGuiDisabledBlock(!inInstancedDuty))
+            using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+            var primaryLabel = execution.IsOwned ? "Stop" : inInstancedDuty ? "Start Inside" : "Start Outside";
+            var actionsWidth = WindowLayout.ButtonMinimum(L(primaryLabel), MaterialIcon.Play)
+                + WindowLayout.ButtonMinimum(L("Leave"), MaterialIcon.DoorExit)
+                + WindowLayout.ButtonMinimum(L("Guided Setup"), MaterialIcon.Document)
+                + WindowLayout.ButtonMinimum(L("More actions")) + ImGui.GetStyle().ItemSpacing.X * 3;
+            var columns = ImGui.GetContentRegionAvail().X >= actionsWidth + 380 * MaterialTheme.Metrics.Scale ? 2 : 1;
+            if (!ImGui.BeginTable("ADSPrimaryActions", columns, ImGuiTableFlags.SizingStretchProp)) return;
+            try
             {
-                if (DrawActionButton(T("Start Inside"), T("Start in current duty"), "Start Inside", blue))
-                    plugin.StartDutyFromInside();
+                ImGui.TableSetupColumn("Ownership", ImGuiTableColumnFlags.WidthStretch);
+                if (columns == 2) ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, actionsWidth);
+                ImGui.TableNextColumn();
+                var summaryTop = ImGui.GetCursorPosY();
+                MaterialText.TextDisabled(T("OWNERSHIP"));
+                using (plugin.Fonts.Push(AdsPresentation.Compact ? UiFontRole.BodyStrong : UiFontRole.PluginName))
+                    MaterialText.Text(Display(execution.CurrentMode.ToString()));
+                MaterialText.TextWrapped(T(execution.IsOwned ? "Current objective and execution behaviour."
+                    : "ADS observes by default. Duty operations become active only after you explicitly grant ownership."));
+                var summaryHeight = ImGui.GetCursorPosY() - summaryTop;
+                if (columns == 2)
+                {
+                    ImGui.TableNextColumn();
+                    ImGui.SetCursorPosY(ImGui.GetCursorPosY() + Math.Max(0, (summaryHeight - ImGui.GetFrameHeight()) * .5f));
+                }
+                if (execution.IsOwned)
+                {
+                    using var stopStyle = new MaterialStyleScope();
+                    stopStyle.Color(ImGuiCol.Button, MaterialTheme.Current.Colors.ErrorContainer);
+                    if (WindowLayout.Button(L("Stop"), icon: MaterialIcon.Stop)) plugin.StopOwnership();
+                }
+                else if (inInstancedDuty)
+                {
+                    if (WindowLayout.Button(L("Start Inside"), icon: MaterialIcon.Play)) plugin.StartDutyFromInside();
+                }
+                else if (WindowLayout.Button(L("Start Outside"), icon: MaterialIcon.Play)) plugin.StartDutyFromOutside();
+                WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(L("Leave"), MaterialIcon.DoorExit));
+                using (new ImGuiDisabledBlock(!inInstancedDuty))
+                    if (WindowLayout.Button(L("Leave"), icon: MaterialIcon.DoorExit)) plugin.LeaveDuty();
+                WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(L("Guided Setup"), MaterialIcon.Document));
+                if (WindowLayout.Button(L("Guided Setup"), icon: MaterialIcon.Document)) plugin.OpenWizardUi();
+                WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(L("More actions")));
+                if (WindowLayout.Button(L("More actions"))) ImGui.OpenPopup("ADSMoreDutyActions");
+                var actionRoot = ImGui.GetID("");
+                if (ImGui.BeginPopup("ADSMoreDutyActions"))
+                {
+                    // Moving actions into a menu retains their original table ID root.
+                    ImGuiP.PushOverrideID(actionRoot);
+                    try
+                    {
+                        if (!execution.IsOwned && WindowLayout.Button(L("Stop"), icon: MaterialIcon.Stop)) plugin.StopOwnership();
+                        if ((execution.IsOwned || inInstancedDuty) && WindowLayout.Button(L("Start Outside"), icon: MaterialIcon.Play)) plugin.StartDutyFromOutside();
+                        using (new ImGuiDisabledBlock(!inInstancedDuty))
+                        {
+                            if ((execution.IsOwned || !inInstancedDuty) && WindowLayout.Button(L("Start Inside"), icon: MaterialIcon.Play)) plugin.StartDutyFromInside();
+                            if (WindowLayout.Button(L("Resume"), icon: MaterialIcon.Refresh)) plugin.ResumeDutyFromInside();
+                        }
+                    }
+                    finally { ImGui.PopID(); ImGui.EndPopup(); }
+                }
             }
-
-            ImGui.TableNextColumn();
-            using (new ImGuiDisabledBlock(!inInstancedDuty))
-            {
-                if (DrawActionButton(T("Resume"), T("Continue execution"), "Resume"))
-                    plugin.ResumeDutyFromInside();
-            }
-
-            ImGui.TableNextColumn();
-            using (new ImGuiDisabledBlock(!inInstancedDuty))
-            {
-                if (DrawActionButton(T("Leave"), T("Leave current duty"), "Leave"))
-                    plugin.LeaveDuty();
-            }
-
-            ImGui.TableNextColumn();
-            if (DrawActionButton(T("Stop"), T("Halt execution"), "Stop", red))
-                plugin.StopOwnership();
-
-            ImGui.TableNextColumn();
-            if (DrawActionButton(T("Guided Setup"), T("Step-by-step help"), "Guided Setup"))
-                plugin.OpenWizardUi();
-            ImGui.EndTable();
-        }
+            finally { ImGui.EndTable(); }
+        }, ImGui.GetID(""), emphasis: true);
     }
 
     internal bool DrawActionButton(string label, string caption, string id, Vector4? color = null)

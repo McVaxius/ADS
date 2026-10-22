@@ -4232,4 +4232,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>क्रिस्टल टावर: अत्यधिक आवेशित बादल का निर्धारित क्षेत्र साफ़ होने तक वहीं रुके हुए हैं।</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>क्रिस्टल टावर: सत्यापित रेड मार्ग पर आगे बढ़ रहा है।</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>क्रिस्टल टावर: शॉर्टकट के सक्रिय होने और पहुँचने की पुष्टि की प्रतीक्षा है।</value></data>
+  <data name="More actions" xml:space="preserve"><value>और कार्रवाइयाँ</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>ऑर्डर और पूर्वावलोकन</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>प्रीसेट और आयात</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>सहायक नियंत्रण</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>थीम और भाषा</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>मुख्य विंडो के नियंत्रण</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>विंडो की अपारदर्शिता</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>फ़ोकस न होने पर</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>??????? ?? ???? ?????</value></data>
 </root>

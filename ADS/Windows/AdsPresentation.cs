@@ -76,9 +76,9 @@ internal static class AdsPresentation
             Gap = 8 * s, IconSize = 20 * s, Rounding = 4 * s, ItemSpacing = new(8 * s, 6 * s), CellPadding = new(12 * s, 6 * s) };
     }
 
-    internal static void Panel(System.Action draw, uint originalIdRoot, float minimumHeight = 0)
+    internal static void Panel(System.Action draw, uint originalIdRoot, float minimumHeight = 0, bool emphasis = false)
         => Surface(draw, originalIdRoot, minimumHeight,
-            new Vector2(Compact ? 8 : 20, Compact ? 6 : 16), false);
+            new Vector2(Compact ? 8 : 16, Compact ? 6 : 16), false, emphasis);
 
     internal static void Inset(System.Action draw, uint originalIdRoot)
         => Inset(draw, originalIdRoot, 0);
@@ -89,7 +89,7 @@ internal static class AdsPresentation
     internal static void ToolPanel(System.Action draw, uint originalIdRoot)
         => Surface(draw, originalIdRoot, 0, new Vector2(6), true);
 
-    private static void Surface(System.Action draw, uint originalIdRoot, float minimumHeight, Vector2 logicalPadding, bool inner)
+    private static void Surface(System.Action draw, uint originalIdRoot, float minimumHeight, Vector2 logicalPadding, bool inner, bool emphasis = false)
     {
         var s = MaterialTheme.Metrics.Scale;
         var start = ImGui.GetCursorScreenPos();
@@ -132,7 +132,7 @@ internal static class AdsPresentation
             var bottom = Math.Max(start.Y + minimumHeight * s, ImGui.GetItemRectMax().Y + padding.Y);
             splitter.SetCurrentChannel(dl, 0);
             var c = MaterialTheme.Current.Colors;
-            MaterialCanvas.Surface(start, new(start.X + width, bottom), inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
+            MaterialCanvas.Surface(start, new(start.X + width, bottom), emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
                 inner ? c.SurfaceContainerLow : c.Surface, 5 * s);
             dl.AddRect(start, new(start.X + width, bottom), MaterialCanvas.Color(c.OutlineVariant), 5 * s);
             ImGui.SetCursorScreenPos(new(start.X, bottom));

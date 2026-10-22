@@ -7,6 +7,13 @@ namespace ADS.Windows;
 
 internal static class WindowLayout
 {
+    internal static void SameLineIfFits(float nextWidth)
+    {
+        var windowRight = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
+        if (ImGui.GetItemRectMax().X + ImGui.GetStyle().ItemSpacing.X + nextWidth <= windowRight)
+            ImGui.SameLine();
+    }
+
     // Existing translated ### labels retain their native IDs as whole controls move between rows.
     public static bool Checkbox(string label, ref bool value)
     {
@@ -86,10 +93,10 @@ internal static class WindowLayout
         return clicked;
     }
 
-    internal static bool Header(string nativeLabel, MaterialIcon icon, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.None)
+    internal static bool Header(string nativeLabel, MaterialIcon icon, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.None, bool tight = false)
     {
         using var style = new MaterialStyleScope();
-        style.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact ? 3 : 12) * MaterialTheme.Metrics.Scale);
+        style.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact || tight ? 3 : 12) * MaterialTheme.Metrics.Scale);
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);var open = ImGui.CollapsingHeader(nativeLabel, flags);ImGui.PopStyleColor();
         var min = ImGui.GetItemRectMin();var max = ImGui.GetItemRectMax();var scale = MaterialTheme.Metrics.Scale;

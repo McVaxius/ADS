@@ -53,6 +53,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 
         var context = plugin.DutyContextService.Current;
         var localPlayer = Plugin.ObjectTable.LocalPlayer;
@@ -208,6 +209,8 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
 
     private void DrawEntrySection(TreasureRouteDefinition route)
     {
+        using var controls = MaterialTable.PushControls();
+        using var rows = MaterialTable.PushTightRows();
         MaterialText.Text(Ui.T("Entry XYZ"));
         if (route.EntryPoint is null)
         {
@@ -255,6 +258,8 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
 
     private void DrawRoomRows(TreasureRouteDefinition route)
     {
+        using var controls = MaterialTable.PushControls();
+        using var rows = MaterialTable.PushTightRows();
         var isThief = route.RouteKind == TreasureRouteKind.Thief;
         var columnCount = isThief ? 4 : 3;
         const ImGuiTableFlags tableFlags =

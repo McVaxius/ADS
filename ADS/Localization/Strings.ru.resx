@@ -4606,4 +4606,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Кристальная башня: удержание назначенной области сверхзаряженного облака до её освобождения.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Кристальная башня: движение по проверенному маршруту рейда.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Кристальная башня: ожидание подтверждения активации короткого пути и прибытия.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Другие действия</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Заказ и предпросмотр</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Профили и импорт</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Управление связанными плагинами</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Тема и язык</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Элементы главного окна</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Непрозрачность окна</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>При потере фокуса</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>???????? ?????? ????????????</value></data>
 </root>

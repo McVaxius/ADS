@@ -11676,4 +11676,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>크리스탈 타워: 배정된 파동 구름 구역이 해제될 때까지 위치를 유지하는 중입니다.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>크리스탈 타워: 확인된 레이드 경로를 따라 이동 중입니다.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>크리스탈 타워: 지름길 활성화 및 도착 확인을 기다리는 중입니다.</value></data>
+  <data name="More actions" xml:space="preserve"><value>추가 작업</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>주문 및 미리보기</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>프리셋 및 가져오기</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>연동 플러그인 제어</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>테마 및 언어</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>메인 창 제어</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>창 불투명도</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>포커스가 없을 때</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>?? ?? ??</value></data>
 </root>

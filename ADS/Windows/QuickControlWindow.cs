@@ -101,11 +101,12 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
-        if (WindowLayout.Header(Ui.L("Tools"), MaterialIcon.Wrench, ImGuiTreeNodeFlags.DefaultOpen))
+        if (WindowLayout.Header(Ui.L("Tools"), MaterialIcon.Wrench, ImGuiTreeNodeFlags.DefaultOpen, tight: true))
         {
-            AdsPresentation.ToolPanel(DrawToolShortcuts, ImGui.GetID(""));
+            DrawToolShortcuts();
         }
-        ImGui.Spacing();
+        if (WindowLayout.Header(Ui.L("Companion controls"), MaterialIcon.Group, tight: true))
+            DrawCompanionShortcuts();
 
         if (plugin.DebugStrafeService.Enabled
             && WindowLayout.Header(Ui.L("Debug Strafe"), MaterialIcon.Sliders))
@@ -113,7 +114,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             DrawDebugStrafeControls();
         }
 
-        if (WindowLayout.Header(Ui.L("Details"), MaterialIcon.Info))
+        if (WindowLayout.Header(Ui.L("Details"), MaterialIcon.Info, tight: true))
             DrawDetails();
     }
 
@@ -158,7 +159,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         using var shortcutFont = plugin.Fonts.Push(UiFontRole.Caption);
         using var shortcutStyle = new MaterialStyleScope();
         shortcutStyle.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact ? 2 : 7) * MaterialTheme.Metrics.Scale);
-        shortcutStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(4, AdsPresentation.Compact ? 2 : 4) * MaterialTheme.Metrics.Scale);
+        shortcutStyle.Style(ImGuiStyleVar.CellPadding, new Vector2(MaterialTheme.Metrics.Scale, 0));
         shortcutStyle.Style(ImGuiStyleVar.ItemSpacing, new Vector2(8, 0) * MaterialTheme.Metrics.Scale);
         var columns = ToolColumns();
         if (!ImGui.BeginTable("ADSQuickToolShortcuts", columns, ImGuiTableFlags.SizingStretchSame)) return;
@@ -182,7 +183,13 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             if (WindowLayout.Button(Ui.L("Shop Lists"), ShortcutSize, MaterialIcon.Cart)) plugin.OpenShopListsUi();
         }
         finally { ImGui.EndTable(); }
+    }
 
+    private void DrawCompanionShortcuts()
+    {
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+        using var rows = MaterialTable.PushTightRows();
+        var columns = ToolColumns();
         if (!ImGui.BeginTable("ADSQuickCompanionControls", columns, ImGuiTableFlags.SizingStretchSame))
             return;
         DrawCompanionControls("QSTcomp", QstCompanionWarningService.InternalName, columns);
@@ -195,7 +202,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
             MaterialText.SetTooltip(Ui.T("Set RSR to Off and restore Coppelia's eleven healing defaults. Works without HealBot loaded."));
     }
 
-    private static Vector2 ShortcutSize => new(-1f, (AdsPresentation.Compact ? 26 : 46) * MaterialTheme.Metrics.Scale);
+    private static Vector2 ShortcutSize => new(-1f, (AdsPresentation.Compact ? 26 : 32) * MaterialTheme.Metrics.Scale);
 
     private static int ToolColumns()
     {

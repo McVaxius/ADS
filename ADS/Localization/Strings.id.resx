@@ -4248,4 +4248,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Crystal Tower: bertahan di area awan bermuatan tinggi yang ditugaskan hingga area tersebut bersih.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Menara Kristal: mengikuti rute raid yang telah diverifikasi.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Crystal Tower: menunggu konfirmasi aktivasi jalan pintas dan kedatangan.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Tindakan lainnya</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Pesanan &amp; pratinjau</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Prasetel &amp; impor</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Kontrol pendamping</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Tema &amp; Bahasa</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Kontrol jendela utama</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Opasitas jendela</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>Saat tidak berfokus</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>Pilih kelompok alat</value></data>
 </root>

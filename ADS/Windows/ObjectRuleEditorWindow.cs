@@ -95,6 +95,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private string dutySearch = string.Empty;
     private string ruleTextFilter = string.Empty;
     private string contextSearch = string.Empty;
+    private int advancedToolGroup;
     private ObjectRulePromotionResult? pendingPromotion;
     private IReadOnlyList<string> pendingSaveChangedFiles = [];
     private bool continueSaveAfterEmptyConfirmation;
@@ -270,14 +271,12 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         DrawFilters();
         visibleRuleIndices = BuildVisibleRuleIndices();
+        DrawAdvancedTools(visibleRuleIndices);
+        if (draftStructureChangedThisDraw)
+            return;
         DrawSelectionToolbar(visibleRuleIndices);
         if (draftStructureChangedThisDraw)
             return;
-
-        if (WindowLayout.Header(Ui.L("Advanced##ADSRuleContextTools"), MaterialIcon.Wrench))
-        {
-            DrawAdvancedTools(visibleRuleIndices);
-        }
         // Keep existing popup identities and pending previews alive outside the expander.
         DrawCreatePresetPopup();
         DrawDiskTransferPopup();
@@ -364,10 +363,15 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     {
         var originalIdRoot = ImGui.GetID("");
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
-        using var height = MaterialText.PushLineHeight(new[] { "Preset management", "Sharing", "Draft editing", "PR-ready checkout", "Guided Setup" }.Select(Ui.Display).ToArray());
-        if (!ImGui.BeginTabBar("##ADSRuleAdvancedTabs", ImGuiTabBarFlags.FittingPolicyScroll))
-            return;
-        try
+        var groups = new[] { "Choose a tool group", "Preset management", "Sharing", "Draft editing", "PR-ready checkout", "Guided Setup" };
+        var captions = groups.Select(label => Ui.T(label)).ToArray();
+        using var height = MaterialText.PushLineHeight(captions.Append(Ui.T("Advanced")).ToArray());
+        ImGui.AlignTextToFramePadding();
+        MaterialText.Text(Ui.T("Advanced"));
+        var width = WindowLayout.ComboMinimum(captions);
+        WindowLayout.SameLineIfFits(width);
+        ImGui.SetNextItemWidth(MaterialLayout.FitNextItemWidth(width, width));
+        WindowLayout.Combo("###Advanced##ADSRuleContextTools", ref advancedToolGroup, captions, captions.Length);
         {
             DrawTab("Preset management", () =>
             {
@@ -427,15 +431,14 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 MaterialText.TextWrapped(Ui.T("Field cues: red required (bright red means missing), amber recommended, normal optional, dim ignored. Cues never clear ignored stored values."));
             });
         }
-        finally { ImGui.EndTabBar(); }
 
         void DrawTab(string label, Action draw)
         {
-            if (!WindowLayout.BeginTabItem(Ui.L(label)))
+            if (advancedToolGroup == 0 || groups[advancedToolGroup] != label)
                 return;
             ImGuiP.PushOverrideID(originalIdRoot);
             try { draw(); }
-            finally { ImGui.PopID(); ImGui.EndTabItem(); }
+            finally { ImGui.PopID(); }
         }
     }
 

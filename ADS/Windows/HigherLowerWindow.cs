@@ -34,17 +34,18 @@ public sealed class HigherLowerWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 
         var probe = plugin.TreasureHighLowDiagnosticService.CaptureLiveProbe();
         var solverState = plugin.HigherLowerCardVfxSolverService.CurrentState;
         var automationState = plugin.HigherLowerAutomationService.CaptureDebugState();
         DrawToolbar(probe);
         ImGui.Separator();
-        DrawRuntime(probe.Runtime, solverState, automationState);
+        MaterialSettings.Columns("ADSHigherLowerOverview", 440 * MaterialTheme.Metrics.Scale,
+            () => DrawRuntime(probe.Runtime, solverState, automationState),
+            () => DrawCandidates(probe.BoardCandidates));
         ImGui.Spacing();
         DrawTagControls();
-        ImGui.Spacing();
-        DrawCandidates(probe.BoardCandidates);
         ImGui.Spacing();
         DrawWarnings(probe);
         ImGui.Spacing();

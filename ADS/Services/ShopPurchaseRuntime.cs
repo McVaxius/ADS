@@ -350,6 +350,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private bool companyActionUiOwned;
     private ulong shopUiCharacter;
     private ulong shopUiNpc;
+    private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedMgpExchange;
     private GearCleanupCandidate? gearSaleContextItem;
     private uint gearSaleConfirmedAddon;
     private string? gearSaleConfirmedPrompt;
@@ -1287,6 +1288,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (nearest == null || !GameInteractionHelper.TryInteractWithObject(targetManager, nearest, log)) return false;
         shopUiCharacter = CharacterId;
         shopUiNpc = nearest.GameObjectId;
+        ownedMgpExchange = null;
         gearSaleContextItem = null;
         GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
@@ -1507,6 +1509,16 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     {
         if (transactionCount is < 1 or > 99 || runtimeRow < 0 || HasUnexpectedConfirmation)
             return false;
+        if (offer.Offer.Kind == ShopOfferKind.SpecialShopMgp && shopUiCharacter != 0 && shopUiNpc != 0 &&
+            CharacterId == shopUiCharacter && (targetManager.Target == null || targetManager.Target.GameObjectId == shopUiNpc))
+        {
+            var exchange = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+            var shop = AgentShop.Instance();
+            if (exchange != null && exchange->IsVisible && exchange->IsReady && shop != null &&
+                shop->AddonId == exchange->Id && shop->EventReceiver != null &&
+                ValidateExchangeShop(offer).State == ShopUiValidationState.Valid)
+                ownedMgpExchange = ((nint)exchange, exchange->Id, (nint)shop->EventReceiver, offer);
+        }
         var accepted = offer.Offer.Kind switch
         {
             ShopOfferKind.InclusionShop => SubmitInclusionPurchase(offer, runtimeRow, transactionCount),
@@ -1652,6 +1664,13 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         => ownerCharacter != 0 && currentCharacter == ownerCharacter && ownerNpc != 0
             && (targetNpc == ownerNpc || shopNpc == ownerNpc || selectorNpc == ownerNpc);
 
+    internal static bool MatchesExchangeCleanupSession(ulong ownerCharacter, ulong currentCharacter,
+        nint ownedAddon, nint currentAddon, uint ownedAddonId, uint currentAddonId,
+        nint ownedReceiver, nint currentReceiver, bool exactOffer, bool foreignTarget) =>
+        ownerCharacter != 0 && ownerCharacter == currentCharacter && !foreignTarget && exactOffer &&
+        ownedAddon != 0 && ownedAddon == currentAddon && ownedAddonId != 0 && ownedAddonId == currentAddonId &&
+        ownedReceiver != 0 && ownedReceiver == currentReceiver;
+
     private bool OwnsShopCleanupUi()
     {
         if (shopUiCharacter == 0) return true;
@@ -1676,8 +1695,19 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         }
         // Entering a shop can clear the ordinary target. The active native NPC
         // interaction still proves ownership of the shop and its returning menu.
-        return MatchesShopCleanupOwner(shopUiCharacter, CharacterId, shopUiNpc,
-            targetManager.Target?.GameObjectId ?? 0, nativeShopNpc, nativeSelectorNpc);
+        var target = targetManager.Target?.GameObjectId ?? 0;
+        if (MatchesShopCleanupOwner(shopUiCharacter, CharacterId, shopUiNpc, target, nativeShopNpc, nativeSelectorNpc))
+            return true;
+        if (ownedMgpExchange is not { } owned || IsSelectionMenuVisible || IsTalkVisible || HasUnexpectedConfirmation)
+            return false;
+        var exchange = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+        var shop = AgentShop.Instance();
+        return exchange != null && exchange->IsVisible && exchange->IsReady && shop != null &&
+            shop->AddonId == exchange->Id &&
+            MatchesExchangeCleanupSession(shopUiCharacter, CharacterId, owned.Addon, (nint)exchange,
+                owned.AddonId, exchange->Id, owned.Receiver, (nint)shop->EventReceiver,
+                ValidateExchangeShop(owned.Offer).State == ShopUiValidationState.Valid,
+                target != 0 && target != shopUiNpc);
     }
 
     private void CloseShopUiOnce()
@@ -1721,6 +1751,17 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public void UpdateOwnedShopCleanup()
     {
+        if (ownedMgpExchange is { } owned)
+        {
+            var exchange = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+            var shop = AgentShop.Instance();
+            var target = targetManager.Target?.GameObjectId ?? 0;
+            if (CharacterId != shopUiCharacter || IsBetweenAreas || exchange == null || !exchange->IsVisible ||
+                (nint)exchange != owned.Addon || exchange->Id != owned.AddonId || shop == null ||
+                shop->AddonId != owned.AddonId || (nint)shop->EventReceiver != owned.Receiver ||
+                target != 0 && target != shopUiNpc)
+                ownedMgpExchange = null;
+        }
         if (ownedUiCleanupUntil == default) return;
         // Keep ownership during the empty frame between a closing shop and its
         // parent menu. Visible replacement UI must still prove the original NPC.

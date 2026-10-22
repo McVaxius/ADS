@@ -47,6 +47,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 
         var context = plugin.DutyContextService.Current;
         var rows = plugin.HigherLowerServerEventTraceService.GetRowsSnapshot()
@@ -181,6 +182,8 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
     private void DrawTable(IReadOnlyList<HigherLowerServerEventTraceService.ServerEventRow> rows)
     {
+        using var controls = MaterialTable.PushControls();
+        using var rowSpacing = MaterialTable.PushTightRows();
         if (!ImGui.BeginTable("ADSServerEventTable", 9, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.SizingStretchProp, new Vector2(-1f, -1f)))
             return;
 

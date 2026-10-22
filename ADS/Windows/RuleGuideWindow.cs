@@ -248,9 +248,6 @@ public sealed class RuleGuideWindow : PositionedWindow, IDisposable
 
     private static void DrawSection(string text)
     {
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T(text));
-        ImGui.Separator();
+        MaterialSettings.Section(Ui.T(text));
     }
 }

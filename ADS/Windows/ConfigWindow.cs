@@ -13,6 +13,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
     private readonly Plugin plugin;
     private readonly ObjectRuleCheckoutState checkoutState;
     private readonly AethertekUI.Dalamud.MaterialSupportLog supportLog = new();
+    private int settingsPage;
 
     public ConfigWindow(Plugin plugin)
         : base("ADS Settings###ADSSettings")
@@ -38,61 +39,70 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
 
         var changed = false;
-        MaterialText.Text(Ui.T("{0} Settings", PluginInfo.DisplayName));
-        MaterialText.TextDisabled(Ui.T("Configuration saves immediately."));
-        ImGui.Spacing();
-
-        bool tabsVisible;
-        using(MaterialText.PushLineHeight(new[] { "General", "Automation", "Data & Rules", "Debug", "Appearance", "About" }.Select(label => Ui.T(label)).ToArray()))
-            tabsVisible = ImGui.BeginTabBar("ADSSettingsTabs", ImGuiTabBarFlags.FittingPolicyScroll);
-        if (tabsVisible)
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+        var labels = new[] { "General", "Automation", "Data & Rules", "Debug###Advanced", "Appearance###Window appearance", "About" };
+        var barRoot = ImGui.GetID("ADSSettingsTabs");
+        var navWidth = labels.Max(label => WindowLayout.ButtonMinimum(Ui.L(label))) + 24 * MaterialTheme.Metrics.Scale;
+        var sidebar = ImGui.GetContentRegionAvail().X >= navWidth + 300 * MaterialTheme.Metrics.Scale;
+        if (sidebar)
         {
-            if (WindowLayout.BeginTabItem(Ui.L("General")))
-            {
-                DrawGeneral(ref changed);
-                ImGui.EndTabItem();
-            }
-
-            if (WindowLayout.BeginTabItem(Ui.L("Automation")))
-            {
-                DrawAutomation(ref changed);
-                ImGui.EndTabItem();
-            }
-
-            if (WindowLayout.BeginTabItem(Ui.L("Data & Rules")))
-            {
-                DrawDataAndRules();
-                ImGui.EndTabItem();
-            }
-
-            if (WindowLayout.BeginTabItem(Ui.L("Debug###Advanced")))
-            {
-                DrawDebug(ref changed);
-                ImGui.EndTabItem();
-            }
-
-            if (WindowLayout.BeginTabItem(Ui.L("Appearance###Window appearance"), ImGuiTabItemFlags.NoPushId))
-            {
-                ImGui.PushID(Ui.L("General"));
-                try { plugin.Appearance.DrawWindowAppearanceSettings(); }
-                finally { ImGui.PopID(); ImGui.EndTabItem(); }
-            }
-            if (WindowLayout.BeginTabItem(Ui.L("About")))
-            {
-                DrawAbout();
-                ImGui.EndTabItem();
-            }
-
-            ImGui.EndTabBar();
+            var navigationVisible = ImGui.BeginChild("ADSSettingsNavigation", new Vector2(navWidth, 0), false);
+            try { if (navigationVisible) DrawNavigation(); }
+            finally { ImGui.EndChild(); }
+            ImGui.SameLine();
         }
+        else DrawNavigation();
+        var contentVisible = ImGui.BeginChild("ADSSettingsContent", Vector2.Zero, false, ImGuiWindowFlags.HorizontalScrollbar);
+        try
+        {
+            if (contentVisible)
+            {
+                ImGuiP.PushOverrideID(barRoot);
+                // Native tab bodies previously used these exact label-derived ID roots.
+                ImGui.PushID(Ui.L(settingsPage == 4 ? "General" : labels[settingsPage]));
+                try
+                {
+                    using (plugin.Fonts.Push(UiFontRole.PluginName)) MaterialText.Text(Ui.T(labels[settingsPage].Split("##")[0]));
+                    MaterialText.TextDisabled(Ui.T("Configuration saves immediately."));
+                    switch (settingsPage)
+                    {
+                        case 0: DrawGeneral(ref changed); break;
+                        case 1: DrawAutomation(ref changed); break;
+                        case 2: DrawDataAndRules(); break;
+                        case 3: DrawDebug(ref changed); break;
+                        case 4: plugin.Appearance.DrawWindowAppearanceSettings(); break;
+                        case 5: DrawAbout(); break;
+                    }
+                }
+                finally { ImGui.PopID(); ImGui.PopID(); }
+            }
+        }
+        finally { ImGui.EndChild(); }
+        if (changed) plugin.SaveConfiguration();
 
-        if (changed)
-            plugin.SaveConfiguration();
+        void DrawNavigation()
+        {
+            ImGuiP.PushOverrideID(barRoot);
+            try
+            {
+                for (var index = 0; index < labels.Length; index++)
+                {
+                    if (!sidebar && index > 0) WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L(labels[index])));
+                    if (sidebar)
+                    {
+                        if (MaterialText.Selectable(Ui.L(labels[index]), settingsPage == index,
+                            size: new Vector2(0, ImGui.GetFrameHeight()))) settingsPage = index;
+                    }
+                    else if (WindowLayout.Button(Ui.L(labels[index]))) settingsPage = index;
+                }
+            }
+            finally { ImGui.PopID(); }
+        }
     }
 
     private void DrawGeneral(ref bool changed)
     {
-        MaterialText.Text(Ui.T("Startup"));
+        MaterialSettings.Section(Ui.T("Startup"));
         var pluginEnabled = plugin.Configuration.PluginEnabled;
         if (WindowLayout.Checkbox("Plugin enabled", ref pluginEnabled))
         {
@@ -115,9 +125,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("DTR Bar"));
+        MaterialSettings.Section(Ui.T("DTR Bar"));
         var dtrBarEnabled = plugin.Configuration.DtrBarEnabled;
         if (WindowLayout.Checkbox("Enable DTR bar", ref dtrBarEnabled))
         {
@@ -156,18 +164,14 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
 
     internal static void DrawAutomationSettings(Configuration configuration, ref bool changed)
     {
-        MaterialText.Text(Ui.T("Integrations & regular duties"));
+        MaterialSettings.Section(Ui.T("Integrations & regular duties"));
         var disableAutoDuty = configuration.DisableAutoDutyOnStart;
         if (WindowLayout.Checkbox("Disable AutoDuty on ADS start", ref disableAutoDuty))
         {
             configuration.DisableAutoDutyOnStart = disableAutoDuty;
             changed = true;
         }
-        if (AdsPresentation.Compact)
-        {
-            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Off by default. Leave AutoDuty loaded so you can choose which plugin runs each duty."));
-        }
-        else MaterialText.TextWrapped(Ui.T("Off by default. Leave AutoDuty loaded so you can choose which plugin runs each duty."));
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Off by default. Leave AutoDuty loaded so you can choose which plugin runs each duty."));
         ImGui.Spacing();
         var enableBmraiVbmInRegularDuties = configuration.EnableBmraiVbmInRegularDuties;
         if (WindowLayout.Checkbox("Enable BMRAI/VBM in regular duties", ref enableBmraiVbmInRegularDuties))
@@ -176,11 +180,9 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        MaterialText.TextWrapped(Ui.T("When enabled, entering a regular duty resets BMRAI and VBM follow targets to Slot1. Changes take effect on the next regular-duty entry."));
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("When enabled, entering a regular duty resets BMRAI and VBM follow targets to Slot1. Changes take effect on the next regular-duty entry."));
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("Equipment cleanup"));
+        MaterialSettings.Section(Ui.T("Equipment cleanup"));
         var gearSaleConfirmation = configuration.GearSaleConfirmationEnabled;
         if (WindowLayout.Checkbox("Preview equipment before selling", ref gearSaleConfirmation))
         {
@@ -188,9 +190,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("Treasure"));
+        MaterialSettings.Section(Ui.T("Treasure"));
         var considerTreasureCoffers = configuration.ConsiderTreasureCoffers;
         if (WindowLayout.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
         {
@@ -198,7 +198,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        MaterialText.TextWrapped(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
 
         var treasureDoorJiggleRecoveryEnabled = configuration.TreasureDoorJiggleRecoveryEnabled;
         if (WindowLayout.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
@@ -207,11 +207,9 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        MaterialText.TextWrapped(Ui.T("Briefly strafe when treasure-door follow-through appears stuck while vnav continues toward the route."));
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Briefly strafe when treasure-door follow-through appears stuck while vnav continues toward the route."));
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("Dialog Rules"));
+        MaterialSettings.Section(Ui.T("Dialog Rules"));
         var processDialogRulesOutsideOwnedDuty = configuration.ProcessDialogRulesOutsideOwnedDuty;
         if (WindowLayout.Checkbox("Process dialog rules outside owned duties", ref processDialogRulesOutsideOwnedDuty))
         {
@@ -219,12 +217,12 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             changed = true;
         }
 
-        MaterialText.TextWrapped(Ui.T("When enabled, dialog rules can run while ADS is enabled, logged in, and not zoning. Disable to require ADS-owned or leaving duty execution."));
+        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("When enabled, dialog rules can run while ADS is enabled, logged in, and not zoning. Disable to require ADS-owned or leaving duty execution."));
     }
 
     private void DrawDataAndRules()
     {
-        MaterialText.Text(Ui.T("Updates"));
+        MaterialSettings.Section(Ui.T("Updates"));
         ImGui.BeginDisabled(plugin.RemoteJsonUpdateService.IsUpdateRunning);
         if (WindowLayout.Button(Ui.L("Update rules cache"), new Vector2(-1f, 30f)))
             plugin.ForceRemoteJsonUpdate();
@@ -235,9 +233,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
             MaterialText.TextDisabled(Ui.Display(statusLine));
         MaterialText.TextWrapped(Ui.T("Published presets arrive through Update JSON or the normal 24-hour refresh after publication. Downloading keeps the active selection."));
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("Object rules & presets"));
+        MaterialSettings.Section(Ui.T("Object rules & presets"));
         MaterialText.Text(Ui.T("Duty Object Rules: {0} active", plugin.ObjectPriorityRuleService.ActiveRuleCount));
         MaterialText.TextWrapped(Ui.T("Active preset: {0}", plugin.ObjectPriorityRuleService.ActivePresetName));
         MaterialText.TextWrapped(Ui.T("Territory shard index: {0}", plugin.ObjectPriorityRuleService.ConfigPath));
@@ -254,9 +250,7 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         MaterialText.TextDisabled(Ui.T("Custom presets execute immediately and inherit missing contexts from DEFAULT. DEFAULT saves require debug mode."));
         MaterialText.TextWrapped(Ui.T("Published presets are protected and updated automatically. Use New Preset to create a personal copy."));
 
-        ImGui.Spacing();
-        ImGui.Separator();
-        MaterialText.Text(Ui.T("Dialog rules & duty metadata"));
+        MaterialSettings.Section(Ui.T("Dialog rules & duty metadata"));
         MaterialText.Text(Ui.T("Dialog Yes/No Rules: {0} active", plugin.DialogYesNoRuleService.ActiveRuleCount));
         MaterialText.TextWrapped(Ui.T("Active preset: {0}", plugin.DialogYesNoRuleService.ActivePresetName));
         MaterialText.TextWrapped(plugin.DialogYesNoRuleService.ActivePresetPath);

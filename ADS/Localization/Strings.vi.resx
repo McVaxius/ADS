@@ -4248,4 +4248,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Tháp Pha lê: đang giữ vị trí trong khu vực đám mây siêu tích điện được phân công cho đến khi khu vực đó được giải trừ.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Tháp Pha Lê: đang đi theo lộ trình phó bản đã được xác minh.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Tháp Pha Lê: đang chờ xác nhận kích hoạt lối tắt và đến nơi.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Thao tác khác</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Đơn hàng và xem trước</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Cấu hình và nhập</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Điều khiển plugin liên kết</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Giao diện và ngôn ngữ</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Điều khiển cửa sổ chính</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Độ đục cửa sổ</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>Khi mất tiêu điểm</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>Ch?n nh?m c?ng c?</value></data>
 </root>

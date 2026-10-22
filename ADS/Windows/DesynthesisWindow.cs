@@ -69,13 +69,11 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
         EnsureDesynthItemsLoaded();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
         DrawRunControls();
-        ImGui.Separator();
-        DrawPolicy();
-        ImGui.Separator();
-        DrawPresets();
-        ImGui.Separator();
-        DrawLedger();
+        if (MaterialText.CollapsingHeader(Ui.L("Policy"), ImGuiTreeNodeFlags.DefaultOpen)) DrawPolicy();
+        if (MaterialText.CollapsingHeader(Ui.L("Presets"), ImGuiTreeNodeFlags.DefaultOpen)) DrawPresets();
+        if (MaterialText.CollapsingHeader(Ui.L("Last-Duty Ledger"))) DrawLedger();
         if (!string.IsNullOrWhiteSpace(status))
             MaterialText.TextWrapped(Ui.Display(status));
     }
@@ -102,7 +100,6 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawPolicy()
     {
-        MaterialText.Text(Ui.T("Policy"));
         var sourceIndex = Math.Max(0, Array.FindIndex(SourceOptions, x => x.Source == plugin.Configuration.DesynthSource));
         var sourceLabels = SourceOptions.Select(x => x.Label).ToArray();
         if (WindowLayout.Combo(WindowLayout.InputLabel("Choose items from"), ref sourceIndex,sourceLabels.Select(Ui.Display).ToArray(), sourceLabels.Length))
@@ -143,7 +140,6 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawPresets()
     {
-        MaterialText.Text(Ui.T("Presets"));
         var presetNames = plugin.DesynthPresetStore.Presets.Select(x => x.Name).ToArray();
         var presetIndex = Math.Max(0, Array.FindIndex(presetNames, x => string.Equals(x, plugin.Configuration.DesynthActivePreset, StringComparison.OrdinalIgnoreCase)));
         if (WindowLayout.Combo(WindowLayout.InputLabel("Active preset"), ref presetIndex, presetNames, presetNames.Length))
@@ -235,6 +231,8 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
 
     private void DrawActivePresetItems(DesynthPreset active)
     {
+        using var controls = MaterialTable.PushControls();
+        using var rows = MaterialTable.PushTightRows();
         MaterialText.Text(Ui.T("Active preset contents"));
         if (active.ItemIds.Count == 0)
         {

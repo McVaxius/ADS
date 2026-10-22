@@ -40,6 +40,8 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     private string testedDisposition = string.Empty;
     private string testedMessage = string.Empty;
     private DateTime? observedBatchCompletionUtc;
+    private Guid selectedRowId;
+    private ShopCatalogSearchRow? selectedCatalogRow;
 
     public ShopListsWindow(Plugin plugin)
         : base("ADS Shop Lists###ADSShopLists")
@@ -64,16 +66,54 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         FinalizePendingWindowPlacement();
         RefreshPreviewIfChanged();
         RefreshAfterBatchCompletion();
-
+        var originalIdRoot = ImGui.GetID("");
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+        using (plugin.Fonts.Push(UiFontRole.BodyStrong)) MaterialText.Text(Ui.T("Shop Lists"));
+        DrawPresetSelector();
         DrawBatchControls();
-        ImGui.Separator();
-        DrawPresetControls();
-        ImGui.Separator();
-        DrawImportControls();
-        ImGui.Separator();
-        DrawCatalogSearch();
-        ImGui.Separator();
-        DrawPreview();
+        EnsurePresetSettings();
+        if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
+        {
+            newTriggerBelow = newRefillToAtLeast;
+            newRepeatable = false;
+        }
+        if (ImGui.BeginTabBar("ADSShopListsTabs", ImGuiTabBarFlags.FittingPolicyScroll))
+        {
+            try
+            {
+            if (WindowLayout.BeginTabItem(Ui.L("Order & preview"), ImGuiTabItemFlags.NoPushId))
+            {
+                ImGuiP.PushOverrideID(originalIdRoot);
+                try
+                {
+                    if (MaterialText.CollapsingHeader(Ui.L("Preset management"))) DrawPresetSettings();
+                    DrawAddRow();
+                    DrawPreview();
+                    DrawBatchDetails();
+                }
+                finally { ImGui.PopID(); ImGui.EndTabItem(); }
+            }
+            if (WindowLayout.BeginTabItem(Ui.L("Catalog"), ImGuiTabItemFlags.NoPushId))
+            {
+                ImGuiP.PushOverrideID(originalIdRoot);
+                try { DrawCatalogSearch(); }
+                finally { ImGui.PopID(); ImGui.EndTabItem(); }
+            }
+            if (WindowLayout.BeginTabItem(Ui.L("Presets & import"), ImGuiTabItemFlags.NoPushId))
+            {
+                ImGuiP.PushOverrideID(originalIdRoot);
+                try
+                {
+                    DrawPresetControls();
+                    DrawImportControls();
+                }
+                finally { ImGui.PopID(); ImGui.EndTabItem(); }
+            }
+            }
+            finally { ImGui.EndTabBar(); }
+        }
+        // Complete read-only work even when its view is hidden, after preset/import actions.
+        CompleteCatalogSearch(plugin.ShopListService.PresetStore.ActivePreset);
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -86,10 +126,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     {
         var service = plugin.ShopListService;
         var batch = plugin.UtilityAutomationService.ShopListBatchStatus;
-        MaterialText.Text(Ui.T("Preset test and purchase"));
         MaterialText.TextWrapped(Ui.Display(batch.Running ? batch.StatusMessage : plugin.UtilityAutomationService.StatusMessage));
-        if (batch.TotalRows > 0)
-            MaterialText.TextDisabled(Ui.T("Completed rows: {0}/{1} | operation: {2}", batch.CompletedRows, batch.TotalRows, batch.OperationId));
 
         if (WindowLayout.Button(Ui.L("Test preset (preview only)")))
         {
@@ -100,11 +137,12 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             testedMessage = test.Message;
             status = $"Test {test.Disposition}: {test.Message} No travel or purchase was started.";
         }
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Refresh local preview")));
         if (WindowLayout.Button(Ui.L("Refresh local preview")))
             RefreshPreview();
 
         var runBlocker = GetRunBlocker();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Run Shop List")));
         ImGui.BeginDisabled(!string.IsNullOrEmpty(runBlocker));
         if (WindowLayout.Button(Ui.L("Run Shop List")))
         {
@@ -113,7 +151,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         }
         ImGui.EndDisabled();
 
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Cancel Shop List")));
         ImGui.BeginDisabled(!batch.Running);
         if (WindowLayout.Button(Ui.L("Cancel Shop List")))
             plugin.CancelUtility();
@@ -122,11 +160,23 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         if (!string.IsNullOrEmpty(runBlocker))
             MaterialText.TextDisabled(Ui.Display(runBlocker));
 
-        if (service.IsStandaloneOrderComplete && WindowLayout.Button(Ui.L("Start new order")))
+        if (service.IsStandaloneOrderComplete)
         {
-            SetStatus(service.StartNewOrder(out var error), error);
-            RefreshPreview();
+            if (WindowLayout.Button(Ui.L("Start new order")))
+            {
+                SetStatus(service.StartNewOrder(out var error), error);
+                RefreshPreview();
+            }
         }
+    }
+
+    private void DrawBatchDetails()
+    {
+        if (!MaterialText.CollapsingHeader(Ui.L("Preset test and purchase"))) return;
+        var service = plugin.ShopListService;
+        var batch = plugin.UtilityAutomationService.ShopListBatchStatus;
+        if (batch.TotalRows > 0)
+            MaterialText.TextDisabled(Ui.T("Completed rows: {0}/{1} | operation: {2}", batch.CompletedRows, batch.TotalRows, batch.OperationId));
         MaterialText.TextWrapped(Ui.T("Targeted refill uses current ownership thresholds. Spend until currency/capacity keeps spending under its repeat rules. Fill order over multiple runs credits initial ownership once, then verified purchases; consuming or moving items keeps that progress."));
 
         MaterialText.TextWrapped(Ui.Display(service.OwnershipStatus));
@@ -138,11 +188,28 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         DrawWarnings("XA Database warnings", service.OwnershipWarnings);
     }
 
+    private void DrawPresetSelector()
+    {
+        var service = plugin.ShopListService;
+        var store = service.PresetStore;
+        var presetNames = store.Presets.Select(preset => preset.Name).ToArray();
+        var presetIndex = Math.Max(0, Array.FindIndex(
+            presetNames,
+            name => string.Equals(name, store.ActivePresetName, StringComparison.OrdinalIgnoreCase)));
+        ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(presetNames));
+        if (WindowLayout.Combo(WindowLayout.InputLabel("Active preset", WindowLayout.ComboMinimum(presetNames)), ref presetIndex, presetNames, presetNames.Length))
+        {
+            SetStatus(service.SelectPreset(presetNames[presetIndex], out var error), error);
+            settingsPresetId = Guid.Empty;
+            RefreshPreview();
+        }
+    }
+
     private void DrawPresetControls()
     {
         var service = plugin.ShopListService;
         var store = service.PresetStore;
-        MaterialText.Text(Ui.T("Presets"));
+        MaterialSettings.Section(Ui.T("Presets"));
         MaterialText.TextWrapped(Ui.Display(store.LastStatus));
         ImGui.BeginDisabled(plugin.UtilityAutomationService.IsRunning);
         if (WindowLayout.Button(Ui.L("Reload saved lists")))
@@ -152,18 +219,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             RefreshPreview();
         }
         ImGui.EndDisabled();
-
-        var presetNames = store.Presets.Select(preset => preset.Name).ToArray();
-        var presetIndex = Math.Max(0, Array.FindIndex(
-            presetNames,
-            name => string.Equals(name, store.ActivePresetName, StringComparison.OrdinalIgnoreCase)));
-        if (WindowLayout.Combo(Ui.L("Active preset"), ref presetIndex, presetNames, presetNames.Length))
-        {
-            SetStatus(service.SelectPreset(presetNames[presetIndex], out var error), error);
-            settingsPresetId = Guid.Empty;
-            RefreshPreview();
-        }
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Copy preset ID")));
         if (WindowLayout.SmallButton(Ui.L("Copy preset ID")))
             ImGui.SetClipboardText(store.ActivePresetId.ToString("D"));
         MaterialText.TextDisabled(store.ActivePresetId.ToString("D"));
@@ -229,16 +285,21 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             RefreshPreview();
         }
         ImGui.EndDisabled();
+    }
 
+    private void DrawPresetSettings()
+    {
+        var service = plugin.ShopListService;
         EnsurePresetSettings();
         var modes = new[] { "Targeted refill", "Spend until currency/capacity", "Fill order over multiple runs" };
-        ImGui.SetNextItemWidth(275f);
-        WindowLayout.Combo(Ui.L("Purchase type"), ref presetModeIndex,modes.Select(Ui.Display).ToArray(), modes.Length);
+        var modeLabels = modes.Select(Ui.Display).ToArray();
+        ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(modeLabels));
+        WindowLayout.Combo(WindowLayout.InputLabel("Purchase type", WindowLayout.ComboMinimum(modeLabels)), ref presetModeIndex, modeLabels, modes.Length);
 
         var currencyKinds = Enum.GetValues<ShopCurrencyKind>();
-        var currencyNames = currencyKinds.Select(ShopOfferSelector.CurrencyKindName).ToArray();
-        ImGui.SetNextItemWidth(210f);
-        if (WindowLayout.Combo(Ui.L("Exact currency kind"), ref currencyKindIndex,currencyNames.Select(Ui.Display).ToArray(), currencyNames.Length))
+        var currencyNames = currencyKinds.Select(ShopOfferSelector.CurrencyKindName).Select(Ui.Display).ToArray();
+        ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(currencyNames));
+        if (WindowLayout.Combo(WindowLayout.InputLabel("Exact currency kind", WindowLayout.ComboMinimum(currencyNames)), ref currencyKindIndex, currencyNames, currencyNames.Length))
         {
             currencyItemId = currencyKinds[currencyKindIndex] switch
             {
@@ -247,13 +308,13 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
                 _ => currencyItemId,
             };
         }
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(120 * MaterialTheme.Metrics.Scale + MaterialText.Measure(Ui.T("Currency item ID")).X + ImGui.GetStyle().ItemInnerSpacing.X);
         ImGui.SetNextItemWidth(120f);
-        WindowLayout.InputInt(Ui.L("Currency item ID"), ref currencyItemId);
-        ImGui.SameLine();
+        WindowLayout.InputInt(WindowLayout.InputLabel("Currency item ID"), ref currencyItemId);
+        WindowLayout.SameLineIfFits(130 * MaterialTheme.Metrics.Scale + MaterialText.Measure(Ui.T("Trigger at >=")).X + ImGui.GetStyle().ItemInnerSpacing.X);
         ImGui.SetNextItemWidth(130f);
-        WindowLayout.InputInt(Ui.L("Trigger at >="), ref currencyThreshold);
-        ImGui.SameLine();
+        WindowLayout.InputInt(WindowLayout.InputLabel("Trigger at >="), ref currencyThreshold);
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Save preset settings")));
         if (WindowLayout.Button(Ui.L("Save preset settings")))
         {
             if (currencyItemId < 0 || currencyThreshold < 0)
@@ -274,10 +335,15 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             }
         }
 
-        MaterialText.Text(Ui.T("Add row"));
+    }
+
+    private void DrawAddRow()
+    {
+        var store = plugin.ShopListService.PresetStore;
+        MaterialSettings.Section(Ui.T("Add row"));
         ImGui.SetNextItemWidth(120f);
         WindowLayout.InputInt(WindowLayout.InputLabel("Item ID"), ref newItemId);
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(95 * MaterialTheme.Metrics.Scale + MaterialText.Measure(Ui.T(store.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns ? "Target quantity" : "If owned <")).X + ImGui.GetStyle().ItemInnerSpacing.X);
         ImGui.SetNextItemWidth(95f);
         if (store.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
         {
@@ -288,17 +354,17 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         else
         {
             WindowLayout.InputInt(WindowLayout.InputLabel("If owned <"), ref newTriggerBelow);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(95 * MaterialTheme.Metrics.Scale + MaterialText.Measure(Ui.T("Refill to >=")).X + ImGui.GetStyle().ItemInnerSpacing.X);
             ImGui.SetNextItemWidth(95f);
             WindowLayout.InputInt(WindowLayout.InputLabel("Refill to >="), ref newRefillToAtLeast);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.T("Repeatable")).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
             WindowLayout.Checkbox("Repeatable", ref newRepeatable);
         }
-        ImGui.SameLine();
         var scopes = new[] { "Inventory only", "Inventory + XA Database retainers" };
-        ImGui.SetNextItemWidth(255f);
+        WindowLayout.SameLineIfFits(WindowLayout.ComboMinimum(scopes.Select(Ui.Display)) + MaterialText.Measure(Ui.T("Item ownership")).X + ImGui.GetStyle().ItemInnerSpacing.X);
+        ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(scopes.Select(Ui.Display)));
         WindowLayout.Combo(WindowLayout.InputLabel("Item ownership", WindowLayout.ComboMinimum(scopes.Select(Ui.Display))), ref newOwnershipScopeIndex,scopes.Select(Ui.Display).ToArray(), scopes.Length);
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Add / update item")));
         if (WindowLayout.Button(Ui.L("Add / update item")))
             AddOrUpdateItem((uint)Math.Max(0, newItemId));
     }
@@ -417,13 +483,13 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         MaterialText.Text(Ui.T("Deterministic vendor catalog"));
         ImGui.BeginDisabled(catalogSearch != null);
         ImGui.SetNextItemWidth(300f);
-        WindowLayout.InputText(Ui.L("Item / vendor / NPC / territory / currency"), ref catalogQuery, 120);
-        ImGui.SameLine();
+        WindowLayout.InputText(WindowLayout.InputLabel("Item / vendor / NPC / territory / currency", WindowLayout.TextMinimum(120)), ref catalogQuery, 120);
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Search exact preset currency")));
         if (WindowLayout.Button(Ui.L("Search exact preset currency")))
         {
             BeginCatalogSearch(active.PresetId, active.Currency);
         }
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Discover currencies")));
         if (WindowLayout.Button(Ui.L("Discover currencies")))
         {
             BeginCatalogSearch(active.PresetId, null);
@@ -437,11 +503,21 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             return;
         }
 
+        using var catalogControls = MaterialTable.PushControls();
+        using var catalogRowsStyle = MaterialTable.PushTightRows();
+        var catalogRowHeight = Math.Max(ImGui.GetFrameHeight(), (AdsPresentation.Compact ? 29 : 34) * MaterialTheme.Metrics.Scale);
+        var catalogHeight = Math.Min(ImGui.GetFrameHeight() + catalogRows.Count * catalogRowHeight + 4 * MaterialTheme.Metrics.Scale,
+            Math.Max(catalogRowHeight * 2, Math.Min(300f * MaterialTheme.Metrics.Scale, ImGui.GetContentRegionAvail().Y * .55f)));
+        var actionWidth = new[] { "Use currency", "Add item", "Copy XYZ" }.Sum(label => WindowLayout.ButtonMinimum(Ui.L(label)))
+            + ImGui.GetStyle().ItemSpacing.X * 2;
+        var innerWidth = Math.Max(ImGui.GetContentRegionAvail().X, actionWidth + 700 * MaterialTheme.Metrics.Scale);
+        if (innerWidth > ImGui.GetContentRegionAvail().X) catalogHeight += ImGui.GetStyle().ScrollbarSize;
         if (!ImGui.BeginTable(
                 "ADSShopCatalogSearch",
                 5,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp,
-                new Vector2(-1f, 220f)))
+                ImGuiTableFlags.BordersOuter | ImGuiTableFlags.BordersH | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY
+                | ImGuiTableFlags.ScrollX | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp,
+                new Vector2(-1f, catalogHeight), innerWidth))
         {
             return;
         }
@@ -449,72 +525,102 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Item / bundle"), ImGuiTableColumnFlags.WidthStretch, 1.2f);
         ImGui.TableSetupColumn(Ui.L("Vendor / NPC"), ImGuiTableColumnFlags.WidthStretch, 1.7f);
         ImGui.TableSetupColumn(Ui.L("Territory / XYZ"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
-        ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, 160f);
+        ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, actionWidth);
+        ImGui.TableSetupScrollFreeze(0, 1);
         WindowLayout.TableHeadersRow();
 
         foreach (var row in catalogRows)
         {
             ImGui.PushID(HashCode.Combine(row.ItemId, row.ShopId, row.ShopRow, row.NpcId, row.TerritoryId));
-            ImGui.TableNextRow();
+            ImGui.TableNextRow(ImGuiTableRowFlags.None, catalogRowHeight);
             ImGui.TableSetColumnIndex(0);
-            MaterialText.TextWrapped(Ui.T("{0}: {1}", Ui.ItemName(row.CurrencyItemId, row.CurrencyName), row.CurrencyCostPerTransaction));
-            MaterialText.TextDisabled(Ui.T("{0}:{1}", row.CurrencyKind, row.CurrencyItemId));
+            MaterialText.Text(Ui.T("{0}: {1}", Ui.ItemName(row.CurrencyItemId, row.CurrencyName), row.CurrencyCostPerTransaction));
             ImGui.TableSetColumnIndex(1);
-            MaterialText.TextWrapped(Ui.ItemName(row.ItemId, row.ItemName));
-            MaterialText.TextDisabled(Ui.T("{0} | receive {1}", row.ItemId, row.ReceiveCount));
+            if (MaterialText.Selectable(Ui.ItemName(row.ItemId, row.ItemName) + "###SelectShopCatalogRow", Equals(selectedCatalogRow, row)))
+                selectedCatalogRow = row;
+            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("{0} | receive {1}", row.ItemId, row.ReceiveCount));
             ImGui.TableSetColumnIndex(2);
-            MaterialText.TextWrapped(Ui.ShopName(row.ShopKind, row.ShopId, row.ShopName));
-            MaterialText.TextDisabled(Ui.T("shop {0} row {1}", row.ShopId, row.ShopRow));
-            MaterialText.TextWrapped(Ui.NpcName(row.NpcId, row.NpcName));
-            MaterialText.TextDisabled(row.NpcId.ToString(CultureInfo.InvariantCulture));
+            MaterialText.Text(Ui.NpcName(row.NpcId, row.NpcName));
             ImGui.TableSetColumnIndex(3);
-            MaterialText.TextWrapped(Ui.TerritoryName(row.TerritoryId, row.TerritoryName));
-            MaterialText.TextDisabled(Ui.T("{0} | {1}", row.TerritoryId, row.CopyableXyz));
+            MaterialText.Text(Ui.TerritoryName(row.TerritoryId, row.TerritoryName));
             ImGui.TableSetColumnIndex(4);
             if (WindowLayout.SmallButton(Ui.L("Use currency")))
                 UseCatalogCurrency(row);
+            ImGui.SameLine();
             if (WindowLayout.SmallButton(Ui.L("Add item")))
                 AddOrUpdateItem(row.ItemId);
+            ImGui.SameLine();
             if (WindowLayout.SmallButton(Ui.L("Copy XYZ")))
                 ImGui.SetClipboardText(row.CopyableXyz);
             ImGui.PopID();
         }
         ImGui.EndTable();
+        var selected = catalogRows.FirstOrDefault(row => Equals(row, selectedCatalogRow)) ?? catalogRows.FirstOrDefault();
+        if (selected is not null)
+        {
+            MaterialSettings.Section(Ui.T("Details"));
+            MaterialText.Text(Ui.ItemName(selected.ItemId, selected.ItemName));
+            MaterialText.TextDisabled(Ui.T("{0} | receive {1}", selected.ItemId, selected.ReceiveCount));
+            MaterialText.Text(Ui.T("{0}:{1}", selected.CurrencyKind, selected.CurrencyItemId));
+            MaterialText.TextWrapped(Ui.ShopName(selected.ShopKind, selected.ShopId, selected.ShopName));
+            MaterialText.TextDisabled(Ui.T("shop {0} row {1}", selected.ShopId, selected.ShopRow));
+            MaterialText.TextWrapped(Ui.NpcName(selected.NpcId, selected.NpcName));
+            MaterialText.TextDisabled(selected.NpcId.ToString(CultureInfo.InvariantCulture));
+            MaterialText.TextWrapped(Ui.TerritoryName(selected.TerritoryId, selected.TerritoryName));
+            MaterialText.TextDisabled(Ui.T("{0} | {1}", selected.TerritoryId, selected.CopyableXyz));
+        }
     }
 
     private void DrawPreview()
     {
-        MaterialText.Text(Ui.T("Preview"));
+        MaterialSettings.Section(Ui.T("Preview"));
         if (previewRows.Count == 0)
         {
             MaterialText.TextDisabled(Ui.T("The active preset has no items."));
             return;
         }
 
-        if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.TargetedRefill)
-            MaterialText.TextWrapped(Ui.T("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items."));
-
-        var scopeNames = new[] { "Inventory", "Inventory + retainers" }.Select(Ui.Display).ToArray();
-        var ruleWidth = MathF.Ceiling(Math.Max(WindowLayout.ComboMinimum(scopeNames),
-            WindowLayout.TextMinimum(64) + ImGui.GetStyle().ItemInnerSpacing.X +
-            Math.Max(MaterialText.Measure(Ui.Display("If owned <")).X, MaterialText.Measure(Ui.Display("Refill to >=")).X)));
+        var fillOrder = plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns;
+        var numberWidth = Math.Max(WindowLayout.NumberMinimum(false),
+            new[] { fillOrder ? "Target" : "If owned <", fillOrder ? "Completed" : "Refill to >=" }
+                .Max(label => MaterialText.Measure(Ui.T(label)).X + ImGui.GetStyle().CellPadding.X * 2));
+        var completedWidth = numberWidth;
+        if (fillOrder)
+        {
+            // This getter only copies existing progress; measuring it does not save or run an order.
+            var progress = plugin.ShopListService.PresetStore.GetOrderProgress(
+                plugin.UtilityAutomationService.ShopCharacterId, plugin.ShopListService.PresetStore.ActivePresetId);
+            completedWidth = Math.Max(completedWidth, previewRows.Max(row =>
+                MaterialText.Measure(Ui.T("Credited: {0} / {1}", progress.GetValueOrDefault(row.RowId), row.RefillToAtLeast)).X)
+                + ImGui.GetStyle().CellPadding.X * 2);
+        }
+        var actionWidth = new[] { "Details", "Save row", "Remove" }.Sum(label => WindowLayout.ButtonMinimum(Ui.L(label)))
+            + ImGui.GetStyle().ItemSpacing.X * 2;
+        using var tableControls = MaterialTable.PushControls();
+        using var rowsStyle = MaterialTable.PushTightRows();
+        var rowHeight = Math.Max(ImGui.GetFrameHeight(), (AdsPresentation.Compact ? 29 : 34) * MaterialTheme.Metrics.Scale);
+        var previewHeight = Math.Min(ImGui.GetFrameHeight() + previewRows.Count * rowHeight + 4 * MaterialTheme.Metrics.Scale,
+            Math.Max(rowHeight * 2, Math.Min(300f * MaterialTheme.Metrics.Scale, ImGui.GetContentRegionAvail().Y * .48f)));
+        var innerWidth = Math.Max(ImGui.GetContentRegionAvail().X, actionWidth + numberWidth + completedWidth + 540 * MaterialTheme.Metrics.Scale);
+        if (innerWidth > ImGui.GetContentRegionAvail().X) previewHeight += ImGui.GetStyle().ScrollbarSize;
         if (!ImGui.BeginTable(
                 "ADSShopListPreview",
                 8,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY
+                ImGuiTableFlags.BordersOuter | ImGuiTableFlags.BordersH | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX
                 | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp,
-                new Vector2(-1f, Math.Max(ImGui.GetContentRegionAvail().Y - 1f, 200f * MaterialTheme.Metrics.Scale))))
+                new Vector2(-1f, previewHeight), innerWidth))
         {
             return;
         }
         ImGui.TableSetupColumn(Ui.L("Item / row"), ImGuiTableColumnFlags.WidthStretch, 1.1f);
-        ImGui.TableSetupColumn(Ui.L("Rule"), ImGuiTableColumnFlags.WidthFixed, ruleWidth);
-        ImGui.TableSetupColumn(Ui.L("Owned"), ImGuiTableColumnFlags.WidthFixed, 95f);
-        ImGui.TableSetupColumn(Ui.L("Retainer locations"), ImGuiTableColumnFlags.WidthStretch, 1.6f);
-        ImGui.TableSetupColumn(Ui.L("Would buy"), ImGuiTableColumnFlags.WidthFixed, 70f);
-        ImGui.TableSetupColumn(Ui.L("Selected vendor"), ImGuiTableColumnFlags.WidthStretch, 1.4f);
+        ImGui.TableSetupColumn(Ui.L(fillOrder ? "Target" : "If owned <"), ImGuiTableColumnFlags.WidthFixed, numberWidth);
+        ImGui.TableSetupColumn(Ui.L(fillOrder ? "Completed" : "Refill to >="), ImGuiTableColumnFlags.WidthFixed, completedWidth);
+        ImGui.TableSetupColumn(Ui.L("Owned"), ImGuiTableColumnFlags.WidthFixed, Math.Max(95f * MaterialTheme.Metrics.Scale, MaterialText.Measure(Ui.T("Owned")).X));
+        ImGui.TableSetupColumn(Ui.L("Would buy"), ImGuiTableColumnFlags.WidthFixed, Math.Max(70f * MaterialTheme.Metrics.Scale, MaterialText.Measure(Ui.T("Would buy")).X));
+        ImGui.TableSetupColumn(Ui.L("Selected vendor"), ImGuiTableColumnFlags.WidthStretch, 1.1f);
         ImGui.TableSetupColumn(Ui.L("Outcome / status"), ImGuiTableColumnFlags.WidthStretch, 1.6f);
-        ImGui.TableSetupColumn(Ui.L("Action"), ImGuiTableColumnFlags.WidthFixed, 72f);
+        ImGui.TableSetupColumn(Ui.L("Action"), ImGuiTableColumnFlags.WidthFixed, actionWidth);
+        ImGui.TableSetupScrollFreeze(0, 1);
         WindowLayout.TableHeadersRow();
 
         foreach (var row in previewRows)
@@ -523,53 +629,34 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             if (!rowEdits.TryGetValue(row.RowId, out var edit))
                 edit = rowEdits[row.RowId] = RowEdit.From(row);
 
-            ImGui.TableNextRow();
+            ImGui.TableNextRow(ImGuiTableRowFlags.None, rowHeight);
             ImGui.TableSetColumnIndex(0);
-            MaterialText.TextWrapped(Ui.ItemName(row.ItemId, row.ItemName));
-            MaterialText.TextDisabled(row.ItemId.ToString(CultureInfo.InvariantCulture));
-            if (WindowLayout.SmallButton(Ui.L("Copy row ID")))
-                ImGui.SetClipboardText(row.RowId.ToString("D"));
+            if (MaterialText.Selectable(Ui.ItemName(row.ItemId, row.ItemName) + "###SelectShopOrderRow", selectedRowId == row.RowId))
+                selectedRowId = row.RowId;
+            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(row.ItemId.ToString(CultureInfo.InvariantCulture));
 
             ImGui.TableSetColumnIndex(1);
-            ImGui.SetNextItemWidth(70f);
-            if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.FillOrderOverMultipleRuns)
+            ImGui.SetNextItemWidth(-1f);
+            if (fillOrder)
             {
-                WindowLayout.InputInt(WindowLayout.InputLabel("Target"), ref edit.RefillToAtLeast);
+                WindowLayout.InputInt("###Target", ref edit.RefillToAtLeast);
                 edit.TriggerBelow = edit.RefillToAtLeast;
                 edit.Repeatable = false;
                 var credited = plugin.ShopListService.PresetStore.GetOrderProgress(
                     plugin.UtilityAutomationService.ShopCharacterId, plugin.ShopListService.PresetStore.ActivePresetId);
-                MaterialText.TextDisabled(Ui.T("Credited: {0} / {1}", credited.GetValueOrDefault(row.RowId), row.RefillToAtLeast));
+                ImGui.TableSetColumnIndex(2);
+                MaterialText.Text(Ui.T("Credited: {0} / {1}", credited.GetValueOrDefault(row.RowId), row.RefillToAtLeast));
             }
             else
             {
-                WindowLayout.InputInt(WindowLayout.InputLabel("If owned <##Trigger"), ref edit.TriggerBelow);
-                ImGui.SetNextItemWidth(70f);
-                WindowLayout.InputInt(WindowLayout.InputLabel("Refill to >=##Refill"), ref edit.RefillToAtLeast);
-                WindowLayout.Checkbox("Repeatable", ref edit.Repeatable);
+                WindowLayout.InputInt("###If owned <##Trigger", ref edit.TriggerBelow);
+                ImGui.TableSetColumnIndex(2);
+                ImGui.SetNextItemWidth(-1f);
+                WindowLayout.InputInt("###Refill to >=##Refill", ref edit.RefillToAtLeast);
             }
-            ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(scopeNames));
-            WindowLayout.Combo("##Scope", ref edit.OwnershipScopeIndex,scopeNames, scopeNames.Length);
-            if (WindowLayout.SmallButton(Ui.L("Save row")))
-            {
-                var succeeded = plugin.ShopListService.UpdateItem(
-                    row.RowId,
-                    edit.TriggerBelow,
-                    edit.RefillToAtLeast,
-                    edit.Repeatable,
-                    (ShopListOwnershipScope)Math.Clamp(edit.OwnershipScopeIndex, 0, 1),
-                    out var error);
-                SetStatus(succeeded, error);
-                if (succeeded)
-                    RefreshPreview();
-            }
-
-            ImGui.TableSetColumnIndex(2);
-            MaterialText.Text(row.OwnedQuantity.ToString("N0", Ui.Culture));
-            MaterialText.TextDisabled(Ui.T("Inv {0:N0}", row.LiveInventoryQuantity));
-
             ImGui.TableSetColumnIndex(3);
-            DrawRetainerLocations(row);
+            MaterialText.Text(row.OwnedQuantity.ToString("N0", Ui.Culture));
+            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Inv {0:N0}", row.LiveInventoryQuantity));
 
             ImGui.TableSetColumnIndex(4);
             MaterialText.Text(row.PurchaseQuantity.ToString("N0", Ui.Culture));
@@ -579,21 +666,22 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             {
                 using var disabledText = new MaterialStyleScope();
                 disabledText.Color(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-                MaterialText.TextWrapped(Ui.T("None needed / available"));
+                MaterialText.Text(Ui.T("None needed / available"));
             }
             else
             {
-                MaterialText.TextWrapped(Ui.ShopName(row.SelectedOffer.ShopKind, row.SelectedOffer.ShopId, row.SelectedOffer.ShopName));
-                MaterialText.TextDisabled(Ui.T("{0} {1}", row.SelectedOffer.ShopKind, row.SelectedOffer.ShopId));
-                MaterialText.TextDisabled(Ui.T("{0} - {1}", Ui.NpcName(row.SelectedOffer.NpcId, row.SelectedOffer.NpcName), Ui.TerritoryName(row.SelectedOffer.TerritoryId, row.SelectedOffer.TerritoryName)));
+                MaterialText.Text(Ui.NpcName(row.SelectedOffer.NpcId, row.SelectedOffer.NpcName));
             }
 
             ImGui.TableSetColumnIndex(6);
-            MaterialText.TextWrapped(Ui.T("{0}: {1}", Ui.Display(row.Outcome), Ui.Display(row.StatusMessage)));
-            if (!string.IsNullOrWhiteSpace(row.FailureCode))
-                MaterialText.TextDisabled(row.FailureCode);
+            MaterialText.Text(Ui.Display(row.Outcome));
+            if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.Display(row.StatusMessage));
 
             ImGui.TableSetColumnIndex(7);
+            if (WindowLayout.SmallButton(Ui.L("Details"))) selectedRowId = row.RowId;
+            ImGui.SameLine();
+            if (WindowLayout.SmallButton(Ui.L("Save row"))) SaveRow(row, edit);
+            ImGui.SameLine();
             if (WindowLayout.SmallButton(Ui.L("Remove")))
             {
                 SetStatus(plugin.ShopListService.RemoveItem(row.RowId, out var error), error);
@@ -602,6 +690,64 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
             ImGui.PopID();
         }
         ImGui.EndTable();
+        var selected = previewRows.FirstOrDefault(row => row.RowId == selectedRowId) ?? previewRows.FirstOrDefault();
+        if (selected is not null) DrawSelectedItem(selected, fillOrder);
+    }
+
+    private void SaveRow(ShopListPreviewRow row, RowEdit edit)
+    {
+        var succeeded = plugin.ShopListService.UpdateItem(row.RowId, edit.TriggerBelow, edit.RefillToAtLeast,
+            edit.Repeatable, (ShopListOwnershipScope)Math.Clamp(edit.OwnershipScopeIndex, 0, 1), out var error);
+        SetStatus(succeeded, error);
+        if (succeeded) RefreshPreview();
+    }
+
+    private void DrawSelectedItem(ShopListPreviewRow row, bool fillOrder)
+    {
+        selectedRowId = row.RowId;
+        if (!rowEdits.TryGetValue(row.RowId, out var edit)) return;
+        MaterialSettings.Section(Ui.T("Details"));
+        MaterialText.Text(Ui.ItemName(row.ItemId, row.ItemName));
+        ImGui.SameLine();
+        MaterialText.TextDisabled(row.ItemId.ToString(CultureInfo.InvariantCulture));
+        // Retain the row table's original scope for the moved secondary editors.
+        var tableRoot = ImGui.GetID("ADSShopListPreview");
+        ImGuiP.PushOverrideID(tableRoot);
+        ImGui.PushID(row.RowId.GetHashCode());
+        try
+        {
+            if (!fillOrder) WindowLayout.Checkbox("Repeatable", ref edit.Repeatable);
+            var scopeNames = new[] { "Inventory", "Inventory + retainers" }.Select(Ui.Display).ToArray();
+            WindowLayout.SameLineIfFits(WindowLayout.ComboMinimum(scopeNames));
+            ImGui.SetNextItemWidth(WindowLayout.ComboMinimum(scopeNames));
+            WindowLayout.Combo("##Scope", ref edit.OwnershipScopeIndex, scopeNames, scopeNames.Length);
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Copy row ID")));
+            if (WindowLayout.SmallButton(Ui.L("Copy row ID"))) ImGui.SetClipboardText(row.RowId.ToString("D"));
+            // The table already draws Save with its retained ID; this second view has its own ID.
+            ImGui.PushID("ADSSelectedItem");
+            try
+            {
+                WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Save row")));
+                if (WindowLayout.SmallButton(Ui.L("Save row"))) SaveRow(row, edit);
+            }
+            finally { ImGui.PopID(); }
+        }
+        finally { ImGui.PopID(); ImGui.PopID(); }
+        MaterialText.TextDisabled(Ui.T("Inv {0:N0}", row.LiveInventoryQuantity));
+        MaterialText.Text(Ui.T("Selected vendor"));
+        if (row.SelectedOffer is { } offer)
+        {
+            MaterialText.TextWrapped(Ui.ShopName(offer.ShopKind, offer.ShopId, offer.ShopName));
+            MaterialText.TextDisabled(Ui.T("{0} {1}", offer.ShopKind, offer.ShopId));
+            MaterialText.TextWrapped(Ui.T("{0} - {1}", Ui.NpcName(offer.NpcId, offer.NpcName), Ui.TerritoryName(offer.TerritoryId, offer.TerritoryName)));
+        }
+        else MaterialText.TextDisabled(Ui.T("None needed / available"));
+        MaterialText.Text(Ui.T("Retainer locations"));
+        DrawRetainerLocations(row);
+        MaterialText.TextWrapped(Ui.T("{0}: {1}", Ui.Display(row.Outcome), Ui.Display(row.StatusMessage)));
+        if (!string.IsNullOrWhiteSpace(row.FailureCode)) MaterialText.TextDisabled(row.FailureCode);
+        if (plugin.ShopListService.PresetStore.ActivePreset.Mode == ShopListMode.TargetedRefill)
+            MaterialText.TextWrapped(Ui.T("Set both 'If owned <' and 'Refill to >=' to 130 to target 130 owned items. With single-item vendor bundles, owning 10 means buying 120. /ads shop <itemID> 130 requests 130 additional items."));
     }
 
     private void EnsurePresetSettings()

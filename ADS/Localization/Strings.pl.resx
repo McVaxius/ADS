@@ -4248,4 +4248,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Kryształowa Wieża: utrzymywanie przydzielonego obszaru silnie naładowanej chmury do jego oczyszczenia.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Kryształowa Wieża: podążanie zweryfikowaną trasą rajdu.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzenie aktywacji skrótu i dotarcia do celu.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Więcej działań</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Zamówienie i podgląd</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Profile i import</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Sterowanie powiązanymi wtyczkami</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Motyw i język</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Sterowanie głównym oknem</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Nieprzezroczystość okna</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>Gdy okno jest nieaktywne</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>Wybierz grup? narz?dzi</value></data>
 </root>

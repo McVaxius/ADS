@@ -47,6 +47,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
         var wizard = selectedWizardId is null
             ? null
             : WizardCatalog.All.FirstOrDefault(candidate => candidate.Id == selectedWizardId);
@@ -68,9 +69,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
         foreach (var wizard in WizardCatalog.All)
         {
             var completed = WizardCatalog.IsCompleted(plugin.Configuration, wizard.Id);
-            ImGui.Separator();
-            MaterialText.Text(Ui.Display(wizard.Title));
-            ImGui.SameLine();
+            MaterialSettings.Section(Ui.Display(wizard.Title));
             MaterialText.TextColored(completed ? new Vector4(0.35f, 0.85f, 0.45f, 1f) : new Vector4(0.75f, 0.75f, 0.75f, 1f), Ui.Display(completed ? "Completed" : "Optional"));
             MaterialText.TextWrapped(Ui.Display(wizard.Summary));
             if (WindowLayout.Button(Ui.L(Ui.T(completed ? "Replay" : "Start") + "###" + $"{(completed ? "Replay" : "Start")}##{wizard.Id}"), new Vector2(140f, 28f)))
@@ -95,7 +94,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
         ImGui.Spacing();
         MaterialText.Text(Ui.Display(wizard.Title));
         MaterialText.TextDisabled(Ui.T("{0} / {1}: {2}", pageIndex + 1, wizard.Pages.Count, Ui.T(page.Title)));
-        ImGui.Separator();
+        ImGui.ProgressBar((pageIndex + 1f) / wizard.Pages.Count, new Vector2(-1, 4 * MaterialTheme.Metrics.Scale), string.Empty);
         MaterialText.TextWrapped(Ui.Display(page.Body));
         ImGui.Spacing();
         foreach (var step in page.Steps)

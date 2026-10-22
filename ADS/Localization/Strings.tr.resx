@@ -4248,4 +4248,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Kristal Kule: atanan aşırı yüklü bulut bölgesi temizlenene kadar konum korunuyor.</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Kristal Kule: doğrulanmış baskın rotası izleniyor.</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Kristal Kule: kestirmenin etkinleşmesi ve varış doğrulaması bekleniyor.</value></data>
+  <data name="More actions" xml:space="preserve"><value>Diğer işlemler</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>Sipariş ve önizleme</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>Önayarlar ve içe aktarma</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>Bağlı eklenti denetimleri</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>Tema ve dil</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>Ana pencere denetimleri</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>Pencere opaklığı</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>Odak dışındayken</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>Bir ara? grubu se?in</value></data>
 </root>

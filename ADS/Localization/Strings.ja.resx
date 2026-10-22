@@ -11676,4 +11676,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>クリスタルタワー：割り当てられた波動雲エリアが解除されるまで待機しています。</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>クリスタルタワー：確認済みのレイド経路を移動中。</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>クリスタルタワー：ショートカットの作動と到着の確認を待っています。</value></data>
+  <data name="More actions" xml:space="preserve"><value>その他の操作</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>注文とプレビュー</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>プリセットとインポート</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>連携プラグインの操作</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>テーマと言語</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>メインウィンドウの操作</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>ウィンドウの不透明度</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>非アクティブ時</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>??????????</value></data>
 </root>

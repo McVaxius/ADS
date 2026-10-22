@@ -50,6 +50,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
         if (WindowLayout.SmallButton(Ui.L("Duties")))
             showActivityPolicies = false;
         ImGui.SameLine();
@@ -93,7 +94,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
         var focusedRow = ResolveFocusedRow(visibleRows, currentContext);
         var focusedCoverage = coverage.Get(focusedRow);
-        if (ImGui.GetContentRegionAvail().X >= 1180f)
+        if (ImGui.GetContentRegionAvail().X >= 1180f * MaterialTheme.Metrics.Scale)
         {
             if (!ImGui.BeginTable("ADSDutyManagerLayout", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
                 return;
@@ -172,11 +173,15 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
     private void DrawToolbar(bool hasDraftChanges)
     {
-        MaterialText.Text(Ui.T("Duty Manager"));
-        if (!ImGui.BeginTable("ADSDutyManagerToolbar", 2, ImGuiTableFlags.SizingStretchProp))
+        MaterialSettings.Section(Ui.T("Duty Manager"));
+        var actionWidth = new[] { "Save", "Reload", "Open JSON" }.Sum(label => WindowLayout.ButtonMinimum(Ui.L(label)))
+            + 2 * ImGui.GetStyle().ItemSpacing.X;
+        var stacked = ImGui.GetContentRegionAvail().X < actionWidth + 240 * MaterialTheme.Metrics.Scale;
+        using var rows = MaterialTable.PushTightRows();
+        if (!ImGui.BeginTable("ADSDutyManagerToolbar", stacked ? 1 : 2, ImGuiTableFlags.SizingStretchProp))
             return;
         ImGui.TableSetupColumn(Ui.L("Search"), ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, 205f);
+        if (!stacked) ImGui.TableSetupColumn(Ui.L("Actions"), ImGuiTableColumnFlags.WidthFixed, actionWidth);
         ImGui.TableNextRow();
         ImGui.TableSetColumnIndex(0);
         ImGui.SetNextItemWidth(-1f);
@@ -184,7 +189,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         if (WindowLayout.InputTextWithHint("##ADSDutyManagerSearch", Ui.T("search duty, family, expansion, note, territory, or CFC"), ref search, 160))
             filters.Search = search;
 
-        ImGui.TableSetColumnIndex(1);
+        if (stacked) ImGui.TableNextRow();
+        ImGui.TableSetColumnIndex(stacked ? 0 : 1);
         using (new ImGuiDisabledBlock(!hasDraftChanges))
         {
             if (WindowLayout.Button(Ui.L("Save")))
@@ -226,7 +232,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             filters.SetAllClearanceStatuses(false);
         foreach (var status in DutyMaturityDisplayCatalog.ClearanceValues)
         {
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.Display(DutyMaturityDisplayCatalog.GetClearanceLabel(status))).X
+                + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
             var enabled = filters.ClearanceStatuses.Contains(status);
             ImGui.PushStyleColor(ImGuiCol.Text, DutyMaturityDisplayCatalog.GetClearanceColor(status));
             if (WindowLayout.NativeCheckbox(Ui.Display(DutyMaturityDisplayCatalog.GetClearanceLabel(status)) + $"###{DutyMaturityDisplayCatalog.GetClearanceLabel(status)}##DutyMaturity{status}", ref enabled))
@@ -278,7 +285,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             filters.SetAllFamilies(false);
         foreach (var entry in DutyCategoryDisplayCatalog.Entries)
         {
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.Display(entry.FilterLabel)).X
+                + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
             var enabled = filters.Families.Contains(entry.Category);
             ImGui.PushStyleColor(ImGuiCol.Text, entry.Accent);
             if (WindowLayout.NativeCheckbox(Ui.Display(entry.FilterLabel) + $"###{entry.FilterLabel}##DutyFamily{entry.Category}", ref enabled))
@@ -289,7 +297,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
     private static void DrawFilterToggle(string label, bool current, Action<bool> set)
     {
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.Display(label)).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X);
         var value = current;
         if (WindowLayout.NativeCheckbox(Ui.L(label), ref value))
             set(value);
@@ -297,6 +305,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
     private void DrawBulkActions(IReadOnlyList<DutyMaturityDraftRow> visibleRows)
     {
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
         if (!MaterialText.CollapsingHeader(Ui.L("Bulk changes")))
             return;
         if (WindowLayout.SmallButton(Ui.L("Select Visible")))
@@ -304,30 +313,31 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             foreach (var row in visibleRows)
                 selectedKeys.Add(DutyMaturityCatalog.BuildDutyCatalogKey(row));
         }
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Clear Selection")));
         if (WindowLayout.SmallButton(Ui.L("Clear Selection")))
             selectedKeys.Clear();
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(80f);
+        var maturityWidth = WindowLayout.ComboMinimum(DutyMaturityDisplayCatalog.ClearanceLabels.Select(Ui.Display));
+        WindowLayout.SameLineIfFits(maturityWidth);
+        ImGui.SetNextItemWidth(maturityWidth);
         WindowLayout.Combo("##BulkMaturity", ref bulkMaturityIndex, DutyMaturityDisplayCatalog.ClearanceLabels.Select(Ui.Display).ToArray(), DutyMaturityDisplayCatalog.ClearanceLabels.Length);
-        ImGui.SameLine();
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Set Maturity")));
         using (new ImGuiDisabledBlock(selectedKeys.Count == 0))
         {
             if (WindowLayout.SmallButton(Ui.L("Set Maturity")))
                 ApplyToSelected(row => row.ClearanceStatus = DutyMaturityDisplayCatalog.ClearanceValues[bulkMaturityIndex]);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Planned On")));
             if (WindowLayout.SmallButton(Ui.L("Planned On")))
                 ApplyToSelected(row => row.IsPlannedTest = true);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Planned Off")));
             if (WindowLayout.SmallButton(Ui.L("Planned Off")))
                 ApplyToSelected(row => row.IsPlannedTest = false);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("MSQ On")));
             if (WindowLayout.SmallButton(Ui.L("MSQ On")))
                 ApplyToSelected(row => row.IsMainScenario = true);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("MSQ Off")));
             if (WindowLayout.SmallButton(Ui.L("MSQ Off")))
                 ApplyToSelected(row => row.IsMainScenario = false);
-            ImGui.SameLine();
+            WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("Reset Selected")));
             if (WindowLayout.SmallButton(Ui.L("Reset Selected")))
                 ApplyToSelected(row => row.ResetToDefaults());
         }
@@ -344,11 +354,13 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
     private void DrawDutyTable(IReadOnlyList<DutyMaturityDraftRow> rows, DutyRuleCoverageSnapshot snapshot, float height)
     {
+        using var controls = MaterialTable.PushControls();
+        using var rowSpacing = MaterialTable.PushTightRows();
         if (!ImGui.BeginTable(
                 "ADSDutyManagerRows",
                 9,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
-                new Vector2(-1f, height)))
+                new Vector2(-1f, height * MaterialTheme.Metrics.Scale)))
             return;
         ImGui.TableSetupColumn(Ui.L("Sel"), ImGuiTableColumnFlags.WidthFixed, 34f);
         ImGui.TableSetupColumn(Ui.L("Duty"));
@@ -410,7 +422,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     private void DrawDetails(DutyMaturityDraftRow row, DutyRuleCoverage coverage)
     {
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
-        if (ImGui.BeginChild("ADSDutyManagerDetail", new Vector2(-1f, -1f), true))
+        if (ImGui.BeginChild("ADSDutyManagerDetail", new Vector2(-1f, -1f), false))
         {
             MaterialText.TextColored(DutyMaturityDisplayCatalog.GetClearanceColor(row.ClearanceStatus), Ui.DutyName(ResolveCatalogEntry(row)));
             MaterialText.TextColored(DutyCategoryDisplayCatalog.Get(row.Category).Accent, Ui.Display(DutyCategoryDisplayCatalog.Get(row.Category).FilterLabel));

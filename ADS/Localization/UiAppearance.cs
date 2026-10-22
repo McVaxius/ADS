@@ -219,11 +219,24 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     internal void DrawWindowAppearanceSettings()
     {
-        if (!MaterialText.CollapsingHeader(Ui.T("Window appearance") + "###UiWindowAppearance")) return;
-        DrawCompactToggle();
-        ImGui.SameLine();
-        MaterialText.Text(Ui.T("Compact mode"));
-        DrawSelector(false);
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
+        var minimum = Math.Max(300 * MaterialTheme.Metrics.Scale,
+            new[] { "Compact visible on main window", "Transparency visible on main window", "Language visible on main window",
+                "Show titlebar status", "Detailed titlebar status", "Auto-fade when unfocused" }
+                .Max(label => MaterialText.Measure(Ui.T(label)).X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X));
+        MaterialAppearanceTab.Draw("ADSGroupedAppearance", new(Ui.T("Theme & Language"), Ui.T("Main window controls"),
+            Ui.T("Window opacity"), Ui.T("When unfocused")), minimum,
+            () =>
+            {
+                DrawCompactToggle();
+                ImGui.SameLine();
+                MaterialText.Text(Ui.T("Compact mode"));
+                DrawSelector(false);
+            }, DrawMainWindowControls, DrawNormalOpacity, DrawUnfocusedOpacity);
+    }
+
+    private void DrawMainWindowControls()
+    {
         var showStatus = plugin.Configuration.UiShowTitlebarStatus;
         if (WindowLayout.Checkbox("Show titlebar status", ref showStatus))
         { plugin.Configuration.UiShowTitlebarStatus = showStatus; plugin.SaveConfiguration(); }
@@ -239,7 +252,6 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var languageVisible = plugin.Configuration.UiLanguageVisibleOnMainWindow;
         if (WindowLayout.Checkbox("Language visible on main window", ref languageVisible))
         { plugin.Configuration.UiLanguageVisibleOnMainWindow = languageVisible; plugin.SaveConfiguration(); }
-        DrawTransparencySettings();
     }
 
     private void PrepareAppearanceTitleBars(Dalamud.Interface.Windowing.WindowSystem windows)
@@ -284,6 +296,12 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     private void DrawTransparencySettings()
     {
+        DrawNormalOpacity();
+        DrawUnfocusedOpacity();
+    }
+
+    private void DrawNormalOpacity()
+    {
         var enabled = plugin.Configuration.UiTransparencyEnabled;
         if (WindowLayout.Checkbox("Transparency", ref enabled))
         { plugin.Configuration.UiTransparencyEnabled = enabled; plugin.SaveConfiguration(); }
@@ -292,6 +310,10 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var normalOpacity = plugin.Configuration.UiWindowOpacityPercent;
         if (WindowLayout.InputInt("##UiWindowOpacityPercent", ref normalOpacity))
         { plugin.Configuration.UiWindowOpacityPercent = normalOpacity; plugin.SaveConfiguration(); }
+    }
+
+    private void DrawUnfocusedOpacity()
+    {
         var autoFade = plugin.Configuration.UiAutoFade;
         if (WindowLayout.Checkbox("Auto-fade when unfocused", ref autoFade))
         { plugin.Configuration.UiAutoFade = autoFade; plugin.SaveConfiguration(); }

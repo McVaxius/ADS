@@ -11676,4 +11676,13 @@
   <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>水晶塔：正在指定的波动云区域内保持位置，直至该区域解除。</value></data>
   <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>水晶塔：正在沿已验证的团队副本路线移动。</value></data>
   <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>水晶塔：等待确认捷径已激活并已抵达。</value></data>
+  <data name="More actions" xml:space="preserve"><value>更多操作</value></data>
+  <data name="Order &amp; preview" xml:space="preserve"><value>订单与预览</value></data>
+  <data name="Presets &amp; import" xml:space="preserve"><value>预设与导入</value></data>
+  <data name="Companion controls" xml:space="preserve"><value>关联插件控件</value></data>
+  <data name="Theme &amp; Language" xml:space="preserve"><value>主题与语言</value></data>
+  <data name="Main window controls" xml:space="preserve"><value>主窗口控件</value></data>
+  <data name="Window opacity" xml:space="preserve"><value>窗口不透明度</value></data>
+  <data name="When unfocused" xml:space="preserve"><value>失去焦点时</value></data>
+  <data name="Choose a tool group" xml:space="preserve"><value>?????</value></data>
 </root>

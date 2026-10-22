@@ -31,10 +31,11 @@ public sealed class ReflectionWindow : PositionedWindow, IDisposable
     {
         windowMotion.DrawChrome();
         FinalizePendingWindowPlacement();
+        using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 
         var status = plugin.BmrReflectionService.Status;
-        DrawStatus(status);
-        ImGui.Separator();
+        AdsPresentation.Panel(() => DrawStatus(status), ImGui.GetID(""));
+        MaterialSettings.Section(Ui.T("Controls"));
         DrawControls(status);
     }
 
