@@ -773,6 +773,7 @@ public sealed class ObjectPriorityRuleService
             .Where(x => MatchesDutyScope(x, context, includeLayerScope: true))
             .Where(x => !string.IsNullOrWhiteSpace(x.MapCoordinates))
             .OrderByDescending(GetSpecificityScore)
+            .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.Alliance))
             .ThenBy(x => x.Priority)
             .ToList();
 
@@ -783,6 +784,7 @@ public sealed class ObjectPriorityRuleService
             .Where(x => MatchesDutyScope(x, context, includeLayerScope: true))
             .Where(x => !string.IsNullOrWhiteSpace(x.WorldCoordinates))
             .OrderByDescending(GetSpecificityScore)
+            .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.Alliance))
             .ThenBy(x => x.Priority)
             .ToList();
 
@@ -1268,6 +1270,7 @@ public sealed class ObjectPriorityRuleService
             .Where(x => !IsManualDestinationRule(x) && !IsCardinalHoldRule(x))
             .Where(x => Matches(x, context, objectKind, baseId, objectName, objectPosition, objectMapId, includeLayerScope))
             .OrderByDescending(GetSpecificityScore)
+            .ThenByDescending(x => !string.IsNullOrWhiteSpace(x.Alliance))
             .ThenBy(x => x.Priority);
     }
 
@@ -1500,6 +1503,7 @@ public sealed class ObjectPriorityRuleService
             ContentFinderConditionId = rule.ContentFinderConditionId,
             DutyEnglishName = rule.DutyEnglishName,
             Alliance = rule.Alliance,
+            CrystalTowerStrategy = rule.CrystalTowerStrategy,
             ObjectKind = rule.ObjectKind,
             BaseId = rule.BaseId,
             ObjectName = rule.ObjectName,
@@ -1549,8 +1553,24 @@ public sealed class ObjectPriorityRuleService
 
         try
         {
-            manifest = JsonSerializer.Deserialize<ObjectPriorityRuleManifest>(json, JsonOptions) ?? new ObjectPriorityRuleManifest();
-            manifest.Rules ??= [];
+            var parsed = JsonSerializer.Deserialize<ObjectPriorityRuleManifest>(json, JsonOptions) ?? new ObjectPriorityRuleManifest();
+            parsed.Rules ??= [];
+            for (var index = 0; index < parsed.Rules.Count; index++)
+            {
+                if (!CrystalTowerStrategy.IsValidRule(parsed.Rules[index]))
+                {
+                    status = "Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope.";
+                    return false;
+                }
+                var alliance = parsed.Rules[index].Alliance;
+                if (!string.IsNullOrWhiteSpace(alliance) && !AllianceScopeParser.IsValidScope(alliance))
+                {
+                    status = $"Invalid Alliance scope in rule {index + 1} from {sourcePath}; use A-G or leave it blank.";
+                    return false;
+                }
+            }
+
+            manifest = parsed;
             return true;
         }
         catch (Exception ex)

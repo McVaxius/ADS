@@ -4224,4 +4224,28 @@
   <data name="Control" xml:space="preserve"><value>Przycisk</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Przejdź do opcji Wybór, aby ustawić każdy kolor.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Wróć do Auto, aby używać motywu automatycznego.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>Zakres regu?y ruchu uleg? zmianie; oczekiwanie na regu?? bie??cej instancji/sojuszu.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzony stan mechaniki sojuszu.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Kryształowa Wieża: przemieszczanie się na przydzieloną platformę.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Kryształowa Wieża: utrzymywanie pozycji na przydzielonej platformie.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na dostawcę obsługi ruchu.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Kryształowa Wieża: przydzielony cel nie spełnia wymagań.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Nieprawidłowa strategia Kryształowej Wieży; użyj SYNC lub UNSYNC z dokładnym zakresem konkretnej instancji Kryształowej Wieży.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Nieprawidłowy zakres sojuszu w regule {0} ze źródła {1}; użyj A-G lub pozostaw puste.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>Reguła '{0}' ma nieprawidłowy zakres sojuszu; oczekiwano jednej litery A-G lub pustego pola.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Kryształowa Wieża: Gorączka; postęp ADS jest wstrzymany.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na aktywną platformę usuwającą Zagładę.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na przydzieloną platformę Atomosa.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzoną platformę powrotną Atomosa.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzone przydziały do wież.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na przejście ze żołądka na zewnątrz.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Kryształowa Wieża: automatyczna obsługa łańcuchów jest niedostępna.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzoną bezpieczną drogę do Mini.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na Mini przed wejściem do kałuży Cerbera.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na przydzielony obszar silnie naładowanej chmury.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Kryształowa Wieża: utrzymywanie przydzielonego obszaru silnie naładowanej chmury do jego oczyszczenia.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Kryształowa Wieża: podążanie zweryfikowaną trasą rajdu.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Kryształowa Wieża: oczekiwanie na potwierdzenie aktywacji skrótu i dotarcia do celu.</value></data>
 </root>

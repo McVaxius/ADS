@@ -88,32 +88,45 @@ public abstract class PositionedWindow : Window
 
     private protected static void DrawToolGuideOffer(Configuration configuration, Action save, ToolGuide tool, ref bool requested, ref bool visible, Action openGuide)
     {
+        if (!WizardCatalog.ShouldOfferToolGuide(configuration, tool))
+        {
+            requested = visible = false;
+            return;
+        }
         var title = Ui.L(tool == ToolGuide.Rules
             ? "Rules guide###ADSRuleGuideOffer" : "Object Explorer guide###ADSExplorerGuideOffer");
         if (requested)
         {
             requested = false;
-            ImGui.OpenPopup(title);
+            visible = true;
         }
+        if (!visible)
+            return;
+
         var open = true;
         var launch = false;
-        if (ImGui.BeginPopupModal(title, ref open, ImGuiWindowFlags.AlwaysAutoResize))
+        var drawContent = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize);
+        try
         {
-            visible = true;
-            ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 440 * MaterialTheme.Metrics.Scale);
-            MaterialText.TextWrapped(Ui.T("Open this tool's guide? You can always use its Guide button later."));
-            ImGui.PopTextWrapPos();
-            if (WindowLayout.Button(Ui.L("Open guide")))
+            if (drawContent)
             {
-                launch = true;
-                ImGui.CloseCurrentPopup();
+                ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 440 * MaterialTheme.Metrics.Scale);
+                MaterialText.TextWrapped(Ui.T("Open this tool's guide? You can always use its Guide button later."));
+                ImGui.PopTextWrapPos();
+                if (WindowLayout.Button(Ui.L("Open guide")))
+                {
+                    launch = true;
+                    open = false;
+                }
+                ImGui.SameLine();
+                if (WindowLayout.Button(Ui.L("Dismiss")))
+                    open = false;
             }
-            ImGui.SameLine();
-            if (WindowLayout.Button(Ui.L("Dismiss")) || ImGui.IsKeyPressed(ImGuiKey.Escape))
-                ImGui.CloseCurrentPopup();
-            ImGui.EndPopup();
+            if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsKeyPressed(ImGuiKey.Escape))
+                open = false;
         }
-        if (!open || visible && !ImGui.IsPopupOpen(title))
+        finally { ImGui.End(); }
+        if (!open)
             CloseToolGuideOffer(configuration, save, tool, ref requested, ref visible);
         if (launch)
             openGuide();

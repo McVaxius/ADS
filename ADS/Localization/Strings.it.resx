@@ -4582,4 +4582,28 @@
   <data name="Control" xml:space="preserve"><value>Controllo</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Passa a Selettore per impostare ogni colore.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Torna ad Automatico per usare il tema automatico.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>L?ambito della regola di movimento ? cambiato; in attesa di una regola per il contenuto e l?alleanza attuali.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Torre di Cristallo: in attesa di uno stato verificato della meccanica dell'alleanza.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Torre di Cristallo: spostamento verso la piattaforma assegnata.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Torre di Cristallo: mantenimento della posizione sulla piattaforma assegnata.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Torre di Cristallo: in attesa del provider di movimento.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Torre di Cristallo: il bersaglio assegnato non è idoneo.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Strategia della Torre di Cristallo non valida; usa SYNC o UNSYNC con un ambito esatto per un'istanza della Torre di Cristallo.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Ambito dell'alleanza non valido nella regola {0} da {1}; usa A-G o lascia vuoto.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>La regola '{0}' ha un ambito dell'alleanza non valido; è richiesta una sola lettera A-G oppure un valore vuoto.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Torre di Cristallo: Piressia; la progressione ADS è in pausa.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Torre di Cristallo: in attesa della piattaforma attiva che rimuove Condanna.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Torre di Cristallo: in attesa della piattaforma assegnata di Atomos.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Torre di Cristallo: in attesa di una piattaforma di ritorno di Atomos verificata.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Torre di Cristallo: in attesa di assegnazioni verificate alle torri.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Torre di Cristallo: in attesa della transizione di uscita dallo stomaco.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Torre di Cristallo: la gestione automatica delle catene non è disponibile.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Torre di Cristallo: in attesa di un percorso sicuro e verificato per avvicinarsi a Mini.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Torre di Cristallo: in attesa di Mini prima di entrare nella pozza di Cerbero.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Torre di Cristallo: in attesa dell'area assegnata della nube ipercarica.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Torre di Cristallo: mantenimento della posizione nell'area assegnata della nube ipercarica finché non si libera.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Torre di Cristallo: percorso verificato dell'incursione in corso.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Torre di Cristallo: in attesa di conferma dell’attivazione della scorciatoia e dell’arrivo.</value></data>
 </root>

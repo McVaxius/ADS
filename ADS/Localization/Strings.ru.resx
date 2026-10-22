@@ -4582,4 +4582,28 @@
   <data name="Control" xml:space="preserve"><value>Кнопка</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Переключитесь на Палитру, чтобы задать каждый цвет.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Вернитесь в Авто, чтобы использовать автоматическую тему.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>??????? ???????? ??????? ???????? ??????????; ???????? ??????? ??? ???????? ??????? ? ???????.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Кристальная башня: ожидание подтверждённого состояния механики альянса.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Кристальная башня: перемещение к назначенной платформе.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Кристальная башня: удержание назначенной платформы.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Кристальная башня: ожидание провайдера перемещения.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Кристальная башня: назначенная цель не соответствует условиям.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Недопустимая стратегия Кристальной башни; используйте SYNC или UNSYNC с точной привязкой к рейду Кристальной башни.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Недопустимая привязка к альянсу в правиле {0} из {1}; укажите A-G или оставьте поле пустым.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>У правила '{0}' недопустимая привязка к альянсу; требуется одна буква A-G или пустое поле.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Кристальная башня: жар; продвижение ADS приостановлено.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Кристальная башня: ожидание активной платформы, снимающей Рок.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Кристальная башня: ожидание назначенной платформы Атомоса.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Кристальная башня: ожидание подтверждённой платформы возврата Атомоса.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Кристальная башня: ожидание подтверждённого распределения по башням.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Кристальная башня: ожидание перехода из желудка наружу.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Кристальная башня: автоматическая работа с цепями недоступна.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Кристальная башня: ожидание подтверждённого безопасного пути к Мини.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Кристальная башня: ожидание Мини перед входом в лужу Цербера.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Кристальная башня: ожидание назначенной области сверхзаряженного облака.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Кристальная башня: удержание назначенной области сверхзаряженного облака до её освобождения.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Кристальная башня: движение по проверенному маршруту рейда.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Кристальная башня: ожидание подтверждения активации короткого пути и прибытия.</value></data>
 </root>

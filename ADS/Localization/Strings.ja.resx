@@ -11652,4 +11652,28 @@
   <data name="Control" xml:space="preserve"><value>コントロール</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>各色を自分で設定するにはピッカーに切り替えます。</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>自動テーマを使うには「自動」に戻します。</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>??????????????????????????????????????????????????</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>クリスタルタワー：確認済みのアライアンスギミック状態を待機中です。</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>クリスタルタワー：割り当てられた足場へ移動しています。</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>クリスタルタワー：割り当てられた足場で待機しています。</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>クリスタルタワー：移動プロバイダーを待機中です。</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>クリスタルタワー：割り当てられたターゲットは実行条件を満たしていません。</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>クリスタルタワーの戦略が無効です。クリスタルタワーの対象コンテンツを厳密に指定し、SYNC または UNSYNC を使用してください。</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>ルール {0}（取得元: {1}）のアライアンス範囲が無効です。A-G を指定するか、空欄にしてください。</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>ルール '{0}' のアライアンス範囲が無効です。A-G の1文字を指定するか、空欄にしてください。</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>クリスタルタワー：ヒートのため、ADS の進行を一時停止しています。</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>クリスタルタワー：死の宣告を解除できる有効な足場を待っています。</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>クリスタルタワー：割り当てられたアトモスの足場を待っています。</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>クリスタルタワー：確認済みのアトモス復帰用足場を待っています。</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>クリスタルタワー：塔の担当割り当ての確認を待っています。</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>クリスタルタワー：胃の中からの退出を待っています。</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>クリスタルタワー：鎖の自動処理は利用できません。</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>クリスタルタワー：ミニマムへの安全な接近経路の確認を待っています。</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>クリスタルタワー：ケルベロスの液だまりに入る前に、ミニマムを待っています。</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>クリスタルタワー：割り当てられた波動雲エリアを待っています。</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>クリスタルタワー：割り当てられた波動雲エリアが解除されるまで待機しています。</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>クリスタルタワー：確認済みのレイド経路を移動中。</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>クリスタルタワー：ショートカットの作動と到着の確認を待っています。</value></data>
 </root>

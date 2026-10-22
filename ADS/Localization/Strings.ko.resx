@@ -11652,4 +11652,28 @@
   <data name="Control" xml:space="preserve"><value>컨트롤</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>각 색상을 직접 설정하려면 색상 선택으로 전환하세요.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>자동 테마를 사용하려면 자동으로 돌아가세요.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>?? ??? ?? ??? ???????. ?? ??/??? ?? ??? ?????.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>크리스탈 타워: 얼라이언스 기믹 상태 확인을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>크리스탈 타워: 배정된 발판으로 이동 중입니다.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>크리스탈 타워: 배정된 발판에서 대기 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>크리스탈 타워: 이동 제공자를 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>크리스탈 타워: 배정된 대상이 실행 조건을 충족하지 않습니다.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>크리스탈 타워 전략이 잘못되었습니다. 크리스탈 타워 임무 범위를 정확히 지정하고 SYNC 또는 UNSYNC를 사용하세요.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>규칙 {0}(출처: {1})의 얼라이언스 범위가 잘못되었습니다. A-G를 사용하거나 비워 두세요.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>규칙 '{0}'의 얼라이언스 범위가 잘못되었습니다. A-G 중 한 글자를 사용하거나 비워 두세요.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>크리스탈 타워: 열병으로 ADS 진행이 일시 중지되었습니다.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>크리스탈 타워: 죽음의 선고를 해제하는 활성 발판을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>크리스탈 타워: 배정된 아토모스 발판을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>크리스탈 타워: 확인된 아토모스 복귀 발판을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>크리스탈 타워: 탑 담당 배정 확인을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>크리스탈 타워: 위장 밖으로 나가는 전환을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>크리스탈 타워: 사슬 자동 처리를 사용할 수 없습니다.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>크리스탈 타워: 미니멈으로 안전하게 접근할 수 있는 경로 확인을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>크리스탈 타워: 케르베로스의 웅덩이에 들어가기 전에 미니멈을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>크리스탈 타워: 배정된 파동 구름 구역을 기다리는 중입니다.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>크리스탈 타워: 배정된 파동 구름 구역이 해제될 때까지 위치를 유지하는 중입니다.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>크리스탈 타워: 확인된 레이드 경로를 따라 이동 중입니다.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>크리스탈 타워: 지름길 활성화 및 도착 확인을 기다리는 중입니다.</value></data>
 </root>

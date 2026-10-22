@@ -100,6 +100,7 @@ internal static class PartialRuleImportPlanner
             ContentFinderConditionId = rule.ContentFinderConditionId,
             DutyEnglishName = rule.DutyEnglishName,
             Alliance = rule.Alliance,
+            CrystalTowerStrategy = rule.CrystalTowerStrategy,
             ObjectKind = rule.ObjectKind,
             BaseId = rule.BaseId,
             ObjectName = rule.ObjectName,

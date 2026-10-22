@@ -766,6 +766,16 @@ internal sealed partial class ObjectRuleShardStore
         out string status)
     {
         fileName = string.Empty;
+        if (!CrystalTowerStrategy.IsValidRule(rule))
+        {
+            status = "Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope.";
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(rule.Alliance) && !AllianceScopeParser.IsValidScope(rule.Alliance))
+        {
+            status = $"Rule '{rule.ObjectName}' has invalid Alliance scope; expected a single letter A-G or blank.";
+            return false;
+        }
         var hasDutyScope = rule.TerritoryTypeId != 0
                            || rule.ContentFinderConditionId != 0
                            || !string.IsNullOrWhiteSpace(rule.DutyEnglishName);
@@ -1033,6 +1043,13 @@ internal sealed partial class ObjectRuleShardStore
             manifest.Rules ??= [];
             if (manifest.SchemaVersion != SchemaVersion)
                 throw new InvalidDataException($"Unsupported manifest schema {manifest.SchemaVersion}; expected {SchemaVersion}.");
+            foreach (var rule in manifest.Rules)
+            {
+                if (!CrystalTowerStrategy.IsValidRule(rule))
+                    throw new InvalidDataException("Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope.");
+                if (!string.IsNullOrWhiteSpace(rule.Alliance) && !AllianceScopeParser.IsValidScope(rule.Alliance))
+                    throw new InvalidDataException($"Rule '{rule.ObjectName}' has invalid Alliance scope; expected a single letter A-G or blank.");
+            }
             status = $"Loaded {manifest.Rules.Count} legacy rule(s) from {path}.";
             return true;
         }

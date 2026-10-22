@@ -191,9 +191,28 @@ The synced preset gives nearby mechanic adds ordinary kill priority ahead of mai
 bosses. The unsynced preset adds boss-focus rules for burst play while keeping
 ordinary mechanic-add rules. Labyrinth has optional, position-matched nearby
 shortcuts, with a two-second arrival wait in SYNC and no extra wait in UNSYNC.
-Atomos uses a nearby-lane target rule in both. These are source-reviewed target and
-shortcut rules; neither preset supplies a complete alliance choreography or a
-verified unattended clear. They inherit missing DEFAULT contexts. Unsynced entry
+Both packages carry explicit SYNC/UNSYNC strategy metadata and alliance-scoped
+Atomos targets; personal copies retain the strategy when renamed or exported.
+The current runtime implements verified encounter handlers, including stable
+Labyrinth pad assignments, observed eligibility/retreat gates, shelter positioning
+and World of Darkness platform/region handling. Complete routes, rare phases and
+chain interactions remain unfinished; neither preset is a verified unattended
+clear. World of Darkness has measured XYZ approaches between observed encounter
+clears. Garm requires its follow-up add wave; Queen Scylla also requires the clone
+summoned through the false chest. Missing actors and idle time do not clear a
+stage. Labyrinth also sequences verified post-entry encounters with full XYZ
+approaches and observed own-alliance Atomos pads. Its three shortcuts use matched
+native objects and require a measured landing. Their placed object coordinates
+are separate from the player's approach points. The opening Pools packs require
+the 24 exact native placed identities in groups of 8/10/6 and matched deaths in
+the current attempt; missing actors or combat ending do not clear them.
+Automatic shortcut confirmation and final-transfer activation remain unfinished. The final
+transfers hold progression until an actual destination observation.
+Glasya's verified main-floor adds receive runtime targeting priority, including
+the actual Clockwork Squire rather than Moonring Blade. A player already held
+by Fetters stays in place to preserve the intercepted line. This does not supply
+energy-node links or the outer-platform launch/return route.
+They inherit missing DEFAULT contexts. Unsynced entry
 changes level restrictions; alliance entry requirements, Atomos/pad requirements
 and other surviving mechanics still need the appropriate participants/actions.
 
@@ -201,9 +220,11 @@ and other surviving mechanics still need the appropriate participants/actions.
    allow the normal 24-hour refresh. Select the desired named preset in Rules;
    downloading it retains your current selection and starts no automation.
 2. Configure the selected combat provider's encounter/rotation setup before the
-   run. ADS owns progression and targeting when started. The combat provider and
-   participants handle encounter movement, attacks and mechanics; give each
-   character one movement owner at a time.
+   run. ADS owns progression and targeting when started and takes movement for
+   its recognized mechanic holds/routes. Ordinary combat retains provider
+   movement; a guarded provider pause prevents competing movement during an ADS
+   hold. Pyretic also requires the action pause. Give each character one movement
+   owner at a time; provider or ownership changes invalidate the owned pause.
 3. If using Fren Rider's ADS handoff, enable its **Alliance** family and an honest
    maturity threshold for the live duty. Fren Rider requires a matching ADS
    catalog identity and clearance before handing over. While ADS owns execution,
@@ -214,10 +235,12 @@ and other surviving mechanics still need the appropriate participants/actions.
    configured in its existing workflow. These rule presets do not configure DAD,
    form parties, choose queue modes or add a repetition sequence. Match the actual
    entry mode, party/alliance roles and active ADS preset before each run.
-5. Keep each alliance in its assigned lane and arrange Atomos pads, Phlegethon
-   platforms, Cerberus roles and other required mechanics with participants or
-   the selected encounter provider. Stop ADS when manual movement must take over;
-   Resume is an explicit return of progression ownership.
+5. The selected runtime policy keeps four stable healer/ranged-preferred Labyrinth
+   pad holders per alliance, and uses A adds / B belly / C chains for synced
+   Cerberus. Normal unsynced burst does not create a belly detour when the phase
+   never occurs. Automatic chain handling is currently unavailable; remaining
+   routes and rare-phase work are still required for full progression. Stop and
+   Resume retain their explicit ownership meaning.
 
 Published presets are protected even with debug enabled. For personal edits or
 sharing, select **New Preset** to create a custom copy; the copy has its own
@@ -231,14 +254,16 @@ The selected rules use public encounter object IDs from
 and [BossMod Reborn](https://github.com/FFXIV-CombatReborn/BossModReborn/tree/main/BossMod/Modules/RealmReborn/Alliance),
 and Labyrinth shortcut IDs/positions from
 [AutoDuty's Labyrinth path](https://github.com/ffxivcode/AutoDuty/blob/master/AutoDuty/Paths/%28174%29%20The%20Labyrinth%20of%20the%20Ancients.json),
-reviewed on 2026-10-18. The public sheet identities agree with the scopes above.
+reviewed again against pinned source on 2026-10-22. The public sheet identities agree with the scopes above.
 No synced/unsynced gameplay or client acceptance was performed in this change.
 ## Rules and Object Explorer guides
 
 Rules and `/ads obj` keep a small labeled **Guide** button in their main toolbar,
 including compact mode. The first eligible opening offers **Open guide** or
-**Dismiss** once per tool. Dismissal, the close button and Escape consume that
-one-time offer. Opening the actual guide records a visit; neither showing nor
+**Dismiss** once per tool in an ordinary titled window. The parent stays interactive
+without dimming. Dismissal, the close button and Escape while the offer has focus
+consume that one-time offer. Opening the actual guide records a visit and removes
+any still-visible offer; neither showing nor
 dismissing an offer completes a wizard. Guide buttons remain available for replay.
 
 Rules help offers tasks for using presets, creating a first rule, class/scope,

@@ -276,6 +276,7 @@ public sealed class Plugin : IDalamudPlugin
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
         TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
+        ExecutionService.ReadCrystalTowerEvents = HigherLowerServerEventTraceService.GetRowsSnapshot;
         ExplorerSnapshotExportService = new ExplorerSnapshotExportService(ObjectTable, Log, configDirectory);
         HigherLowerVfxTraceService = new HigherLowerVfxTraceService(ObjectTable, ClientState, TreasureHighLowDiagnosticService, Log);
         HigherLowerCardVfxSolverService = new HigherLowerCardVfxSolverService(TreasureHighLowDiagnosticService, HigherLowerVfxTraceService, HigherLowerServerEventTraceService, DataManager, Log);
@@ -501,6 +502,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        ExecutionService.CancelCrystalTower(DutyContextService.Current);
         ExecutionService.CancelInteractionPause();
         XaSlaveSkipperService.EndOwnershipRun();
         CameraRecoveryService.Dispose();

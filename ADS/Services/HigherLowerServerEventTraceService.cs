@@ -294,6 +294,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
                 ActorControlCategory.EObjAnimation => ServerEventKind.EObjAnim,
                 ActorControlCategory.EObjSetState => ServerEventKind.EObjState,
                 ActorControlCategory.PlayActionTimeline => ServerEventKind.Timeline,
+                ActorControlCategory.DirectorUpdate => ServerEventKind.DirectorUpdate,
                 _ => ServerEventKind.Unknown,
             };
 
@@ -686,6 +687,8 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
                 CultureInfo.InvariantCulture,
                 $"state={raw.P1:X4} p2={raw.P2:X8} housing={(raw.P3 != 0 ? raw.P4.ToString(CultureInfo.InvariantCulture) : "none")}"),
             ServerEventKind.Timeline => string.Create(CultureInfo.InvariantCulture, $"id={raw.P1:X4}"),
+            ServerEventKind.DirectorUpdate => string.Create(CultureInfo.InvariantCulture,
+                $"director=0x{raw.P1:X8} update=0x{raw.P2:X8} params={raw.P3:X8},{raw.P4:X8},{raw.P5:X8},{raw.P6:X8}"),
             ServerEventKind.MapEffect => string.Create(
                 CultureInfo.InvariantCulture,
                 $"index={raw.Index:X2} state={raw.State:X8} s1={raw.State1:X4} s2={raw.State2:X4}"),
@@ -700,7 +703,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
     private static string FormatSourceParams(RawServerEvent raw)
         => raw.Kind switch
         {
-            ServerEventKind.EObjAnim or ServerEventKind.EObjState or ServerEventKind.Timeline => string.Create(
+            ServerEventKind.EObjAnim or ServerEventKind.EObjState or ServerEventKind.Timeline or ServerEventKind.DirectorUpdate => string.Create(
                 CultureInfo.InvariantCulture,
                 $"category={raw.Category} p1=0x{raw.P1:X8} p2=0x{raw.P2:X8} p3=0x{raw.P3:X8} p4=0x{raw.P4:X8} p5=0x{raw.P5:X8} p6=0x{raw.P6:X8} p7=0x{raw.P7:X8} p8=0x{raw.P8:X8} target=0x{raw.TargetId:X} replay={raw.Replaying}"),
             ServerEventKind.MapEffect => string.Create(
@@ -763,6 +766,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
             ServerEventKind.MapEffect => "MapEffect",
             ServerEventKind.SystemLog => "SystemLog",
             ServerEventKind.OpenTreasure => "OpenTreasure",
+            ServerEventKind.DirectorUpdate => "DIRU",
             _ => "Unknown",
         };
 
@@ -784,6 +788,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
         Timeline,
         SystemLog,
         OpenTreasure,
+        DirectorUpdate,
     }
 
     private sealed record ObjectInfo(
@@ -1060,6 +1065,7 @@ public sealed unsafe class HigherLowerServerEventTraceService : IDisposable
                 ServerEventKind.Timeline => "Timeline",
                 ServerEventKind.SystemLog => "SystemLog",
                 ServerEventKind.OpenTreasure => "OpenTreasure",
+                ServerEventKind.DirectorUpdate => "DirectorUpdate",
                 _ => "Unknown",
             };
 

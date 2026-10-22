@@ -175,6 +175,149 @@ public sealed class WizardCatalogTests
     }
 
     [Theory]
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    public unsafe void NativeToolGuideOffersKeepParentInteractiveAndPreserveEveryClosePath(int toolIndex, bool compact)
+    {
+        var previous = ImGui.GetCurrentContext();
+        var language = Ui.Language;
+        var context = ImGui.CreateContext();
+        try
+        {
+            Ui.SetLanguage(UiLanguage.English);
+            var io = ImGui.GetIO();
+            io.IniFilename = null; io.LogFilename = null;
+            io.DisplaySize = new(1280, 900); io.DeltaTime = 1f / 60;
+            io.Fonts.AddFontDefault();
+            byte* pixels = null; int width = 0, height = 0;
+            io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
+            io.Fonts.SetTexID(0, new ImTextureID((nint)1));
+            var theme = AdsPresentation.Theme(AdsPresentation.ReferenceAccent);
+            theme.Density = compact ? MaterialDensity.Compact : MaterialDensity.Standard;
+            using var themeScope = MaterialTheme.Push(theme, 1, MaterialStyleMode.ColorsOnly);
+            var draw = typeof(PositionedWindow).GetMethod("DrawToolGuideOffer", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var close = typeof(PositionedWindow).GetMethod("CloseToolGuideOffer", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var tool = (ToolGuide)toolIndex;
+            var title = tool == ToolGuide.Rules ? "Rules guide###ADSRuleGuideOffer" : "Object Explorer guide###ADSExplorerGuideOffer";
+            const string owner = "ADS native offer owner";
+            foreach (var action in new[] { "Dismiss", "Open", "Close", "Escape", "OwnerClose", "ToolbarGuide" })
+            {
+                var configuration = new Configuration();
+                var saves = 0; var launches = 0; var parentPresses = 0;
+                Vector2 parentButton = default;
+                object[] args = [configuration, (Action)(() => saves++), tool, true, false, (Action)(() =>
+                {
+                    launches++;
+                    if (WizardCatalog.MarkToolGuideVisited(configuration, tool)) saves++;
+                })];
+                void Frame()
+                {
+                    ImGui.NewFrame();
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(380, 200));
+                    ImGui.Begin(owner, ImGuiWindowFlags.NoSavedSettings);
+                    try
+                    {
+                        if (ImGui.Button("Parent action")) parentPresses++;
+                        parentButton = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) * .5f;
+                        if ((bool)args[3] || (bool)args[4]) ImGui.SetNextWindowPos(new(500, 120));
+                        draw.Invoke(null, args);
+                        Assert.False(ImGui.IsPopupOpen(title));
+                    }
+                    finally { ImGui.End(); }
+                    ImGui.Render();
+                }
+                void Click(Vector2 point)
+                {
+                    io.AddMousePosEvent(point.X, point.Y); Frame();
+                    io.AddMouseButtonEvent(0, true); Frame();
+                    io.AddMouseButtonEvent(0, false); Frame();
+                }
+                Vector2 CaptionCenter(string caption)
+                {
+                    var list = ImGuiP.FindWindowByName(title).DrawList;
+                    Vector2? found = null;
+                    for (var index = 0; index + caption.Length * 4 <= list.VtxBuffer.Size; index++)
+                    {
+                        var matches = true;
+                        for (var character = 0; character < caption.Length; character++)
+                        {
+                            var glyph = ImGui.FindGlyphNoFallback(ImGui.GetFont(), caption[character]);
+                            if (list.VtxBuffer[index + character * 4].Uv != new Vector2(glyph.Handle->U0, glyph.Handle->V0)
+                                || list.VtxBuffer[index + character * 4 + 2].Uv != new Vector2(glyph.Handle->U1, glyph.Handle->V1))
+                            { matches = false; break; }
+                        }
+                        if (matches) found = (list.VtxBuffer[index].Pos + list.VtxBuffer[index + caption.Length * 4 - 2].Pos) * .5f;
+                    }
+                    return found ?? throw new InvalidOperationException("Offer did not render " + caption);
+                }
+                Frame(); ImGui.SetWindowCollapsed(title, false); Frame(); Frame();
+                var native = ImGuiP.FindWindowByName(title);
+                Assert.Equal(ImGuiWindowFlags.None, native.Flags & (ImGuiWindowFlags.Popup | ImGuiWindowFlags.Modal | ImGuiWindowFlags.NoTitleBar));
+                var dimColour = ImGui.GetColorU32(ImGuiCol.ModalWindowDimBg) & 0x00FFFFFF;
+                var data = ImGui.GetDrawData();
+                for (var listIndex = 0; listIndex < data.CmdListsCount; listIndex++)
+                {
+                    var vertices = new ImDrawListPtr(data.CmdLists[listIndex]).VtxBuffer;
+                    for (var index = 0; index + 3 < vertices.Size; index++)
+                    {
+                        if ((vertices[index].Col & 0x00FFFFFF) != dimColour || (vertices[index].Col >> 24) == 0) continue;
+                        var first = vertices[index].Pos; var opposite = vertices[index + 2].Pos;
+                        Assert.False(first.X <= 0 && first.Y <= 0 && opposite.X >= io.DisplaySize.X && opposite.Y >= io.DisplaySize.Y,
+                            "Guide offer emitted a viewport-sized dimming quad.");
+                    }
+                }
+                Click(parentButton);
+                Assert.Equal(1, parentPresses);
+                io.AddKeyEvent(ImGuiKey.Escape, true); Frame();
+                io.AddKeyEvent(ImGuiKey.Escape, false); Frame();
+                Assert.True((bool)args[4]); // Escape in the parent must not dismiss another window.
+                Assert.Equal(0, saves);
+                if (action is "Dismiss" or "Open") Click(CaptionCenter(action));
+                else if (action == "Close")
+                {
+                    var titleRect = ImGuiP.TitleBarRect(native);
+                    Click(new(titleRect.Max.X - ImGui.GetStyle().FramePadding.X - ImGui.GetFontSize() * .5f,
+                        titleRect.Min.Y + ImGuiP.TitleBarHeight(native) * .5f));
+                }
+                else if (action == "Escape")
+                {
+                    ImGui.SetWindowCollapsed(title, true); Frame();
+                    Assert.True(native.Collapsed); // Begin(false) still requires End and retains the offer.
+                    Assert.True((bool)args[4]);
+                    ImGui.SetWindowFocus(title);
+                    io.AddKeyEvent(ImGuiKey.Escape, true); Frame();
+                    io.AddKeyEvent(ImGuiKey.Escape, false); Frame();
+                }
+                else if (action == "ToolbarGuide")
+                {
+                    Assert.True(WizardCatalog.MarkToolGuideVisited(configuration, tool));
+                    saves++;
+                }
+                else
+                {
+                    object[] closeArgs = [configuration, args[1], tool, args[3], args[4]];
+                    close.Invoke(null, closeArgs); args[3] = closeArgs[3]; args[4] = closeArgs[4];
+                }
+                Frame(); Frame();
+                Assert.False((bool)args[3]); Assert.False((bool)args[4]);
+                Assert.False(WizardCatalog.ShouldOfferToolGuide(configuration, tool));
+                Assert.True(WizardCatalog.ShouldOfferToolGuide(configuration, tool == ToolGuide.Rules ? ToolGuide.ObjectExplorer : ToolGuide.Rules));
+                Assert.Equal(action == "Open" ? 2 : 1, saves);
+                Assert.Equal(action == "Open" ? 1 : 0, launches);
+                Assert.Equal(action is "Open" or "ToolbarGuide" && tool == ToolGuide.Rules, configuration.RulesGuideVisited);
+                Assert.Equal(action is "Open" or "ToolbarGuide" && tool == ToolGuide.ObjectExplorer, configuration.ObjectExplorerGuideVisited);
+                Assert.False(configuration.RulesDataWizardCompleted);
+            }
+        }
+        finally
+        {
+            Ui.SetLanguage(language); ImGui.DestroyContext(context); ImGui.SetCurrentContext(previous);
+        }
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public unsafe void NativeGuidesAndDebugSettingsRenderAtBothDensitiesAndGuideOffersDismissWithEscape(bool compact)

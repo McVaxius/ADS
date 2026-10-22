@@ -4224,4 +4224,28 @@
   <data name="Control" xml:space="preserve"><value>Denetim</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Her rengi ayarlamak için Seçici&apos;ye geçin.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Otomatik temayı kullanmak için Otomatik&apos;e dönün.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>Hareket kural?n?n kapsam? de?i?ti; ge?erli g?rev/ittifak kural? bekleniyor.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Kristal Kule: doğrulanmış ittifak mekaniği durumu bekleniyor.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Kristal Kule: atanan platforma gidiliyor.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Kristal Kule: atanan platformda konum korunuyor.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Kristal Kule: hareket sağlayıcısı bekleniyor.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Kristal Kule: atanan hedef gerekli koşulları karşılamıyor.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Geçersiz Kristal Kule stratejisi; belirli bir Kristal Kule görevinin tam kapsamıyla SYNC veya UNSYNC kullanın.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Kural {0} içinde, {1} kaynağından gelen ittifak kapsamı geçersiz; A-G kullanın veya boş bırakın.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>'{0}' kuralının ittifak kapsamı geçersiz; tek bir A-G harfi veya boş değer bekleniyor.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Kristal Kule: Yüksek ateş; ADS ilerlemesi duraklatıldı.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Kristal Kule: Ölüm Lanetini kaldıran aktif platform bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Kristal Kule: atanan Atomos platformu bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Kristal Kule: doğrulanmış bir Atomos dönüş platformu bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Kristal Kule: doğrulanmış kule atamaları bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Kristal Kule: mideden çıkış geçişi bekleniyor.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Kristal Kule: otomatik zincir yönetimi kullanılamıyor.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Kristal Kule: Mini'ye doğrulanmış güvenli bir yaklaşma yolu bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Kristal Kule: Cerberus'un birikintisine girmeden önce Mini bekleniyor.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Kristal Kule: atanan aşırı yüklü bulut bölgesi bekleniyor.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Kristal Kule: atanan aşırı yüklü bulut bölgesi temizlenene kadar konum korunuyor.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Kristal Kule: doğrulanmış baskın rotası izleniyor.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Kristal Kule: kestirmenin etkinleşmesi ve varış doğrulaması bekleniyor.</value></data>
 </root>

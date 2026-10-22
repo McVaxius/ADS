@@ -11652,4 +11652,28 @@
   <data name="Control" xml:space="preserve"><value>控制項</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>切換至選色器以自行設定每種顏色。</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>切換回自動以使用自動主題。</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>???????????????????????????????</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>水晶塔：正在等待已確認的聯盟機制狀態。</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>水晶塔：正在前往指定平台。</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>水晶塔：在指定平台上保持位置。</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>水晶塔：正在等待移動服務提供者。</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>水晶塔：指定目標不符合條件。</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>水晶塔策略無效；請使用 SYNC 或 UNSYNC，並精確限定至水晶塔的特定副本。</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>規則 {0}（來源：{1}）中的聯盟範圍無效；請使用 A-G 或留空。</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>規則 '{0}' 的聯盟範圍無效；應為 A-G 中的單一字母或留空。</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>水晶塔：熱病；ADS 推進已暫停。</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>水晶塔：正在等待可解除死亡宣告的啟用平台。</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>水晶塔：正在等待指定的阿托莫斯平台。</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>水晶塔：正在等待已確認的阿托莫斯返回踏板。</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>水晶塔：正在等待已確認的踩塔分工。</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>水晶塔：正在等待離開胃部的區域切換。</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>水晶塔：自動處理鎖鏈的功能無法使用。</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>水晶塔：正在等待已確認的安全路線以接近縮小魔法。</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>水晶塔：正在等待縮小魔法，再進入刻耳柏洛斯的液池。</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>水晶塔：正在等待指定的波動雲區域。</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>水晶塔：正在指定的波動雲區域內保持位置，直至該區域解除。</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>水晶塔：正在沿已驗證的團隊副本路線移動。</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>水晶塔：等待確認捷徑已啟動並已抵達。</value></data>
 </root>

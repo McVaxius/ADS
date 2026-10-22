@@ -1376,6 +1376,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
            && left.ContentFinderConditionId == right.ContentFinderConditionId
            && string.Equals(left.DutyEnglishName, right.DutyEnglishName, StringComparison.Ordinal)
            && string.Equals(left.Alliance, right.Alliance, StringComparison.Ordinal)
+           && string.Equals(left.CrystalTowerStrategy, right.CrystalTowerStrategy, StringComparison.Ordinal)
            && string.Equals(left.ObjectKind, right.ObjectKind, StringComparison.Ordinal)
            && left.BaseId == right.BaseId
            && string.Equals(left.ObjectName, right.ObjectName, StringComparison.Ordinal)
@@ -3535,6 +3536,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
             ContentFinderConditionId = rule.ContentFinderConditionId,
             DutyEnglishName = rule.DutyEnglishName,
             Alliance = rule.Alliance,
+            CrystalTowerStrategy = rule.CrystalTowerStrategy,
             ObjectKind = rule.ObjectKind,
             BaseId = rule.BaseId,
             ObjectName = rule.ObjectName,

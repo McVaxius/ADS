@@ -4224,4 +4224,28 @@
   <data name="Control" xml:space="preserve"><value>Kontrol</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Beralih ke Pemilih untuk menentukan setiap warna.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Kembali ke Otomatis untuk menggunakan tema otomatis.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>Cakupan aturan pergerakan berubah; menunggu aturan tugas/aliansi saat ini.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Crystal Tower: menunggu status mekanik aliansi yang telah terverifikasi.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Crystal Tower: bergerak menuju platform yang ditugaskan.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Crystal Tower: bertahan di platform yang ditugaskan.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Crystal Tower: menunggu penyedia pergerakan.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Crystal Tower: target yang ditugaskan tidak memenuhi syarat.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Strategi Crystal Tower tidak valid; gunakan SYNC atau UNSYNC dengan cakupan duty Crystal Tower yang spesifik.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Cakupan aliansi tidak valid pada aturan {0} dari {1}; gunakan A-G atau biarkan kosong.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>Aturan '{0}' memiliki cakupan aliansi yang tidak valid; gunakan satu huruf A-G atau biarkan kosong.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Crystal Tower: Pireksia; progres ADS dijeda.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Crystal Tower: menunggu platform aktif yang menghilangkan Kutukan Kematian.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Crystal Tower: menunggu platform Atomos yang ditugaskan.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Crystal Tower: menunggu platform kembali ke Atomos yang telah terverifikasi.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Crystal Tower: menunggu pembagian tugas menara yang telah terverifikasi.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Crystal Tower: menunggu transisi keluar dari perut.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Crystal Tower: penanganan rantai otomatis tidak tersedia.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Crystal Tower: menunggu jalur pendekatan yang aman dan terverifikasi menuju Mini.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Crystal Tower: menunggu Mini sebelum memasuki genangan Cerberus.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Crystal Tower: menunggu area awan bermuatan tinggi yang ditugaskan.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Crystal Tower: bertahan di area awan bermuatan tinggi yang ditugaskan hingga area tersebut bersih.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Menara Kristal: mengikuti rute raid yang telah diverifikasi.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Crystal Tower: menunggu konfirmasi aktivasi jalan pintas dan kedatangan.</value></data>
 </root>

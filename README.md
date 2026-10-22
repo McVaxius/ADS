@@ -193,8 +193,9 @@ Other Gold Saucer instances, PvP, seasonal instances and Hall of the Novice requ
 **Start Inside** or **Resume** in the current instance; an older run cannot carry
 ownership into them automatically.
 Rules and Object Explorer keep a small **Guide** button visible in regular and
-compact toolbars. Each tool offers its guide once; dismissal/close/Escape is
-remembered independently of actual guide visits and wizard completion. Rules help
+compact toolbars. Each tool offers its guide once in an ordinary titled window,
+without dimming or blocking the parent tool. Dismissal, close and focused Escape
+are remembered independently of actual guide visits and wizard completion. Rules help
 has task choices plus the existing class/field reference; Object Explorer has its
 own guide. See the [Operator Guide](GUIDE.md#rules-and-object-explorer-guides) and
 [Crystal Tower setup](GUIDE.md#crystal-tower-presets).

@@ -94,6 +94,8 @@ public sealed class ObjectPriorityRule
     public uint ContentFinderConditionId { get; set; }
     public string DutyEnglishName { get; set; } = string.Empty;
     public string? Alliance { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CrystalTowerStrategy { get; set; }
     public string ObjectKind { get; set; } = string.Empty;
     public uint BaseId { get; set; }
     public string ObjectName { get; set; } = string.Empty;

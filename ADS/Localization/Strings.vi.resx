@@ -4224,4 +4224,28 @@
   <data name="Control" xml:space="preserve"><value>Điều khiển</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Chuyển sang Bộ chọn để tự đặt từng màu.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Chuyển về Tự động để dùng chủ đề tự động.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>Ph?m vi quy t?c di chuy?n ?? thay ??i; ?ang ch? quy t?c nhi?m v?/li?n minh hi?n t?i.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Tháp Pha lê: đang chờ trạng thái cơ chế liên minh được xác nhận.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Tháp Pha lê: đang di chuyển đến bệ được phân công.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Tháp Pha lê: đang giữ vị trí trên bệ được phân công.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Tháp Pha lê: đang chờ trình cung cấp di chuyển.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Tháp Pha lê: mục tiêu được phân công không đáp ứng điều kiện.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Chiến thuật Tháp Pha lê không hợp lệ; hãy dùng SYNC hoặc UNSYNC với phạm vi xác định chính xác nhiệm vụ Tháp Pha lê.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Phạm vi liên minh không hợp lệ trong quy tắc {0} từ {1}; hãy dùng A-G hoặc để trống.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>Quy tắc '{0}' có phạm vi liên minh không hợp lệ; cần một chữ cái A-G hoặc để trống.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Tháp Pha lê: Sốt; tiến trình ADS đang tạm dừng.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Tháp Pha lê: đang chờ bệ đang hoạt động có thể giải trừ Án tử.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Tháp Pha lê: đang chờ bệ Atomos được phân công.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Tháp Pha lê: đang chờ bệ quay lại Atomos đã được xác nhận.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Tháp Pha lê: đang chờ phân công tháp đã được xác nhận.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Tháp Pha lê: đang chờ chuyển tiếp ra khỏi dạ dày.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Tháp Pha lê: xử lý dây xích tự động không khả dụng.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Tháp Pha lê: đang chờ lối tiếp cận Mini an toàn đã được xác nhận.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Tháp Pha lê: đang chờ Mini trước khi vào vũng chất lỏng của Cerberus.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Tháp Pha lê: đang chờ khu vực đám mây siêu tích điện được phân công.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Tháp Pha lê: đang giữ vị trí trong khu vực đám mây siêu tích điện được phân công cho đến khi khu vực đó được giải trừ.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Tháp Pha Lê: đang đi theo lộ trình phó bản đã được xác minh.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Tháp Pha Lê: đang chờ xác nhận kích hoạt lối tắt và đến nơi.</value></data>
 </root>

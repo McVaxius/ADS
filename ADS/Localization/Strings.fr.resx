@@ -11652,4 +11652,28 @@
   <data name="Control" xml:space="preserve"><value>Commande</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Passez au Sélecteur pour définir chaque couleur.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Revenez à Automatique pour utiliser le thème automatique.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>La port?e de la r?gle de d?placement a chang? ; en attente d?une r?gle correspondant au contenu et ? l?alliance actuels.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Tour de Cristal : en attente d'un état confirmé de la mécanique d'alliance.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Tour de Cristal : déplacement vers la plateforme assignée.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Tour de Cristal : maintien de la position sur la plateforme assignée.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Tour de Cristal : en attente du fournisseur de déplacement.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Tour de Cristal : la cible assignée ne remplit pas les conditions.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Stratégie de la Tour de Cristal invalide ; utilisez SYNC ou UNSYNC avec un périmètre ciblant précisément une instance de la Tour de Cristal.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Périmètre d'alliance invalide dans la règle {0} provenant de {1} ; utilisez A-G ou laissez le champ vide.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>La règle '{0}' a un périmètre d'alliance invalide ; une seule lettre A-G ou un champ vide est attendu.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Tour de Cristal : Pyromanie ; la progression ADS est en pause.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Tour de Cristal : en attente de la plateforme active dissipant Glas.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Tour de Cristal : en attente de la plateforme assignée d'Atomos.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Tour de Cristal : en attente d'une plateforme de retour d'Atomos confirmée.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Tour de Cristal : en attente d'attributions de tours confirmées.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Tour de Cristal : en attente de la transition de sortie de l'estomac.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Tour de Cristal : la gestion automatique des chaînes est indisponible.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Tour de Cristal : en attente d'un chemin d'approche sûr et confirmé vers Mini.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Tour de Cristal : en attente de Mini avant d'entrer dans la flaque de Cerbère.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Tour de Cristal : en attente de la zone assignée du nuage palpitant.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Tour de Cristal : maintien dans la zone assignée du nuage palpitant jusqu'à sa désactivation.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Tour de Cristal : suit l’itinéraire de raid vérifié.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Tour de Cristal : en attente de la confirmation du raccourci et de l’arrivée.</value></data>
 </root>

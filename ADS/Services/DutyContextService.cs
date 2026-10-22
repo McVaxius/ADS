@@ -2,8 +2,7 @@ using ADS.Models;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Component.GUI;
+using FFXIVClientStructs.FFXIV.Client.Game.Group;
 
 namespace ADS.Services;
 
@@ -125,38 +124,32 @@ public sealed class DutyContextService
             ContentTypeRowId = dutyCatalogService.ResolveContentType(contentFinderConditionId, territoryTypeId),
             CurrentMapId = isLoggedIn && !betweenAreas && !betweenAreas51 && territoryTypeId != 0 && mapId != 0
                 ? mapId : null,
-            Alliance = automationExcludedTerritory ? null : TryResolveAlliance(),
+            Alliance = isLoggedIn && !betweenAreas && !betweenAreas51 && !automationExcludedTerritory
+                ? TryResolveAlliance() : null,
             CurrentDuty = currentDuty,
         };
     }
 
-    private unsafe string? TryResolveAlliance()
+    internal unsafe string? TryResolveAlliance()
     {
         try
         {
-            if (!partyList.IsAlliance)
-                return null;
-
-            var unitManager = RaptureAtkUnitManager.Instance();
-            if (unitManager == null)
-                return null;
-
-            var addon = (AddonPartyList*)unitManager->GetAddonByName("_PartyList");
-            if (addon == null
-                || !addon->AtkUnitBase.IsReady
-                || !addon->AtkUnitBase.IsVisible
-                || addon->PartyTypeTextNode == null)
-            {
-                return null;
-            }
-
-            return AllianceScopeParser.Parse(
-                isAlliance: true,
-                addon->PartyTypeTextNode->NodeText.ToString());
+            var manager = (GroupManager*)partyList.GroupManagerAddress;
+            return manager == null ? null : ResolveAllianceFromGroup(&manager->MainGroup);
         }
         catch
         {
             return null;
         }
+    }
+
+    internal static unsafe string? ResolveAllianceFromGroup(GroupManager.Group* group)
+    {
+        if (group == null || !group->IsAlliance || group->MemberCount is 0 or > 8)
+            return null;
+
+        // Slot 0 is the player's party: BossMod d409d336 WorldStateGameSync.UpdateParty.
+        var index = group->GetAllianceGroupIndexBySlot(0);
+        return index < group->AllianceGroupIndexCount ? ((char)('A' + index)).ToString() : null;
     }
 }

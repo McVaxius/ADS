@@ -11652,4 +11652,28 @@
   <data name="Control" xml:space="preserve"><value>Steuerelement</value></data>
   <data name="Switch to Picker to set each colour yourself." xml:space="preserve"><value>Wechsle zur Farbwahl, um jede Farbe selbst festzulegen.</value></data>
   <data name="Switch back to Auto to use the automatic theme." xml:space="preserve"><value>Wechsle zurück zu Automatisch, um das automatische Design zu verwenden.</value></data>
+  <data name="Authored movement scope changed; waiting for a current duty/alliance rule." xml:space="preserve">
+    <value>Der Geltungsbereich der Bewegungsregel hat sich ge?ndert; eine passende Inhalts-/Allianzregel wird abgewartet.</value>
+  </data>
+  <data name="Crystal Tower: waiting for verified alliance mechanic state." xml:space="preserve"><value>Kristallturm: Warte auf einen bestätigten Zustand der Allianzmechanik.</value></data>
+  <data name="Crystal Tower: navigating to the assigned platform." xml:space="preserve"><value>Kristallturm: Navigiere zur zugewiesenen Plattform.</value></data>
+  <data name="Crystal Tower: holding the assigned platform." xml:space="preserve"><value>Kristallturm: Halte die zugewiesene Plattform besetzt.</value></data>
+  <data name="Crystal Tower: waiting for the movement provider." xml:space="preserve"><value>Kristallturm: Warte auf den Bewegungsanbieter.</value></data>
+  <data name="Crystal Tower: assigned target is not eligible." xml:space="preserve"><value>Kristallturm: Das zugewiesene Ziel erfüllt die Voraussetzungen nicht.</value></data>
+  <data name="Invalid Crystal Tower strategy; use SYNC or UNSYNC with an exact Crystal Tower duty scope." xml:space="preserve"><value>Ungültige Kristallturm-Strategie; verwende SYNC oder UNSYNC mit einer eindeutigen Zuordnung zu einem Kristallturm-Inhalt.</value></data>
+  <data name="Invalid Alliance scope in rule {0} from {1}; use A-G or leave it blank." xml:space="preserve"><value>Ungültiger Allianzbereich in Regel {0} aus {1}; verwende A-G oder lasse das Feld leer.</value></data>
+  <data name="Rule '{0}' has invalid Alliance scope; expected a single letter A-G or blank." xml:space="preserve"><value>Regel '{0}' hat einen ungültigen Allianzbereich; erwartet wird ein einzelner Buchstabe A-G oder ein leeres Feld.</value></data>
+  <data name="Crystal Tower: Pyretic; ADS progression is paused." xml:space="preserve"><value>Kristallturm: Pyretisch; der ADS-Fortschritt ist pausiert.</value></data>
+  <data name="Crystal Tower: waiting for the active Doom-cleansing platform." xml:space="preserve"><value>Kristallturm: Warte auf die aktive Plattform zum Entfernen von Verhängnis.</value></data>
+  <data name="Crystal Tower: waiting for the assigned Atomos platform." xml:space="preserve"><value>Kristallturm: Warte auf die zugewiesene Atomos-Plattform.</value></data>
+  <data name="Crystal Tower: waiting for a verified Atomos return pad." xml:space="preserve"><value>Kristallturm: Warte auf eine bestätigte Atomos-Rücksprungplattform.</value></data>
+  <data name="Crystal Tower: waiting for verified tower assignments." xml:space="preserve"><value>Kristallturm: Warte auf bestätigte Turmzuweisungen.</value></data>
+  <data name="Crystal Tower: waiting for the stomach exit transition." xml:space="preserve"><value>Kristallturm: Warte auf den Übergang aus dem Magen.</value></data>
+  <data name="Crystal Tower: automatic chain handling is unavailable." xml:space="preserve"><value>Kristallturm: Die automatische Handhabung der Ketten ist nicht verfügbar.</value></data>
+  <data name="Crystal Tower: waiting for a verified safe approach to Mini." xml:space="preserve"><value>Kristallturm: Warte auf einen bestätigten sicheren Weg zu Wicht.</value></data>
+  <data name="Crystal Tower: waiting for Mini before entering Cerberus's puddle." xml:space="preserve"><value>Kristallturm: Warte auf Wicht, bevor Cerberus' Pfütze betreten wird.</value></data>
+  <data name="Crystal Tower: waiting for the assigned hypercharged-cloud region." xml:space="preserve"><value>Kristallturm: Warte auf den zugewiesenen Bereich der pulsierenden Wolke.</value></data>
+  <data name="Crystal Tower: holding the assigned hypercharged-cloud region until it clears." xml:space="preserve"><value>Kristallturm: Halte den zugewiesenen Bereich der pulsierenden Wolke bis zu seiner Aufhebung.</value></data>
+  <data name="Crystal Tower: following the verified raid route." xml:space="preserve"><value>Kristallturm: folgt der verifizierten Raidroute.</value></data>
+  <data name="Crystal Tower: waiting for verified shortcut activation and arrival." xml:space="preserve"><value>Kristallturm: Warten auf bestätigte Aktivierung der Abkürzung und Ankunft.</value></data>
 </root>

@@ -17,6 +17,23 @@ public sealed partial class ExecutionService
 
     internal bool TryPauseInteractionVbm(DutyContextSnapshot context)
     {
+        if (crystalTowerMovementLease is { } movement)
+        {
+            // The interaction owner changes AI/presets. Finish the movement-only
+            // lease first so its saved provider state cannot overlap those writes.
+            var original = movement.Original;
+            ReleaseCrystalTowerMovement(context, restore: true);
+            if (crystalTowerMovementLease is not null
+                || ReadCrystalTowerMovement().Snapshot is not { } restored
+                || !TryReadCrystalTowerMovementOwner(context, movement.Owner.EntityId, movement.Owner.Strategy, out var currentOwner)
+                || currentOwner != movement.Owner || crystalTowerMovementLease is not null
+                || !CrystalTowerMovementSameState(restored, original)
+                || restored.ForbidMovement != original.ForbidMovement)
+            {
+                InteractionVbmPauseStatus = "Crystal Tower movement restoration is unverified; interaction held.";
+                return false;
+            }
+        }
         var read = ReadInteractionVbm();
         if (!read.Loaded)
         {

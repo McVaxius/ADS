@@ -108,6 +108,7 @@ public sealed partial class ExecutionService
             // Stop only on entry. Subsequent ticks must leave Fren Rider's recovery
             // navigation alone, and retain ADS ownership and the current run.
             ReleaseHyperFocus("Phoenix Down recovery");
+            ReleaseCrystalTowerMovement(context, restore: true);
             InterruptCardinalHold("Phoenix Down recovery");
             StopMovementAssists();
             ClearInteractableCommitment();
@@ -678,6 +679,7 @@ public sealed partial class ExecutionService
 
     public bool StartDutyFromOutside()
     {
+        ResetCrystalTowerRuntime(crystalTowerLastContext, restoreMovement: true);
         CancelDebugReturn();
         explicitActivityDuty = null;
         CancelInteractionPause();
@@ -700,6 +702,7 @@ public sealed partial class ExecutionService
             SetPhase(CurrentPhase, blocker);
             return false;
         }
+        ResetCrystalTowerRuntime(context, restoreMovement: true);
         CancelDebugReturn();
         CancelInteractionPause();
         ResetCompletionTreasureSweep();
@@ -736,6 +739,7 @@ public sealed partial class ExecutionService
             SetPhase(CurrentPhase, blocker);
             return false;
         }
+        ResetCrystalTowerRuntime(context, restoreMovement: true);
         CancelDebugReturn();
         CancelInteractionPause();
         ResetCompletionTreasureSweep();
@@ -774,6 +778,7 @@ public sealed partial class ExecutionService
         }
 
         CancelInteractionPause();
+        ResetCrystalTowerRuntime(context, restoreMovement: true);
         ReleaseHyperFocus("leave request");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -851,6 +856,7 @@ public sealed partial class ExecutionService
             return true;
 
         CancelInteractionPause();
+        ResetCrystalTowerRuntime(context, restoreMovement: true);
         ReleaseHyperFocus("duty completion treasure sweep");
         StopMovementAssists();
         ClearInteractableCommitment();
@@ -873,6 +879,7 @@ public sealed partial class ExecutionService
 
     public void Stop(DutyContextSnapshot context, string? idleStatus = null)
     {
+        ResetCrystalTowerRuntime(context, restoreMovement: true);
         CancelDebugReturn();
         explicitActivityDuty = null;
         ResumeCutsceneTimers();
@@ -900,6 +907,7 @@ public sealed partial class ExecutionService
 
     public void CompleteDuty(string dutyName)
     {
+        ResetCrystalTowerRuntime(crystalTowerLastContext, restoreMovement: true);
         CancelDebugReturn();
         CancelInteractionPause();
         ReleaseHyperFocus("duty complete");
@@ -929,6 +937,7 @@ public sealed partial class ExecutionService
         string dialogAutomationStatus,
         bool sessionDebugEnabled = false)
     {
+        RefreshCrystalTowerLifetime(context, pluginEnabled);
         if (ReleaseDisallowedActivityOwnership(context))
             return;
         if (RefreshCutsceneHold(context, pluginEnabled))
@@ -992,6 +1001,9 @@ public sealed partial class ExecutionService
             UpdateUnsafeTransitionHold(context);
             return;
         }
+
+        if (TryHandleCrystalTower(context, observation))
+            return;
 
         if (TryUpdateCardinalHold(context))
             return;
@@ -2405,11 +2417,26 @@ public sealed partial class ExecutionService
         return true;
     }
 
+    private bool ReleaseOutOfScopeAuthoredMovement(DutyContextSnapshot context, ObjectPriorityRule? rule)
+    {
+        if (rule is null || rule.Enabled && objectPriorityRuleService.MatchesCurrentDutyScopeForEditor(rule, context))
+            return false;
+
+        // Recheck before arrival can consume a destination or another navigation command is sent.
+        StopMovementAssists();
+        ClearCommittedForceMarchManualDestination();
+        SetPhase(ExecutionPhase.TransitionHold, "Authored movement scope changed; waiting for a current duty/alliance rule.");
+        return true;
+    }
+
     private bool TryAdvanceCommittedForceMarchManualDestination(DutyContextSnapshot context, PlannerSnapshot planner, string prefix)
     {
         var committedDestination = committedForceMarchManualDestination;
         if (committedDestination is null)
             return false;
+
+        if (ReleaseOutOfScopeAuthoredMovement(context, committedDestination.SourceRule))
+            return true;
 
         var playerPosition = objectTable.LocalPlayer?.Position;
         var navigationPoint = RebuildCommittedForceMarchManualDestination(committedDestination, playerPosition);
@@ -2677,6 +2704,9 @@ public sealed partial class ExecutionService
 
     private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, bool isXyzDestination, string prefix)
     {
+        if (ReleaseOutOfScopeAuthoredMovement(context, frontierPoint.SourceRule))
+            return;
+
         var playerPosition = objectTable.LocalPlayer?.Position;
         var isTreasureRoutePoint = IsTreasureRouteFrontierPoint();
         var isTreasureFollowerRoutePoint = isTreasureRoutePoint && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
@@ -6709,7 +6739,7 @@ public sealed partial class ExecutionService
         }
 
         var player = objectTable.LocalPlayer;
-        if (player is null)
+        if (player is null || player.IsDead)
         {
             InterruptCardinalHold("local player unavailable");
             return false;
@@ -6718,6 +6748,13 @@ public sealed partial class ExecutionService
         var now = TimerUtcNow;
         if (activeCardinalHold is { } active)
         {
+            if (!active.Rule.Enabled || !objectPriorityRuleService.MatchesCurrentDutyScopeForEditor(active.Rule, context))
+            {
+                InterruptCardinalHold("authored duty/alliance scope changed");
+                StopNavigationIfNeeded();
+                SetPhase(ExecutionPhase.TransitionHold, "Authored movement scope changed; waiting for a current duty/alliance rule.");
+                return true;
+            }
             if (now >= activeCardinalHoldUntilUtc)
             {
                 cardinalHoldInputService.Release("cardinal hold complete");

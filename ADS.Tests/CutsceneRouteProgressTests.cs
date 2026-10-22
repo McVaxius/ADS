@@ -11,6 +11,67 @@ namespace ADS.Tests;
 public sealed class CutsceneRouteProgressTests
 {
     [Theory]
+    [InlineData(null, true)]
+    [InlineData("B", true)]
+    [InlineData(null, false)]
+    [InlineData("B", false)]
+    public void AllianceScopeLossStopsAuthoredNavigationBeforeArrivalCanConsumeIt(string? alliance, bool committed)
+    {
+        var rule = Rule("Alliance A route", "XYZForceMarch", "0,0,0", 30);
+        rule.Alliance = "A";
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true,
+            initialRules: new ObjectPriorityRuleManifest { Rules = [rule] });
+        var context = TestDutyContextFactory.Create(alliance: "A");
+        var rules = Get<ObjectPriorityRuleService>(fixture.Execution, "objectPriorityRuleService");
+        var point = Point(context, rules.Current.Rules.Single());
+        Target(fixture.Frontier, point);
+        Set(fixture.Execution, "navigationActive", true);
+        Set(fixture.Execution, "committedForceMarchManualDestination", point);
+
+        var lost = TestDutyContextFactory.Create(alliance: alliance);
+        if (committed)
+        {
+            var handled = typeof(ExecutionService).GetMethod("TryAdvanceCommittedForceMarchManualDestination", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(fixture.Execution, [lost, new PlannerSnapshot { Mode = PlannerMode.Progression,
+                    ObjectiveKind = PlannerObjectiveKind.XyzForceMarchDestination, Objective = point.Name,
+                    Explanation = "Stale alliance route", CapturedAtUtc = DateTime.UtcNow }, "Owned"]);
+            Assert.Equal(true, handled);
+        }
+        else
+            typeof(ExecutionService).GetMethod("TryAdvanceFrontierPoint", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(fixture.Execution, [lost, point, false, true, "Owned"]);
+
+        Assert.False(Get<bool>(fixture.Execution, "navigationActive"));
+        Assert.Null(Get<DungeonFrontierPoint?>(fixture.Execution, "committedForceMarchManualDestination"));
+        Assert.DoesNotContain(point.Key, Get<HashSet<string>>(fixture.Frontier, "visitedFrontierKeys"));
+        Assert.Contains("/vnav stop", fixture.Commands);
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+        Assert.Equal(ExecutionPhase.TransitionHold, fixture.Execution.CurrentPhase);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("B")]
+    public void AllianceScopeLossInterruptsCardinalHoldWithoutConsumingItsRule(string? alliance)
+    {
+        var rule = new ObjectPriorityRule { Alliance = "A", Classification = "CardinalHoldNorth",
+            WorldCoordinates = "0,0", MaxDistance = 4, WaitAtDestinationSeconds = 60 };
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true,
+            initialRules: new ObjectPriorityRuleManifest { Rules = [rule] });
+        var rules = Get<ObjectPriorityRuleService>(fixture.Execution, "objectPriorityRuleService");
+        Assert.True(CardinalHoldPolicy.TryParse(rules.Current.Rules.Single(), out var hold));
+        Set<CardinalHoldRule?>(fixture.Execution, "activeCardinalHold", hold);
+        Set(fixture.Execution, "activeCardinalHoldUntilUtc", DateTime.UtcNow.AddMinutes(1));
+        var handled = typeof(ExecutionService).GetMethod("TryUpdateCardinalHold", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(fixture.Execution, [TestDutyContextFactory.Create(alliance: alliance)]);
+        Assert.Equal(true, handled);
+        Assert.Null(Get<CardinalHoldRule?>(fixture.Execution, "activeCardinalHold"));
+        Assert.Equal(DateTime.MinValue, Get<DateTime>(fixture.Execution, "activeCardinalHoldUntilUtc"));
+        Assert.False(Get<CardinalHoldGhostTracker>(fixture.Execution, "cardinalHoldGhosts").IsGhosted(hold.Key));
+        Assert.Equal(ExecutionPhase.TransitionHold, fixture.Execution.CurrentPhase);
+    }
+
+    [Theory]
     [InlineData("cfc", 1)]
     [InlineData("duty", 1)]
     [InlineData("territory", 1)]
