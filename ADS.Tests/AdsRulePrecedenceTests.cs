@@ -12,6 +12,29 @@ namespace ADS.Tests;
 
 public sealed class AdsRulePrecedenceTests
 {
+    [Theory]
+    [InlineData(false, true, PlannerObjectiveKind.Frontier)]
+    [InlineData(true, true, PlannerObjectiveKind.InteractableGhost)]
+    [InlineData(false, false, PlannerObjectiveKind.InteractableGhost)]
+    public void GeneratedFrontierBeatsOnlyUnqualifiedInteractableGhosts(
+        bool authoredRule, bool frontierAvailable, PlannerObjectiveKind expected)
+    {
+        ObjectPriorityRule[] rules = authoredRule
+            ? [Rule("Shortcut", InteractableClass.Required, priority: 10)] : [];
+        using var fixture = new PlannerFixture(Vector3.Zero, rules);
+        if (frontierAvailable) fixture.SetFrontier(Label("Second Column"), FrontierMode.Label);
+        var observation = new ObservationSnapshot
+        {
+            LiveMonsters = [], LiveFollowTargets = [], MonsterGhosts = [], LiveInteractables = [],
+            InteractableGhosts = [Interactable("Shortcut", InteractableClass.Optional, new Vector3(-115f, 0f, 0f))],
+        };
+
+        fixture.Planner.Update(Context(), observation, OwnershipMode.OwnedStartInside, considerTreasureCoffers: false);
+
+        Assert.Equal(expected, fixture.Planner.Current.ObjectiveKind);
+        Assert.Equal(expected == PlannerObjectiveKind.Frontier ? "Second Column" : "Shortcut", fixture.Planner.Current.TargetName);
+    }
+
     [Fact]
     public void LiveRequiredObjectRuleBeatsGeneratedLabelFrontier()
     {

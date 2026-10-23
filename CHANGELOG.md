@@ -1,3 +1,8 @@
+2026-10-22 - Keep generated frontiers ahead of weak recovery hints
+
+- Prefer an available map frontier over an unqualified remembered interactable. This prevents stale shortcut hints from pulling a duty run away from forward navigation. Keep authored destinations, rule-backed recovery, monsters and live interactions ahead of this fallback.
+- Validation: all 14 focused priority cases passed on the 2.0.0.0 baseline. Native bridge navigation remains pending the repaired runtime reload.
+
 2026-10-22 - Approved ADS window layout and density
 
 - Present duty ownership and primary actions together; flatten overview cards and use separate Settings navigation with grouped appearance controls.

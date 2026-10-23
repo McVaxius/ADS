@@ -556,6 +556,15 @@ public sealed class ObjectivePlannerService
             return;
         }
 
+        if (nearestMonster is null
+            && nearestFollowTarget is null
+            && nearestRequiredInteractable is null
+            && dungeonFrontierService.CurrentTarget is { } generatedFrontierPoint)
+        {
+            Current = BuildFrontierSnapshot(context, observation, generatedFrontierPoint, playerPosition, now);
+            return;
+        }
+
         var nearestInteractableGhost = playerPosition.HasValue
             ? observation.InteractableGhosts
                 .Where(x => MatchesCurrentMap(context.MapId, x.MapId))
@@ -575,15 +584,6 @@ public sealed class ObjectivePlannerService
                 TargetVerticalDelta = playerPosition.HasValue ? MathF.Abs(nearestInteractableGhost.Position.Y - playerPosition.Value.Y) : null,
                 CapturedAtUtc = now,
             };
-            return;
-        }
-
-        if (nearestMonster is null
-            && nearestFollowTarget is null
-            && nearestRequiredInteractable is null
-            && dungeonFrontierService.CurrentTarget is { } generatedFrontierPoint)
-        {
-            Current = BuildFrontierSnapshot(context, observation, generatedFrontierPoint, playerPosition, now);
             return;
         }
 

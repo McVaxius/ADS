@@ -484,6 +484,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Log.Information($"[ADS] {RemoteJsonUpdateService.LastUpdateStatus}");
         Log.Information($"[ADS] Loaded version {PluginInfo.GetVersion()} from {PluginInterface.AssemblyLocation.FullName}");
+        Log.Information("[ADS][Shop] verification build=ads-vmx-mgp-cleanup-client5-20261022-03");
         Log.Information("[ADS] Fishing verification marker fish-collection-client7-20261003-14; exact-item vendor discovery available.");
         Log.Information("[ADS][Shop] startup build=I496-gil-menu-02; native gil shop exit and handler selector; culture-invariant confirmation numbers");
         Log.Information("[ADS][UI] build=devhub-explorer-map-resize-20261011-02; approved Object Explorer map/table; session map divider and reset; independent selection; truthful flag copying; guarded manual DNav; retained support export and AutoDuty controls");
