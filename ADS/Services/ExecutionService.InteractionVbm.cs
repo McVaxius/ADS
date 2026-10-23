@@ -268,17 +268,14 @@ public sealed partial class ExecutionService
         if (provider is null || assembly is null || !ReferenceEquals(provider.GetType().Assembly, assembly))
             return new(true, null, "VBM live instance is unavailable; interaction held.");
 
-        var host = ReadInteractionVbmMember(provider, "Host");
-        var tickType = assembly.GetType("BossMod.Services.TickService");
-        var services = host is null ? null : ReadInteractionVbmMember(host, "Services") as IServiceProvider;
-        var tick = tickType is null ? null : services?.GetService(tickType);
-        var database = tick is null ? null : ReadInteractionVbmMember(tick, "_rotationDB");
+        var runtime = ReadInteractionVbmRotation(provider, assembly);
+        var database = runtime is null ? null : ReadInteractionVbmMember(runtime, "Database");
         var serviceType = assembly.GetType("BossMod.Service");
         const BindingFlags statics = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         var config = serviceType?.GetProperty("Config", statics)?.GetValue(null) ?? serviceType?.GetField("Config", statics)?.GetValue(null);
         var aiType = assembly.GetType("BossMod.AI.AIConfig");
         var ai = config is null || aiType is null ? null : ReadInteractionVbmAiConfig(config, aiType, assembly);
-        if (tick is null || tick.GetType() != tickType || database is null || ai is null
+        if (runtime is null || database is null || ai is null
             || ReadInteractionVbmMember(ai, "Enabled") is not bool aiEnabled)
             return new(true, null, "VBM runtime or AI configuration is unreadable; interaction held.");
 
@@ -293,7 +290,36 @@ public sealed partial class ExecutionService
         var active = getActive.InvokeFunc();
         if (active is null || active.Any(name => name is null))
             return new(true, null, "VBM active presets are unreadable; interaction held.");
-        return new(true, new(provider, ai, tick, database, aiEnabled, disabled, active.ToArray()), string.Empty);
+        return new(true, new(provider, ai, runtime, database, aiEnabled, disabled, active.ToArray()), string.Empty);
+    }
+
+    internal static object? ReadInteractionVbmRotation(object provider, Assembly assembly)
+    {
+        if (provider.GetType().Assembly != assembly)
+            return null;
+        var host = ReadInteractionVbmMember(provider, "Host");
+        if (host is null || ReadInteractionVbmMember(host, "Services") is not IServiceProvider services)
+            return null;
+        var rotationType = assembly.GetType("BossMod.Autorotation.RotationModuleManager");
+        var tickType = assembly.GetType("BossMod.Services.TickService");
+        if (rotationType is null || tickType is null)
+            return null;
+
+        // Published 7.5.7.4 owns the manager inside TickService. The newer
+        // provider registers the manager itself. Select by the native contract;
+        // never construct a service or resolve types from another plugin load.
+        var field = tickType.GetField("_rotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        object? runtime;
+        if (field is not null)
+        {
+            if (field.FieldType != rotationType)
+                return null;
+            var tick = services.GetService(tickType);
+            runtime = tick?.GetType() == tickType ? field.GetValue(tick) : null;
+        }
+        else
+            runtime = services.GetService(rotationType);
+        return runtime?.GetType() == rotationType ? runtime : null;
     }
 
     private static bool WriteNativeInteractionVbmAi(bool enabled)

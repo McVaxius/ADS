@@ -1,3 +1,8 @@
+2026-10-22 - VBM runtime compatibility (I507)
+
+- Read the live rotation manager from the published VBM TickService layout or the newer direct service registration. Share that exact runtime identity between interaction and Crystal Tower pauses; reject missing hosts, foreign types and replaced services without constructing provider objects.
+- Keep existing IPC writes and guarded restoration. Offline contract and pause tests cover both layouts; loaded-client acceptance remains unverified. No version or deployment change.
+
 2026-10-22 - Keep generated frontiers ahead of weak recovery hints
 
 - Prefer an available map frontier over an unqualified remembered interactable. This prevents stale shortcut hints from pulling a duty run away from forward navigation. Keep authored destinations, rule-backed recovery, monsters and live interactions ahead of this fallback.

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Reflection.Emit;
 using ADS.Models;
 using ADS.Services;
 
@@ -6,6 +7,51 @@ namespace ADS.Tests;
 
 public sealed class InteractionVbmPauseTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LiveRotationUsesTheReleasedOrDirectServiceContractWithoutConstructingServices(bool releasedLayout)
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("SyntheticVbm"), AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("Provider");
+        var rotationType = module.DefineType("BossMod.Autorotation.RotationModuleManager", TypeAttributes.Public).CreateType()!;
+        var tickBuilder = module.DefineType("BossMod.Services.TickService", TypeAttributes.Public);
+        if (releasedLayout)
+            tickBuilder.DefineField("_rotation", rotationType, FieldAttributes.Private);
+        var tickType = tickBuilder.CreateType()!;
+        var providerBuilder = module.DefineType("BossMod.Plugin", TypeAttributes.Public);
+        providerBuilder.DefineField("Host", typeof(object), FieldAttributes.Public);
+        var providerType = providerBuilder.CreateType()!;
+        var provider = Activator.CreateInstance(providerType)!;
+        var rotation = Activator.CreateInstance(rotationType)!;
+        var service = releasedLayout ? Activator.CreateInstance(tickType)! : rotation;
+        if (releasedLayout)
+            tickType.GetField("_rotation", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(service, rotation);
+        var services = new RotationServices(service);
+        providerType.GetField("Host")!.SetValue(provider, new RotationHost(services));
+
+        Assert.Same(rotation, ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        Assert.Equal(new[] { releasedLayout ? tickType : rotationType }, services.Requests);
+
+        services.Service = new object();
+        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        services.Service = service;
+        services.Requests.Clear();
+        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, typeof(InteractionVbmPauseTests).Assembly));
+        Assert.Empty(services.Requests);
+        providerType.GetField("Host")!.SetValue(provider, null);
+        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        Assert.Empty(services.Requests);
+    }
+
+    private sealed record RotationHost(IServiceProvider Services);
+    private sealed class RotationServices(object service) : IServiceProvider
+    {
+        internal object Service = service;
+        internal List<Type> Requests = new();
+        public object? GetService(Type type) { Requests.Add(type); return Service; }
+    }
+
     [Fact]
     public void NativeTypeListConfigUsesThePublicGenericGetterForItsNode()
     {

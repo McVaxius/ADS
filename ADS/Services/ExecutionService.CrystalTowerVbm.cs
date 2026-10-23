@@ -265,12 +265,7 @@ public sealed partial class ExecutionService
         object? runtime, aiManager = null, behaviour = null;
         if (kind == CrystalTowerMovementProvider.BossMod)
         {
-            // d409d336 Plugin registers this exact live service. No TickService
-            // private/generated constructor fields are part of this contract.
-            var host = ReadInteractionVbmMember(provider, "Host");
-            var services = host is null ? null : ReadInteractionVbmMember(host, "Services") as IServiceProvider;
-            var runtimeType = assembly.GetType("BossMod.Autorotation.RotationModuleManager");
-            runtime = runtimeType is null ? null : services?.GetService(runtimeType);
+            runtime = ReadInteractionVbmRotation(provider, assembly);
         }
         else
         {
