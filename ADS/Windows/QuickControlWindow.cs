@@ -92,7 +92,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         DrawStatusSummary();

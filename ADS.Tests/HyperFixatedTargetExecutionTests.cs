@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Reflection;
 using ADS.Models;
 using ADS.Services;
+using Dalamud.Game.Command;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
@@ -11,6 +12,113 @@ namespace ADS.Tests;
 
 public sealed class HyperFixatedTargetExecutionTests
 {
+    [Fact]
+    public void DragonsNeckReturnsToCenterImmediatelyThenEveryEightSecondsWithoutCatchUp()
+    {
+        using var fixture = new Fixture(Vector3.Zero);
+        fixture.Execution.ReadUtcNow = () => fixture.Now;
+        var context = TestDutyContextFactory.Create(DutyCategory.EightMan,
+            territoryId: 142, cfcId: 81, inCombat: true);
+        const string move = "/vnav moveto -258.08 19.07 18.11";
+
+        fixture.Update(IdlePlanner(), context);
+        Assert.Equal(new[] { "/bmrai off", "/vbmai off", move }, fixture.Commands);
+        Assert.Equal(ExecutionPhase.CombatHold, fixture.Execution.CurrentPhase);
+
+        fixture.Now = fixture.Now.AddMilliseconds(7999);
+        fixture.Update(IdlePlanner(), context);
+        Assert.Single(fixture.Commands, command => command == move);
+        Assert.DoesNotContain("/vnav stop", fixture.Commands);
+
+        fixture.Now = fixture.Now.AddMilliseconds(1);
+        fixture.Update(IdlePlanner(), context);
+        Assert.Equal(2, fixture.Commands.Count(command => command == move));
+        fixture.Now = fixture.Now.AddSeconds(25);
+        fixture.Update(IdlePlanner(), context);
+        Assert.Equal(3, fixture.Commands.Count(command => command == move));
+    }
+
+    [Theory]
+    [InlineData("combat ended")]
+    [InlineData("stop")]
+    [InlineData("disable")]
+    [InlineData("cutscene")]
+    [InlineData("departure")]
+    [InlineData("completion")]
+    [InlineData("dispose")]
+    public void DragonsNeckReleasesOnlyItsOwnedPathAtLifecycleBoundaries(string boundary)
+    {
+        using var fixture = new Fixture(Vector3.Zero);
+        fixture.Execution.ReadUtcNow = () => fixture.Now;
+        var context = TestDutyContextFactory.Create(DutyCategory.EightMan,
+            territoryId: 142, cfcId: 81, inCombat: true);
+        fixture.Update(IdlePlanner(), context);
+        fixture.Now = fixture.Now.AddSeconds(1);
+
+        switch (boundary)
+        {
+            case "stop": fixture.Execution.Stop(context); break;
+            case "completion": fixture.Execution.CompleteDuty("Test Duty"); break;
+            case "dispose": fixture.Execution.ReleaseHeldMovementKeys("plugin dispose"); break;
+            case "cutscene":
+                Assert.True(fixture.Execution.RefreshCutsceneHold(TestDutyContextFactory.Create(DutyCategory.EightMan,
+                    territoryId: 142, cfcId: 81, inCombat: true, cutscene: true), pluginEnabled: true));
+                break;
+            default:
+                fixture.Update(IdlePlanner(boundary == "departure" ? PlannerMode.UnsafeTransition : PlannerMode.Progression),
+                    TestDutyContextFactory.Create(DutyCategory.EightMan,
+                    territoryId: boundary == "departure" ? 777u : 142u, cfcId: 81,
+                    inCombat: boundary != "combat ended", cutscene: boundary == "cutscene"),
+                    pluginEnabled: boundary != "disable");
+                break;
+        }
+
+        Assert.Single(fixture.Commands, command => command == "/vnav stop");
+        Assert.Single(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+        fixture.Execution.ReleaseHeldMovementKeys("repeat cleanup");
+        Assert.Single(fixture.Commands, command => command == "/vnav stop");
+        if (boundary is "combat ended" or "cutscene" or "dispose")
+        {
+            fixture.Update(IdlePlanner(), context);
+            Assert.Equal(2, fixture.Commands.Count(command => command.StartsWith("/vnav moveto", StringComparison.Ordinal)));
+        }
+    }
+
+    [Theory]
+    [InlineData(142u, 80u)]
+    [InlineData(777u, 81u)]
+    public void DragonsNeckDoesNotControlAnotherDuty(uint territory, uint cfc)
+    {
+        using var fixture = new Fixture(Vector3.Zero);
+        fixture.Update(IdlePlanner(PlannerMode.UnsafeTransition), TestDutyContextFactory.Create(DutyCategory.EightMan,
+            territoryId: territory, cfcId: cfc, inCombat: true));
+        Assert.Empty(fixture.Commands);
+    }
+
+    [Fact]
+    public void DragonsNeckDoesNotControlAnUnownedBattle()
+    {
+        using var fixture = new Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create(DutyCategory.EightMan,
+            territoryId: 142, cfcId: 81, inCombat: true);
+        fixture.Execution.Stop(context);
+        fixture.Update(IdlePlanner(), context);
+        Assert.Empty(fixture.Commands);
+    }
+
+    [Fact]
+    public void DragonsNeckFailedMovementWaitsForTheNextEightSecondAttempt()
+    {
+        using var fixture = new Fixture(Vector3.Zero, commandsAccepted: false);
+        fixture.Execution.ReadUtcNow = () => fixture.Now;
+        var context = TestDutyContextFactory.Create(DutyCategory.EightMan,
+            territoryId: 142, cfcId: 81, inCombat: true);
+        fixture.Update(IdlePlanner(), context);
+        fixture.Now = fixture.Now.AddSeconds(1);
+        fixture.Update(IdlePlanner(), context);
+        Assert.Single(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void LeasePrecedesExactTargetAndMovementThenChainsWithoutRelease()
     {
@@ -80,10 +188,10 @@ public sealed class HyperFixatedTargetExecutionTests
             CapturedAtUtc = DateTime.UtcNow,
         };
 
-    private static PlannerSnapshot IdlePlanner()
+    private static PlannerSnapshot IdlePlanner(PlannerMode mode = PlannerMode.Progression)
         => new()
         {
-            Mode = PlannerMode.Progression,
+            Mode = mode,
             ObjectiveKind = PlannerObjectiveKind.None,
             Objective = "No target",
             Explanation = "test",
@@ -97,7 +205,8 @@ public sealed class HyperFixatedTargetExecutionTests
         private readonly TargetManagerProxy targetManagerProxy;
         private readonly List<TargetFixture> targets = [];
 
-        public Fixture(Vector3 playerPosition, bool includeObservationMemory = false, ObjectPriorityRuleManifest? initialRules = null)
+        public Fixture(Vector3 playerPosition, bool includeObservationMemory = false, ObjectPriorityRuleManifest? initialRules = null,
+            bool commandsAccepted = true)
         {
             var log = DispatchProxy.Create<IPluginLog, NoOpProxy>();
             var objectTable = DispatchProxy.Create<IObjectTable, ObjectTableProxy>();
@@ -112,6 +221,7 @@ public sealed class HyperFixatedTargetExecutionTests
             var commandManager = DispatchProxy.Create<ICommandManager, CommandManagerProxy>();
             ((CommandManagerProxy)(object)commandManager).Commands = Commands;
             ((CommandManagerProxy)(object)commandManager).Events = Events;
+            ((CommandManagerProxy)(object)commandManager).CommandsAccepted = commandsAccepted;
             var keyState = DispatchProxy.Create<IKeyState, NoOpProxy>();
             if (initialRules is not null)
                 File.WriteAllText(Path.Combine(tempDirectory.Path, ObjectRuleShardStore.LegacyFileName),
@@ -197,7 +307,7 @@ public sealed class HyperFixatedTargetExecutionTests
             return target;
         }
 
-        public void Update(PlannerSnapshot planner, DutyContextSnapshot? context = null)
+        public void Update(PlannerSnapshot planner, DutyContextSnapshot? context = null, bool pluginEnabled = true)
         {
             Execution.Update(
                 context ?? TestDutyContextFactory.Create(DutyCategory.Solo),
@@ -210,7 +320,7 @@ public sealed class HyperFixatedTargetExecutionTests
                     LiveInteractables = [],
                     InteractableGhosts = [],
                 },
-                pluginEnabled: true,
+                pluginEnabled: pluginEnabled,
                 considerTreasureCoffers: false,
                 dialogAutomationStatus: string.Empty);
         }
@@ -288,16 +398,24 @@ public sealed class HyperFixatedTargetExecutionTests
 
     public class CommandManagerProxy : DispatchProxy
     {
+        public bool CommandsAccepted { get; set; } = true;
         public List<string> Commands { get; set; } = [];
         public List<string> Events { get; set; } = [];
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
+            if (targetMethod?.Name == "get_Commands")
+                return new System.Collections.ObjectModel.ReadOnlyDictionary<string, IReadOnlyCommandInfo>(
+                    new Dictionary<string, IReadOnlyCommandInfo>
+                {
+                    ["/bmrai"] = new CommandInfo((_, _) => { }),
+                    ["/vbmai"] = new CommandInfo((_, _) => { }),
+                });
             if (targetMethod?.Name == "ProcessCommand" && args is [string command])
             {
                 Commands.Add(command);
                 Events.Add($"command:{command}");
-                return true;
+                return CommandsAccepted;
             }
 
             return DefaultValue(targetMethod);

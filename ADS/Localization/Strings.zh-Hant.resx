@@ -11685,4 +11685,15 @@
   <data name="Window opacity" xml:space="preserve"><value>視窗不透明度</value></data>
   <data name="When unfocused" xml:space="preserve"><value>失去焦點時</value></data>
   <data name="Choose a tool group" xml:space="preserve"><value>??????</value></data>
+  <data name="LCARS" xml:space="preserve"><value>LCARS</value></data>
+  <data name="LCARS panels, bars and controls" xml:space="preserve"><value>LCARS 面板、橫條與控制項</value></data>
+  <data name="LCARS UI sounds" xml:space="preserve"><value>LCARS 介面音效</value></data>
+  <data name="UI sounds" xml:space="preserve"><value>介面音效</value></data>
+  <data name="Preview sound" xml:space="preserve"><value>試聽音效</value></data>
+  <data name="Custom UI tones. The titlebar speaker toggles the same setting." xml:space="preserve"><value>自訂介面音效。標題列的喇叭可切換相同設定。</value></data>
+  <data name="Select LCARS to use UI sounds." xml:space="preserve"><value>選擇 LCARS 以使用介面音效。</value></data>
+  <data name="Turn on UI sounds to preview." xml:space="preserve"><value>開啟介面音效以試聽。</value></data>
+  <data name="Audio output is unavailable." xml:space="preserve"><value>音訊輸出無法使用。</value></data>
+  <data name="UI sounds muted" xml:space="preserve"><value>介面音效已靜音</value></data>
+  <data name="UI sounds on" xml:space="preserve"><value>介面音效已開啟</value></data>
 </root>

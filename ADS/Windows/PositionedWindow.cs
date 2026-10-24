@@ -39,6 +39,13 @@ public abstract class PositionedWindow : Window
     public override void PostDraw()
         => windowMotion.Restore(this);
 
+    protected void DrawWindowChrome()
+    {
+        windowMotion.DrawChrome();
+        if (MaterialTheme.Current.IsLcars && (Flags & ImGuiWindowFlags.NoTitleBar) == 0)
+            MaterialLcars.Header(this is MainWindow ? string.Empty : WindowName.Split("##", 2)[0]);
+    }
+
     protected void PrepareWindowPlacement()
     {
         WindowName = Ui.L(originalWindowName);
@@ -110,6 +117,8 @@ public abstract class PositionedWindow : Window
         {
             if (drawContent)
             {
+                if (MaterialTheme.Current.IsLcars)
+                    MaterialLcars.Header(Ui.T(tool == ToolGuide.Rules ? "Rules guide" : "Object Explorer guide"));
                 ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 440 * MaterialTheme.Metrics.Scale);
                 MaterialText.TextWrapped(Ui.T("Open this tool's guide? You can always use its Guide button later."));
                 ImGui.PopTextWrapPos();

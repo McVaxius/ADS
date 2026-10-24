@@ -94,7 +94,7 @@ internal static class AdsPresentation
         var s = MaterialTheme.Metrics.Scale;
         var start = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
-        var padding = logicalPadding * s;
+        var padding = (MaterialTheme.Current.IsLcars ? Vector2.Max(logicalPadding, new Vector2(18, 12)) : logicalPadding) * s;
         var dl = ImGui.GetWindowDrawList();
         var splitter = ImGui.ImDrawListSplitter();
         splitter.Split(dl, 2);
@@ -132,9 +132,14 @@ internal static class AdsPresentation
             var bottom = Math.Max(start.Y + minimumHeight * s, ImGui.GetItemRectMax().Y + padding.Y);
             splitter.SetCurrentChannel(dl, 0);
             var c = MaterialTheme.Current.Colors;
-            MaterialCanvas.Surface(start, new(start.X + width, bottom), emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
-                inner ? c.SurfaceContainerLow : c.Surface, 5 * s);
-            dl.AddRect(start, new(start.X + width, bottom), MaterialCanvas.Color(c.OutlineVariant), 5 * s);
+            if (MaterialTheme.Current.IsLcars)
+                MaterialLcars.PanelFrame(start, new(start.X + width, bottom), emphasis ? 0 : inner ? 2 : 1);
+            else
+            {
+                MaterialCanvas.Surface(start, new(start.X + width, bottom), emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
+                    inner ? c.SurfaceContainerLow : c.Surface, 5 * s);
+                dl.AddRect(start, new(start.X + width, bottom), MaterialCanvas.Color(c.OutlineVariant), 5 * s);
+            }
             ImGui.SetCursorScreenPos(new(start.X, bottom));
             ImGui.Dummy(new(width, 0));
         }
@@ -184,6 +189,15 @@ internal static class AdsPresentation
         style.Color(ImGuiCol.ButtonActive, fill is null ? colors.SurfaceContainerHigh : Vector4.Lerp(fill.Value, colors.Background, .12f));
         style.Color(ImGuiCol.Border, colors.OutlineVariant);
         style.Style(ImGuiStyleVar.FrameBorderSize, 1 * scale);
+        var lcars = MaterialTheme.Current.IsLcars;
+        if (lcars)
+        {
+            style.Color(ImGuiCol.Button, MaterialLcars.Background);
+            style.Color(ImGuiCol.ButtonHovered, MaterialColor.Layer(MaterialLcars.Background, fill ?? MaterialLcars.Lilac, .12f));
+            style.Color(ImGuiCol.ButtonActive, MaterialColor.Layer(MaterialLcars.Background, fill ?? MaterialLcars.Lilac, .22f));
+            style.Color(ImGuiCol.Border, fill ?? MaterialLcars.Lilac);
+            style.Style(ImGuiStyleVar.FrameBorderSize, 1.5f * scale);
+        }
         var width = MaterialLayout.FitNextItemWidth(-1f, ActionMinimum(pushFont, label, caption));
         if (Compact)
         {
@@ -191,7 +205,7 @@ internal static class AdsPresentation
             var text = MaterialText.Measure(label);
             var clickedCompact = ImGui.Button("###" + id, new Vector2(width, Math.Max(height * scale, text.Y + 8 * scale)));
             var start = ImGui.GetItemRectMin(); var end = ImGui.GetItemRectMax();
-            var foregroundCompact = fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
+            var foregroundCompact = lcars ? MaterialLcars.Text : fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
             var iconCompact = id switch { "Start Outside" or "Start Inside" => MaterialIcon.Play, "Resume" => MaterialIcon.Refresh,
                 "Leave" => MaterialIcon.DoorExit, "Stop" => MaterialIcon.Stop, _ => MaterialIcon.Wrench };
             var drawing = ImGui.GetWindowDrawList();
@@ -203,6 +217,7 @@ internal static class AdsPresentation
             }
             finally { drawing.PopClipRect(); }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) MaterialText.SetTooltip(label + "\n" + caption);
+            MaterialLcars.Feedback(clickedCompact);
             return clickedCompact;
         }
         var verticalShift = (ControlHeight - height) * scale * .5f;
@@ -223,7 +238,7 @@ internal static class AdsPresentation
         var clicked = ImGui.Button("###" + id, new Vector2(width, buttonHeight));
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
-        var foreground = fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
+        var foreground = lcars ? MaterialLcars.Text : fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
         var icon = id switch { "Start Outside" or "Start Inside" => MaterialIcon.Play, "Resume" => MaterialIcon.Refresh,
             "Leave" => MaterialIcon.DoorExit, "Stop" => MaterialIcon.Stop, _ => MaterialIcon.Wrench };
         var dl = ImGui.GetWindowDrawList();
@@ -248,6 +263,7 @@ internal static class AdsPresentation
         finally { dl.PopClipRect(); }
         if (clippedText && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             MaterialText.SetTooltip($"{label}\n{caption}");
+        MaterialLcars.Feedback(clicked);
         return clicked;
     }
 
@@ -284,6 +300,12 @@ internal static class AdsPresentation
     {
         using var style = new MaterialStyleScope();
         style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(0, 2) * MaterialTheme.Metrics.Scale);
+        if (MaterialTheme.Current.IsLcars)
+        {
+            using (pushFont(UiFontRole.BodyStrong)) MaterialLcars.PanelHeading(title, 2);
+            MaterialText.TextWrapped(description);
+            return;
+        }
         var scale = MaterialTheme.Metrics.Scale;var size = (Compact ? 20 : 32) * scale;var min = ImGui.GetCursorScreenPos();
         ImGui.BeginGroup();MaterialIcons.Draw(icon, min, size, MaterialTheme.Current.Colors.OnSurfaceVariant);
         ImGui.Dummy(new Vector2(size));ImGui.SameLine(0, (Compact ? 6 : 16) * scale);ImGui.BeginGroup();

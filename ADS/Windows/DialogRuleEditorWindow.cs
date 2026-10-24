@@ -57,7 +57,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);

@@ -108,7 +108,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         DrawToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.ObjectExplorer, ref guideOfferRequested, ref guideOfferVisible, plugin.OpenObjectExplorerGuideUi);
         if (WindowLayout.SmallButton(Ui.L("Guide###ADSExplorerToolbarGuide")))

@@ -39,7 +39,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;

@@ -29,7 +29,7 @@ public sealed class LootWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         MaterialText.Text(Ui.T("Mode: {0}", Ui.Display(plugin.Configuration.LootMode.ToString())));

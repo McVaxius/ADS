@@ -30,7 +30,7 @@ public sealed class FrontierLabelWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;

@@ -12,6 +12,8 @@ The first load of this update applies Compact mode once and hides Main's Compact
 
 Hindi uses installed shaping fonts. The source now leaves other languages usable when the Hindi menu caption is unavailable, showing a disabled ASCII `Hindi (unavailable)` option. Required text for a selected Hindi UI still requires full validation; on failure, the readable status offers **Use English**, saving English only after an explicit press. Native verification and Linux/Wine acceptance remain pending for this change.
 
+Choose Auto, Picker or LCARS in the shared colour editor. LCARS adds segmented rails, framed panels and outlined actions across Main, Controls, Settings and the existing tools. Optional UI tones default muted; Settings and each titlebar speaker share one saved setting. Switching modes retains Picker RGB values.
+
 Use Settings for shared colour, language, compact spacing and window transparency/fade; titlebar appearance actions change the same saved preferences. Main branding and Main/Quick Controls titles use the packaged ADS icon, keeping its colours and proportions when the title is collapsed. Duty automation remains in Guided Setup and the existing Start, Resume and Stop actions; appearance choices do not change duty ownership or rules.
 
 Titlebars use the packaged icon and a single live status line. **Show titlebar status** and **Detailed titlebar status** in Appearance default on; turn details off to keep concise state and progress, or hide the status entirely. Hover the title for full details. Object Explorer shows its object count and selected name.

@@ -45,7 +45,7 @@ public sealed class WizardWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
         var wizard = selectedWizardId is null

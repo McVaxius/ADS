@@ -93,7 +93,7 @@ public sealed class InventoryUtilityWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         var character = Plugin.PlayerState.IsLoaded ? Plugin.PlayerState.ContentId : 0;
         if (lastCompletion != plugin.UtilityAutomationService.LastCompletionUtc || summaryCharacter != character) Refresh();

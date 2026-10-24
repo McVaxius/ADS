@@ -62,7 +62,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         RefreshPreviewIfChanged();
         RefreshAfterBatchCompletion();

@@ -1,3 +1,20 @@
+2026-10-23 - Approved LCARS appearance
+
+- Add LCARS to the existing Auto/Picker editor, with segmented window rails, framed panels, outlined retained actions and readable selected Settings navigation. Preserve duty ownership, tool behavior, native IDs and all sixteen languages, including Traditional Chinese.
+- Share one saved default-muted UI tone setting between Settings, Main and titlebar speakers; keep the original Picker RGB values and dispose only the owned player. Pin existing CI to the published AethertekUI baseline. Version remains 2.0.0.2.
+- Offline Debug/Release builds passed with two existing diagnostic warnings; all 26 focused native callback, guide, configuration and catalog tests passed. Full-window locale/layout, game/GPU and audible-output acceptance remain separate.
+
+2026-10-23 - Return to center during Dragon's Neck
+
+- During owned Dragon's Neck combat, turn off available BossMod AI providers and move to the arena center at (-258.08, 19.07, 18.11) immediately and every eight seconds. This takes priority over ordinary combat movement holds and leaves the independent rotation provider running.
+- Stop the owned movement on combat end, Stop, disable, transitions, duty completion and unload. Preserve other duties and unowned battles. The user completed this fight manually; replay is skipped for this run.
+- Validation: isolated Debug/x64 compilation passed and all 15 focused execution cases passed, including eight-second cadence, failed-command spacing, direct cutscene cleanup, lifecycle cancellation and exclusion of unowned/other duties. No deployment, live replay or version change.
+
+2026-10-23 - BMR load-distance configuration IPC (I507)
+
+- Use existing BossMod configuration IPC to save a load-distance preference when BMR is the single identifiable provider, then verify the bound live config value. Let the provider notify persistence once; an attempted rejected, unreadable or uncertain IPC write cannot fall through to reflection. Keep the existing path for unavailable or ambiguous channels.
+- Registry filtering still requires the existing native reflection adapter. All 146 focused config IPC, runtime contract, pause and follow tests passed with the complete Release/x64 plugin build. Native client acceptance remains unverified; no client, deployment or version action is included.
+
 2026-10-22 - VBM runtime compatibility (I507)
 
 - Read the live rotation manager from the published VBM TickService layout or the newer direct service registration. Share that exact runtime identity between interaction and Crystal Tower pauses; reject missing hosts, foreign types and replaced services without constructing provider objects.

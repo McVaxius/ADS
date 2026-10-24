@@ -45,7 +45,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 

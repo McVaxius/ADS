@@ -26,7 +26,7 @@ public sealed class GearSalePreviewWindow(Plugin plugin) : PositionedWindow("Equ
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         var current = selection;
         if (current == null) { IsOpen = false; return; }

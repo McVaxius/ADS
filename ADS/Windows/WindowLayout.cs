@@ -59,6 +59,7 @@ internal static class WindowLayout
     {
         using var controls = ImGui.GetStyle().FramePadding.Y == 0 || MaterialControls.Context == MaterialControlContext.Dense
             ? default(MaterialControls.ControlScope) : MaterialControls.Push(MaterialControlContext.Toolbar);
+        using var outline = MaterialLcars.NativeButtonStyle();
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         size.X = MaterialLayout.FitNextItemWidth(size.X, Math.Max(size.X, ButtonMinimum(nativeLabel, icon)));
         var caption = nativeLabel.Split("##", 2)[0];
@@ -75,7 +76,12 @@ internal static class WindowLayout
         }
         // Native centered text clips descenders that extend beyond the font's line box.
         size.Y = MathF.Ceiling(Math.Max(size.Y, Math.Max(ImGui.GetFrameHeight() + 2 * inkOverflow, icon == MaterialIcon.None ? 0 : 20 * MaterialTheme.Metrics.Scale)));
-        if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0])) return ImGui.Button(nativeLabel, size);
+        if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0]))
+        {
+            var pressed = ImGui.Button(nativeLabel, size);
+            MaterialLcars.Feedback(pressed);
+            return pressed;
+        }
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         var clicked = ImGui.Button(nativeLabel, size);
         ImGui.PopStyleColor();
@@ -90,6 +96,7 @@ internal static class WindowLayout
             MaterialText.AddText(dl,new(x + iconWidth, min.Y + (max.Y - min.Y - text.Y) * .5f), ImGui.GetColorU32(ImGuiCol.Text), label);
         }
         finally { dl.PopClipRect(); }
+        MaterialLcars.Feedback(clicked);
         return clicked;
     }
 
@@ -97,8 +104,16 @@ internal static class WindowLayout
     {
         using var style = new MaterialStyleScope();
         style.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 6 : 10, AdsPresentation.Compact || tight ? 3 : 12) * MaterialTheme.Metrics.Scale);
+        if (MaterialTheme.Current.IsLcars)
+        {
+            style.Color(ImGuiCol.Header, MaterialLcars.Lilac);
+            style.Color(ImGuiCol.HeaderHovered, MaterialColor.Layer(MaterialLcars.Lilac, MaterialLcars.Text, .12f));
+            style.Color(ImGuiCol.HeaderActive, MaterialLcars.Orange);
+            style.Color(ImGuiCol.Text, MaterialLcars.Background);
+        }
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);var open = ImGui.CollapsingHeader(nativeLabel, flags);ImGui.PopStyleColor();
+        MaterialLcars.Feedback(ImGui.IsItemActivated(), MaterialUiSoundCue.Toggle);
         var min = ImGui.GetItemRectMin();var max = ImGui.GetItemRectMax();var scale = MaterialTheme.Metrics.Scale;
         var label = nativeLabel.Split("##", 2)[0];var size = Math.Min(20 * scale, max.Y - min.Y);
         var color = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];var dl = ImGui.GetWindowDrawList();dl.PushClipRect(min, max, true);
@@ -121,6 +136,7 @@ internal static class WindowLayout
         ImGui.SetNextItemWidth(MaterialText.Measure(nativeLabel, true).X + 2 * ImGui.GetStyle().FramePadding.X);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         var selected = ImGui.BeginTabItem(nativeLabel);
+        MaterialLcars.Feedback(ImGui.IsItemActivated());
         ImGui.PopStyleColor();
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
@@ -143,7 +159,12 @@ internal static class WindowLayout
     internal static bool NativeCheckbox(string nativeLabel, ref bool value)
     {
         var caption = nativeLabel.Split("##", 2)[0];
-        if (!MaterialText.RequiresShaping(caption)) return ImGui.Checkbox(nativeLabel, ref value);
+        if (!MaterialText.RequiresShaping(caption))
+        {
+            var activated = ImGui.Checkbox(nativeLabel, ref value);
+            MaterialLcars.Feedback(activated, MaterialUiSoundCue.Toggle);
+            return activated;
+        }
         using var height = MaterialText.PushLineHeight(caption);
         var gap = ImGui.GetStyle().ItemInnerSpacing;
         var color = ImGui.GetColorU32(ImGuiCol.Text);
@@ -155,6 +176,7 @@ internal static class WindowLayout
             changed = ImGui.Checkbox(nativeLabel, ref value);
         }
         MaterialText.AddText(ImGui.GetWindowDrawList(), ImGui.GetItemRectMin() + new Vector2(ImGui.GetFrameHeight() + gap.X, (ImGui.GetItemRectMax().Y-ImGui.GetItemRectMin().Y-MaterialText.Measure(caption).Y)*.5f), color, caption);
+        MaterialLcars.Feedback(changed, MaterialUiSoundCue.Toggle);
         return changed;
     }
 
@@ -169,13 +191,18 @@ internal static class WindowLayout
     internal static bool BeginTabItem(string nativeLabel, ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
     {
         var caption = nativeLabel.Split("##", 2)[0];
-        if (!MaterialText.RequiresShaping(caption)) return ImGui.BeginTabItem(nativeLabel, flags);
+        if (!MaterialText.RequiresShaping(caption))
+        {
+            var selected = ImGui.BeginTabItem(nativeLabel, flags);
+            MaterialLcars.Feedback(ImGui.IsItemActivated());
+            return selected;
+        }
         using var height = MaterialText.PushLineHeight(caption);
         ImGui.SetNextItemWidth(MaterialText.Measure(caption).X + 2*ImGui.GetStyle().FramePadding.X);
         var color = ImGui.GetColorU32(ImGuiCol.Text);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         bool open;
-        try { open = ImGui.BeginTabItem(nativeLabel, flags); }
+        try { open = ImGui.BeginTabItem(nativeLabel, flags); MaterialLcars.Feedback(ImGui.IsItemActivated()); }
         finally { ImGui.PopStyleColor(); }
         var min = ImGui.GetItemRectMin(); var max = ImGui.GetItemRectMax(); var drawing = ImGui.GetWindowDrawList();
         drawing.PushClipRect(min, max, true);
@@ -207,6 +234,7 @@ internal static class WindowLayout
             finally { ImGui.EndCombo(); }
         }
         if(changed) ImGuiP.MarkItemEdited(ImGui.GetID(nativeLabel));
+        MaterialLcars.Feedback(changed, MaterialUiSoundCue.Toggle);
         return changed;
     }
 
@@ -284,7 +312,12 @@ internal static class WindowLayout
     internal static bool RadioButton(string nativeLabel, bool selected)
     {
         var caption = nativeLabel.Split("##", 2)[0];
-        if(!MaterialText.RequiresShaping(caption)) return ImGui.RadioButton(nativeLabel, selected);
+        if(!MaterialText.RequiresShaping(caption))
+        {
+            var activated = ImGui.RadioButton(nativeLabel, selected);
+            MaterialLcars.Feedback(activated, MaterialUiSoundCue.Toggle);
+            return activated;
+        }
         using var height = MaterialText.PushLineHeight(caption);
         var gap = ImGui.GetStyle().ItemInnerSpacing; var color = ImGui.GetColorU32(ImGuiCol.Text);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
@@ -293,6 +326,7 @@ internal static class WindowLayout
         finally { ImGui.PopStyleColor(); }
         var min = ImGui.GetItemRectMin(); var max = ImGui.GetItemRectMax();
         MaterialText.AddText(ImGui.GetWindowDrawList(), min + new Vector2(ImGui.GetFrameHeight()+gap.X, (max.Y-min.Y-MaterialText.Measure(caption).Y)*.5f), color, caption);
+        MaterialLcars.Feedback(changed, MaterialUiSoundCue.Toggle);
         return changed;
     }
 

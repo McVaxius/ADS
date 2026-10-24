@@ -30,17 +30,18 @@ public sealed class InteractionVbmPauseTests
         var services = new RotationServices(service);
         providerType.GetField("Host")!.SetValue(provider, new RotationHost(services));
 
-        Assert.Same(rotation, ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        var liveAssembly = providerType.Assembly;
+        Assert.Same(rotation, ExecutionService.ReadInteractionVbmRotation(provider, liveAssembly));
         Assert.Equal(new[] { releasedLayout ? tickType : rotationType }, services.Requests);
 
         services.Service = new object();
-        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, liveAssembly));
         services.Service = service;
         services.Requests.Clear();
         Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, typeof(InteractionVbmPauseTests).Assembly));
         Assert.Empty(services.Requests);
         providerType.GetField("Host")!.SetValue(provider, null);
-        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, assembly));
+        Assert.Null(ExecutionService.ReadInteractionVbmRotation(provider, liveAssembly));
         Assert.Empty(services.Requests);
     }
 

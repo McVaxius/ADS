@@ -20,6 +20,7 @@ public sealed class WizardCatalogTests
         var configuration = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
             """{"Version":25,"UiAccentRgb":1193046,"UiLanguage":5,"UnrelatedFixture":17}""")!;
         Assert.Equal(MaterialColorMode.Auto, configuration.UiColors.Mode);
+        Assert.True(configuration.UiLcarsSoundsMuted);
         Assert.Equal(UiLanguage.TraditionalChinese, configuration.UiLanguage);
         Assert.Null(new Configuration().UiLanguage);
         Assert.Equal(Enumerable.Range(0, 16), Enum.GetValues<UiLanguage>().Select(language => (int)language));
@@ -46,6 +47,17 @@ public sealed class WizardCatalogTests
         Assert.Equal(AdsPresentation.Rgb(0x040506), manual.Primary);
         Assert.Equal(AdsPresentation.Rgb(0x070809), manual.OnSurface);
         Assert.Equal(automatic.Error, manual.Error);
+        restored.UiColors = restored.UiColors with { Mode = MaterialColorMode.Lcars };
+        restored.UiLcarsSoundsMuted = false;
+        saved = (string)storage.GetMethod("SerializeConfig", flags)!.Invoke(null, [restored])!;
+        var lcars = (Configuration)storage.GetMethod("DeserializeConfig", flags)!.Invoke(null, [saved])!;
+        Assert.Equal(restored.UiColors, lcars.UiColors);
+        Assert.False(lcars.UiLcarsSoundsMuted);
+        Assert.Equal(17, (int)lcars.AdditionalSettings!["UnrelatedFixture"]);
+        lcars.UiColors = lcars.UiColors with { Mode = MaterialColorMode.Auto };
+        Assert.Equal(restored.UiColors.BackgroundRgb, lcars.UiColors.BackgroundRgb);
+        Assert.Equal(restored.UiColors.ControlsRgb, lcars.UiColors.ControlsRgb);
+        Assert.Equal(restored.UiColors.TextRgb, lcars.UiColors.TextRgb);
     }
 
     [Fact]
@@ -53,7 +65,10 @@ public sealed class WizardCatalogTests
     {
         string[] keys = ["Auto", "Picker", "Default", "Background, controls and text follow your theme.", "Theme colour",
             "Choose each colour independently.", "Background", "Controls", "Text", "Aa  Preview text", "Control",
-            "Switch to Picker to set each colour yourself.", "Switch back to Auto to use the automatic theme."];
+            "Switch to Picker to set each colour yourself.", "Switch back to Auto to use the automatic theme.",
+            "LCARS", "LCARS panels, bars and controls", "LCARS UI sounds", "UI sounds", "Preview sound",
+            "Custom UI tones. The titlebar speaker toggles the same setting.", "Select LCARS to use UI sounds.",
+            "Turn on UI sounds to preview.", "Audio output is unavailable.", "UI sounds muted", "UI sounds on"];
         var previous = Ui.Language;
         try
         {
@@ -91,7 +106,13 @@ public sealed class WizardCatalogTests
             var configuration = new Configuration { UiCompact = compact, UiLanguage = UiLanguage.TraditionalChinese };
             var plugin = (Plugin)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
             typeof(Plugin).GetField("<Configuration>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(plugin, configuration);
-            var appearance = new UiAppearance(plugin);
+            using var appearance = new UiAppearance(plugin);
+            var sounds = typeof(UiAppearance).GetMethod("DrawLcarsSounds", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var titleBars = typeof(UiAppearance).GetMethod("PrepareAppearanceTitleBars", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var owner = new MainWindow(plugin);
+            var windows = new Dalamud.Interface.Windowing.WindowSystem("ADS LCARS callback");
+            windows.AddWindow(owner);
+            var feedback = new List<MaterialUiSoundCue>();
             typeof(UiAppearance).GetField("accentDraft", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(appearance, MaterialColorSettings.Rgb(configuration.UiAccentRgb));
             var draw = typeof(UiAppearance).GetMethod("DrawTitleBarColour", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var io = ImGui.GetIO(); io.IniFilename = null; io.LogFilename = null;
@@ -106,10 +127,17 @@ public sealed class WizardCatalogTests
                 ImGui.NewFrame();
                 var theme = AdsPresentation.Theme(configuration.UiAccentRgb, configuration.UiColors);
                 theme.Density = compact ? MaterialDensity.Compact : MaterialDensity.Standard;
+                theme.Feedback = feedback.Add;
                 using var palette = MaterialTheme.Push(theme, scale, MaterialStyleMode.ColorsOnly);
                 ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(600 * scale, 800 * scale));
                 ImGui.Begin("ADS Colour callback", ImGuiWindowFlags.NoSavedSettings);
-                try { draw.Invoke(appearance, null); list = ImGui.GetWindowDrawList(); }
+                try
+                {
+                    titleBars.Invoke(appearance, [windows]);
+                    draw.Invoke(appearance, null);
+                    sounds.Invoke(appearance, null);
+                    list = ImGui.GetWindowDrawList();
+                }
                 finally { ImGui.End(); }
                 ImGui.Render();
             }
@@ -122,6 +150,9 @@ public sealed class WizardCatalogTests
             }
             Vector2 Center(string caption)
             {
+                var lastMatch = caption == "UI sounds";
+                Vector2? point = null;
+                caption = caption.Replace(" ", string.Empty);
                 for (var index = 0; index + caption.Length * 4 <= list.VtxBuffer.Size; index++)
                 {
                     var matched = true;
@@ -132,9 +163,13 @@ public sealed class WizardCatalogTests
                             || list.VtxBuffer[index + character * 4 + 2].Uv != new Vector2(glyph.Handle->U1, glyph.Handle->V1))
                         { matched = false; break; }
                     }
-                    if (matched) return (list.VtxBuffer[index].Pos + list.VtxBuffer[index + caption.Length * 4 - 2].Pos) / 2;
+                    if (matched)
+                    {
+                        point = (list.VtxBuffer[index].Pos + list.VtxBuffer[index + caption.Length * 4 - 2].Pos) / 2;
+                        if (!lastMatch) return point.Value;
+                    }
                 }
-                throw new InvalidOperationException("Actual colour callback did not show " + caption);
+                return point ?? throw new InvalidOperationException("Actual colour callback did not show " + caption);
             }
             Frame(); Frame(); Click("Picker");
             Assert.Equal(1, proxy.Saves);
@@ -161,8 +196,32 @@ public sealed class WizardCatalogTests
                 Assert.Equal(UiLanguage.TraditionalChinese, configuration.UiLanguage);
             }
             var manual = configuration.UiColors;
-            Click("Auto");
+            var nativeTitleButtons = owner.TitleBarButtons.Take(6).ToArray();
+            Click("LCARS"); Frame();
             Assert.Equal(5, proxy.Saves);
+            Assert.Equal(manual with { Mode = MaterialColorMode.Lcars }, configuration.UiColors);
+            Assert.True(configuration.UiLcarsSoundsMuted);
+            Assert.Equal(9, owner.TitleBarButtons.Count);
+            Assert.Equal(nativeTitleButtons, owner.TitleBarButtons.Take(6));
+            Assert.Contains(owner.TitleBarButtons, button => button.Icon == Dalamud.Interface.FontAwesomeIcon.Globe);
+            var speaker = owner.TitleBarButtons.Single(button => button.Icon == Dalamud.Interface.FontAwesomeIcon.VolumeMute);
+            speaker.Click(ImGuiMouseButton.Right);
+            Assert.True(configuration.UiLcarsSoundsMuted);
+            Assert.Equal(5, proxy.Saves);
+            speaker.Click(ImGuiMouseButton.Left); Frame();
+            Assert.False(configuration.UiLcarsSoundsMuted);
+            Assert.Equal(6, proxy.Saves);
+            feedback.Clear();
+            Click("Preview sound");
+            Assert.Equal(new[] { MaterialUiSoundCue.Preview }, feedback);
+            Assert.Equal(6, proxy.Saves);
+            Click("UI sounds");
+            Assert.True(configuration.UiLcarsSoundsMuted);
+            Assert.Equal(7, proxy.Saves);
+            Click("Auto"); Frame();
+            Assert.Equal(8, proxy.Saves);
+            Assert.DoesNotContain(speaker, owner.TitleBarButtons);
+            Assert.Equal(8, owner.TitleBarButtons.Count);
             Assert.Equal(manual with { Mode = MaterialColorMode.Auto }, configuration.UiColors);
             Assert.Equal(AdsPresentation.ReferenceAccent, configuration.UiAccentRgb);
         }
@@ -318,9 +377,11 @@ public sealed class WizardCatalogTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public unsafe void NativeGuidesAndDebugSettingsRenderAtBothDensitiesAndGuideOffersDismissWithEscape(bool compact)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public unsafe void NativeGuidesAndDebugSettingsRenderAtBothDensitiesAndGuideOffersDismissWithEscape(bool compact, bool lcars)
     {
         var previous = ImGui.GetCurrentContext();
         var language = Ui.Language;
@@ -338,7 +399,8 @@ public sealed class WizardCatalogTests
             int width = 0, height = 0;
             io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
             io.Fonts.SetTexID(0, new ImTextureID((nint)1));
-            var theme = AdsPresentation.Theme(AdsPresentation.ReferenceAccent);
+            var theme = AdsPresentation.Theme(AdsPresentation.ReferenceAccent,
+                new() { Mode = lcars ? MaterialColorMode.Lcars : MaterialColorMode.Auto });
             theme.Density = compact ? MaterialDensity.Compact : MaterialDensity.Standard;
             using var themeScope = MaterialTheme.Push(theme, 1, MaterialStyleMode.ColorsOnly);
             var drawOffer = typeof(PositionedWindow).GetMethod("DrawToolGuideOffer", BindingFlags.Static | BindingFlags.NonPublic)!;

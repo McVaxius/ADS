@@ -31,7 +31,7 @@ public sealed class GhostListWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;

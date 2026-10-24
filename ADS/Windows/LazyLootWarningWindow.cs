@@ -40,6 +40,7 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     public override void Draw()
     {
         windowMotion.DrawChrome();
+        if (MaterialTheme.Current.IsLcars) MaterialLcars.Header(Ui.T("LazyLoot Warning"));
         MaterialText.TextWrapped(Ui.T("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once."));
         ImGui.Spacing();
 

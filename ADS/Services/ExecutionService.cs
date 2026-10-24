@@ -20,6 +20,8 @@ public sealed partial class ExecutionService
     private DateTime? cutscenePausedAtUtc;
     // New timers created during the hold receive their full budget when UTC deadlines resume.
     private DateTime TimerUtcNow => cutscenePausedAtUtc ?? ReadUtcNow();
+    private bool dragonsNeckCentering;
+    private DateTime nextDragonsNeckCenterUtc;
 
     internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool pluginEnabled)
     {
@@ -31,6 +33,7 @@ public sealed partial class ExecutionService
             && (IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving))
         {
             cutscenePausedAtUtc ??= ReadUtcNow();
+            CancelDragonsNeckCentering();
             StopNavigationIfNeeded();
             cardinalHoldInputService.Release("cutscene hold");
             treasureDoorStrafeInputService.Release("cutscene hold");
@@ -600,6 +603,7 @@ public sealed partial class ExecutionService
 
     public void ReleaseHeldMovementKeys(string reason)
     {
+        CancelDragonsNeckCentering();
         ReleaseHyperFocus(reason);
         InterruptCardinalHold(reason);
         var hadNudge = treasureDoorNudgeTargetKey != null || treasureDoorNudgeUntilUtc != DateTime.MinValue;
@@ -938,6 +942,8 @@ public sealed partial class ExecutionService
         bool sessionDebugEnabled = false)
     {
         RefreshCrystalTowerLifetime(context, pluginEnabled);
+        if (!CanCenterInDragonsNeck(context, pluginEnabled))
+            CancelDragonsNeckCentering();
         if (ReleaseDisallowedActivityOwnership(context))
             return;
         if (RefreshCutsceneHold(context, pluginEnabled))
@@ -950,6 +956,8 @@ public sealed partial class ExecutionService
         }
         if (RefreshInteractionActionHold(context, pluginEnabled,
                 interactionAttemptDispatched && IsNativeInteractionActive(context), TimerUtcNow))
+            return;
+        if (TryHandleDragonsNeckCombat(context, pluginEnabled))
             return;
         currentDialogAutomationStatus = dialogAutomationStatus;
         UpdateDebugRuleCommand(context, planner, pluginEnabled, sessionDebugEnabled);
@@ -6473,8 +6481,55 @@ public sealed partial class ExecutionService
         log?.Information($"[ADS][HLAUTO] hlauto duty-exit-hold mode=leaving lastActivityAge={lastActivityAge}s");
     }
 
+    private bool CanCenterInDragonsNeck(DutyContextSnapshot context, bool pluginEnabled)
+        => pluginEnabled && context.PluginEnabled && IsActiveOwnedDutyMode()
+            && context.IsLoggedIn && context.InInstancedDuty && context.InCombat
+            && context.ContentFinderConditionId == 81 && context.TerritoryTypeId == 142
+            && !context.IsUnsafeTransition && !context.IsCutscene && !context.IsInteractionOccupied;
+
+    private bool TryHandleDragonsNeckCombat(DutyContextSnapshot context, bool pluginEnabled)
+    {
+        if (!CanCenterInDragonsNeck(context, pluginEnabled)
+            || objectTable.LocalPlayer is not { IsDead: false })
+        {
+            CancelDragonsNeckCentering();
+            return false;
+        }
+
+        if (!dragonsNeckCentering)
+        {
+            StopMovementAssists();
+            ReleaseHyperFocus("Dragon's Neck center movement");
+            dragonsNeckCentering = true;
+        }
+        var now = TimerUtcNow;
+        if (now >= nextDragonsNeckCenterUtc)
+        {
+            // Keep the independent rotation provider running. BossMod AI must
+            // yield movement instead of dodging away from the arena center.
+            foreach (var provider in new[] { "/bmrai", "/vbmai" })
+                if (commandManager.Commands.ContainsKey(provider))
+                    TrySendCommand($"{provider} off");
+            TryBeginNavigation(0, new Vector3(-258.08f, 19.07f, 18.11f));
+            nextDragonsNeckCenterUtc = now.AddSeconds(8);
+        }
+        SetPhase(ExecutionPhase.CombatHold,
+            "Dragon's Neck: BossMod AI off; return to the arena center every 8 seconds until combat ends.");
+        return true;
+    }
+
+    private void CancelDragonsNeckCentering()
+    {
+        if (!dragonsNeckCentering)
+            return;
+        StopNavigationIfNeeded();
+        dragonsNeckCentering = false;
+        nextDragonsNeckCenterUtc = DateTime.MinValue;
+    }
+
     private void StopMovementAssists(bool preserveTreasureFollowerDoorFollowThrough = false)
     {
+        CancelDragonsNeckCentering();
         cardinalHoldInputService.Release("movement assists stopped");
         StopNavigationIfNeeded();
         ResetRecoveryNavigationProgress();

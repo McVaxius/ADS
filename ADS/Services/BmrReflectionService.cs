@@ -580,13 +580,13 @@ public sealed class BmrReflectionService : IDisposable
                 : DefaultFallbackMaxLoadDistance;
             resetValue = Math.Clamp(resetValue, 0.1f, DefaultFallbackMaxLoadDistance);
 
-            var changed = SetMaxLoadDistance(context.Config, resetValue);
+            var changed = SetMaxLoadDistance(context.Config, resetValue, out var notified);
             if (clearMaxLoadDistanceDesiredAfterRestore)
                 configuration.ReflectionMaxLoadDistanceMinimized = false;
             configuration.ReflectionHasOriginalMaxLoadDistance = false;
             configuration.ReflectionOriginalMaxLoadDistance = DefaultFallbackMaxLoadDistance;
             configuration.Save();
-            if (changed)
+            if (changed && !notified)
                 FireConfigModified(context.Config);
 
             return new MaxLoadDistanceApplyResult(
@@ -615,8 +615,8 @@ public sealed class BmrReflectionService : IDisposable
             configuration.Save();
         }
 
-        var minimizedChanged = SetMaxLoadDistance(context.Config, minimizedValue);
-        if (minimizedChanged)
+        var minimizedChanged = SetMaxLoadDistance(context.Config, minimizedValue, out var minimizedNotified);
+        if (minimizedChanged && !minimizedNotified)
             FireConfigModified(context.Config);
 
         return new MaxLoadDistanceApplyResult(
@@ -719,16 +719,38 @@ public sealed class BmrReflectionService : IDisposable
                || string.Equals(groupType, "Hunt", StringComparison.Ordinal);
     }
 
-    private bool SetMaxLoadDistance(object config, float value)
+    private bool SetMaxLoadDistance(object config, float value, out bool notified)
     {
+        notified = false;
         if (TryGetFloatMember(config, "MaxLoadDistance", out var current) && Math.Abs(current - value) < 0.001f)
             return false;
 
+        var applied = ApplyMaxLoadDistanceViaIpc(pluginInterface, config, value);
+        if (applied == false)
+            throw new InvalidOperationException("BMR MaxLoadDistance configuration IPC failed or its live readback did not match.");
+        if (applied == true)
+        {
+            notified = true;
+            return true;
+        }
         if (TrySetMember(config, "MaxLoadDistance", value))
             return true;
 
         lastAction = "BMR MaxLoadDistance member not writable.";
         return false;
+    }
+
+    internal static bool? ApplyMaxLoadDistanceViaIpc(IDalamudPluginInterface ipc, object config, float value)
+    {
+        var loaded = ipc.InstalledPlugins.Where(p => p.IsLoaded && p.InternalName is "BossMod" or "BossModReborn").ToArray();
+        if (loaded.Length != 1 || loaded[0].InternalName != "BossModReborn")
+            return null;
+        var call = ipc.GetIpcSubscriber<List<string>, bool, List<string>>("BossMod.Configuration");
+        if (!call.HasFunction)
+            return null;
+        var result = call.InvokeFunc([config.GetType().Name, "MaxLoadDistance", value.ToString("R", CultureInfo.InvariantCulture)], true);
+        return result is { Count: 0 } && TryGetFloatMember(config, "MaxLoadDistance", out var readback)
+            && Math.Abs(readback - value) < 0.001f;
     }
 
     private void FireConfigModified(object config)

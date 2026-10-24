@@ -14,6 +14,7 @@ public sealed class Configuration : IPluginConfiguration
     public uint UiAccentRgb { get; set; } = Windows.AdsPresentation.ReferenceAccent;
     public AethertekUI.MaterialColorSettings UiColors { get; set; } = new();
     public bool UiCompact { get; set; } = true;
+    public bool UiLcarsSoundsMuted { get; set; } = true;
     public bool UiShowTitlebarStatus { get; set; } = true;
     public bool UiDetailedTitlebarStatus { get; set; } = true;
     public bool UiCompactVisibleOnMainWindow { get; set; }

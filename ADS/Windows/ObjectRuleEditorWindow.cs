@@ -161,7 +161,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
         DrawToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.Rules, ref guideOfferRequested, ref guideOfferVisible, plugin.OpenRuleGuideUi);
         EnsureDraftLoaded();

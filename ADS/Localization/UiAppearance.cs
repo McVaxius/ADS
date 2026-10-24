@@ -20,6 +20,9 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
     private MaterialColorSettings? appliedColors;
     private MaterialColorSettings? appliedSavedColors;
     private bool fontErrorLogged;
+    private MaterialUiSoundPlayer? uiSoundPlayer;
+    private bool appliedSoundsMuted = true;
+    private readonly Dictionary<Dalamud.Interface.Windowing.Window, Dalamud.Interface.Windowing.TitleBarButton> soundTitleButtons = new();
 
     internal void Draw()
     {
@@ -38,10 +41,17 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
             appliedAccent = plugin.Configuration.UiAccentRgb & 0xFFFFFF;
             appliedColors = colorDraft;
             theme = AdsPresentation.Theme(appliedAccent, colorDraft);
+            theme.Feedback = PlayLcarsSound;
+            if (!theme.IsLcars) uiSoundPlayer?.Stop();
             var rgb = AdsPresentation.Rgb(appliedAccent);
             accentDraft = new(rgb.X, rgb.Y, rgb.Z);
         }
         theme.Density = plugin.Configuration.UiCompact ? MaterialDensity.Compact : MaterialDensity.Standard;
+        if (appliedSoundsMuted != plugin.Configuration.UiLcarsSoundsMuted)
+        {
+            appliedSoundsMuted = plugin.Configuration.UiLcarsSoundsMuted;
+            if (appliedSoundsMuted) uiSoundPlayer?.Stop();
+        }
         if (!plugin.Fonts.Prepare(Ui.Language, shapedText.Renderer))
         {
             if (!fontErrorLogged && plugin.Fonts.LoadException is { } error)
@@ -56,6 +66,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                 if (ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize))
                 {
                     fontStatusDecorations.Paint();
+                    if (theme.IsLcars) MaterialLcars.Header("ADS");
                     var failed = plugin.Fonts.LoadException is not null;
                     ImGui.TextWrapped(Ui.Language == UiLanguage.Hindi && failed ? "Hindi UI fonts are unavailable. Use English to continue."
                         : failed ? "UI fonts failed to load. See the plugin log." : "Loading UI fonts...");
@@ -84,6 +95,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
         using var body = plugin.Fonts.Push(UiFontRole.Body);
         using var chrome = MaterialWindowChrome.Push();
+        using var nativeButtons = MaterialLcars.NativeButtonStyle();
         PrepareAppearanceTitleBars(plugin.WindowSystem);
         plugin.WindowSystem.Draw();
         foreach (var titlebar in appearanceTitleBars.Values) titlebar.DrawPopups();
@@ -233,6 +245,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                 MaterialText.Text(Ui.T("Compact mode"));
                 DrawSelector(false);
             }, DrawMainWindowControls, DrawNormalOpacity, DrawUnfocusedOpacity);
+        DrawLcarsSounds();
     }
 
     private void DrawMainWindowControls()
@@ -270,6 +283,21 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                             plugin.Configuration.UiTransparencyVisibleOnMainWindow, true)
                         : new(true, true, true, true)));
             appearanceTitleBars[window].RefreshVisibility();
+            appearanceTitleBars[window].SetLcarsIcons(MaterialTheme.Current.IsLcars);
+            if (!soundTitleButtons.TryGetValue(window, out var sound))
+            {
+                sound = new()
+                {
+                    Priority = (int)Math.Max(int.MinValue + 1L, window.TitleBarButtons.Select(static button => (long)button.Priority).DefaultIfEmpty(0).Min() - 1),
+                    IconOffset = new(2, 1),
+                    Click = mouse => { if (mouse == ImGuiMouseButton.Left && LcarsActive) SetLcarsSounds(plugin.Configuration.UiLcarsSoundsMuted); },
+                    ShowTooltip = () => MaterialText.SetTooltip(Ui.T(plugin.Configuration.UiLcarsSoundsMuted ? "UI sounds muted" : "UI sounds on")),
+                };
+                soundTitleButtons.Add(window, sound);
+            }
+            sound.Icon = plugin.Configuration.UiLcarsSoundsMuted ? Dalamud.Interface.FontAwesomeIcon.VolumeMute : Dalamud.Interface.FontAwesomeIcon.VolumeUp;
+            if (MaterialTheme.Current.IsLcars && !window.TitleBarButtons.Contains(sound)) window.TitleBarButtons.Add(sound);
+            else if (!MaterialTheme.Current.IsLcars) window.TitleBarButtons.Remove(sound);
         }
     }
 
@@ -286,10 +314,12 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
             new(Ui.T("Auto"), Ui.T("Picker"), Ui.T("Default"), Ui.T("Background, controls and text follow your theme."),
                 Ui.T("Theme colour"), Ui.T("Choose each colour independently."), Ui.T("Background"), Ui.T("Controls"),
                 Ui.T("Text"), Ui.T("Aa  Preview text"), Ui.T("Control"),
-                Ui.T("Switch to Picker to set each colour yourself."), Ui.T("Switch back to Auto to use the automatic theme.")),
+                Ui.T("Switch to Picker to set each colour yourself."), Ui.T("Switch back to Auto to use the automatic theme."))
+            { Lcars = Ui.T("LCARS"), LcarsHelp = Ui.T("LCARS panels, bars and controls") },
             plugin.Configuration.UiCompact ? 298 : 316);
         if (!changed) return false;
         plugin.Configuration.UiColors = colorDraft;
+        if (!LcarsActive) uiSoundPlayer?.Stop();
         plugin.Configuration.UiAccentRgb = MaterialColorSettings.ToRgb(accentDraft);
         return true;
     }
@@ -334,5 +364,75 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         finally { ImGui.EndDisabled(); }
     }
 
-    public void Dispose() => shapedText?.Dispose();
+    private bool LcarsActive => plugin.Configuration.UiColors?.Mode == MaterialColorMode.Lcars;
+
+    private void PlayLcarsSound(MaterialUiSoundCue cue)
+    {
+        if (!LcarsActive || plugin.Configuration.UiLcarsSoundsMuted) return;
+        (uiSoundPlayer ??= new MaterialUiSoundPlayer()).TryPlay(cue);
+    }
+
+    private void SetLcarsSounds(bool enabled)
+    {
+        plugin.Configuration.UiLcarsSoundsMuted = !enabled;
+        if (!enabled) uiSoundPlayer?.Stop();
+        plugin.SaveConfiguration();
+    }
+
+    private void DrawLcarsSounds()
+    {
+        MaterialSettings.Section(Ui.T("LCARS UI sounds"));
+        ImGui.BeginDisabled(!LcarsActive);
+        try
+        {
+            var enabled = !plugin.Configuration.UiLcarsSoundsMuted;
+            if (WindowLayout.Checkbox("UI sounds", ref enabled)) SetLcarsSounds(enabled);
+            MaterialText.TextWrapped(Ui.T("Custom UI tones. The titlebar speaker toggles the same setting."));
+            ImGui.BeginDisabled(plugin.Configuration.UiLcarsSoundsMuted);
+            try
+            {
+                var current = MaterialTheme.Current;
+                var feedback = current.Feedback;
+                bool preview;
+                try { current.Feedback = null; preview = WindowLayout.Button(Ui.L("Preview sound")); }
+                finally { current.Feedback = feedback; }
+                MaterialLcars.Feedback(preview, MaterialUiSoundCue.Preview);
+            }
+            finally { ImGui.EndDisabled(); }
+            if (uiSoundPlayer?.Error is not null) MaterialText.TextWrapped(Ui.T("Audio output is unavailable."));
+        }
+        finally { ImGui.EndDisabled(); }
+        if (!LcarsActive) MaterialText.TextDisabled(Ui.T("Select LCARS to use UI sounds."));
+        else if (plugin.Configuration.UiLcarsSoundsMuted) MaterialText.TextDisabled(Ui.T("Turn on UI sounds to preview."));
+    }
+
+    internal void DrawLcarsQuickPreferences()
+    {
+        foreach (var mode in new[] { MaterialColorMode.Auto, MaterialColorMode.Picker, MaterialColorMode.Lcars })
+        {
+            var caption = mode == MaterialColorMode.Lcars ? "LCARS" : mode.ToString();
+            if (mode != MaterialColorMode.Auto) WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.T(caption)).X + ImGui.GetFrameHeight());
+            if (WindowLayout.RadioButton(Ui.L(caption + "##MainColour"), plugin.Configuration.UiColors.Mode == mode)
+                && plugin.Configuration.UiColors.Mode != mode)
+            {
+                plugin.Configuration.UiColors = plugin.Configuration.UiColors with { Mode = mode };
+                if (!LcarsActive) uiSoundPlayer?.Stop();
+                plugin.SaveConfiguration();
+            }
+        }
+        WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(Ui.L("UI sounds")));
+        ImGui.BeginDisabled(!LcarsActive);
+        try
+        {
+            var enabled = !plugin.Configuration.UiLcarsSoundsMuted;
+            if (WindowLayout.Checkbox("UI sounds", ref enabled)) SetLcarsSounds(enabled);
+        }
+        finally { ImGui.EndDisabled(); }
+    }
+
+    public void Dispose()
+    {
+        uiSoundPlayer?.Dispose();
+        shapedText?.Dispose();
+    }
 }

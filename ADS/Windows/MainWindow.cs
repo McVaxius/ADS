@@ -90,10 +90,11 @@ public sealed class MainWindow : PositionedWindow, IDisposable
 
     public override void Draw()
     {
-        windowMotion.DrawChrome();
+        DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
         DrawHeader();
+        if (MaterialTheme.Current.IsLcars) plugin.Appearance.DrawLcarsQuickPreferences();
         ImGui.Spacing();
         DrawActionRow();
         ImGui.Spacing();
@@ -354,7 +355,11 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 ImGui.TableSetColumnIndex(0);
                 AdsPresentation.Panel(() =>
                 {
-                    using (plugin.Fonts.Push(UiFontRole.BodyStrong)) MaterialText.Text(title);
+                    using (plugin.Fonts.Push(UiFontRole.BodyStrong))
+                    {
+                        if (MaterialTheme.Current.IsLcars) MaterialLcars.PanelHeading(title, icon == MaterialIcon.Warning ? 3 : 1);
+                        else MaterialText.Text(title);
+                    }
                     if (ImGui.IsItemHovered()) MaterialText.SetTooltip(description);
                     ImGui.Dummy(new Vector2(0, AdsPresentation.Compact ? 4 : 8) * MaterialTheme.Metrics.Scale);
                     ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(8f, AdsPresentation.Compact ? 2 : 4) * ImGuiHelpers.GlobalScale);
