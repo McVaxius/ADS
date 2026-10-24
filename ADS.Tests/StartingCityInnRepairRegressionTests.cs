@@ -1159,6 +1159,37 @@ public sealed class StartingCityInnRepairRegressionTests
         }
     }
 
+    [Theory]
+    [InlineData("shop")]
+    [InlineData("selection")]
+    [InlineData("confirmation")]
+    [InlineData("talk")]
+    public void NpcRepairLeavesAlreadyOpenNpcUiUntouched(string ui)
+    {
+        using var fixture = new NpcSaleFixture(repair: true) { BlockingUi = ui };
+        Assert.False(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains("left it untouched", fixture.Service.LastFailureMessage);
+        Assert.Equal(0, fixture.TargetChanges);
+        Assert.Equal(ui, fixture.BlockingUi);
+        Assert.All(fixture.Commands, command => Assert.Equal("/vnav stop", command));
+    }
+
+    [Fact]
+    public void FailedRepairInteractionDoesNotOwnALaterNpcMenu()
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        // The synthetic NPC has no native object, so setting the target cannot open its menu.
+        Assert.Equal(1, fixture.TargetChanges);
+        Assert.NotEqual(DateTime.MinValue, Get(fixture.Service, "lastInteractUtc"));
+        Assert.Equal(0UL, Get(fixture.Service, "npcRepairUiCharacter"));
+        Invoke(fixture.Service, "TrySelectRepairMenuOption", DateTime.UtcNow);
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains("did not open", fixture.Service.LastFailureMessage);
+        Assert.Equal(DateTime.MinValue, Get(fixture.Service, "lastMenuSelectionUtc"));
+    }
+
     [Fact]
     public void NpcSaleApproachStopsOnlyOwnedNavigationAndSettlesBeforeDispatch()
     {

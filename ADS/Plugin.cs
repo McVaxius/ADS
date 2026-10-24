@@ -3458,6 +3458,10 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService.ObserveDebugReturnTerritory(territoryType);
         pendingRemoteJsonOwnedDutyRestart?.ObserveTerritory(territoryType);
         QstCompanionWarningService.HandleTerritoryChanged();
+        if (Configuration.PluginEnabled
+            && (DutyCatalogService.ResolveCurrentDuty(0, territoryType)?.Category == DutyCategory.TreasureDungeon
+                || TreasureDungeonData.IsSupportedDutyTerritory(territoryType)))
+            ToastGui.ShowNormal(Ui.T("ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available."));
     }
 
     private void OnDutyCompleted(uint territoryId)

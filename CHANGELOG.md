@@ -1,3 +1,15 @@
+2026-10-24 - Resolve the live NPC repair service (I649)
+
+- Select the unique repair handler from the NPC's current event menu instead of guessing visible rows from sheet indexes or falling back to row zero. Stop clearly when repair cannot be identified.
+- Back out of an ADS-opened purchase menu for the exact repair NPC and continue the original repair. Verify accepted interaction, current character and native NPC ownership; leave unrelated/manual UI untouched and preserve intentional shopping/selling.
+- Preserve existing repair completion checks, travel, version 2.0.0.3 and retry cadence. Debug/x64 compilation passed with two existing warnings; all 453 focused repair, shop, catalog, treasure-duty, enable-compatibility and warning checks passed, including fourteen native cancellation cases. In-game acceptance remains pending.
+
+2026-10-24 - Treasure-dungeon strafe binding reminder (I645)
+
+- Show a normal floating-text reminder on treasure-dungeon territory entry advising the default Strafe Left/Right bindings. Explicitly describe it as a stopgap until better navigation is available.
+- Reuse the existing territory event, duty catalog and supported-territory data, with translations in all sixteen catalogs. Preserve existing navigation, ownership and enable-compatibility behavior.
+- Validation: Debug/x64 plugin compilation passed with two existing obsolete-distance warnings; all 55 focused catalog, treasure-duty, enable-compatibility and existing warning-service checks passed. XML validation passed for all sixteen catalogs. Native dungeon-entry verification remains pending; version stays 2.0.0.3.
+
 2026-10-23 - Approved LCARS appearance
 
 - Add LCARS to the existing Auto/Picker editor, with segmented window rails, framed panels, outlined retained actions and readable selected Settings navigation. Preserve duty ownership, tool behavior, native IDs and all sixteen languages, including Traditional Chinese.

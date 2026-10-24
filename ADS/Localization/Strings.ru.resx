@@ -4626,4 +4626,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>Аудиовыход недоступен.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>Звуки интерфейса отключены</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Звуки интерфейса включены</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: В подземельях сокровищ используйте стандартные привязки бокового шага влево/вправо (Strafe Left/Right), чтобы не застревать. Это временная мера до появления улучшенной навигации.</value></data>
 </root>

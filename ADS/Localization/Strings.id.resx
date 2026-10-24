@@ -4268,4 +4268,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>Keluaran audio tidak tersedia.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>Suara antarmuka dibisukan</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Suara antarmuka aktif</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: Di dungeon harta karun, gunakan tombol bawaan untuk bergerak menyamping ke kiri/kanan (Strafe Left/Right) agar tidak tersangkut. Ini langkah sementara sampai navigasi yang lebih baik tersedia.</value></data>
 </root>

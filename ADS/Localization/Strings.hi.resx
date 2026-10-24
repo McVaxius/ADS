@@ -4252,4 +4252,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>ऑडियो आउटपुट उपलब्ध नहीं है।</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>इंटरफ़ेस ध्वनियाँ मूक हैं</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>इंटरफ़ेस ध्वनियाँ चालू हैं</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: खज़ाने की कालकोठरियों में फँसने से बचने के लिए बाएँ/दाएँ पार्श्व चाल (Strafe Left/Right) की डिफ़ॉल्ट कुंजी-बाइंडिंग इस्तेमाल करें। बेहतर नेविगेशन उपलब्ध होने तक यह एक अस्थायी उपाय है।</value></data>
 </root>

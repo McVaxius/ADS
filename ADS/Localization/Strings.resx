@@ -11696,4 +11696,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>Audio output is unavailable.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>UI sounds muted</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>UI sounds on</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available.</value></data>
 </root>

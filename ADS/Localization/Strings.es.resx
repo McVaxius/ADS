@@ -11696,4 +11696,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>La salida de audio no está disponible.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>Sonidos de interfaz silenciados</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Sonidos de interfaz activados</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: En las mazmorras del tesoro, usa las teclas predeterminadas de desplazamiento lateral izquierdo/derecho (Strafe Left/Right) para evitar quedarte atascado. Es una solución provisional hasta disponer de una mejor navegación.</value></data>
 </root>

@@ -11696,4 +11696,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>音訊輸出無法使用。</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>介面音效已靜音</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>介面音效已開啟</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS：進入藏寶副本時，請使用左右平移（Strafe Left/Right）的預設按鍵綁定，以免卡住。這只是暫時措施，直到提供更好的導航。</value></data>
 </root>

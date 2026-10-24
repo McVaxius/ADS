@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using ADS.Models;
 using ADS.Services;
+using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ADS.Tests;
@@ -16,6 +18,49 @@ public sealed class ShopReliabilityExpansionTests
         public int Calls;
         public int Parameter;
         public bool ValidEventData;
+    }
+
+    private struct ShopCancellationState
+    {
+        public int DispatchCount;
+        public int CancelOrder;
+        public int ResponseOrder;
+        public bool EventActive;
+        public bool ValidResponse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct ShopCancellationHandler
+    {
+        public ShopEventHandler Handler;
+        public ShopCancellationState* State;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct ShopCancellationAgent
+    {
+        public AgentShop Agent;
+        public ShopCancellationState* State;
+    }
+
+    [UnmanagedCallersOnly]
+    private static unsafe void CancelShopInteraction(ShopEventHandler* handler)
+    {
+        var state = ((ShopCancellationHandler*)handler)->State;
+        state->CancelOrder = ++state->DispatchCount;
+    }
+
+    [UnmanagedCallersOnly]
+    private static unsafe AtkValue* ReceiveShopCancellation(AgentShop* agent, AtkValue* result,
+        AtkValue* values, uint count, ulong kind)
+    {
+        var state = ((ShopCancellationAgent*)agent)->State;
+        state->ResponseOrder = ++state->DispatchCount;
+        state->ValidResponse = values != null && count == 1 && kind == 0
+            && values->Type == AtkValueType.Int && values->Int == -1;
+        if (state->CancelOrder == 1 && state->ResponseOrder == 2 && state->ValidResponse)
+            state->EventActive = false;
+        return result;
     }
 
     [UnmanagedCallersOnly]
@@ -51,6 +96,69 @@ public sealed class ShopReliabilityExpansionTests
         Assert.False(GameInteractionHelper.TryDispatchRegisteredClick(&click));
         Assert.False(GameInteractionHelper.TryDispatchRegisteredClick(null));
         Assert.Equal(1, receiver.Calls);
+    }
+
+    [Theory]
+    [InlineData("ready", true)]
+    [InlineData("missing-addon", false)]
+    [InlineData("hidden-addon", false)]
+    [InlineData("unready-addon", false)]
+    [InlineData("missing-agent", false)]
+    [InlineData("missing-proxy", false)]
+    [InlineData("missing-handler", false)]
+    [InlineData("wrong-addon", false)]
+    [InlineData("wrong-receiver", false)]
+    [InlineData("starting-buy", false)]
+    [InlineData("starting-sell", false)]
+    [InlineData("sale-confirmation", false)]
+    [InlineData("transaction-pending", false)]
+    [InlineData("unexpected-confirmation", false)]
+    public unsafe void GilShopCancellationFinishesTheOwnedEventThroughHandlerThenAgent(string scenario, bool accepted)
+    {
+        var state = new ShopCancellationState { EventActive = true };
+        var handlerVtable = new ShopEventHandler.ShopEventHandlerVirtualTable { CancelInteraction = &CancelShopInteraction };
+        var agentVtable = new AgentShop.AgentShopVirtualTable { ReceiveEvent = &ReceiveShopCancellation };
+        var handler = new ShopCancellationHandler
+        {
+            Handler = new ShopEventHandler { VirtualTable = &handlerVtable }, State = &state,
+        };
+        var agent = new ShopCancellationAgent
+        {
+            Agent = new AgentShop { VirtualTable = &agentVtable }, State = &state,
+        };
+        var addon = new AtkUnitBase { Id = 77, IsVisible = true, Flags1A1 = 1 }; // OnSetup completed.
+        var proxy = new ShopEventHandler.AgentProxy { Handler = &handler.Handler, AddonId = addon.Id };
+        agent.Agent.EventReceiver = (AtkModuleInterface.AtkEventInterface*)&proxy;
+        AtkUnitBase* addonPointer = &addon;
+        AgentShop* agentPointer = &agent.Agent;
+        ShopEventHandler.AgentProxy* proxyPointer = &proxy;
+        var unexpectedConfirmation = false;
+        switch (scenario)
+        {
+            case "ready": break;
+            case "missing-addon": addonPointer = null; break;
+            case "hidden-addon": addon.IsVisible = false; break;
+            case "unready-addon": addon.Flags1A1 = 0; break;
+            case "missing-agent": agentPointer = null; break;
+            case "missing-proxy": proxyPointer = null; break;
+            case "missing-handler": proxy.Handler = null; break;
+            case "wrong-addon": proxy.AddonId++; break;
+            case "wrong-receiver": agent.Agent.EventReceiver = null; break;
+            case "starting-buy": handler.Handler.StartingBuy = true; break;
+            case "starting-sell": handler.Handler.StartingSell = true; break;
+            case "sale-confirmation": handler.Handler.WaitingForSellConfirm = true; break;
+            case "transaction-pending": handler.Handler.WaitingForTransactionToFinish = true; break;
+            case "unexpected-confirmation": unexpectedConfirmation = true; break;
+            default: throw new ArgumentOutOfRangeException(nameof(scenario));
+        }
+
+        Assert.Equal(accepted, DalamudShopPurchaseRuntime.TryCancelGilShop(
+            addonPointer, agentPointer, proxyPointer, unexpectedConfirmation));
+        Assert.Equal(accepted ? 2 : 0, state.DispatchCount);
+        Assert.Equal(accepted ? 1 : 0, state.CancelOrder);
+        Assert.Equal(accepted ? 2 : 0, state.ResponseOrder);
+        Assert.Equal(accepted, state.ValidResponse);
+        Assert.Equal(!accepted, state.EventActive);
     }
 
     [Fact]
@@ -92,6 +200,24 @@ public sealed class ShopReliabilityExpansionTests
         Assert.Contains("sheet index 3", firstDiagnostic, StringComparison.Ordinal);
         Assert.True(nestedAccepted);
         Assert.Equal(4, nestedCallback);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 0)]
+    [InlineData(3, 2)]
+    public void RepairMenuResolutionUsesTheLiveRepairHandlerInsteadOfTheSheetRow(int sheetIndex, int repairSlot)
+    {
+        var options = new ShopRuntimeMenuOption[] { new(262_145, 10, 3), new(262_146, 20, 4), new(262_147, 30, 5) };
+        options[repairSlot] = new(720_915, 99, 7);
+        Assert.True(ShopMenuRouteResolver.TryResolveSelectorIndex(10, 10,
+            new(ShopMenuPathStepKind.ENpcData, sheetIndex, 720_915), options, out var index, out _));
+        Assert.Equal(repairSlot, index);
+
+        options[repairSlot] = new(262_148, 99, 7);
+        Assert.False(ShopMenuRouteResolver.TryResolveSelectorIndex(10, 10,
+            new(ShopMenuPathStepKind.ENpcData, sheetIndex, 720_915), options, out index, out _));
+        Assert.Equal(-1, index);
     }
 
     [Fact]

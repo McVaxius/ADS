@@ -4268,4 +4268,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>Không có đầu ra âm thanh.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>Âm thanh giao diện đã tắt</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Âm thanh giao diện đang bật</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: Trong hầm ngục kho báu, hãy dùng phím mặc định để di chuyển ngang trái/phải (Strafe Left/Right) nhằm tránh bị kẹt. Đây là biện pháp tạm thời cho đến khi có khả năng tìm đường tốt hơn.</value></data>
 </root>

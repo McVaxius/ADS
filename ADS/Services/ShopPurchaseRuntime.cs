@@ -1781,34 +1781,45 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         ContinueRelicUiCleanup();
     }
 
-    private void CloseShopAddon(string name)
+    internal bool CloseShopAddon(string name)
     {
         var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(name);
         if (addon == null || !addon->IsVisible)
-            return;
+            return false;
         if (name == "Shop")
         {
             var agent = AgentShop.Instance();
             var proxy = ShopEventHandler.AgentProxy.Instance();
-            if (!addon->IsReady || agent == null || proxy == null || proxy->Handler == null
-                || proxy->AddonId != addon->Id || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
-                return;
-            var handler = proxy->Handler;
-            if (handler->StartingBuy || handler->StartingSell || handler->WaitingForSellConfirm
-                || handler->WaitingForTransactionToFinish || HasUnexpectedConfirmation)
-                return;
-            // Regular gil shops finish their NPC event through the handler and
-            // agent, as in VERMAXION. An addon callback alone can leave it active.
-            handler->CancelInteraction();
-            AtkValue result = default, cancel = default;
-            cancel.SetInt(-1);
-            agent->ReceiveEvent(&result, &cancel, 1, 0);
+            if (!TryCancelGilShop(addon, agent, proxy, HasUnexpectedConfirmation))
+                return false;
             log.Debug("[ADS][Shop] Dispatched native gil shop cancellation.");
-            return;
+            return true;
         }
         // Send the shop's cancel response; Close(true) can leave its NPC event active.
-        GameInteractionHelper.TryFireAddonCallback(name, true, -1);
+        if (!GameInteractionHelper.TryFireAddonCallback(name, true, -1))
+            return false;
         log.Debug("[ADS][Shop] Dispatched shop cancel callback for {Addon}.", name);
+        return true;
+    }
+
+    internal static bool TryCancelGilShop(AtkUnitBase* addon, AgentShop* agent,
+        ShopEventHandler.AgentProxy* proxy, bool unexpectedConfirmation)
+    {
+        if (addon == null || !addon->IsVisible || !addon->IsReady || agent == null || proxy == null
+            || proxy->Handler == null || proxy->AddonId != addon->Id
+            || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy)
+            return false;
+        var handler = proxy->Handler;
+        if (handler->StartingBuy || handler->StartingSell || handler->WaitingForSellConfirm
+            || handler->WaitingForTransactionToFinish || unexpectedConfirmation)
+            return false;
+        // Regular gil shops finish their NPC event through the handler and
+        // agent, as in VERMAXION. An addon callback alone can leave it active.
+        handler->CancelInteraction();
+        AtkValue result = default, cancel = default;
+        cancel.SetInt(-1);
+        agent->ReceiveEvent(&result, &cancel, 1, 0);
+        return true;
     }
 
     private static bool TryGetSelectYesNoExchangeItemId(out uint itemId)

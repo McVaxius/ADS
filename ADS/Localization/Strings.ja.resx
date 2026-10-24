@@ -11696,4 +11696,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>音声出力を利用できません。</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>操作音はミュート中</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>操作音はオン</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: 宝物庫で動けなくなるのを防ぐため、左右ストレイフ（Strafe Left/Right）のキーバインドを初期設定にしてください。より良いナビゲーションが利用できるまでの暫定対策です。</value></data>
 </root>

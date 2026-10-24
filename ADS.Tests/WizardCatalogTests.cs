@@ -61,14 +61,15 @@ public sealed class WizardCatalogTests
     }
 
     [Fact]
-    public void AllSixteenCompiledCatalogsContainTheColourEditorLabels()
+    public void AllSixteenCompiledCatalogsContainAppearanceAndNoticeLabels()
     {
         string[] keys = ["Auto", "Picker", "Default", "Background, controls and text follow your theme.", "Theme colour",
             "Choose each colour independently.", "Background", "Controls", "Text", "Aa  Preview text", "Control",
             "Switch to Picker to set each colour yourself.", "Switch back to Auto to use the automatic theme.",
             "LCARS", "LCARS panels, bars and controls", "LCARS UI sounds", "UI sounds", "Preview sound",
             "Custom UI tones. The titlebar speaker toggles the same setting.", "Select LCARS to use UI sounds.",
-            "Turn on UI sounds to preview.", "Audio output is unavailable.", "UI sounds muted", "UI sounds on"];
+            "Turn on UI sounds to preview.", "Audio output is unavailable.", "UI sounds muted", "UI sounds on",
+            "ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available."];
         var previous = Ui.Language;
         try
         {

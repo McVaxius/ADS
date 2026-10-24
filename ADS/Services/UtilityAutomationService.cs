@@ -9,6 +9,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -295,7 +296,7 @@ public sealed unsafe class UtilityAutomationService
     private uint targetNpcBaseId;
     private string targetNpcName = string.Empty;
     private int targetNpcRepairIndex;
-    private bool npcRepairFallbackToFirstOption;
+    private ulong npcRepairUiCharacter;
     private NpcRepairTravelStage npcRepairTravelStage = NpcRepairTravelStage.None;
     private DateTime npcRepairTravelStageStartedUtc = DateTime.MinValue;
     private DateTime npcRepairTravelCommandUtc = DateTime.MinValue;
@@ -2021,13 +2022,59 @@ public sealed unsafe class UtilityAutomationService
             }
         }
 
+        var now = DateTime.UtcNow;
+        if (!npcSaleRequest && (shopRuntime.IsAnyShopVisible || shopRuntime.IsSelectionMenuVisible
+                || GameInteractionHelper.IsAddonVisible("Repair") || GameInteractionHelper.IsAddonVisible("SelectYesno"))
+            && !OwnsNpcRepairInteraction())
+        {
+            Fail("Unowned NPC UI appeared during repair; ADS did not interact with it.");
+            return;
+        }
+
+        if (!npcSaleRequest && GameInteractionHelper.IsAddonVisible("Shop"))
+        {
+            var shopAddon = GetVisibleAddon<AtkUnitBase>("Shop");
+            var proxy = ShopEventHandler.AgentProxy.Instance();
+            var agent = AgentShop.Instance();
+            var npc = proxy == null || proxy->Handler == null ? null : proxy->Handler->EventHandler.EventGameObject;
+            if (shopAddon == null || agent == null || proxy == null || proxy->AddonId != shopAddon->Id
+                || agent->EventReceiver != (AtkModuleInterface.AtkEventInterface*)proxy
+                || npc == null || !OwnsNpcRepairNpc((ulong)npc->GetGameObjectId(), npc->BaseId))
+            {
+                Fail("The purchase menu does not belong to ADS's repair NPC; ADS left it untouched.");
+                return;
+            }
+
+            if (!shopAddon->IsReady || now - lastActionUtc < UiRetryCooldown)
+            {
+                StatusMessage = $"Waiting for the owned purchase menu from {targetNpcName} to settle before repair.";
+                return;
+            }
+
+            if (!shopPurchaseRuntime.CloseShopAddon("Shop"))
+            {
+                Fail("ADS could not safely cancel its purchase menu to continue NPC repair.");
+                return;
+            }
+
+            lastActionUtc = now;
+            StatusMessage = $"Backing out of the purchase menu from {targetNpcName}; continuing NPC repair.";
+            return;
+        }
+
+        if (!npcSaleRequest && (GameInteractionHelper.IsAddonVisible("Repair")
+                || GameInteractionHelper.IsAddonVisible("SelectYesno")) && !OwnsNpcRepairWindow())
+        {
+            Fail("The repair window does not belong to ADS's repair NPC; ADS left it untouched.");
+            return;
+        }
+
         if (TryCompleteRepairIfFinished("NPC repair finished; equipped gear is fully repaired."))
             return;
 
         if (!PrepareForUiWork(npcSaleRequest ? "NPC selling" : "NPC repair", allowDismount: false))
             return;
 
-        var now = DateTime.UtcNow;
         if (npcSaleRequest && HasUnownedNpcSaleUi())
         { Fail("Unowned NPC UI appeared before the sale command; ADS did not interact with it."); return; }
         if (GameInteractionHelper.IsAddonVisible("SelectIconString")
@@ -2529,28 +2576,48 @@ public sealed unsafe class UtilityAutomationService
 
     private void TrySelectRepairMenuOption(DateTime now)
     {
+        if (!OwnsNpcRepairInteraction())
+        {
+            Fail("ADS did not open this repair menu; no menu option was selected.");
+            return;
+        }
+        var selector = EventHandlerSelector.Instance();
+        var events = EventFramework.Instance();
+        if (selector == null || selector->Target == null || events == null
+            || !OwnsNpcRepairNpc((ulong)selector->Target->GetGameObjectId(), selector->Target->BaseId)
+            || selector->OptionsCount is < 1 or > 32)
+        {
+            Fail("ADS could not identify its repair NPC's live menu; no menu option was selected.");
+            return;
+        }
+
         if (now - lastMenuSelectionUtc < MenuRetryCooldown)
         {
             StatusMessage = $"Waiting for repair menu retry window on {targetNpcName}.";
             return;
         }
 
-        var optionIndex = npcRepairFallbackToFirstOption ? 0 : Math.Max(0, targetNpcRepairIndex);
-        if (GameInteractionHelper.IsAddonVisible("SelectIconString"))
+        var options = new ShopRuntimeMenuOption[selector->OptionsCount];
+        for (var index = 0; index < options.Length; index++)
         {
-            GameInteractionHelper.FireAddonCallback("SelectIconString", true, optionIndex);
-            lastMenuSelectionUtc = now;
-            StatusMessage = $"Selecting repair option {optionIndex} on {targetNpcName}.";
-        }
-        else if (GameInteractionHelper.IsAddonVisible("SelectString"))
-        {
-            GameInteractionHelper.FireAddonCallback("SelectString", true, optionIndex);
-            lastMenuSelectionUtc = now;
-            StatusMessage = $"Selecting repair menu row {optionIndex} on {targetNpcName}.";
+            var option = selector->Options[index];
+            options[index] = new ShopRuntimeMenuOption(
+                option.Handler == null ? 0 : option.Handler->Info.EventId.Id,
+                option.GlobalIndex, option.LocalIndex);
         }
 
-        if (!npcRepairFallbackToFirstOption && targetNpcRepairIndex != 0)
-            npcRepairFallbackToFirstOption = true;
+        if (!ShopMenuRouteResolver.TryResolveSelectorIndex(targetNpcBaseId, selector->Target->BaseId,
+                new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, targetNpcRepairIndex, RepairShopEventId),
+                options, out var selectorIndex, out var diagnostic))
+        {
+            Fail($"ADS could not identify a unique repair option: {diagnostic}");
+            return;
+        }
+
+        log.Debug("[ADS][Utility] {Diagnostic}", diagnostic);
+        events->InteractWithHandlerFromSelector(selectorIndex);
+        lastMenuSelectionUtc = now;
+        StatusMessage = $"Selecting the verified repair handler on {targetNpcName}.";
     }
 
     private unsafe void ClickRepairAll(AddonRepair* repairAddon)
@@ -2673,8 +2740,22 @@ public sealed unsafe class UtilityAutomationService
 
     private void CloseRepairAddons()
     {
+        if (activeTask == UtilityTask.NpcRepair && !OwnsNpcRepairWindow())
+            return;
         GameInteractionHelper.TryCloseAddon("SelectYesno", log);
         GameInteractionHelper.TryCloseAddon("Repair", log);
+    }
+
+    private void CloseOwnedNpcRepairMenus()
+    {
+        if (!OwnsNpcRepairInteraction() || !shopRuntime.IsSelectionMenuVisible)
+            return;
+        var selector = EventHandlerSelector.Instance();
+        if (selector == null || selector->Target == null
+            || !OwnsNpcRepairNpc((ulong)selector->Target->GetGameObjectId(), selector->Target->BaseId))
+            return;
+        GameInteractionHelper.TryCloseAddon("SelectString", log);
+        GameInteractionHelper.TryCloseAddon("SelectIconString", log);
     }
 
     private void ResetRepairSubmission()
@@ -2691,7 +2772,7 @@ public sealed unsafe class UtilityAutomationService
         targetNpcBaseId = targetNpc.BaseId;
         targetNpcName = targetNpc.Name;
         targetNpcRepairIndex = targetNpc.RepairIndex;
-        npcRepairFallbackToFirstOption = false;
+        npcRepairUiCharacter = 0;
         ResetRepairSubmission();
         if (npcSaleRequest)
             startedAtUtc = DateTime.UtcNow;
@@ -3677,9 +3758,48 @@ public sealed unsafe class UtilityAutomationService
 
     private void TryInteractWithRepairNpc(IGameObject npc)
     {
+        if (HasUnownedNpcSaleUi())
+        {
+            Fail("NPC UI was already open before ADS could interact for repair; ADS left it untouched.");
+            return;
+        }
+
+        npcRepairUiCharacter = 0;
         lastInteractUtc = DateTime.UtcNow;
         if (GameInteractionHelper.TryInteractWithObject(targetManager, npc, log))
+        {
+            npcRepairUiCharacter = Plugin.PlayerState.ContentId;
+            targetNpcGameObjectId = npc.GameObjectId;
             log.Information($"[ADS][Utility] Interacting with repair NPC {targetNpcName}.");
+        }
+    }
+
+    private bool OwnsNpcRepairInteraction()
+        => npcRepairUiCharacter != 0 && clientState.IsLoggedIn
+            && npcRepairUiCharacter == Plugin.PlayerState.ContentId
+            && !condition[ConditionFlag.BetweenAreas] && !condition[ConditionFlag.BetweenAreas51];
+
+    private bool OwnsNpcRepairNpc(ulong npcId, uint npcBaseId)
+        => OwnsNpcRepairInteraction() && targetNpcGameObjectId != 0
+            && targetNpcGameObjectId == npcId && targetNpcBaseId == npcBaseId;
+
+    private bool OwnsNpcRepairWindow()
+    {
+        if (!OwnsNpcRepairInteraction())
+            return false;
+        var repairAddon = GetVisibleAddon<AtkUnitBase>("Repair");
+        var agent = AgentRepair.Instance();
+        if (repairAddon == null || agent == null || agent->AddonId != repairAddon->Id
+            || agent->IsSelfRepairOpen || agent->UseSelfRepair || agent->NpcRepairCallback == null)
+            return false;
+        var confirmation = GetVisibleAddon<AtkUnitBase>("SelectYesno");
+        if (confirmation != null && agent->DialogAddonId != confirmation->Id)
+            return false;
+        var handler = agent->NpcRepairCallback->EventHandler;
+        if (handler == null || handler->Info.EventId.Id != RepairShopEventId)
+            return false;
+        var npc = handler == null ? null : handler->EventGameObject;
+        return npc != null && OwnsNpcRepairNpc((ulong)npc->GetGameObjectId(), npc->BaseId);
     }
 
     private void SendMoveCommand(Vector3 destination, string label, bool initial)
@@ -4270,8 +4390,7 @@ public sealed unsafe class UtilityAutomationService
         {
             StopMovementIfNpcRepair();
             CloseRepairAddons();
-            GameInteractionHelper.TryCloseAddon("SelectString", log);
-            GameInteractionHelper.TryCloseAddon("SelectIconString", log);
+            CloseOwnedNpcRepairMenus();
             SetNpcRepairTravelStage(NpcRepairTravelStage.ReturningToInn, $"{message} Returning to the inn room.");
             return;
         }
@@ -4357,8 +4476,7 @@ public sealed unsafe class UtilityAutomationService
         if (activeTask == UtilityTask.NpcRepair && activeNpcRepairMode == NpcRepairMode.YesInn)
         {
             CloseRepairAddons();
-            GameInteractionHelper.TryCloseAddon("SelectString", log);
-            GameInteractionHelper.TryCloseAddon("SelectIconString", log);
+            CloseOwnedNpcRepairMenus();
         }
         if (npcRepairInnEntryStarted)
             innEntryService?.Cancel("NPC repair ended");
@@ -4382,7 +4500,7 @@ public sealed unsafe class UtilityAutomationService
         targetNpcBaseId = 0;
         targetNpcName = string.Empty;
         targetNpcRepairIndex = 0;
-        npcRepairFallbackToFirstOption = false;
+        npcRepairUiCharacter = 0;
         ClearNpcRepairInnTravel();
         ResetRepairSubmission();
         materializeCategory = 0;

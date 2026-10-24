@@ -4268,4 +4268,5 @@
   <data name="Audio output is unavailable." xml:space="preserve"><value>Ses çıkışı kullanılamıyor.</value></data>
   <data name="UI sounds muted" xml:space="preserve"><value>Arayüz sesleri kapalı</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Arayüz sesleri açık</value></data>
+  <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: Hazine zindanlarında takılmamak için sola/sağa yan hareket (Strafe Left/Right) tuşlarını varsayılan ayarlarında kullanın. Bu, daha iyi gezinme sağlanana kadar geçici bir çözümdür.</value></data>
 </root>
