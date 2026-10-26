@@ -231,7 +231,7 @@ public sealed class HyperFixatedTargetExecutionTests
                 ? new ObservationMemoryService(objectTable,
                     DispatchProxy.Create<IPartyList, TreasureCofferObservationPolicyTests.PartyListProxy>(), log, ruleService)
                 : null;
-            Frontier = new DungeonFrontierService(null!, objectTable, log, ruleService, Memory!);
+            Frontier = new DungeonFrontierService(new CrystalTowerWaveTests.MaplessData(), objectTable, log, ruleService, Memory!);
             var lease = new HyperFocusLeaseService(
                 _ =>
                 {

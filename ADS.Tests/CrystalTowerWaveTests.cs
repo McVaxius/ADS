@@ -311,7 +311,7 @@ public sealed class CrystalTowerWaveTests
 
     // Preserve the SDK's generic row constraints; DispatchProxy cannot represent
     // this GetExcelSheet<T> contract. Optional map sheets are absent in this case.
-    private sealed class MaplessData : IDataManager
+    internal sealed class MaplessData : IDataManager
     {
         public Dalamud.Game.ClientLanguage Language => Dalamud.Game.ClientLanguage.English;
         public Lumina.GameData GameData => null!;

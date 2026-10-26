@@ -38,6 +38,15 @@ public sealed class LootWindow : PositionedWindow, IDisposable
 
         DrawModeButtons();
         ImGui.Separator();
+        var considerTreasureCoffers = plugin.Configuration.ConsiderTreasureCoffers;
+        if (WindowLayout.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
+        {
+            plugin.Configuration.ConsiderTreasureCoffers = considerTreasureCoffers;
+            plugin.SaveConfiguration();
+        }
+        if (ImGui.IsItemHovered())
+            MaterialText.SetTooltip(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
+        ImGui.Separator();
         var glamourNeed = plugin.Configuration.LootGlamourNeedingEnabled;
         if (WindowLayout.Checkbox("Need/Greed missing glamour gear (XA Database)", ref glamourNeed))
             plugin.SetLootGlamourNeedingEnabled(glamourNeed);

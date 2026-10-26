@@ -14,13 +14,16 @@ namespace ADS.Tests;
 
 public sealed class TreasureCofferObservationPolicyTests
 {
-    [Fact]
-    public void OffRejectsReportedCofferBeforeAuthoredRequiredRule()
+    [Theory]
+    [InlineData(InteractableClass.Required)]
+    [InlineData(InteractableClass.Optional)]
+    [InlineData(InteractableClass.Expendable)]
+    public void OffRejectsReportedCofferBeforeAuthoredRule(InteractableClass classification)
     {
         using var fixture = new ObservationFixture(
             Context(),
             [GameObject("Treasure Coffer", ObjectKind.EventObj)],
-            Rule("Treasure Coffer", InteractableClass.Required));
+            Rule("Treasure Coffer", classification));
 
         fixture.Service.Update(fixture.Context, considerTreasureCoffers: false);
 
@@ -134,6 +137,37 @@ public sealed class TreasureCofferObservationPolicyTests
         Assert.Equal(InteractableClass.TreasureDoor, remaining.Classification);
         Assert.Equal(["door"], known.Keys);
         Assert.Empty(suppressions);
+    }
+
+    [Fact]
+    public void OffPreservesUnrelatedAuthoredInteractionsAndReenableRediscoversCoffers()
+    {
+        using var fixture = new ObservationFixture(
+            Context(territoryTypeId: 558),
+            [
+                GameObject("Treasure Coffer", ObjectKind.EventObj, gameObjectId: 1),
+                GameObject("Optional Terminal", ObjectKind.EventObj, gameObjectId: 2),
+                GameObject("Required Switch", ObjectKind.EventObj, gameObjectId: 3),
+                GameObject("Vault Door", ObjectKind.Treasure, gameObjectId: 4),
+            ],
+            Rule("Optional Terminal", InteractableClass.Optional),
+            Rule("Required Switch", InteractableClass.Required));
+
+        fixture.Service.Update(fixture.Context, considerTreasureCoffers: true);
+        Assert.Contains(fixture.Service.Current.LiveInteractables,
+            item => item.GameObjectId == 1 && item.Classification == InteractableClass.TreasureCoffer);
+
+        fixture.Service.Update(fixture.Context, considerTreasureCoffers: false);
+        Assert.Collection(fixture.Service.Current.LiveInteractables.OrderBy(item => item.GameObjectId),
+            item => Assert.Equal(InteractableClass.Optional, item.Classification),
+            item => Assert.Equal(InteractableClass.Required, item.Classification),
+            item => Assert.Equal(InteractableClass.TreasureDoor, item.Classification));
+        Assert.DoesNotContain(fixture.Service.Current.InteractableGhosts, item => item.GameObjectId == 1);
+
+        fixture.Service.Update(fixture.Context, considerTreasureCoffers: true);
+        Assert.Contains(fixture.Service.Current.LiveInteractables,
+            item => item.GameObjectId == 1 && item.Classification == InteractableClass.TreasureCoffer);
+        Assert.Equal(4, fixture.Service.Current.LiveInteractables.Count);
     }
 
     private static ObjectPriorityRule Rule(string name, InteractableClass classification)

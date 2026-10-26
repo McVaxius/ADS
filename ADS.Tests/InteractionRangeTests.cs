@@ -200,8 +200,7 @@ public sealed class InteractionRangeTests
         now = now.AddSeconds(30);
         frontier.Update(TestDutyContextFactory.Create(watchingCutscene: true), ObservationSnapshot.Empty);
         Assert.Equal("Seeking", frontier.TreasureFollowerCofferSeekStateName);
-        typeof(DungeonFrontierService).GetMethod("RefreshCutsceneHold", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(frontier, [normal]);
+        frontier.RefreshCutsceneHold(normal);
         void Progress() => typeof(DungeonFrontierService)
             .GetMethod("UpdateTreasureFollowerCofferSeekProgress", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(frontier, [1, (Vector3?)Vector3.Zero, now]);
@@ -214,6 +213,382 @@ public sealed class InteractionRangeTests
         Progress();
         Assert.Equal("TimedOut", frontier.TreasureFollowerCofferSeekStateName);
     }
+
+    [Theory]
+    [InlineData(false, false, "Latched")]
+    [InlineData(true, false, "Seeking")]
+    [InlineData(false, true, "Reached")]
+    [InlineData(true, true, "Reached")]
+    public void OffClearsLatchedStagingBeforeCutsceneReturnsWithoutResettingProgression(
+        bool fastPath, bool preserveDoorTarget, string seekState)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var frontier = fixture.Frontier;
+        var context = TestDutyContextFactory.Create(cutscene: true);
+        var target = new DungeonFrontierPoint
+        {
+            Key = preserveDoorTarget ? "door:1" : "stage:1", Name = "Current route target",
+            Position = new Vector3(40, 0, 0), LevelRowId = 1, MapId = 1,
+            TreasureRouteIndex = 1, TreasureRoomIndex = 1, TreasurePassageGroup = "Left",
+            IsTreasureFollowerStagingPoint = !preserveDoorTarget,
+        };
+        typeof(DungeonFrontierService).GetProperty(nameof(DungeonFrontierService.CurrentTarget))!
+            .SetValue(frontier, target);
+        WritePrivateField(frontier, "activeDutyKey", context.ContentFinderConditionId);
+        WritePrivateField(frontier, "treasureFollowerActiveDoorCycleRoomIndex", 1);
+        WritePrivateField(frontier, "highestTreasureFollowerRoomReached", 1);
+        WritePrivateField(frontier, "heldTreasureFollowerCandidateKey", "door:held");
+        WritePrivateField(frontier, "lastValidManualDestination", target);
+        var visited = ReadPrivateField<HashSet<string>>(frontier, "visitedFrontierKeys");
+        visited.Add("manual:visited");
+        WritePrivateField(frontier, "treasureFollowerActiveStagingRoomIndex", 1);
+        WritePrivateField(frontier, "treasureFollowerActiveStagingTargetKey", "stage:1");
+        WritePrivateField(frontier, "treasureFollowerActiveStagingTargetPosition", (Vector3?)target.Position);
+        WritePrivateField(frontier, "treasureFollowerCofferSeekStartedUtc", DateTime.UtcNow);
+        WritePrivateField(frontier, "treasureFollowerCofferSeekLastProgressUtc", DateTime.UtcNow);
+        WritePrivateField(frontier, "treasureFollowerStagingReached", seekState == "Reached");
+        WritePrivateField(frontier, "treasureFollowerStagingAttempted", true);
+        WritePrivateField(frontier, "treasureFollowerDoorChaseGateState", "StagedAtTreasureCoffer");
+        WriteEnumPrivateField(frontier, "treasureFollowerCofferSeekState", seekState);
+
+        if (fastPath) Assert.True(frontier.RefreshCutsceneHold(context, considerTreasureCoffers: false));
+        else frontier.Update(context, ObservationSnapshot.Empty, considerTreasureCoffers: false);
+
+        Assert.Equal("Inactive", frontier.TreasureFollowerCofferSeekStateName);
+        Assert.Equal(0, ReadPrivateField<int>(frontier, "treasureFollowerActiveStagingRoomIndex"));
+        Assert.Null(ReadPrivateField<string?>(frontier, "treasureFollowerActiveStagingTargetKey"));
+        Assert.Null(ReadPrivateField<Vector3?>(frontier, "treasureFollowerActiveStagingTargetPosition"));
+        Assert.False(ReadPrivateField<bool>(frontier, "treasureFollowerStagingReached"));
+        Assert.False(ReadPrivateField<bool>(frontier, "treasureFollowerStagingAttempted"));
+        Assert.Equal(DateTime.MinValue, ReadPrivateField<DateTime>(frontier, "treasureFollowerCofferSeekStartedUtc"));
+        Assert.Equal(DateTime.MinValue, ReadPrivateField<DateTime>(frontier, "treasureFollowerCofferSeekLastProgressUtc"));
+        Assert.Equal(1, ReadPrivateField<int>(frontier, "treasureFollowerActiveDoorCycleRoomIndex"));
+        Assert.Equal(1, ReadPrivateField<int>(frontier, "highestTreasureFollowerRoomReached"));
+        Assert.Equal("door:held", ReadPrivateField<string>(frontier, "heldTreasureFollowerCandidateKey"));
+        Assert.Same(target, ReadPrivateField<DungeonFrontierPoint>(frontier, "lastValidManualDestination"));
+        Assert.Contains("manual:visited", visited);
+        if (preserveDoorTarget) Assert.Same(target, frontier.CurrentTarget);
+        else Assert.Null(frontier.CurrentTarget);
+    }
+
+    [Fact]
+    public void OffOmitsCofferRoutesAndStagingButPreservesDoorsAndReenabledStaging()
+    {
+        var playerPosition = new Vector3(0, 99.4f, 330);
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(playerPosition, includeObservationMemory: true);
+        var frontier = fixture.Frontier;
+        var context = TestDutyContextFactory.Create(DutyCategory.TreasureDungeon, territoryId: 712);
+        frontier.SetTreasureDungeonRole(new(TreasureDungeonRole.Follower, "Test", "Test", "fabricated",
+            true, true, false, false, false));
+        WritePrivateField(frontier, "activeDutyKey", context.ContentFinderConditionId);
+        WritePrivateField(frontier, "treasureFollowerEntryProofDutyKey", context.ContentFinderConditionId);
+        var coffer = Observed("coffer:84", 84, "Treasure Coffer", new Vector3(0, 99.4f, 300));
+        var door = Observed("door:85", 85, "Vault Door", new Vector3(22, 99.4f, 277), InteractableClass.TreasureDoor);
+        var observation = new ObservationSnapshot
+        {
+            LiveMonsters = [], LiveFollowTargets = [], MonsterGhosts = [],
+            LiveInteractables = [coffer, door], InteractableGhosts = [],
+        };
+        IReadOnlyList<DungeonFrontierPoint> Build(bool enabled) => (IReadOnlyList<DungeonFrontierPoint>)
+            typeof(DungeonFrontierService).GetMethod("BuildTreasureRoutePoints", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(frontier, [context, default(Lumina.Excel.Sheets.Map), observation,
+                    Array.Empty<DungeonFrontierPoint>(), (Vector3?)playerPosition, enabled])!;
+        DungeonFrontierPoint? Select(IReadOnlyList<DungeonFrontierPoint> points, bool enabled)
+            => (DungeonFrontierPoint?)typeof(DungeonFrontierService)
+                .GetMethod("SelectTreasureFollowerTarget", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(frontier, [context, points, (Vector3?)playerPosition, null, enabled, false]);
+
+        var enabledPoints = Build(true);
+        Assert.Contains(enabledPoints, point => point.IsTreasureFollowerStagingPoint);
+        Assert.True(Select(enabledPoints, true)!.IsTreasureFollowerStagingPoint);
+        Assert.Equal("Seeking", frontier.TreasureFollowerCofferSeekStateName);
+
+        frontier.RefreshCutsceneHold(context, considerTreasureCoffers: false);
+        var disabledPoints = Build(false);
+        Assert.DoesNotContain(disabledPoints, point => point.IsTreasureFollowerStagingPoint);
+        Assert.Contains(disabledPoints, point => point.IsLiveTreasureDoorCandidate);
+        Assert.Equal(enabledPoints.Where(point => !point.IsTreasureFollowerStagingPoint).Select(point => point.Key),
+            disabledPoints.Select(point => point.Key));
+        Assert.Null(Select(enabledPoints, false)); // A stale snapshot cannot select its coffer.
+        Assert.Equal("Inactive", frontier.TreasureFollowerCofferSeekStateName);
+        Assert.Equal("WaitingForRoomCombat", ReadPrivateField<string>(frontier, "treasureFollowerDoorChaseGateState"));
+        Assert.DoesNotContain("coffer", frontier.CurrentLabelStatus, StringComparison.OrdinalIgnoreCase);
+
+        var reenabledPoints = Build(true);
+        Assert.True(Select(reenabledPoints, true)!.IsTreasureFollowerStagingPoint);
+        Assert.Equal("Seeking", frontier.TreasureFollowerCofferSeekStateName);
+    }
+
+    private static ObservedInteractable Observed(string key, ulong id, string name, Vector3 position,
+        InteractableClass classification = InteractableClass.TreasureCoffer,
+        Dalamud.Game.ClientState.Objects.Enums.ObjectKind kind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
+        => new()
+        {
+            Key = key, GameObjectId = id, DataId = 100, MapId = 0, ObjectKind = kind, Name = name,
+            Position = position, LastSeenUtc = DateTime.UtcNow, Classification = classification,
+            GhostReason = GhostReason.SeenPreviously,
+        };
+
+    [Theory]
+    [InlineData("navigation")]
+    [InlineData("arrival")]
+    [InlineData("sack")]
+    [InlineData("one-shot")]
+    public void OffReleasesOwnedCofferWorkBeforeGenericHoldsAndAllowsTheNextObjective(string state)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        var position = state == "navigation" ? new Vector3(30, 0, 0) : Vector3.Zero;
+        var name = state == "sack" ? "Leather Sack" : "Treasure Coffer";
+        fixture.AddMonster(86, name, position);
+        var coffer = Observed("coffer:86", 86, name, position);
+        var follower = state is "sack" or "one-shot";
+        Commit(fixture.Execution, coffer, follower ? PlannerObjectiveKind.TreasureFollowerLoot : PlannerObjectiveKind.TreasureCoffer);
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        fixture.Execution.QueryInteractionDialog = () => false;
+        var dispatches = 0;
+        fixture.Execution.DispatchInteractionOverride = _ => { ++dispatches; return true; };
+        if (state == "arrival") WritePrivateField(fixture.Execution, "navigationActive", true);
+
+        Advance(fixture.Execution, context, coffer);
+
+        if (state == "navigation") Assert.True(ReadPrivateField<bool>(fixture.Execution, "navigationActive"));
+        if (state == "arrival") Assert.NotNull(ReadPrivateField<string?>(fixture.Execution, "interactArrivalWaitKey"));
+        if (state == "sack") Assert.Same(coffer, ReadPrivateField<ObservedInteractable>(fixture.Execution, "pendingProgressionInteractable"));
+        if (state == "one-shot")
+        {
+            Assert.Null(ReadPrivateField<string?>(fixture.Execution, "committedInteractableKey"));
+            Assert.True(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+            Assert.True(fixture.Memory!.IsTreasureFollowerContainerChecked(coffer));
+        }
+        if (state == "sack")
+        {
+            WritePrivateField(fixture.Execution, "pendingProgressionInteractAfterWaitUntilUtc", DateTime.UtcNow.AddMinutes(1));
+            WritePrivateField(fixture.Execution, "pendingCloseRecoveryInteractable", coffer);
+            WritePrivateField(fixture.Execution, "treasureCofferLockedRetryKey", coffer.Key);
+            WritePrivateField(fixture.Execution, "treasureCofferLockedNextRetryUtc", DateTime.UtcNow.AddMinutes(1));
+        }
+        var dispatchesBeforeDisable = dispatches;
+        var nextPull = fixture.AddMonster(87, "Next pull", new Vector3(20, 0, 0));
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        fixture.Execution.QueryInteractionDialog = () => true;
+
+        fixture.Update(HyperFixatedTargetExecutionTests.HyperPlanner(nextPull), context);
+
+        Assert.Equal(dispatchesBeforeDisable, dispatches);
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "committedInteractableKey"));
+        Assert.Null(ReadPrivateField<ObservedInteractable?>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.Null(ReadPrivateField<ObservedInteractable?>(fixture.Execution, "pendingCloseRecoveryInteractable"));
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "interactArrivalWaitKey"));
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "treasureCofferRouteKey"));
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "treasureCofferLockedRetryKey"));
+        Assert.Equal(0ul, ReadPrivateField<ulong>(fixture.Execution, "lastInteractGameObjectId"));
+        Assert.Equal(DateTime.MinValue, ReadPrivateField<DateTime>(fixture.Execution, "nextInteractAttemptUtc"));
+        Assert.Equal(DateTime.MinValue, ReadPrivateField<DateTime>(fixture.Execution, "pendingProgressionInteractAfterWaitUntilUtc"));
+        Assert.Same(nextPull.GameObject, fixture.Target);
+        Assert.Equal(ExecutionPhase.NavigatingToMonsterObjective, fixture.Execution.CurrentPhase);
+        Assert.True(fixture.Execution.IsOwned);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OffCancelsOnlyCofferStagingNavigation(bool staging)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero);
+        var context = TestDutyContextFactory.Create();
+        var point = new DungeonFrontierPoint
+        {
+            Key = staging ? "stage:94" : "door:94", Name = staging ? "Staging coffer" : "Passage door",
+            Position = new Vector3(40, 0, 0), LevelRowId = 1, MapId = 1,
+            TreasureRouteIndex = 1, TreasureRoomIndex = 1,
+            TreasurePassageGroup = staging ? "StagingCoffer" : "Left", IsTreasureFollowerStagingPoint = staging,
+        };
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        typeof(DungeonFrontierService).GetProperty(nameof(DungeonFrontierService.CurrentTarget))!.SetValue(fixture.Frontier, point);
+        typeof(DungeonFrontierService).GetProperty(nameof(DungeonFrontierService.CurrentMode))!
+            .SetValue(fixture.Frontier, FrontierMode.TreasureDungeon);
+        typeof(ExecutionService).GetMethod("TryAdvanceFrontierPoint", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(fixture.Execution, [context, point, false, false, "Test."]);
+        Assert.True(ReadPrivateField<bool>(fixture.Execution, "navigationActive"));
+        fixture.Commands.Clear();
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        fixture.Frontier.RefreshCutsceneHold(context, considerTreasureCoffers: false);
+        if (staging) Assert.Null(fixture.Frontier.CurrentTarget);
+        else Assert.Same(point, fixture.Frontier.CurrentTarget);
+
+        Assert.Equal(staging, fixture.Execution.CancelDisabledTreasureCofferWork(context));
+
+        Assert.Equal(!staging, ReadPrivateField<bool>(fixture.Execution, "navigationActive"));
+        if (staging) Assert.Equal("/vnav stop", Assert.Single(fixture.Commands));
+        else Assert.Empty(fixture.Commands);
+        Assert.True(fixture.Execution.IsOwned);
+    }
+
+    [Theory]
+    [InlineData("Treasure Coffer", InteractableClass.TreasureCoffer, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)]
+    [InlineData("Treasure Coffer", InteractableClass.Required, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)]
+    [InlineData("Mysterious Cache", InteractableClass.TreasureCoffer, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)]
+    [InlineData("Leather Sack", InteractableClass.Expendable, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)]
+    public void OffRejectsNewCofferWorkBeforeNativeDialogWaitOrDispatch(
+        string name, InteractableClass classification, Dalamud.Game.ClientState.Objects.Enums.ObjectKind kind)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create(DutyCategory.TreasureDungeon, territoryId: 712);
+        fixture.AddMonster(88, name, Vector3.Zero);
+        var coffer = Observed("coffer:88", 88, name, Vector3.Zero, classification, kind);
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        fixture.Execution.QueryInteractionDialog = () => true;
+        fixture.Execution.DispatchInteractionOverride = _ => { Assert.Fail("Disabled coffer dispatched"); return true; };
+
+        Advance(fixture.Execution, context, coffer);
+
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
+        Assert.Null(fixture.Target);
+        Assert.Empty(fixture.Commands);
+        Assert.NotEqual(ExecutionPhase.AttemptingInteractableObjective, fixture.Execution.CurrentPhase);
+
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        fixture.Execution.QueryInteractionDialog = () => false;
+        fixture.Execution.DispatchInteractionOverride = _ => true;
+        Advance(fixture.Execution, context, coffer);
+        Assert.True(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+    }
+
+    [Theory]
+    [InlineData(InteractableClass.Optional, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)]
+    [InlineData(InteractableClass.Required, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)]
+    [InlineData(InteractableClass.TreasureDoor, Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)]
+    public void OffPreservesUnrelatedDispatchPendingResultAndNativeDialogHold(
+        InteractableClass classification, Dalamud.Game.ClientState.Objects.Enums.ObjectKind kind)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create(DutyCategory.TreasureDungeon, territoryId: 558);
+        var name = classification == InteractableClass.TreasureDoor ? "Vault Door" : "Terminal";
+        fixture.AddMonster(89, name, Vector3.Zero);
+        var observed = Observed("ordinary:89", 89, name, Vector3.Zero, classification, kind);
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        fixture.Execution.QueryInteractionDialog = () => false;
+        fixture.Execution.DispatchInteractionOverride = _ => true;
+        Commit(fixture.Execution, observed, PlannerObjectiveKind.RequiredInteractable);
+
+        Advance(fixture.Execution, context, observed);
+        fixture.Execution.QueryInteractionDialog = () => true;
+        fixture.Update(HyperFixatedTargetExecutionTests.HyperPlanner(
+            fixture.AddMonster(90, "Next pull", new Vector3(20, 0, 0))), context);
+
+        Assert.True(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.Same(observed, ReadPrivateField<ObservedInteractable>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.Equal(ExecutionPhase.AttemptingInteractableObjective, fixture.Execution.CurrentPhase);
+        Assert.DoesNotContain("target:90", fixture.Events);
+    }
+
+    [Fact]
+    public void OffPreservesAuthoredGenericTreasureProgressionAndStillRejectsExplicitCoffers()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true,
+            initialRules: new ObjectPriorityRuleManifest
+            {
+                Rules = [new()
+                {
+                    ObjectKind = "Treasure", ObjectName = "Transit Beacon", NameMatchMode = "Exact",
+                    Classification = "Required", Priority = 0,
+                }],
+            });
+        var context = TestDutyContextFactory.Create(); // Outside the treasure progression catalog.
+        fixture.AddMonster(95, "Transit Beacon", Vector3.Zero);
+        fixture.AddMonster(96, "Treasure Coffer", Vector3.Zero);
+        var beacon = Observed("beacon:95", 95, "Transit Beacon", Vector3.Zero, InteractableClass.Required,
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure);
+        var coffer = Observed("coffer:96", 96, "Treasure Coffer", Vector3.Zero, InteractableClass.Required,
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure);
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+        fixture.Execution.QueryInteractionDialog = () => false;
+        var dispatched = new List<ulong>();
+        fixture.Execution.DispatchInteractionOverride = gameObject => { dispatched.Add(gameObject.GameObjectId); return true; };
+        Commit(fixture.Execution, beacon, PlannerObjectiveKind.RequiredInteractable);
+
+        Advance(fixture.Execution, context, beacon);
+
+        Assert.Equal(new[] { 95ul }, dispatched);
+        Assert.Same(beacon, ReadPrivateField<ObservedInteractable>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.False(fixture.Execution.CancelDisabledTreasureCofferWork(context));
+        Assert.True(fixture.Execution.RefreshInteractionActionHold(context, true, true, DateTime.UtcNow));
+        Assert.Same(beacon, ReadPrivateField<ObservedInteractable>(fixture.Execution, "pendingProgressionInteractable"));
+
+        fixture.Execution.CancelInteractionPause();
+        typeof(ExecutionService).GetMethod("ClearInteractableCommitment", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(fixture.Execution, null);
+        Commit(fixture.Execution, coffer, PlannerObjectiveKind.RequiredInteractable);
+        Advance(fixture.Execution, context, coffer);
+        Assert.Equal(new[] { 95ul }, dispatched);
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "committedInteractableKey"));
+        Assert.Null(ReadPrivateField<ObservedInteractable?>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+    }
+
+    [Fact]
+    public void TargetSetterDisablingCoffersBlocksDispatchWithoutAnExplicitCancellation()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        var cofferObject = fixture.AddMonster(97, "Treasure Coffer", Vector3.Zero);
+        var coffer = Observed("coffer:97", 97, "Treasure Coffer", Vector3.Zero);
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        fixture.Execution.QueryInteractionDialog = () => false;
+        var dispatches = 0;
+        fixture.Execution.DispatchInteractionOverride = _ => { ++dispatches; return true; };
+        Commit(fixture.Execution, coffer, PlannerObjectiveKind.TreasureFollowerLoot);
+        var manager = DispatchProxy.Create<Dalamud.Plugin.Services.ITargetManager, CallbackTargetManagerProxy>();
+        var managerState = (CallbackTargetManagerProxy)(object)manager;
+        managerState.Events = fixture.Events;
+        var callbacks = 0;
+        ulong generationBeforeDisable = 0, generationAfterDisable = 0;
+        managerState.AfterTargetSet = () =>
+        {
+            ++callbacks;
+            generationBeforeDisable = ReadPrivateField<ulong>(fixture.Execution, "interactionCancellationGeneration");
+            fixture.Configuration.ConsiderTreasureCoffers = false;
+            generationAfterDisable = ReadPrivateField<ulong>(fixture.Execution, "interactionCancellationGeneration");
+        };
+        WritePrivateField(fixture.Execution, "targetManager", manager);
+
+        Advance(fixture.Execution, context, coffer);
+
+        Assert.Equal(1, callbacks);
+        Assert.Equal(0, dispatches);
+        Assert.Equal(generationBeforeDisable, generationAfterDisable);
+        Assert.Same(cofferObject.GameObject, managerState.Target);
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "committedInteractableKey"));
+        Assert.Null(ReadPrivateField<ObservedInteractable?>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.False(fixture.Memory!.IsTreasureFollowerContainerChecked(coffer));
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+    }
+
+    public class CallbackTargetManagerProxy : HyperFixatedTargetExecutionTests.TargetManagerProxy
+    {
+        public Action? AfterTargetSet { get; set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            var result = base.Invoke(targetMethod, args);
+            if (targetMethod?.Name == "set_Target") AfterTargetSet?.Invoke();
+            return result;
+        }
+    }
+
+    private static void Advance(ExecutionService execution, DutyContextSnapshot context, ObservedInteractable observed)
+        => typeof(ExecutionService).GetMethod("TryAdvanceInteractableObjective", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(execution, [context, observed, "Test."]);
+
+    private static void Commit(ExecutionService execution, ObservedInteractable observed, PlannerObjectiveKind kind)
+        => typeof(ExecutionService).GetMethod("CommitInteractable", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(execution, [observed, kind]);
 
     private static T ReadPrivateField<T>(object target, string name)
         => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
@@ -472,6 +847,67 @@ public sealed class InteractionRangeTests
             .GetValue(fixture.Execution)!);
         Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
         if (stopAt is "ai" or "presets") Assert.DoesNotContain("dispatch", fixture.Events);
+    }
+
+    [Theory]
+    [InlineData("ai", true)]
+    [InlineData("presets", true)]
+    [InlineData("dispatch", true)]
+    [InlineData("dispatch", false)]
+    [InlineData("restore", false)]
+    public void DisablingCoffersInsideAnExternalCallbackCannotRearmTheInteraction(string disableAt, bool dispatched)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        fixture.AddMonster(91, "Treasure Coffer", Vector3.Zero);
+        var coffer = Observed("coffer:91", 91, "Treasure Coffer", Vector3.Zero);
+        Commit(fixture.Execution, coffer, PlannerObjectiveKind.TreasureFollowerLoot);
+        var ai = true;
+        var forceDisabled = false;
+        var names = new List<string> { "Rotation" };
+        var identities = new[] { new object(), new object(), new object(), new object() };
+        fixture.Execution.QueryInteractionDialog = () => false;
+        fixture.Execution.InteractionVbmCharacterIdOverride = () => 1;
+        fixture.Execution.ReadInteractionVbmOverride = () => new(true,
+            new(identities[0], identities[1], identities[2], identities[3], ai, forceDisabled, names), string.Empty);
+        fixture.Execution.WriteInteractionVbmAiOverride = (_, enabled) =>
+        {
+            ai = enabled;
+            if ((!enabled && disableAt == "ai") || (enabled && disableAt == "restore"))
+                fixture.Configuration.ConsiderTreasureCoffers = false;
+            return true;
+        };
+        fixture.Execution.WriteInteractionVbmPresetsOverride = (_, disabled, selected) =>
+        {
+            forceDisabled = disabled;
+            names = selected.ToList();
+            if (disabled && disableAt == "presets") fixture.Configuration.ConsiderTreasureCoffers = false;
+            return true;
+        };
+        fixture.Execution.DispatchInteractionOverride = _ =>
+        {
+            fixture.Events.Add("dispatch");
+            if (disableAt == "dispatch") fixture.Configuration.ConsiderTreasureCoffers = false;
+            return dispatched;
+        };
+
+        Advance(fixture.Execution, context, coffer);
+
+        Assert.False(fixture.Configuration.ConsiderTreasureCoffers);
+        Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
+        Assert.False(ReadPrivateField<bool>(fixture.Execution, "interactionAttemptDispatched"));
+        Assert.Null(ReadPrivateField<string?>(fixture.Execution, "committedInteractableKey"));
+        Assert.Null(ReadPrivateField<ObservedInteractable?>(fixture.Execution, "pendingProgressionInteractable"));
+        Assert.False(fixture.Memory!.IsTreasureFollowerContainerChecked(coffer));
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto", StringComparison.Ordinal));
+        if (disableAt is "ai" or "presets") Assert.DoesNotContain("dispatch", fixture.Events);
+
+        fixture.Execution.QueryInteractionDialog = () => true;
+        var next = fixture.AddMonster(92, "Next pull", new Vector3(20, 0, 0));
+        fixture.Update(HyperFixatedTargetExecutionTests.HyperPlanner(next), context);
+        Assert.Same(next.GameObject, fixture.Target);
+        Assert.Equal(ExecutionPhase.NavigatingToMonsterObjective, fixture.Execution.CurrentPhase);
     }
 
     private static void ArmSentInteraction(ExecutionService execution, DutyContextSnapshot context)

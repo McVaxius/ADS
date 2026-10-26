@@ -446,6 +446,106 @@ public sealed class InteractionVbmPauseTests
         Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
     }
 
+    [Theory]
+    [InlineData("unchanged")]
+    [InlineData("initially-off")]
+    [InlineData("ai")]
+    [InlineData("force")]
+    [InlineData("presets")]
+    [InlineData("provider")]
+    [InlineData("character")]
+    [InlineData("territory")]
+    [InlineData("duty")]
+    [InlineData("mode")]
+    [InlineData("transition")]
+    [InlineData("logout")]
+    public void DisablingCoffersRestoresOnlyTheCurrentUnchangedOwnedPause(string changed)
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(System.Numerics.Vector3.Zero,
+            includeObservationMemory: true);
+        var context = TestDutyContextFactory.Create();
+        fixture.Configuration.ConsiderTreasureCoffers = true;
+        fixture.AddMonster(93, "Treasure Coffer", System.Numerics.Vector3.Zero);
+        var coffer = new ObservedInteractable
+        {
+            Key = "coffer:93", GameObjectId = 93, DataId = 100, MapId = 1,
+            ObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure,
+            Name = "Treasure Coffer", Position = System.Numerics.Vector3.Zero, LastSeenUtc = DateTime.UtcNow,
+            Classification = InteractableClass.TreasureCoffer, GhostReason = GhostReason.SeenPreviously,
+        };
+        var ai = changed != "initially-off";
+        var disabled = changed == "initially-off";
+        var names = disabled ? new List<string>() : new List<string> { "Second", "Rotation" };
+        var provider = new object();
+        var identities = new[] { new object(), new object(), new object() };
+        ulong character = 1;
+        var writes = new List<string>();
+        fixture.Execution.QueryInteractionDialog = () => false;
+        fixture.Execution.InteractionVbmCharacterIdOverride = () => character;
+        fixture.Execution.ReadInteractionVbmOverride = () => new(true,
+            new(provider, identities[0], identities[1], identities[2], ai, disabled, names), string.Empty);
+        fixture.Execution.WriteInteractionVbmAiOverride = (_, enabled) =>
+        {
+            writes.Add($"ai:{enabled}");
+            ai = enabled;
+            names.Remove("VBM Multibox");
+            if (enabled && !disabled) names.Add("VBM Multibox");
+            return true;
+        };
+        fixture.Execution.WriteInteractionVbmPresetsOverride = (_, forceDisabled, selected) =>
+        {
+            writes.Add($"presets:{forceDisabled}");
+            disabled = forceDisabled;
+            names = selected.ToList();
+            return true;
+        };
+        fixture.Execution.DispatchInteractionOverride = _ => true;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(ExecutionService).GetMethod("CommitInteractable", flags)!
+            .Invoke(fixture.Execution, [coffer, PlannerObjectiveKind.TreasureFollowerLoot]);
+        typeof(ExecutionService).GetMethod("TryAdvanceInteractableObjective", flags)!
+            .Invoke(fixture.Execution, [context, coffer, "Test."]);
+        Assert.True(fixture.Execution.IsInteractionVbmPauseActive);
+
+        if (changed == "ai") ai = true;
+        if (changed == "force") disabled = false;
+        if (changed == "presets") names.Add("Manual");
+        if (changed == "provider") provider = new();
+        if (changed == "character") ++character;
+        if (changed == "mode") typeof(ExecutionService).GetProperty(nameof(ExecutionService.CurrentMode))!
+            .SetValue(fixture.Execution, OwnershipMode.Observing);
+        context = changed switch
+        {
+            "territory" => TestDutyContextFactory.Create(territoryId: 778),
+            "duty" => TestDutyContextFactory.Create(cfcId: 889),
+            "transition" => TestDutyContextFactory.Create(betweenAreas: true),
+            "logout" => TestDutyContextFactory.Create(loggedIn: false),
+            _ => context,
+        };
+        var before = (Ai: ai, Disabled: disabled, Names: names.ToArray());
+        writes.Clear();
+        fixture.Configuration.ConsiderTreasureCoffers = false;
+
+        Assert.False(fixture.Execution.RefreshInteractionActionHold(context, true, true, DateTime.UtcNow));
+
+        Assert.False(fixture.Execution.IsInteractionVbmPauseActive);
+        Assert.False((bool)typeof(ExecutionService).GetField("interactionAttemptDispatched", flags)!.GetValue(fixture.Execution)!);
+        if (changed == "unchanged")
+        {
+            Assert.True(ai);
+            Assert.False(disabled);
+            Assert.Equal(new[] { "Second", "Rotation" }, names);
+            Assert.Equal(new[] { "ai:True", "presets:False" }, writes);
+        }
+        else
+        {
+            Assert.Empty(writes);
+            Assert.Equal(before.Ai, ai);
+            Assert.Equal(before.Disabled, disabled);
+            Assert.Equal(before.Names, names);
+        }
+    }
+
     private class AiConfigContract { }
     private sealed class DerivedAiConfigContract : AiConfigContract { }
     private sealed class TypeListConfigRoot(AiConfigContract node)

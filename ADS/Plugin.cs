@@ -2015,6 +2015,7 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 pluginEnabled = Configuration.PluginEnabled,
+                considerTreasureCoffers = Configuration.ConsiderTreasureCoffers,
                 frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled,
                 lootMode = Configuration.LootMode.ToString(),
                 lootGlamourNeedingEnabled = Configuration.LootGlamourNeedingEnabled,
@@ -2814,6 +2815,7 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
                 DutyContextService.Current.TerritoryTypeId);
             if (automationExcludedTerritory)
@@ -2853,7 +2855,6 @@ public sealed class Plugin : IDalamudPlugin
 
             if (ExecutionService.RefreshCutsceneHold(DutyContextService.Current, Configuration.PluginEnabled))
             {
-                DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current);
                 CameraRecoveryService.Release("cutscene hold");
                 UpdateDtrBar();
                 if (frameworkHitchProfilerEnabled)
@@ -3076,7 +3077,7 @@ public sealed class Plugin : IDalamudPlugin
                 RecordFrameworkSection(sectionStartedAt, "observation", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
-            DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current);
+            DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current, Configuration.ConsiderTreasureCoffers);
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "frontier", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)

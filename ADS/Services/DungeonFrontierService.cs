@@ -128,7 +128,25 @@ public sealed class DungeonFrontierService
     private DateTime TimerUtcNow => cutscenePausedAtUtc ?? ReadUtcNow();
 
     internal bool RefreshCutsceneHold(DutyContextSnapshot context)
+        => RefreshCutsceneHold(context, true);
+
+    internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool considerTreasureCoffers)
     {
+        if (!considerTreasureCoffers)
+        {
+            ResetTreasureFollowerStagingState();
+            if (CurrentTarget is { IsTreasureFollowerStagingPoint: true })
+            {
+                CurrentTarget = null;
+                CurrentMode = FrontierMode.None;
+            }
+
+            if (treasureFollowerDoorChaseGateState is "StagingTowardTreasureCoffer" or "StagedAtTreasureCoffer")
+                treasureFollowerDoorChaseGateState = "Inactive";
+            if (treasureFollowerRouteHoldReason == "StagedAtTreasureCofferComplete")
+                treasureFollowerRouteHoldReason = string.Empty;
+        }
+
         if (context.PluginEnabled && context.IsLoggedIn && !context.IsUnsafeTransition && context.IsCutscene
             && (context.InInstancedDuty || context.CurrentDuty is not null || context.TerritoryTypeId == 0))
         {
@@ -470,8 +488,11 @@ public sealed class DungeonFrontierService
     }
 
     public void Update(DutyContextSnapshot context, ObservationSnapshot observation)
+        => Update(context, observation, true);
+
+    public void Update(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers)
     {
-        if (RefreshCutsceneHold(context))
+        if (RefreshCutsceneHold(context, considerTreasureCoffers))
             return;
 
         if (!context.PluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.TerritoryTypeId == 0)
@@ -602,7 +623,7 @@ public sealed class DungeonFrontierService
             && heldTreasureFollowerCandidateKey is not null
             && IsTreasureFollowerPostEntryDoorCycleEnabled())
         {
-            var combatTreasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, observation, manualDestinations, playerPosition);
+            var combatTreasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, observation, manualDestinations, playerPosition, considerTreasureCoffers);
             ConsumeHeldTreasureFollowerCandidateAfterCombatStarted(context, combatTreasureRoutePoints);
         }
         var selectedCombatBypassManualDestination = SelectPraetoriumOnFootCombatBypassManualDestination(
@@ -658,12 +679,13 @@ public sealed class DungeonFrontierService
                                                             && !context.InCombat;
         if (hasActiveMap && (noFrontierBlockingLiveObjects || treasureFollowerRouteCanOverrideLiveProgression))
         {
-            var treasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, observation, manualDestinations, playerPosition);
+            var treasureRoutePoints = BuildTreasureRoutePoints(context, activeMap, observation, manualDestinations, playerPosition, considerTreasureCoffers);
             if (TryApplyTreasureRouteTarget(
                     context,
                     treasureRoutePoints,
                     playerPosition,
-                    previousTarget))
+                    previousTarget,
+                    considerTreasureCoffers))
                 return;
         }
 
@@ -1353,7 +1375,8 @@ public sealed class DungeonFrontierService
         Map map,
         ObservationSnapshot observation,
         IReadOnlyList<DungeonFrontierPoint> manualDestinations,
-        Vector3? playerPosition)
+        Vector3? playerPosition,
+        bool considerTreasureCoffers)
     {
         if (!TreasureDungeonData.HasRoute(context.TerritoryTypeId))
         {
@@ -1371,7 +1394,8 @@ public sealed class DungeonFrontierService
         var liveDoorCandidates = EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             ? BuildLiveTreasureDoorRoutePoints(context, map, observation, staticRoutePoints, playerPosition)
             : [];
-        var followerStagingPoints = EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
+        var followerStagingPoints = considerTreasureCoffers
+                                    && EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower
             ? BuildTreasureFollowerStagingRoutePoints(context, map, observation, staticRoutePoints)
             : [];
         LiveTreasureDoorCandidateCount = liveDoorCandidates.Count;
@@ -1715,7 +1739,8 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         IReadOnlyList<DungeonFrontierPoint> treasureRoutePoints,
         Vector3? playerPosition,
-        DungeonFrontierPoint? previousTarget)
+        DungeonFrontierPoint? previousTarget,
+        bool considerTreasureCoffers)
     {
         if (treasureRoutePoints.Count == 0)
             return false;
@@ -1748,7 +1773,7 @@ public sealed class DungeonFrontierService
         isTreasureFollower = EffectiveTreasureDungeonRole == ADS.Models.TreasureDungeonRole.Follower;
         var treasureFollowerRouteHoldActive = false;
         CurrentTarget = isTreasureFollower
-            ? SelectTreasureFollowerTarget(context, treasureRoutePoints, playerPosition, previousTarget, out treasureFollowerRouteHoldActive)
+            ? SelectTreasureFollowerTarget(context, treasureRoutePoints, playerPosition, previousTarget, considerTreasureCoffers, out treasureFollowerRouteHoldActive)
             : SelectCurrentTarget(treasureRoutePoints, playerPosition, previousTarget);
         if (CurrentTarget is not null)
         {
@@ -2558,6 +2583,7 @@ public sealed class DungeonFrontierService
         IReadOnlyList<DungeonFrontierPoint> points,
         Vector3? playerPosition,
         DungeonFrontierPoint? previousTarget,
+        bool considerTreasureCoffers,
         out bool routeHoldActive)
     {
         routeHoldActive = false;
@@ -2586,7 +2612,7 @@ public sealed class DungeonFrontierService
             else
             {
                 treasureFollowerActiveDoorCycleRoomIndex = heldCandidate.TreasureRoomIndex;
-                if (TryHoldTreasureFollowerDoorChaseGate(context, heldCandidate.TreasureRoomIndex, out var heldGateStatus))
+                if (TryHoldTreasureFollowerDoorChaseGate(context, heldCandidate.TreasureRoomIndex, considerTreasureCoffers, out var heldGateStatus))
                 {
                     routeHoldActive = true;
                     CurrentLabelStatus = heldGateStatus;
@@ -2634,12 +2660,14 @@ public sealed class DungeonFrontierService
         treasureFollowerActiveDoorCycleRoomIndex = roomIndex;
         EnsureTreasureFollowerDoorSeekCombatGateRoom(roomIndex);
 
-        var stagingTarget = SelectTreasureFollowerStagingTarget(
-            context,
-            points,
-            roomIndex,
-            playerPosition,
-            previousTarget);
+        var stagingTarget = considerTreasureCoffers
+            ? SelectTreasureFollowerStagingTarget(
+                context,
+                points,
+                roomIndex,
+                playerPosition,
+                previousTarget)
+            : null;
         if (stagingTarget is not null)
             return stagingTarget;
 
@@ -2672,7 +2700,7 @@ public sealed class DungeonFrontierService
             }
         }
 
-        if (TryHoldTreasureFollowerDoorChaseGate(context, roomIndex, out var gateStatus))
+        if (TryHoldTreasureFollowerDoorChaseGate(context, roomIndex, considerTreasureCoffers, out var gateStatus))
         {
             routeHoldActive = true;
             treasureFollowerRouteHoldReason = treasureFollowerDoorChaseGateState;
@@ -2783,7 +2811,7 @@ public sealed class DungeonFrontierService
             ? 0
             : Math.Max(0, (untilUtc - TimerUtcNow).TotalSeconds);
 
-    private bool TryHoldTreasureFollowerDoorChaseGate(DutyContextSnapshot context, int roomIndex, out string status)
+    private bool TryHoldTreasureFollowerDoorChaseGate(DutyContextSnapshot context, int roomIndex, bool considerTreasureCoffers, out string status)
     {
         status = string.Empty;
         if (!IsTreasureFollowerPostEntryDoorCycleEnabled()
@@ -2803,7 +2831,7 @@ public sealed class DungeonFrontierService
         }
 
         var now = TimerUtcNow;
-        if (TryHoldTreasureFollowerDoorSeekCombatGate(context, roomIndex, now, out status))
+        if (TryHoldTreasureFollowerDoorSeekCombatGate(context, roomIndex, now, considerTreasureCoffers, out status))
             return true;
 
         if (TryHoldTreasureFollowerDoorOpenTransitionGate(context, roomIndex, now, out status))
@@ -2818,6 +2846,7 @@ public sealed class DungeonFrontierService
         DutyContextSnapshot context,
         int roomIndex,
         DateTime now,
+        bool considerTreasureCoffers,
         out string status)
     {
         status = string.Empty;
@@ -2827,7 +2856,9 @@ public sealed class DungeonFrontierService
         {
             treasureFollowerDoorChaseGateState = "WaitingForRoomCombat";
             treasureFollowerDoorChaseHoldActive = true;
-            status = $"Waiting for live treasure coffer staging target or room {roomIndex} combat before chasing passage doors.";
+            status = considerTreasureCoffers
+                ? $"Waiting for live treasure coffer staging target or room {roomIndex} combat before chasing passage doors."
+                : $"Waiting for room {roomIndex} combat before chasing passage doors.";
             return true;
         }
 

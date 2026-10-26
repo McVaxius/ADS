@@ -25,6 +25,7 @@ public sealed partial class ExecutionService
 
     internal bool RefreshCutsceneHold(DutyContextSnapshot context, bool pluginEnabled)
     {
+        CancelDisabledTreasureCofferWork(context);
         if (ReleaseDisallowedActivityOwnership(context))
             return false;
         if (pluginEnabled && context.IsLoggedIn
@@ -96,6 +97,7 @@ public sealed partial class ExecutionService
 
     internal bool RefreshPhoenixDownRecoveryHold(DutyContextSnapshot context, bool pluginEnabled)
     {
+        CancelDisabledTreasureCofferWork(context);
         if (ReleaseDisallowedActivityOwnership(context))
             return false;
         var requested = false;
@@ -222,6 +224,7 @@ public sealed partial class ExecutionService
     private PlannerObjectiveKind committedInteractableObjectiveKind = PlannerObjectiveKind.None;
     private ulong lastInteractGameObjectId;
     private bool interactionAttemptDispatched;
+    private bool interactionAttemptIsTreasureCoffer;
     private ulong interactionCancellationGeneration;
     private DateTime interactionDispatchSettleUntilUtc;
     private (uint Territory, uint Content) interactionAttemptDuty;
@@ -231,6 +234,7 @@ public sealed partial class ExecutionService
     private DateTime nextNavigationCommandUtc;
     private ulong movementTargetGameObjectId;
     private bool navigationActive;
+    private bool navigationTargetsTreasureCoffer;
     private ulong hyperFocusTargetGameObjectId;
     private bool mapFlagNavigationActive;
     private bool unsafeTransitionNavigationStopLatched;
@@ -941,6 +945,7 @@ public sealed partial class ExecutionService
         string dialogAutomationStatus,
         bool sessionDebugEnabled = false)
     {
+        CancelDisabledTreasureCofferWork(context);
         RefreshCrystalTowerLifetime(context, pluginEnabled);
         if (!CanCenterInDragonsNeck(context, pluginEnabled))
             CancelDragonsNeckCentering();
@@ -1125,18 +1130,59 @@ public sealed partial class ExecutionService
     private bool IsNativeInteractionActive(DutyContextSnapshot context)
         => context.IsInteractionActionActive || QueryInteractionDialog();
 
-    internal void CancelInteractionPause()
+    internal void CancelInteractionPause(DutyContextSnapshot? context = null, bool allowRestore = false)
     {
         unchecked { interactionCancellationGeneration++; }
         interactionAttemptDispatched = false;
+        interactionAttemptIsTreasureCoffer = false;
         interactionDispatchSettleUntilUtc = DateTime.MinValue;
         interactionAttemptDuty = default;
-        ReleaseInteractionVbmPause(null, allowRestore: false);
+        ReleaseInteractionVbmPause(context, allowRestore);
+    }
+
+    internal bool CancelDisabledTreasureCofferWork(DutyContextSnapshot context)
+    {
+        if (configuration.ConsiderTreasureCoffers)
+            return false;
+
+        var cofferAttempt = interactionAttemptIsTreasureCoffer;
+        var cofferCommitment = committedInteractableObjectiveKind is PlannerObjectiveKind.TreasureCoffer or PlannerObjectiveKind.TreasureFollowerLoot
+            || cofferAttempt && committedInteractableKey is not null
+            || pendingProgressionInteractable is { } pending
+                && IsTreasureCofferWork(context, pending)
+            || pendingCloseRecoveryInteractable is { } recovery
+                && IsTreasureCofferWork(context, recovery)
+            || treasureCofferRouteKey is not null
+            || treasureCofferLockedRetryKey is not null;
+        var cofferNavigation = navigationTargetsTreasureCoffer;
+        var cofferSweep = leaveTreasureSweepStarted || leaveTreasureInteractionSent;
+        if (cofferCommitment)
+            ClearInteractableCommitment();
+        if (cofferNavigation)
+        {
+            navigationTargetsTreasureCoffer = false;
+            StopNavigationForTreasureRouteNudge();
+        }
+        if (cofferAttempt || cofferCommitment)
+            CancelInteractionPause(context, allowRestore: true);
+
+        // Keep the explicit leave/completion owner and any unrelated exit prompt.
+        leaveTreasureSweepStarted = false;
+        leaveTreasureInteractionSent = false;
+        leaveTreasureSweepClearSinceUtc = DateTime.MinValue;
+        leaveTreasureSweepGraceUntilUtc = DateTime.MinValue;
+        leaveLootDistributionWaitUntilUtc = DateTime.MinValue;
+        leaveTreasureSweepGraceLogged = false;
+        leaveTreasureSweepClearLogged = false;
+        leaveLootDistributionWaitLogged = false;
+        lastLoggedLeaveTreasureKey = string.Empty;
+        return cofferAttempt || cofferCommitment || cofferNavigation || cofferSweep;
     }
 
     internal bool RefreshInteractionActionHold(DutyContextSnapshot context, bool pluginEnabled,
         bool nativeInteractionActive, DateTime now)
     {
+        CancelDisabledTreasureCofferWork(context);
         if (!pluginEnabled || !context.IsLoggedIn || !context.InInstancedDuty || context.IsUnsafeTransition
             || !(IsActiveOwnedDutyMode() || CurrentMode == OwnershipMode.Leaving)
             || interactionAttemptDispatched && (interactionAttemptDuty != (context.TerritoryTypeId, context.ContentFinderConditionId)
@@ -1160,6 +1206,8 @@ public sealed partial class ExecutionService
         }
 
         interactionAttemptDispatched = false;
+        if (committedInteractableKey is null)
+            interactionAttemptIsTreasureCoffer = false;
         interactionDispatchSettleUntilUtc = DateTime.MinValue;
         ReleaseInteractionVbmPause(context, allowRestore: true);
         return false;
@@ -2712,6 +2760,11 @@ public sealed partial class ExecutionService
 
     private void TryAdvanceFrontierPoint(DutyContextSnapshot context, DungeonFrontierPoint frontierPoint, bool isMapXzDestination, bool isXyzDestination, string prefix)
     {
+        if (frontierPoint.IsTreasureFollowerStagingPoint && !configuration.ConsiderTreasureCoffers)
+        {
+            CancelDisabledTreasureCofferWork(context);
+            return;
+        }
         if (ReleaseOutOfScopeAuthoredMovement(context, frontierPoint.SourceRule))
             return;
 
@@ -2903,9 +2956,14 @@ public sealed partial class ExecutionService
                     }
                 }
 
-                TryBeginNavigation(frontierTargetId, navigationDecision.Destination);
+                TryBeginNavigation(frontierTargetId, navigationDecision.Destination, frontierPoint.IsTreasureFollowerStagingPoint);
             }
 
+            if (frontierPoint.IsTreasureFollowerStagingPoint && !configuration.ConsiderTreasureCoffers)
+            {
+                CancelDisabledTreasureCofferWork(context);
+                return;
+            }
             var navigationMethod = usedMapFlagNavigation
                 ? "via map flag and /vnav moveflag"
                 : "via direct /vnav moveto";
@@ -3702,6 +3760,13 @@ public sealed partial class ExecutionService
 
     private void TryAdvanceInteractableObjective(DutyContextSnapshot context, ObservedInteractable observedInteractable, string prefix)
     {
+        var isTreasureCoffer = IsTreasureCofferWork(context, observedInteractable);
+        interactionAttemptIsTreasureCoffer = isTreasureCoffer;
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+        {
+            CancelDisabledTreasureCofferWork(context);
+            return;
+        }
         // Check native action/dialog truth before out-of-range retry navigation.
         if (IsNativeInteractionActive(context))
         {
@@ -3762,7 +3827,12 @@ public sealed partial class ExecutionService
             && ShouldUseCloseRangeInteractFallback(observedInteractable, targetHorizontalDistance, targetVerticalDelta);
         if (interactionReach > interactionPolicy.AttemptRange && !usingCloseRangeInteractFallback)
         {
-            TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint);
+            TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint, isTreasureCoffer);
+            if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            {
+                CancelDisabledTreasureCofferWork(context);
+                return;
+            }
 
             var phase = targetDistance > NavigationPhaseRange
                 ? ExecutionPhase.NavigatingToInteractableObjective
@@ -3814,6 +3884,8 @@ public sealed partial class ExecutionService
 
         var cancellationGeneration = interactionCancellationGeneration;
         var vbmPaused = TryPauseInteractionVbm(context);
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            CancelDisabledTreasureCofferWork(context);
         if (cancellationGeneration != interactionCancellationGeneration)
             return;
         if (!vbmPaused)
@@ -3826,9 +3898,13 @@ public sealed partial class ExecutionService
             return;
         }
         var sentTreasureDoorLockonBeforeRetry = TrySendTreasureDoorLockonBeforeRetry(observedInteractable, gameObject);
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            CancelDisabledTreasureCofferWork(context);
         if (cancellationGeneration != interactionCancellationGeneration)
             return;
-        var interacted = TryInteractWithObject(gameObject);
+        var interacted = TryInteractWithObject(gameObject, isTreasureCoffer);
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            CancelDisabledTreasureCofferWork(context);
         if (cancellationGeneration != interactionCancellationGeneration)
             return;
         if (interacted)
@@ -3927,6 +4003,10 @@ public sealed partial class ExecutionService
         }
 
         ReleaseInteractionVbmPause(context, allowRestore: true);
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            CancelDisabledTreasureCofferWork(context);
+        if (committedInteractableKey is null)
+            interactionAttemptIsTreasureCoffer = false;
         if (cancellationGeneration != interactionCancellationGeneration)
             return;
         nextInteractAttemptUtc = now + InteractAttemptCooldown;
@@ -3940,7 +4020,12 @@ public sealed partial class ExecutionService
                 return;
             }
 
-            TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint);
+            TryBeginNavigation(gameObject.GameObjectId, preferredApproachPoint, isTreasureCoffer);
+            if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            {
+                CancelDisabledTreasureCofferWork(context);
+                return;
+            }
             SetPhase(
                 ExecutionPhase.ApproachingInteractableObjective,
                 $"{prefix} Direct interact did not land for {observedInteractable.Name} at XZ {targetHorizontalDistance:0.0}y (3D {targetDistance:0.0}y, Y {targetVerticalDelta:0.0}); continuing close-nav toward the full XYZ stand-off target.");
@@ -4336,6 +4421,8 @@ public sealed partial class ExecutionService
 
     private void ClearInteractableCommitment()
     {
+        if (!interactionAttemptDispatched)
+            interactionAttemptIsTreasureCoffer = false;
         ResetTreasureDoorLockonBeforeRetry();
         committedInteractableKey = null;
         committedInteractableMapId = 0;
@@ -4547,6 +4634,7 @@ public sealed partial class ExecutionService
 
     private bool TryHoldPendingProgressionInteractResult(DutyContextSnapshot context, PlannerSnapshot planner, ObservationSnapshot observation, string prefix)
     {
+        CancelDisabledTreasureCofferWork(context);
         if (pendingProgressionInteractable is null)
             return false;
 
@@ -5190,6 +5278,8 @@ public sealed partial class ExecutionService
 
     private bool IsInteractableStillAllowedInContext(DutyContextSnapshot context, ObservedInteractable interactable)
     {
+        if (!configuration.ConsiderTreasureCoffers && IsTreasureCofferWork(context, interactable))
+            return false;
         if (!MatchesCurrentMap(context, interactable.MapId))
             return false;
 
@@ -5219,6 +5309,8 @@ public sealed partial class ExecutionService
     internal void UpdateLeaveDuty(DutyContextSnapshot context, ObservationSnapshot observation, bool considerTreasureCoffers,
         Action sendLeaveUi, DateTime? nowUtc = null)
     {
+        CancelDisabledTreasureCofferWork(context);
+        considerTreasureCoffers &= configuration.ConsiderTreasureCoffers;
         if (TryHandleLeaveRespawn(context))
             return;
 
@@ -5401,11 +5493,20 @@ public sealed partial class ExecutionService
         => interactable.Classification == InteractableClass.TreasureCoffer
            || LooksLikeLeaveSweepTreasureCofferName(interactable.Name);
 
-    private static bool LooksLikeLeaveSweepTreasureCofferName(string name)
+    private bool IsTreasureCofferWork(DutyContextSnapshot context, ObservedInteractable interactable)
+        => interactable.Classification == InteractableClass.TreasureCoffer
+           || committedInteractableKey == interactable.Key
+               && committedInteractableObjectiveKind is PlannerObjectiveKind.TreasureCoffer or PlannerObjectiveKind.TreasureFollowerLoot
+           || interactable.Classification != InteractableClass.TreasureDoor
+               && !TreasureDungeonData.TryGetInteractableClassification(context.TerritoryTypeId, interactable.Name, out _)
+               && LooksLikeLeaveSweepTreasureCofferName(interactable.Name,
+                   includeSacks: TreasureDungeonData.IsSupportedDutyTerritory(context.TerritoryTypeId));
+
+    private static bool LooksLikeLeaveSweepTreasureCofferName(string name, bool includeSacks = true)
     {
         var normalized = name.Trim();
         return normalized.Contains("coffer", StringComparison.OrdinalIgnoreCase)
-               || normalized.Contains("sack", StringComparison.OrdinalIgnoreCase)
+               || includeSacks && normalized.Contains("sack", StringComparison.OrdinalIgnoreCase)
                || normalized.Contains("treasure chest", StringComparison.OrdinalIgnoreCase)
                || normalized.Equals("chest", StringComparison.OrdinalIgnoreCase)
                || normalized.EndsWith(" chest", StringComparison.OrdinalIgnoreCase);
@@ -5749,8 +5850,10 @@ public sealed partial class ExecutionService
         return names;
     }
 
-    private bool TryBeginNavigation(ulong gameObjectId, Vector3 destination)
+    private bool TryBeginNavigation(ulong gameObjectId, Vector3 destination, bool isTreasureCoffer = false)
     {
+        if (isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
+            return false;
         if (IsTreasureFollowerPostTransitSettleActive())
         {
             StopNavigationForTreasureFollowerPostTransitSettle();
@@ -5767,6 +5870,7 @@ public sealed partial class ExecutionService
         if (navigationActive && !mapFlagNavigationActive && movementTargetGameObjectId == gameObjectId && now < nextNavigationCommandUtc)
             return true;
 
+        var cancellationGeneration = interactionCancellationGeneration;
         if (TrySendCommand(string.Format(
                 CultureInfo.InvariantCulture,
                 "/vnav moveto {0:F2} {1:F2} {2:F2}",
@@ -5775,9 +5879,15 @@ public sealed partial class ExecutionService
                 destination.Z)))
         {
             navigationActive = true;
+            navigationTargetsTreasureCoffer = isTreasureCoffer;
             mapFlagNavigationActive = false;
             movementTargetGameObjectId = gameObjectId;
             nextNavigationCommandUtc = now + NavigationRetryCooldown;
+            if (isTreasureCoffer && (!configuration.ConsiderTreasureCoffers || cancellationGeneration != interactionCancellationGeneration))
+            {
+                StopNavigationForTreasureRouteNudge();
+                return false;
+            }
             return true;
         }
 
@@ -5786,6 +5896,8 @@ public sealed partial class ExecutionService
 
     private bool TryBeginMapFlagNavigation(DutyContextSnapshot context, ulong targetId, DungeonFrontierPoint frontierPoint)
     {
+        if (frontierPoint.IsTreasureFollowerStagingPoint && !configuration.ConsiderTreasureCoffers)
+            return false;
         var targetName = frontierPoint.Name;
         var destination = frontierPoint.Position;
 
@@ -5811,15 +5923,25 @@ public sealed partial class ExecutionService
             return false;
         }
 
+        if (frontierPoint.IsTreasureFollowerStagingPoint && !configuration.ConsiderTreasureCoffers)
+            return false;
+        var cancellationGeneration = interactionCancellationGeneration;
         var moveflagSent = TrySendCommand("/vnav moveflag");
         LogMapXzMoveflagResult(context, frontierPoint, destination, moveflagSent ? "sent" : "send-failed", flagStatus);
         if (!moveflagSent)
             return false;
 
         navigationActive = true;
+        navigationTargetsTreasureCoffer = frontierPoint.IsTreasureFollowerStagingPoint;
         mapFlagNavigationActive = true;
         movementTargetGameObjectId = targetId;
         nextNavigationCommandUtc = now + MapFlagNavigationRetryCooldown;
+        if (frontierPoint.IsTreasureFollowerStagingPoint
+            && (!configuration.ConsiderTreasureCoffers || cancellationGeneration != interactionCancellationGeneration))
+        {
+            StopNavigationForTreasureRouteNudge();
+            return false;
+        }
         return true;
     }
 
@@ -6299,13 +6421,14 @@ public sealed partial class ExecutionService
 
     internal Func<IGameObject, bool>? DispatchInteractionOverride { get; set; }
 
-    private unsafe bool TryInteractWithObject(IGameObject gameObject)
+    private unsafe bool TryInteractWithObject(IGameObject gameObject, bool isTreasureCoffer)
     {
         try
         {
             var cancellationGeneration = interactionCancellationGeneration;
             targetManager.Target = gameObject;
-            if (cancellationGeneration != interactionCancellationGeneration)
+            if (cancellationGeneration != interactionCancellationGeneration
+                || isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
                 return false;
 
             if (DispatchInteractionOverride is { } dispatch)
@@ -6316,7 +6439,8 @@ public sealed partial class ExecutionService
                 return false;
 
             var nativeObject = (GameObject*)gameObject.Address;
-            if (nativeObject == null)
+            if (nativeObject == null || cancellationGeneration != interactionCancellationGeneration
+                || isTreasureCoffer && !configuration.ConsiderTreasureCoffers)
                 return false;
 
             targetSystem->InteractWithObject(nativeObject, false);
@@ -6552,6 +6676,7 @@ public sealed partial class ExecutionService
     {
         ResetRecoveryNavigationProgress();
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -6600,6 +6725,7 @@ public sealed partial class ExecutionService
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -6661,6 +6787,7 @@ public sealed partial class ExecutionService
 
         treasureFollowerPostTransitSettleStopSent = true;
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -6727,6 +6854,7 @@ public sealed partial class ExecutionService
             TrySendCommand("/vnav stop");
 
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -6752,6 +6880,7 @@ public sealed partial class ExecutionService
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;
@@ -6783,6 +6912,7 @@ public sealed partial class ExecutionService
 
         TrySendCommand("/vnav stop");
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
     }
 
     private bool TryUpdateCardinalHold(DutyContextSnapshot context)
@@ -6890,6 +7020,7 @@ public sealed partial class ExecutionService
             TrySendCommand("/vnav stop");
 
         navigationActive = false;
+        navigationTargetsTreasureCoffer = false;
         movementTargetGameObjectId = 0;
         mapFlagNavigationActive = false;
         nextNavigationCommandUtc = DateTime.MinValue;

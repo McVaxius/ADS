@@ -226,6 +226,73 @@ public sealed class DutyLeaveRespawnTests
         Assert.False(execution.IsOwned);
     }
 
+    [Theory]
+    [InlineData("explicit")]
+    [InlineData("completion-exit")]
+    [InlineData("completion-release")]
+    public void DisablingCoffersBypassesExistingSweepWaitsWithoutLosingTheLeaveRequest(string request)
+    {
+        using var tempDirectory = new TempDirectory();
+        var configuration = new Configuration { ConsiderTreasureCoffers = true };
+        var execution = CreateExecution(tempDirectory.Path, out var objects, configuration);
+        var context = TreasureContext();
+        Assert.True(execution.StartDutyFromInside(context, sweepWithoutExit: request == "completion-release"));
+        if (request == "explicit") Assert.True(execution.LeaveDuty(context, considerTreasureCoffers: true));
+        else
+        {
+            execution.MarkDutyCompleted(context, context.TerritoryTypeId, context.ContentFinderConditionId);
+            Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Treasure duty"));
+        }
+        var now = DateTime.UtcNow;
+        var coffer = new ObservedInteractable
+        {
+            Key = "pending-final-coffer", GameObjectId = 1, DataId = 1, MapId = 1,
+            ObjectKind = ObjectKind.Treasure, Name = "Treasure Coffer", Position = Vector3.Zero,
+            LastSeenUtc = now, Classification = InteractableClass.TreasureCoffer, GhostReason = GhostReason.SeenPreviously,
+        };
+        objects.Coffer = DispatchProxy.Create<IGameObject, CofferProxy>();
+        SetField(execution, "leaveTreasureInteractionSent", true);
+        SetField(execution, "leaveTreasureSweepGraceUntilUtc", now.AddMinutes(1));
+        SetField(execution, "leaveLootDistributionWaitUntilUtc", now.AddMinutes(1));
+        SetField(execution, "nextInteractAttemptUtc", now.AddMinutes(1));
+        SetField(execution, "pendingProgressionInteractable", coffer);
+        SetField(execution, "pendingTreasureFollowerLootFollowThrough", true);
+        SetField(execution, "pendingProgressionInteractResultUntilUtc", now.AddMinutes(1));
+        SetField(execution, "pendingProgressionInteractAfterWaitUntilUtc", now.AddMinutes(1));
+        SetField(execution, "interactionAttemptDispatched", true);
+        SetField(execution, "interactionAttemptIsTreasureCoffer", true);
+        SetField(execution, "interactionAttemptDuty", (context.TerritoryTypeId, context.ContentFinderConditionId));
+        SetField(execution, "interactionAttemptOwnerMode", execution.CurrentMode);
+        execution.QueryInteractionDialog = () => true;
+        execution.DispatchInteractionOverride = _ => { Assert.Fail("Disabled final coffer dispatched"); return true; };
+        configuration.ConsiderTreasureCoffers = false;
+        var exits = 0;
+
+        execution.UpdateLeaveDuty(context, new ObservationSnapshot
+        {
+            LiveMonsters = [], LiveFollowTargets = [], MonsterGhosts = [],
+            LiveInteractables = [coffer], InteractableGhosts = [],
+        }, considerTreasureCoffers: false, () => ++exits, now);
+
+        Assert.False(Field<bool>(execution, "interactionAttemptDispatched"));
+        Assert.Null(Field<ObservedInteractable?>(execution, "pendingProgressionInteractable"));
+        Assert.False(execution.CompletionTreasureSweepCompleted);
+        if (request == "completion-release")
+        {
+            Assert.Equal(0, exits);
+            Assert.False(execution.IsOwned);
+            Assert.Equal(OwnershipMode.Observing, execution.CurrentMode);
+        }
+        else
+        {
+            Assert.Equal(1, exits);
+            Assert.True(execution.IsOwned);
+            Assert.Equal(OwnershipMode.Leaving, execution.CurrentMode);
+            Assert.True(Field<bool>(execution, "leaveDutyExitArmed"));
+            if (request == "explicit") Assert.True(execution.IsLeaveRequested);
+        }
+    }
+
     [Fact]
     public void VariantCriterionCompletionRetainsOwnershipThroughLootThenReleasesWithoutLeaving()
     {
@@ -409,7 +476,7 @@ public sealed class DutyLeaveRespawnTests
         TerritoryTypeId = territory, MapId = 1, ContentFinderConditionId = content, CurrentDuty = duty,
     };
 
-    private static ExecutionService CreateExecution(string path, out SweepObjectTableProxy table)
+    private static ExecutionService CreateExecution(string path, out SweepObjectTableProxy table, Configuration? configuration = null)
     {
         var log = DispatchProxy.Create<IPluginLog, ForceMarchLockTests.NoOpProxy>();
         var keys = DispatchProxy.Create<IKeyState, ForceMarchLockTests.NoOpProxy>();
@@ -420,7 +487,7 @@ public sealed class DutyLeaveRespawnTests
         var frontier = new DungeonFrontierService(null!, objects, log, rules, null!);
         return new ExecutionService(null!, objects, null!, DispatchProxy.Create<ICommandManager, ForceMarchLockTests.CommandManagerProxy>(),
             null!, frontier, null!, rules, new HyperFocusLeaseService(_ => "{}", _ => "{}", _ => "{}", () => "{}"),
-            new TreasureDoorStrafeInputService(keys, log), new CardinalHoldInputService(keys, log), new Configuration(), log);
+            new TreasureDoorStrafeInputService(keys, log), new CardinalHoldInputService(keys, log), configuration ?? new Configuration(), log);
     }
 
     private static DutyContextSnapshot TreasureContext(bool occupied = false)

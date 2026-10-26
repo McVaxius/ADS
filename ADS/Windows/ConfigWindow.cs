@@ -214,15 +214,6 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
         }
 
         MaterialSettings.Section(Ui.T("Treasure"));
-        var considerTreasureCoffers = configuration.ConsiderTreasureCoffers;
-        if (WindowLayout.Checkbox("Consider treasure coffers in planner", ref considerTreasureCoffers))
-        {
-            configuration.ConsiderTreasureCoffers = considerTreasureCoffers;
-            changed = true;
-        }
-
-        if (ImGui.IsItemHovered()) MaterialText.SetTooltip(Ui.T("Treat nearby eligible coffers as optional pickups. ADS keeps vertical and route-value guards."));
-
         var treasureDoorJiggleRecoveryEnabled = configuration.TreasureDoorJiggleRecoveryEnabled;
         if (WindowLayout.Checkbox("Treasure door frame recovery", ref treasureDoorJiggleRecoveryEnabled))
         {

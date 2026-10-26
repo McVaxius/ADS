@@ -1,3 +1,9 @@
+2026-10-26 - 2.0.0.8 - Cancel disabled treasure-coffer work (I664/I665)
+
+- Move the existing coffer setting to /ads loot and publish its current value through the existing status response for FrenRider. Keep loot rolling independent.
+- Clear disabled coffer staging before coordinator holds and cancel only coffer-owned navigation, interaction waits and retries. Restore only the owned VBM pause and recheck the setting immediately before dispatch. Preserve enabled coffer handling, progression routes, unrelated dialogs and explicit leave/completion ownership.
+- Debug/x64 compilation and all 229 focused coffer, interaction, VBM, leave, dialog and shared-fixture regressions passed. In-game acceptance remains user-controlled.
+
 2026-10-26 - 2.0.0.7 - Resume owned innkeeper conversations (I663/I666)
 
 - Advance the current owned innkeeper Talk before its entry menu, including while approaching or resuming the existing zone-stage wait. Visible dialogs retain their wait during readiness and the existing click cooldown, preventing duplicate NPC interactions.
