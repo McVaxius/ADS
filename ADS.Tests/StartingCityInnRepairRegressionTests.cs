@@ -1888,6 +1888,198 @@ public sealed class StartingCityInnRepairRegressionTests
         }
     }
 
+    [Theory]
+    [InlineData("SelectString", false)]
+    [InlineData("SelectString", true)]
+    [InlineData("SelectIconString", false)]
+    [InlineData("SelectIconString", true)]
+    [InlineData("SelectYesno", false)]
+    [InlineData("SelectYesno", true)]
+    public void InnEntryContinuesOwnedTalkBeforeMovementAndWaitsWithoutDuplicateInteraction(string selector, bool dialogAlreadyOpen)
+    {
+        var commands = new List<string>();
+        var clicks = new List<string>();
+        var interactions = 0;
+        var occupied = true;
+        var ready = false;
+        var acceptClick = true;
+        var selectorOverlapsTalk = false;
+        string? visibleDialog = dialogAlreadyOpen ? "Talk" : null;
+        uint territory = 130;
+        var playerPosition = Vector3.Zero;
+        var player = Fake<IPlayerCharacter>((method, _) => method.Name == "get_Position"
+            ? playerPosition : Default(method.ReturnType));
+        var keeper = Fake<IGameObject>((method, _) => method.Name switch
+        {
+            "get_BaseId" => 1001976u, "get_GameObjectId" => 900UL, "get_ObjectKind" => ObjectKind.EventNpc,
+            "get_Position" => new Vector3(28.86f, 7, -80.13f),
+            "get_Name" => new SeString(new TextPayload("Synthetic innkeeper")), _ => Default(method.ReturnType),
+        });
+        var unrelated = Fake<IGameObject>((method, _) => method.Name switch
+        {
+            "get_BaseId" => 1001976u, "get_GameObjectId" => 901UL, _ => Default(method.ReturnType),
+        });
+        IGameObject? currentTarget = keeper;
+        var targets = Fake<ITargetManager>((method, args) =>
+        {
+            if (method.Name == "get_Target") return currentTarget;
+            if (method.Name == "set_Target")
+            {
+                interactions++;
+                throw new InvalidOperationException("Synthetic interaction must not reach native client calls.");
+            }
+            return Default(method.ReturnType);
+        });
+        var objects = Fake<IObjectTable>((method, _) => method.Name switch
+        {
+            "get_LocalPlayer" => player,
+            "GetEnumerator" => ((IEnumerable<IGameObject>)new[] { keeper }).GetEnumerator(),
+            _ => Default(method.ReturnType),
+        });
+        var client = Fake<IClientState>((method, _) => method.Name switch
+        {
+            "get_IsLoggedIn" => true, "get_TerritoryType" => territory, _ => Default(method.ReturnType),
+        });
+        var condition = Fake<ICondition>((method, args) => method.Name == "get_Item"
+            ? occupied && (ConditionFlag)args![0]! == ConditionFlag.OccupiedInQuestEvent : Default(method.ReturnType));
+        var command = Fake<ICommandManager>((method, args) =>
+        {
+            if (method.Name != "ProcessCommand") return Default(method.ReturnType);
+            commands.Add((string)args![0]!);
+            return true;
+        });
+        var pluginInterface = Fake<IDalamudPluginInterface>((method, args) =>
+        {
+            if (method.Name != "GetIpcSubscriber") return Default(method.ReturnType);
+            var name = (string)args![0]!;
+            if (method.GetGenericArguments().Single() == typeof(bool))
+                return Fake<ICallGateSubscriber<bool>>((call, _) => call.Name == "InvokeFunc"
+                    ? name == "vnavmesh.Nav.IsReady" : Default(call.ReturnType));
+            return Fake<ICallGateSubscriber<object>>();
+        });
+        var property = typeof(Plugin).GetProperty("PluginInterface", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previous = property.GetValue(null);
+        property.SetValue(null, pluginInterface);
+        try
+        {
+            var inn = new InnEntryService(new TestData(InnTerritories([177, 178, 179])), objects, targets,
+                command, client, condition, Fake<IPluginLog>())
+            {
+                QueryInnDialog = name => (name == visibleDialog || selectorOverlapsTalk && name == selector, ready),
+                ClickInnDialog = name =>
+                {
+                    if (!acceptClick) return false;
+                    clicks.Add(name);
+                    visibleDialog = name == "Talk" ? selector : null;
+                    selectorOverlapsTalk = false;
+                    ready = false;
+                    return true;
+                },
+            };
+
+            // A pre-existing dialog wins even outside the counter approach; a dialog opened while moving stops that movement.
+            Assert.True(inn.StartManualEntry());
+            if (!dialogAlreadyOpen)
+            {
+                Assert.Equal("MovingToNpc", Get(inn, "state")!.ToString());
+                Assert.Equal("/vnav moveto 31.50 7.00 -82.00", Assert.Single(commands));
+                commands.Clear();
+                visibleDialog = "Talk";
+                inn.Update();
+            }
+            Assert.Equal("/vnav stop", Assert.Single(commands));
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            commands.Clear();
+            playerPosition = new Vector3(31.5f, 7, -82);
+            inn.Update();
+            Assert.Empty(clicks);
+            Assert.Equal(DateTime.MinValue, Get(inn, "lastInteractUtc"));
+            Assert.Equal(0, interactions);
+
+            ready = true;
+            currentTarget = unrelated;
+            inn.Update();
+            currentTarget = keeper;
+            occupied = false;
+            inn.Update();
+            Assert.Empty(clicks); // Same NPC type or a selected target alone does not own the event dialog.
+            occupied = true;
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow);
+            inn.Update();
+            Assert.Empty(clicks);
+            // During a native dialog handoff, ready Talk takes priority over a simultaneously visible selector.
+            selectorOverlapsTalk = true;
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow.AddSeconds(-2));
+            inn.Update();
+            Assert.Equal("Talk", Assert.Single(clicks));
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            Assert.Equal(selector, visibleDialog);
+
+            visibleDialog = null;
+            inn.Update();
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            Assert.Empty(commands); // The existing cooldown also protects the gap between Talk and its selector.
+            Assert.Equal(0, interactions);
+            visibleDialog = selector;
+
+            // The visible selector blocks interaction both before readiness and during the existing cooldown.
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow.AddSeconds(-2));
+            inn.Update();
+            ready = true;
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow);
+            inn.Update();
+            Assert.Single(clicks);
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow.AddSeconds(-2));
+            acceptClick = false;
+            inn.Update();
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            acceptClick = true;
+            inn.Update();
+            Assert.Equal(new[] { "Talk", selector }, clicks);
+            Assert.Equal("WaitingForZone", Get(inn, "state")!.ToString());
+            inn.Update();
+            Assert.True(inn.IsRunning); // Selecting a menu cannot complete entry in the city.
+
+            // The existing zone-stage timeout resumes the current Talk instead of opening another interaction.
+            visibleDialog = "Talk";
+            Set(inn, "stateStartedAtUtc", DateTime.UtcNow.AddSeconds(-13));
+            inn.Update();
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            ready = true;
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow.AddSeconds(-2));
+            inn.Update();
+            Assert.Equal("WaitingForMenu", Get(inn, "state")!.ToString());
+            ready = true;
+            Set(inn, "lastMenuClickUtc", DateTime.UtcNow.AddSeconds(-2));
+            inn.Update();
+            Assert.Equal(new[] { "Talk", selector, "Talk", selector }, clicks);
+            Assert.Equal("WaitingForZone", Get(inn, "state")!.ToString());
+            Assert.Empty(commands);
+            Assert.Equal(0, interactions);
+            Assert.Equal(DateTime.MinValue, Get(inn, "lastInteractUtc"));
+            territory = 178;
+            inn.Update();
+            Assert.False(inn.IsRunning);
+
+            territory = 130;
+            visibleDialog = "Talk";
+            Assert.True(inn.StartManualEntry());
+            Set(inn, "startedAtUtc", DateTime.UtcNow.AddSeconds(-91));
+            inn.Update();
+            Assert.False(inn.IsRunning);
+            Assert.Contains("Timed out", inn.StatusMessage);
+            Assert.Equal(4, clicks.Count);
+            Assert.True(inn.StartManualEntry());
+            inn.Cancel("test Stop");
+            ready = true;
+            inn.Update();
+            Assert.False(inn.IsRunning);
+            Assert.Equal(4, clicks.Count);
+            Assert.Equal(0, interactions);
+        }
+        finally { property.SetValue(null, previous); }
+    }
+
     [Fact]
     public void ManualInnRepairPreservesDestinationAndCancellationBoundaries()
     {

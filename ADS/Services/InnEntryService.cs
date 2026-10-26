@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace ADS.Services;
 
@@ -39,6 +40,7 @@ public sealed class InnEntryService
 
     private InnEntryState state = InnEntryState.Idle;
     private string targetNpcName = string.Empty;
+    private ulong targetNpcObjectId;
     private DateTime startedAtUtc = DateTime.MinValue;
     private DateTime stateStartedAtUtc = DateTime.MinValue;
     private DateTime lastMoveCommandUtc = DateTime.MinValue;
@@ -68,6 +70,9 @@ public sealed class InnEntryService
     public bool IsRunning => state != InnEntryState.Idle;
     public string StatusMessage { get; private set; } = "Idle";
 
+    internal Func<string, (bool Visible, bool Ready)> QueryInnDialog { get; set; } = ReadInnDialog;
+    internal Func<string, bool> ClickInnDialog { get; set; } = TryClickInnDialog;
+
     public bool StartManualEntry()
     {
         if (!clientState.IsLoggedIn || objectTable.LocalPlayer == null)
@@ -96,11 +101,21 @@ public sealed class InnEntryService
         }
 
         targetNpcName = npc.Name.TextValue;
+        targetNpcObjectId = npc.GameObjectId;
         startedAtUtc = DateTime.UtcNow;
         stateStartedAtUtc = startedAtUtc;
         lastMoveCommandUtc = DateTime.MinValue;
         lastInteractUtc = DateTime.MinValue;
         lastMenuClickUtc = DateTime.MinValue;
+
+        state = InnEntryState.WaitingForMenu;
+        StatusMessage = $"Waiting for innkeeper {targetNpcName}";
+        if (TryAdvanceInnDialogs())
+        {
+            StopMovement();
+            log.Information($"[ADS][Inn] /ads enterinn continuing the current innkeeper dialog for {targetNpcName}.");
+            return IsRunning;
+        }
 
         var distance = DistanceToLocalPlayer(npc);
         if (HasReachedInteractionPoint(npc))
@@ -175,15 +190,13 @@ public sealed class InnEntryService
         state = InnEntryState.Idle;
         StatusMessage = "Idle";
         targetNpcName = string.Empty;
+        targetNpcObjectId = 0;
     }
 
     private void UpdateMovingToNpc()
     {
         if (TryAdvanceInnDialogs())
-        {
-            TransitionTo(InnEntryState.WaitingForZone, "Waiting for inn zone transition");
             return;
-        }
 
         var npc = FindTargetNpc();
         if (npc == null)
@@ -206,10 +219,7 @@ public sealed class InnEntryService
     private void UpdateWaitingForMenu()
     {
         if (TryAdvanceInnDialogs())
-        {
-            TransitionTo(InnEntryState.WaitingForZone, "Waiting for inn zone transition");
             return;
-        }
 
         var npc = FindTargetNpc();
         if (npc == null)
@@ -238,8 +248,7 @@ public sealed class InnEntryService
 
     private void UpdateWaitingForZone()
     {
-        if (TryAdvanceInnDialogs())
-            return;
+        var hasDialog = TryAdvanceInnDialogs();
 
         if (condition[ConditionFlag.BetweenAreas])
             return;
@@ -247,8 +256,10 @@ public sealed class InnEntryService
         if (DateTime.UtcNow - stateStartedAtUtc < ZoneWaitTimeout)
             return;
 
-        log.Warning($"[ADS][Inn] Zone transition did not start after selecting the inn option for {targetNpcName}; retrying interaction.");
-        TransitionTo(InnEntryState.WaitingForMenu, $"Retrying {targetNpcName}");
+        log.Warning($"[ADS][Inn] Zone transition did not start after selecting the inn option for {targetNpcName}; resuming the current dialog.");
+        TransitionTo(InnEntryState.WaitingForMenu, $"Waiting for innkeeper {targetNpcName}");
+        if (!hasDialog)
+            UpdateWaitingForMenu();
     }
 
     private void TransitionTo(InnEntryState nextState, string statusMessage)
@@ -261,33 +272,65 @@ public sealed class InnEntryService
     private bool TryAdvanceInnDialogs()
     {
         var now = DateTime.UtcNow;
-        if (now - lastMenuClickUtc < MenuRetryCooldown)
+        foreach (var addonName in new[] { "Talk", "SelectString", "SelectIconString", "SelectYesno" })
+        {
+            var dialog = QueryInnDialog(addonName);
+            if (!dialog.Visible)
+                continue;
+
+            if (state == InnEntryState.MovingToNpc)
+            {
+                StopMovement();
+                TransitionTo(InnEntryState.WaitingForMenu, $"Waiting for innkeeper {targetNpcName}");
+            }
+
+            // Visible UI still owns the wait while it becomes ready or the existing click cooldown settles.
+            var target = targetManager?.Target;
+            if (!IsRunning || targetNpcObjectId == 0 || target == null || target.GameObjectId != targetNpcObjectId
+                || !KnownInnNpcIds.Contains(target.BaseId) || !condition[ConditionFlag.OccupiedInQuestEvent]
+                || !dialog.Ready || now - lastMenuClickUtc < MenuRetryCooldown)
+                return true;
+
+            if (!ClickInnDialog(addonName))
+                return true;
+
+            lastMenuClickUtc = now;
+            if (addonName == "Talk")
+                log.Information($"[ADS][Inn] Advancing innkeeper Talk for {targetNpcName}.");
+            else
+            {
+                log.Information($"[ADS][Inn] Selected the inn entry option in {addonName} for {targetNpcName}.");
+                TransitionTo(InnEntryState.WaitingForZone, "Waiting for inn zone transition");
+            }
+            return true;
+        }
+
+        return now - lastMenuClickUtc < MenuRetryCooldown;
+    }
+
+    private static unsafe (bool Visible, bool Ready) ReadInnDialog(string addonName)
+    {
+        var manager = RaptureAtkUnitManager.Instance();
+        var addon = manager == null ? null : manager->GetAddonByName(addonName);
+        return (addon != null && addon->IsVisible, addon != null && addon->IsReady);
+    }
+
+    private static unsafe bool TryClickInnDialog(string addonName)
+    {
+        var manager = RaptureAtkUnitManager.Instance();
+        var addon = manager == null ? null : manager->GetAddonByName(addonName);
+        if (addon == null || !addon->IsVisible || !addon->IsReady)
             return false;
 
-        if (GameInteractionHelper.IsAddonVisible("SelectString"))
+        if (addonName == "Talk")
         {
-            GameInteractionHelper.FireAddonCallback("SelectString", true, 0);
-            lastMenuClickUtc = now;
-            log.Information($"[ADS][Inn] Selecting the first SelectString option for {targetNpcName}.");
+            new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.Talk(addon).Click();
             return true;
         }
 
-        if (GameInteractionHelper.IsAddonVisible("SelectIconString"))
-        {
-            GameInteractionHelper.FireAddonCallback("SelectIconString", true, 0);
-            lastMenuClickUtc = now;
-            log.Information($"[ADS][Inn] Selecting the first SelectIconString option for {targetNpcName}.");
-            return true;
-        }
-
-        if (GameInteractionHelper.ClickYesIfVisible(log))
-        {
-            lastMenuClickUtc = now;
-            log.Information($"[ADS][Inn] Confirmed SelectYesno while entering the inn through {targetNpcName}.");
-            return true;
-        }
-
-        return false;
+        return addonName == "SelectYesno"
+            ? GameInteractionHelper.ClickYesIfVisible()
+            : GameInteractionHelper.TryFireAddonCallback(addonName, true, 0);
     }
 
     private void TryInteract(IGameObject npc)
@@ -405,6 +448,7 @@ public sealed class InnEntryService
         state = InnEntryState.Idle;
         StatusMessage = "Idle";
         targetNpcName = string.Empty;
+        targetNpcObjectId = 0;
     }
 
     private void Fail(string message)
@@ -414,6 +458,7 @@ public sealed class InnEntryService
         state = InnEntryState.Idle;
         StatusMessage = message;
         targetNpcName = string.Empty;
+        targetNpcObjectId = 0;
     }
 
     private IGameObject? FindTargetNpc()

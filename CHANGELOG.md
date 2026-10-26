@@ -1,3 +1,9 @@
+2026-10-26 - 2.0.0.7 - Resume owned innkeeper conversations (I663/I666)
+
+- Advance the current owned innkeeper Talk before its entry menu, including while approaching or resuming the existing zone-stage wait. Visible dialogs retain their wait during readiness and the existing click cooldown, preventing duplicate NPC interactions.
+- Enter the zone wait only after an accepted entry selection. Preserve exact innkeeper ownership, cancellation, city approach, confirmed-territory completion and the 90-second hard limit for manual entry and repair's existing inn-return path.
+- Debug/x64 compilation and all 184 focused inn/repair regressions passed. In-game acceptance remains user-controlled.
+
 2026-10-26 - 2.0.0.6 - Approved material styles and colour controls
 
 - Add Glassmorphism, Spatial and Cyberpunk as separate materials across the retained windows, tools and popups. Preserve Auto, Picker, LCARS, native actions, IDs, density and font roles.
