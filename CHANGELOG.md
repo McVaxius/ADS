@@ -1,3 +1,9 @@
+2026-10-26 - 2.0.0.9 - Retain duty truth from the third native bound flag (I666)
+
+- Include BoundByDuty95 in captured duty state, held identity and the direct desynthesis duty check. Keep ownership when only that native flag remains, without treating it as completion.
+- Preserve matching native completion, explicit leave and departure cleanup. The supplied incident logs do not establish the release-time flag state, so in-game confirmation of the reported completion/exit failure remains pending.
+- Debug/x64 compilation and all 64 focused duty-context, cutscene, completion and leave regressions passed, including both ordinary-flag to flag95-only transitions.
+
 2026-10-26 - 2.0.0.8 - Cancel disabled treasure-coffer work (I664/I665)
 
 - Move the existing coffer setting to /ads loot and publish its current value through the existing status response for FrenRider. Keep loot rolling independent.

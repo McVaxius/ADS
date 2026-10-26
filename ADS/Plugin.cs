@@ -1658,7 +1658,8 @@ public sealed class Plugin : IDalamudPlugin
 
         // IPC may arrive after duty exit but before ADS's next framework duty-context tick.
         DesynthDutyLedgerStore.Update(
-            Condition[ConditionFlag.BoundByDuty] || Condition[ConditionFlag.BoundByDuty56],
+            Condition[ConditionFlag.BoundByDuty] || Condition[ConditionFlag.BoundByDuty56]
+                || Condition[ConditionFlag.BoundByDuty95],
             ClientState.TerritoryType,
             Configuration.DesynthSource == DesynthSource.LastDutyGains,
             CaptureRegularInventoryCounts);

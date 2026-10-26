@@ -204,6 +204,70 @@ public sealed class CutsceneRouteProgressTests
     }
 
     [Theory]
+    [InlineData(ConditionFlag.BoundByDuty)]
+    [InlineData(ConditionFlag.BoundByDuty56)]
+    public void BoundByDuty95OnlyPreservesOwnershipCompletionAndExplicitLeaveUntilDeparture(ConditionFlag entryFlag)
+    {
+        var capture = new ContextCapture(entryFlag);
+        var original = capture.Service.Current;
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var planner = new PlannerSnapshot
+        {
+            Mode = PlannerMode.Progression, ObjectiveKind = PlannerObjectiveKind.None,
+            Objective = "Waiting for duty truth", Explanation = "Native duty flag transition regression",
+            CapturedAtUtc = DateTime.UtcNow,
+        };
+        Assert.True(fixture.Execution.StartDutyFromInside(original));
+        Tick(original);
+        Assert.Equal(OwnershipMode.OwnedStartInside, fixture.Execution.CurrentMode);
+
+        capture.Flags.Active.Clear();
+        capture.Flags.Active.Add(ConditionFlag.BoundByDuty95);
+        capture.Service.Update(true, original.TerritoryTypeId, 1, 0);
+        var only95 = capture.Service.Current;
+        Assert.False(only95.BoundByDuty);
+        Assert.False(only95.BoundByDuty56);
+        Assert.True(only95.BoundByDuty95);
+        Assert.True(only95.InInstancedDuty);
+        Assert.Equal(original.ContentFinderConditionId, only95.ContentFinderConditionId);
+        Assert.Same(original.CurrentDuty, only95.CurrentDuty);
+        Tick(only95);
+        Assert.True(fixture.Execution.IsOwned);
+        Assert.Equal(OwnershipMode.OwnedStartInside, fixture.Execution.CurrentMode);
+        Assert.Null(Get<(uint Territory, uint Content)?>(fixture.Execution, "completedDuty"));
+
+        fixture.Execution.MarkDutyCompleted(only95, original.TerritoryTypeId, original.ContentFinderConditionId);
+        Assert.Equal<(uint Territory, uint Content)?>((original.TerritoryTypeId, original.ContentFinderConditionId),
+            Get<(uint Territory, uint Content)?>(fixture.Execution, "completedDuty"));
+        fixture.Execution.CompleteDuty("Synthetic duty");
+        Assert.Equal(OwnershipMode.Observing, fixture.Execution.CurrentMode);
+        Assert.False(fixture.Execution.IsOwned);
+        Assert.True(fixture.Execution.LeaveDuty(only95, considerTreasureCoffers: false));
+        Assert.True(fixture.Execution.IsLeaveRequested);
+        var returnRequests = 0;
+        Assert.True(fixture.Execution.TryHandleLeaveRespawn(only95, true, () => ++returnRequests > 0));
+        Assert.Equal(1, returnRequests);
+        Assert.True(fixture.Execution.TryHandleLeaveRespawn(only95, true, () => ++returnRequests > 0));
+        Assert.Equal(1, returnRequests);
+
+        capture.Flags.Active.Clear();
+        capture.Service.Update(true, original.TerritoryTypeId, 1, 0);
+        var departed = capture.Service.Current;
+        Assert.False(departed.InInstancedDuty);
+        Tick(departed);
+        Assert.False(fixture.Execution.IsOwned);
+        Assert.False(fixture.Execution.IsLeaveRequested);
+        Assert.Equal(OwnershipMode.Idle, fixture.Execution.CurrentMode);
+        Assert.Null(Get<(uint Territory, uint Content)?>(fixture.Execution, "completedDuty"));
+
+        void Tick(DutyContextSnapshot context)
+        {
+            fixture.Execution.ObserveDutyCompletion(context);
+            fixture.Update(planner, context);
+        }
+    }
+
+    [Theory]
     [InlineData("new-duty")]
     [InlineData("exit")]
     [InlineData("logout")]
@@ -312,13 +376,13 @@ public sealed class CutsceneRouteProgressTests
 
     private sealed class ContextCapture
     {
-        public ContextCapture()
+        public ContextCapture(ConditionFlag entryFlag = ConditionFlag.BoundByDuty)
         {
             var client = DispatchProxy.Create<IClientState, ClientProxy>();
             Client = (ClientProxy)(object)client;
             var conditions = DispatchProxy.Create<ICondition, ConditionsProxy>();
             Flags = (ConditionsProxy)(object)conditions;
-            Flags.Active.Add(ConditionFlag.BoundByDuty);
+            Flags.Active.Add(entryFlag);
             var first = TestDutyContextFactory.Create().CurrentDuty!;
             var second = TestDutyContextFactory.Create(territoryId: 778, cfcId: 889).CurrentDuty!;
             var catalog = (DutyCatalogService)RuntimeHelpers.GetUninitializedObject(typeof(DutyCatalogService));

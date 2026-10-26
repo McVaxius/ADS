@@ -29,6 +29,7 @@ public sealed class DutyContextService
             IsLoggedIn = false,
             BoundByDuty = false,
             BoundByDuty56 = false,
+            BoundByDuty95 = false,
             BetweenAreas = false,
             BetweenAreas51 = false,
             Jumping = false,
@@ -69,6 +70,7 @@ public sealed class DutyContextService
         var betweenAreas51 = condition[ConditionFlag.BetweenAreas51];
         var boundByDuty = condition[ConditionFlag.BoundByDuty];
         var boundByDuty56 = condition[ConditionFlag.BoundByDuty56];
+        var boundByDuty95 = condition[ConditionFlag.BoundByDuty95];
         var occupiedInCutSceneEvent = condition[ConditionFlag.OccupiedInCutSceneEvent];
         var watchingCutscene = condition[ConditionFlag.WatchingCutscene];
         var watchingCutscene78 = condition[ConditionFlag.WatchingCutscene78];
@@ -77,7 +79,7 @@ public sealed class DutyContextService
         // Missing native fields during a held run are not a new duty. Retaining
         // the identity here also keeps authored destination keys consistent.
         if (pluginEnabled && isLoggedIn && Current.PluginEnabled && Current.IsLoggedIn
-            && (boundByDuty || boundByDuty56 || transitHold)
+            && (boundByDuty || boundByDuty56 || boundByDuty95 || transitHold)
             && (Current.InInstancedDuty || Current.IsCutscene || Current.IsUnsafeTransition)
             && Current.TerritoryTypeId != 0 && Current.ContentFinderConditionId != 0
             && (territoryTypeId == 0 || territoryTypeId == Current.TerritoryTypeId)
@@ -104,6 +106,7 @@ public sealed class DutyContextService
             IsLoggedIn = isLoggedIn,
             BoundByDuty = boundByDuty,
             BoundByDuty56 = boundByDuty56,
+            BoundByDuty95 = boundByDuty95,
             BetweenAreas = betweenAreas,
             BetweenAreas51 = betweenAreas51,
             Jumping = condition[ConditionFlag.Jumping],

@@ -8,6 +8,7 @@ public sealed class DutyContextSnapshot
     public required bool IsLoggedIn { get; init; }
     public required bool BoundByDuty { get; init; }
     public required bool BoundByDuty56 { get; init; }
+    public bool BoundByDuty95 { get; init; }
     public required bool BetweenAreas { get; init; }
     public required bool BetweenAreas51 { get; init; }
     public required bool Jumping { get; init; }
@@ -31,7 +32,7 @@ public sealed class DutyContextSnapshot
     public required DutyCatalogEntry? CurrentDuty { get; init; }
 
     public bool InInstancedDuty
-        => BoundByDuty || BoundByDuty56;
+        => BoundByDuty || BoundByDuty56 || BoundByDuty95;
 
     public bool IsUnsafeTransition
         => BetweenAreas || BetweenAreas51;
