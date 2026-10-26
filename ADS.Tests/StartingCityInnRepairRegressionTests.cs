@@ -1191,6 +1191,125 @@ public sealed class StartingCityInnRepairRegressionTests
     }
 
     [Fact]
+    public void NpcNoInnRepairAdmitsANearbyMenderOutsideSanctuary()
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoInn(), fixture.Service.StatusMessage);
+        Assert.Equal("npc-no-inn", fixture.Service.ActiveModeName);
+        Assert.Equal(1, fixture.TargetChanges);
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/li "));
+    }
+
+    [Theory]
+    [InlineData(false, 79f, true)]
+    [InlineData(false, 81f, false)]
+    [InlineData(true, 119f, true)]
+    [InlineData(true, 121f, false)]
+    public void NearbyRepairAdmissionPreservesEachModesSearchAndTravelLimits(bool localOnly, float distance, bool accepted)
+    {
+        using var fixture = new NpcSaleFixture(repair: true) { VendorPosition = new Vector3(distance, 0, 0) };
+        Assert.Equal(accepted, localOnly ? fixture.Service.StartNpcRepairNoTeleportNoInn() : fixture.Service.StartNpcRepairNoInn());
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/li "));
+        Assert.Equal(accepted, fixture.Service.IsRunning);
+        Assert.Equal(0, fixture.TargetChanges); // Outside interact range; admission never clicks a shop NPC.
+    }
+
+    [Fact]
+    public void NearbyShopNpcWithoutTheRepairHandlerCannotAdmitNoInnRepair()
+    {
+        using var fixture = new NpcSaleFixture();
+        Assert.False(fixture.Service.StartNpcRepairNoInn());
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Equal(0, fixture.TargetChanges);
+        Assert.All(fixture.Commands, command => Assert.Equal("/vnav stop", command));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OwnedRepairMenuWaitsForTheExistingNativeTransitionCooldown(bool selected)
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        var now = DateTime.UtcNow;
+        Set(fixture.Service, "npcRepairUiCharacter", fixture.CharacterId);
+        Set(fixture.Service, "lastInteractUtc", selected ? now.AddSeconds(-3) : now);
+        Set(fixture.Service, "lastMenuSelectionUtc", selected ? now : DateTime.MinValue);
+
+        // A native selector can disappear before its selection addon closes, or be
+        // unavailable while a just-opened menu populates. Neither authorizes another click.
+        Invoke(fixture.Service, "TrySelectRepairMenuOption", now.AddMilliseconds(1400));
+        Assert.True(fixture.Service.IsRunning);
+        Assert.Empty(fixture.Service.LastFailureMessage);
+        Assert.Equal(1, fixture.TargetChanges);
+
+        fixture.CharacterId++;
+        Invoke(fixture.Service, "TrySelectRepairMenuOption", now.AddMilliseconds(1450));
+        Assert.False(fixture.Service.IsRunning); // The cooldown never bypasses ownership.
+        Assert.Contains("did not open", fixture.Service.LastFailureMessage);
+    }
+
+    [Fact]
+    public unsafe void OwnedRepairMenuStopsClearlyWhenItsNativeSelectorRemainsUnavailableAfterCooldown()
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        var priorSelector = EventHandlerSelector.Addresses.Instance.Value;
+        var selector = new EventHandlerSelector(); // Native selector was cleared; no option is guessed.
+        try
+        {
+            EventHandlerSelector.Addresses.Instance.Value = (nint)(&selector);
+            Set(fixture.Service, "npcRepairUiCharacter", fixture.CharacterId);
+            Set(fixture.Service, "lastInteractUtc", DateTime.UtcNow.AddSeconds(-3));
+            Invoke(fixture.Service, "TrySelectRepairMenuOption", DateTime.UtcNow);
+            Assert.False(fixture.Service.IsRunning);
+            Assert.Contains("could not identify", fixture.Service.LastFailureMessage);
+            Assert.Equal(DateTime.MinValue, Get(fixture.Service, "lastMenuSelectionUtc"));
+            Assert.Equal(1, fixture.TargetChanges);
+        }
+        finally { EventHandlerSelector.Addresses.Instance.Value = priorSelector; }
+    }
+
+    [Theory]
+    [InlineData(418u, 80u, 429u)]
+    [InlineData(132u, 94u, 179u)]
+    public void InnRepairStopsAtAMenderAlongTheRouteAndFinishesTheSamePathAfterRepair(
+        uint territory, uint aethernet, uint room)
+    {
+        using var fixture = new NpcSaleFixture(repair: true)
+        { TerritoryId = territory, VendorPosition = new Vector3(4, 0, 0) };
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        Set(fixture.Service, "activeNpcRepairMode", Enum.Parse(Get(fixture.Service, "activeNpcRepairMode")!.GetType(), "YesInn"));
+        Set(fixture.Service, "npcRepairRequiredInnTerritory", room);
+        var routeType = typeof(UtilityAutomationService).GetNestedType("ResolvedInnRepairRoute", BindingFlags.NonPublic)!;
+        var waypoint = new Vector3(12, 0, 0);
+        var route = Activator.CreateInstance(routeType, territory, "Synthetic city", aethernet, "Synthetic inn",
+            new[] { waypoint }, 0)!;
+        Set(fixture.Service, "activeNpcRepairInnRoute", route);
+        Set(fixture.Service, "npcRepairTravelStage", Enum.Parse(Get(fixture.Service, "npcRepairTravelStage")!.GetType(), "WalkingInnPath"));
+        Set(fixture.Service, "npcRepairTravelStageStartedUtc", DateTime.UtcNow);
+        fixture.Service.Update();
+        Assert.Equal("None", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal(route, Get(fixture.Service, "activeNpcRepairInnRoute"));
+        Assert.Contains("/vnav moveto 4.00 0.00 0.00", fixture.Commands);
+        Assert.DoesNotContain("/vnav moveto 12.00 0.00 0.00", fixture.Commands);
+
+        fixture.PlayerPosition = fixture.VendorPosition;
+        Set(fixture.Service, "npcRepairMenderReached", true);
+        Invoke(fixture.Service, "Complete", "Synthetic repair finished");
+        fixture.Service.Update();
+        Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal(room, Get(fixture.Service, "npcRepairRequiredInnTerritory"));
+        Assert.Contains("/vnav moveto 12.00 0.00 0.00", fixture.Commands);
+        Assert.Empty(fixture.Service.LastSuccessMessage);
+        fixture.PlayerPosition = waypoint;
+        fixture.Service.Update();
+        Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal(1, Get(fixture.Service, "npcRepairInnPathIndex"));
+        fixture.Service.Cancel("test complete");
+    }
+
+    [Fact]
     public void NpcSaleApproachStopsOnlyOwnedNavigationAndSettlesBeforeDispatch()
     {
         using var fixture = new NpcSaleFixture();
@@ -1628,7 +1747,12 @@ public sealed class StartingCityInnRepairRegressionTests
         uint territory = 178;
         var position = new Vector3(-137.8995f, -3.154889f, -168.48999f);
         var player = Fake<IPlayerCharacter>((method, _) => method.Name == "get_Position" ? position : Default(method.ReturnType));
-        var objects = Fake<IObjectTable>((method, _) => method.Name == "get_LocalPlayer" ? player : Default(method.ReturnType));
+        var objects = Fake<IObjectTable>((method, _) => method.Name switch
+        {
+            "get_LocalPlayer" => player,
+            "GetEnumerator" => Enumerable.Empty<IGameObject>().GetEnumerator(),
+            _ => Default(method.ReturnType),
+        });
         var client = Fake<IClientState>((method, _) => method.Name switch
         {
             "get_IsLoggedIn" => true, "get_TerritoryType" => territory, _ => Default(method.ReturnType),
@@ -2214,6 +2338,7 @@ public sealed class StartingCityInnRepairRegressionTests
         public Vector3 PlayerPosition { get; set; }
         public ulong CharacterId { get; set; } = 1;
         public bool LoggedIn { get; set; } = true;
+        public uint TerritoryId { get; set; } = 130;
         public bool Loading { get; set; }
         public bool Mounted { get; set; }
         public bool Combat { get; set; }
@@ -2311,7 +2436,7 @@ public sealed class StartingCityInnRepairRegressionTests
             });
             var client = Fake<IClientState>((method, _) => method.Name switch
             {
-                "get_IsLoggedIn" => LoggedIn, "get_TerritoryType" => 130u, _ => Default(method.ReturnType),
+                "get_IsLoggedIn" => LoggedIn, "get_TerritoryType" => TerritoryId, _ => Default(method.ReturnType),
             });
             var condition = Fake<ICondition>((method, args) => method.Name != "get_Item" ? Default(method.ReturnType)
                 : (ConditionFlag)args![0]! switch

@@ -1,3 +1,8 @@
+2026-10-25 - 2.0.0.5 - NPC repair admission and inn routing (I650/I654/I657/I658)
+
+- Admit valid nearby menders before applying sanctuary requirements to field travel. Retain repair mode, native handler identity and owned-menu checks, and let the existing selection cooldown settle before inspecting a closing selector.
+- Find loaded menders during the existing inn approach, retain the remaining city path and finish it before entering the selected inn. No new retry or recovery layer is added.
+
 2026-10-24 - Resolve the live NPC repair service (I649)
 
 - Select the unique repair handler from the NPC's current event menu instead of guessing visible rows from sheet indexes or falling back to row zero. Stop clearly when repair cannot be identified.

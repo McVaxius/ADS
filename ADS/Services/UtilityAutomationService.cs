@@ -1198,17 +1198,6 @@ public sealed unsafe class UtilityAutomationService
         if (IsRepairBlockedByMountedState(UtilityTask.NpcRepair))
             return false;
 
-        if (saleOperationId == null && gearSale == null && mode == NpcRepairMode.NoInn
-            && clientState.IsLoggedIn
-            && objectTable.LocalPlayer != null
-            && !condition[ConditionFlag.BetweenAreas]
-            && !CanStartNpcRepairNoInnHere())
-        {
-            StatusMessage = "NPC repair without inn fallback can only start from a sanctuary or nearby Aetheryte/Aethernet. Move to a sanctuary, stand near an Aetheryte/Aethernet, or use /ads npcrepair for inn fallback.";
-            log.Warning($"[ADS][Utility] {StatusMessage}");
-            return false;
-        }
-
         var statusMessage = saleOperationId != null || gearSale != null ? "Looking for a nearby NPC vendor for selling." : mode switch
         {
             NpcRepairMode.NoInn => "Starting NPC repair without inn fallback.",
@@ -1274,9 +1263,11 @@ public sealed unsafe class UtilityAutomationService
             return false;
         }
 
-        if (npcSaleRequest && !CanStartNpcRepairNoInnHere())
+        if (mode == NpcRepairMode.NoInn && !CanStartNpcRepairNoInnHere())
         {
-            Fail("No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet.");
+            Fail(npcSaleRequest
+                ? "No nearby sale vendor was found; field travel requires a sanctuary or nearby Aetheryte/Aethernet."
+                : "NPC repair without inn fallback can only start from a sanctuary or nearby Aetheryte/Aethernet. Move to a sanctuary, stand near an Aetheryte/Aethernet, or use /ads npcrepair for inn fallback.");
             return false;
         }
 
@@ -2581,19 +2572,19 @@ public sealed unsafe class UtilityAutomationService
             Fail("ADS did not open this repair menu; no menu option was selected.");
             return;
         }
+        // The selector may not be populated yet, or may already be cleared while
+        // its addon closes after dispatch. Let the existing transition cooldown settle.
+        if (now - lastInteractUtc < MenuRetryCooldown || now - lastMenuSelectionUtc < MenuRetryCooldown)
+        {
+            StatusMessage = $"Waiting for repair menu retry window on {targetNpcName}.";
+            return;
+        }
         var selector = EventHandlerSelector.Instance();
-        var events = EventFramework.Instance();
-        if (selector == null || selector->Target == null || events == null
+        if (selector == null || selector->Target == null
             || !OwnsNpcRepairNpc((ulong)selector->Target->GetGameObjectId(), selector->Target->BaseId)
             || selector->OptionsCount is < 1 or > 32)
         {
             Fail("ADS could not identify its repair NPC's live menu; no menu option was selected.");
-            return;
-        }
-
-        if (now - lastMenuSelectionUtc < MenuRetryCooldown)
-        {
-            StatusMessage = $"Waiting for repair menu retry window on {targetNpcName}.";
             return;
         }
 
@@ -2614,6 +2605,12 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
+        var events = EventFramework.Instance();
+        if (events == null)
+        {
+            Fail("ADS could not identify its repair NPC's live menu; no menu option was selected.");
+            return;
+        }
         log.Debug("[ADS][Utility] {Diagnostic}", diagnostic);
         events->InteractWithHandlerFromSelector(selectorIndex);
         lastMenuSelectionUtc = now;
@@ -2767,7 +2764,14 @@ public sealed unsafe class UtilityAutomationService
 
     private void BeginNpcRepairWithCandidate(RepairNpcCandidate targetNpc, string logPrefix)
     {
+        var innRoute = activeNpcRepairInnRoute;
+        var innPathIndex = npcRepairInnPathIndex;
         ClearNpcRepairInnTravel();
+        if (activeNpcRepairMode == NpcRepairMode.YesInn)
+        {
+            activeNpcRepairInnRoute = innRoute;
+            npcRepairInnPathIndex = innPathIndex;
+        }
         targetNpcGameObjectId = targetNpc.GameObjectId;
         targetNpcBaseId = targetNpc.BaseId;
         targetNpcName = targetNpc.Name;
@@ -2830,6 +2834,11 @@ public sealed unsafe class UtilityAutomationService
 
         if (route.TerritoryTypeId == clientState.TerritoryType)
         {
+            if (TryFindNearbyRepairNpc(out var targetNpc))
+            {
+                BeginNpcRepairWithCandidate(targetNpc, "Starting inn repair with");
+                return IsRunning;
+            }
             SetNpcRepairTravelStage(
                 route.Path.Length > 0
                     ? NpcRepairTravelStage.WalkingInnPath
@@ -3276,9 +3285,18 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
+        if (npcRepairTravelStage != NpcRepairTravelStage.ReturningToInn
+            && TryFindNearbyRepairNpc(out var targetNpc))
+        {
+            BeginNpcRepairWithCandidate(targetNpc, $"Found a mender on the {route.TerritoryName} inn route:");
+            return;
+        }
+
         if (npcRepairInnPathIndex >= route.Path.Length)
         {
             StopMovementIfNpcRepair();
+            if (npcRepairTravelStage == NpcRepairTravelStage.ReturningToInn)
+                return;
             SetNpcRepairTravelStage(
                 NpcRepairTravelStage.AwaitingRepairNpc,
                 $"Looking for a repair NPC near the {route.TerritoryName} inn.");
@@ -3294,6 +3312,8 @@ public sealed unsafe class UtilityAutomationService
             if (npcRepairInnPathIndex >= route.Path.Length)
             {
                 StopMovementIfNpcRepair();
+                if (npcRepairTravelStage == NpcRepairTravelStage.ReturningToInn)
+                    return;
                 SetNpcRepairTravelStage(
                     NpcRepairTravelStage.AwaitingRepairNpc,
                     $"Looking for a repair NPC near the {route.TerritoryName} inn.");
@@ -3356,7 +3376,9 @@ public sealed unsafe class UtilityAutomationService
                 return;
             }
             activeNpcRepairInnRoute = route;
-            SetNpcRepairTravelStage(NpcRepairTravelStage.AwaitingRepairNpc, "Looking for a repair NPC outside the inn room.");
+            SetNpcRepairTravelStage(route.Path.Length > 0
+                    ? NpcRepairTravelStage.WalkingInnPath : NpcRepairTravelStage.AwaitingRepairNpc,
+                "Looking for a repair NPC outside the inn room.");
             return;
         }
 
@@ -3402,6 +3424,16 @@ public sealed unsafe class UtilityAutomationService
                 Fail($"NPC repair entered room {clientState.TerritoryType}, expected {npcRepairRequiredInnTerritory}.");
             else
                 Complete($"NPC repair trip finished; confirmed entry into inn room {npcRepairRequiredInnTerritory}.");
+            return;
+        }
+        if (activeNpcRepairInnRoute is { } route && npcRepairInnPathIndex < route.Path.Length)
+        {
+            if (clientState.TerritoryType != route.TerritoryTypeId)
+            {
+                Fail("NPC repair left the selected inn city before returning to its inn.");
+                return;
+            }
+            UpdateNpcRepairInnPath(DateTime.UtcNow, route);
             return;
         }
         if (innEntryService == null)
