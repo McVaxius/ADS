@@ -61,11 +61,15 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
             ImGui.SetNextWindowSize(new Vector2(460 * ImGuiHelpers.GlobalScale, 0), ImGuiCond.Always);
             fontStatusFold.PreDraw("ADS##FontStatus", null, null, reducedMotion: false,
                 prepareDecorations: fontStatusDecorations.Prepare);
+            bool statusVisible;
+            using (var backdrop = MaterialSkin.BackdropStyle())
+                statusVisible = ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize);
             try
             {
-                if (ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize))
+                if (statusVisible)
                 {
                     fontStatusDecorations.Paint();
+                    MaterialSkin.Backdrop();
                     if (theme.IsLcars) MaterialLcars.Header("ADS");
                     var failed = plugin.Fonts.LoadException is not null;
                     ImGui.TextWrapped(Ui.Language == UiLanguage.Hindi && failed ? "Hindi UI fonts are unavailable. Use English to continue."
@@ -95,7 +99,9 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
         using var body = plugin.Fonts.Push(UiFontRole.Body);
         using var chrome = MaterialWindowChrome.Push();
-        using var nativeButtons = MaterialLcars.NativeButtonStyle();
+        if (theme.IsGlassmorphism)
+            style.Color(ImGuiCol.ChildBg, MaterialColor.Alpha(theme.Colors.Surface, .42f));
+        using var nativeButtons = MaterialSkin.NativeButtonStyle();
         PrepareAppearanceTitleBars(plugin.WindowSystem);
         plugin.WindowSystem.Draw();
         foreach (var titlebar in appearanceTitleBars.Values) titlebar.DrawPopups();
@@ -193,7 +199,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var width = Math.Max(130 * scale, LanguageMenuLabels.Max(label => MaterialText.Measure(label).X) + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2);
         ImGui.SetNextItemWidth(MaterialLayout.FitNextItemWidth(width, width));
         var changed = false;
-        if (MaterialText.BeginCombo("##ADSUiLanguage", LanguageMenuLabel((int)Ui.Language)))
+        if (WindowLayout.BeginCombo("##ADSUiLanguage", LanguageMenuLabel((int)Ui.Language)))
         {
             try {
             for (var index = 0; index < Ui.LanguageLabels.Length; index++)
@@ -315,7 +321,15 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                 Ui.T("Theme colour"), Ui.T("Choose each colour independently."), Ui.T("Background"), Ui.T("Controls"),
                 Ui.T("Text"), Ui.T("Aa  Preview text"), Ui.T("Control"),
                 Ui.T("Switch to Picker to set each colour yourself."), Ui.T("Switch back to Auto to use the automatic theme."))
-            { Lcars = Ui.T("LCARS"), LcarsHelp = Ui.T("LCARS panels, bars and controls") },
+            {
+                Lcars = Ui.T("LCARS"), LcarsHelp = Ui.T("LCARS panels, bars and controls"),
+                Glassmorphism = Ui.T("Glassmorphism"), Spatial = Ui.T("Spatial"), Cyberpunk = Ui.T("Cyberpunk"),
+                LcarsBar1 = Ui.T("LCARS bar 1"), LcarsBar2 = Ui.T("LCARS bar 2"), LcarsBar3 = Ui.T("LCARS bar 3"),
+                Reset = Ui.T("Reset"), ResetColors = Ui.T("Reset colours"), Animation = Ui.T("Animation"),
+                AnimationSpeed = Ui.T("Animation speed (0.1–10x; default 1x)"), WaveColors = Ui.T("Wave colours"),
+                GlassWave1 = Ui.T("Wave colour 1"), GlassWave2 = Ui.T("Wave colour 2"), GlassWave3 = Ui.T("Wave colour 3"),
+                ResetWaveColors = Ui.T("Reset wave colours"),
+            }, new MaterialColorSettings(), MaterialColorSettings.Rgb(AdsPresentation.ReferenceAccent),
             plugin.Configuration.UiCompact ? 298 : 316);
         if (!changed) return false;
         plugin.Configuration.UiColors = colorDraft;
@@ -408,7 +422,8 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     internal void DrawLcarsQuickPreferences()
     {
-        foreach (var mode in new[] { MaterialColorMode.Auto, MaterialColorMode.Picker, MaterialColorMode.Lcars })
+        foreach (var mode in new[] { MaterialColorMode.Auto, MaterialColorMode.Picker, MaterialColorMode.Lcars,
+                     MaterialColorMode.Glassmorphism, MaterialColorMode.Spatial, MaterialColorMode.Cyberpunk })
         {
             var caption = mode == MaterialColorMode.Lcars ? "LCARS" : mode.ToString();
             if (mode != MaterialColorMode.Auto) WindowLayout.SameLineIfFits(MaterialText.Measure(Ui.T(caption)).X + ImGui.GetFrameHeight());

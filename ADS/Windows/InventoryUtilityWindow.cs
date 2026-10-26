@@ -81,7 +81,7 @@ public sealed class InventoryUtilityWindow : PositionedWindow, IDisposable
     {
         PrepareWindowPlacement();
         ReserveTitleSpace(320);
-        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+        PrepareWindowChrome();
     }
 
     private void Refresh()

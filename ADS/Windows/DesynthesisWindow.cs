@@ -304,7 +304,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
         var displayText = selectedId > 0 ? $"{Ui.ItemName(selectedId, selectedName)} ({selectedId})" : Ui.T("Select {0}...", Ui.T(label));
 
         ImGui.SetNextItemWidth(420f);
-        if (MaterialText.BeginCombo($"##{label}Select",Ui.Display(displayText)))
+        if (WindowLayout.BeginCombo($"##{label}Select",Ui.Display(displayText)))
         {
             try {
             ImGui.SetNextItemWidth(400f);

@@ -4269,4 +4269,18 @@
   <data name="UI sounds muted" xml:space="preserve"><value>Âm thanh giao diện đã tắt</value></data>
   <data name="UI sounds on" xml:space="preserve"><value>Âm thanh giao diện đang bật</value></data>
   <data name="ADS: Use the default Strafe Left/Right keybinds in treasure dungeons to avoid getting stuck. This is a stopgap until better navigation is available." xml:space="preserve"><value>ADS: Trong hầm ngục kho báu, hãy dùng phím mặc định để di chuyển ngang trái/phải (Strafe Left/Right) nhằm tránh bị kẹt. Đây là biện pháp tạm thời cho đến khi có khả năng tìm đường tốt hơn.</value></data>
+  <data name="Glassmorphism" xml:space="preserve"><value>Hiệu ứng kính</value></data>
+  <data name="Spatial" xml:space="preserve"><value>Không gian</value></data>
+  <data name="Cyberpunk" xml:space="preserve"><value>Cyberpunk</value></data>
+  <data name="LCARS bar 1" xml:space="preserve"><value>Thanh LCARS 1</value></data>
+  <data name="LCARS bar 2" xml:space="preserve"><value>Thanh LCARS 2</value></data>
+  <data name="LCARS bar 3" xml:space="preserve"><value>Thanh LCARS 3</value></data>
+  <data name="Reset colours" xml:space="preserve"><value>Đặt lại màu</value></data>
+  <data name="Animation" xml:space="preserve"><value>Hoạt ảnh</value></data>
+  <data name="Animation speed (0.1–10x; default 1x)" xml:space="preserve"><value>Tốc độ hoạt ảnh (0,1–10x; mặc định 1x)</value></data>
+  <data name="Wave colours" xml:space="preserve"><value>Màu sóng</value></data>
+  <data name="Wave colour 1" xml:space="preserve"><value>Màu sóng 1</value></data>
+  <data name="Wave colour 2" xml:space="preserve"><value>Màu sóng 2</value></data>
+  <data name="Wave colour 3" xml:space="preserve"><value>Màu sóng 3</value></data>
+  <data name="Reset wave colours" xml:space="preserve"><value>Đặt lại màu sóng</value></data>
 </root>

@@ -1,3 +1,9 @@
+2026-10-26 - 2.0.0.6 - Approved material styles and colour controls
+
+- Add Glassmorphism, Spatial and Cyberpunk as separate materials across the retained windows, tools and popups. Preserve Auto, Picker, LCARS, native actions, IDs, density and font roles.
+- Expose independent material palettes, LCARS Background and three bar colours, individual/current-palette resets, and Glass animation, speed and three editable wave colours with separate resets. Save through the existing appearance configuration.
+- Pin the existing CI checkout to the published AethertekUI revision used for this integration. Translate new controls in all sixteen catalogs.
+
 2026-10-25 - 2.0.0.5 - NPC repair admission and inn routing (I650/I654/I657/I658)
 
 - Admit valid nearby menders before applying sanctuary requirements to field travel. Retain repair mode, native handler identity and owned-menu checks, and let the existing selection cooldown settle before inspecting a closing selector.

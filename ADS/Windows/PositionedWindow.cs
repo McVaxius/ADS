@@ -14,6 +14,7 @@ public abstract class PositionedWindow : Window
     private readonly string originalWindowName;
     private Vector2? pendingWindowPosition;
     private bool pendingPositionConditionReset;
+    private bool materialBackdropPending;
 
     protected PositionedWindow(string name, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
         : base(name, flags)
@@ -33,15 +34,26 @@ public abstract class PositionedWindow : Window
     public override void PreDraw()
     {
         PrepareWindowPlacement();
+        PrepareWindowChrome();
+    }
+
+    protected void PrepareWindowChrome()
+    {
         windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+        materialBackdropPending = WindowLayout.PrepareMaterialBackdrop();
     }
 
     public override void PostDraw()
-        => windowMotion.Restore(this);
+    {
+        WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
+        windowMotion.Restore(this);
+    }
 
     protected void DrawWindowChrome()
     {
+        WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
         windowMotion.DrawChrome();
+        MaterialSkin.Backdrop();
         if (MaterialTheme.Current.IsLcars && (Flags & ImGuiWindowFlags.NoTitleBar) == 0)
             MaterialLcars.Header(this is MainWindow ? string.Empty : WindowName.Split("##", 2)[0]);
     }
@@ -112,11 +124,14 @@ public abstract class PositionedWindow : Window
 
         var open = true;
         var launch = false;
-        var drawContent = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize);
+        bool drawContent;
+        using (var backdrop = MaterialSkin.BackdropStyle())
+            drawContent = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize);
         try
         {
             if (drawContent)
             {
+                MaterialSkin.Backdrop();
                 if (MaterialTheme.Current.IsLcars)
                     MaterialLcars.Header(Ui.T(tool == ToolGuide.Rules ? "Rules guide" : "Object Explorer guide"));
                 ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + 440 * MaterialTheme.Metrics.Scale);

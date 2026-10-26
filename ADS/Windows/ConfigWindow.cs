@@ -64,7 +64,10 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
                 {
                     using (plugin.Fonts.Push(UiFontRole.PluginName))
                     {
-                        if (MaterialTheme.Current.IsLcars) MaterialLcars.PanelHeading(Ui.T(labels[settingsPage].Split("##")[0]), 1);
+                        if (MaterialTheme.Current.IsLcars || MaterialTheme.Current.IsCyberpunk)
+                            MaterialSkin.Heading(MaterialTheme.Current.IsCyberpunk
+                                ? Ui.T(labels[settingsPage].Split("##")[0]).ToUpper(Ui.Culture)
+                                : Ui.T(labels[settingsPage].Split("##")[0]), 1);
                         else MaterialText.Text(Ui.T(labels[settingsPage].Split("##")[0]));
                     }
                     MaterialText.TextDisabled(Ui.T("Configuration saves immediately."));
@@ -101,6 +104,14 @@ public sealed class ConfigWindow : PositionedWindow, IDisposable
                             selected.Color(ImGuiCol.HeaderHovered, MaterialLcars.Periwinkle);
                             selected.Color(ImGuiCol.HeaderActive, MaterialLcars.Orange);
                             if (settingsPage == index) selected.Color(ImGuiCol.Text, MaterialLcars.Background);
+                        }
+                        else if (AdsPresentation.IsMaterial)
+                        {
+                            var colors = MaterialTheme.Current.Colors;
+                            selected.Color(ImGuiCol.Header, colors.Primary);
+                            selected.Color(ImGuiCol.HeaderHovered, Vector4.Lerp(colors.Primary, colors.OnSurface, .12f));
+                            selected.Color(ImGuiCol.HeaderActive, Vector4.Lerp(colors.Primary, colors.Background, .12f));
+                            if (settingsPage == index) selected.Color(ImGuiCol.Text, colors.OnPrimary);
                         }
                         if (MaterialText.Selectable(Ui.L(labels[index]), settingsPage == index,
                             size: new Vector2(0, ImGui.GetFrameHeight()))) settingsPage = index;

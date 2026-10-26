@@ -239,7 +239,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
         MaterialLayout.FitNextItemWidth(0, ImGui.GetFrameHeight());
         if (IconAction(Ui.L("Columns"), MaterialIcon.More, "Columns")) ImGui.OpenPopup("ADSExplorerColumns");
         var originalIdRoot = ImGui.GetID(string.Empty);
-        if (ImGui.BeginPopup("ADSExplorerColumns"))
+        if (WindowLayout.BeginPopup("ADSExplorerColumns"))
         {
             try
             {
@@ -993,7 +993,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
 
     private void DrawRulePopup(ulong objectId, ObjectExplorerRow? row)
     {
-        if (!ImGui.BeginPopup($"ADSObjectRulePopup##{objectId}"))
+        if (!WindowLayout.BeginPopup($"ADSObjectRulePopup##{objectId}"))
         {
             rulePopupObjectId = null;
             return;

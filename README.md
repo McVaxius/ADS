@@ -12,7 +12,9 @@ The first load of this update applies Compact mode once and hides Main's Compact
 
 Hindi uses installed shaping fonts. The source now leaves other languages usable when the Hindi menu caption is unavailable, showing a disabled ASCII `Hindi (unavailable)` option. Required text for a selected Hindi UI still requires full validation; on failure, the readable status offers **Use English**, saving English only after an explicit press. Native verification and Linux/Wine acceptance remain pending for this change.
 
-Choose Auto, Picker or LCARS in the shared colour editor. LCARS adds segmented rails, framed panels and outlined actions across Main, Controls, Settings and the existing tools. Optional UI tones default muted; Settings and each titlebar speaker share one saved setting. Switching modes retains Picker RGB values.
+Choose Auto, Picker, LCARS, Glassmorphism, Spatial or Cyberpunk in the shared colour editor. Each new material keeps its own Background, Controls and Text colours; LCARS separately exposes Background and three bar colours. Individual and current-palette resets restore defaults while retaining other palettes. Optional LCARS tones remain muted by default and share their saved setting between Settings and titlebar speakers.
+
+Glassmorphism has flowing waves, independent wave colours and animation enabled by default. Its speed ranges from 0.1 to 10x, defaulting to 1x. Pausing animation keeps wave colours editable. Palette resets retain wave choices; wave resets retain the palette.
 
 Use Settings for shared colour, language, compact spacing and window transparency/fade; titlebar appearance actions change the same saved preferences. Main branding and Main/Quick Controls titles use the packaged ADS icon, keeping its colours and proportions when the title is collapsed. Duty automation remains in Guided Setup and the existing Start, Resume and Stop actions; appearance choices do not change duty ownership or rules.
 

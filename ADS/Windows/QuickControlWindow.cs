@@ -70,7 +70,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
         PrepareWindowPlacement();
         WindowName = $"{Ui.T("ADS Controls")}###ADSQuickControls";
         ReserveTitleSpace(300);
-        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+        PrepareWindowChrome();
     }
 
     public override void PostDraw()

@@ -73,7 +73,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         PrepareWindowPlacement();
         WindowName = $"{T("AI Duty Solver")} {typeof(Plugin).Assembly.GetName().Version}###ADSMain";
         ReserveTitleSpace(680);
-        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
+        PrepareWindowChrome();
     }
 
     public override void PostDraw()
@@ -93,7 +93,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
         DrawWindowChrome();
         FinalizePendingWindowPlacement();
 
-        DrawHeader();
+        if (AdsPresentation.IsMaterial) AdsPresentation.Panel(DrawHeader, ImGui.GetID(""));
+        else DrawHeader();
         if (MaterialTheme.Current.IsLcars) plugin.Appearance.DrawLcarsQuickPreferences();
         ImGui.Spacing();
         DrawActionRow();
@@ -357,7 +358,9 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 {
                     using (plugin.Fonts.Push(UiFontRole.BodyStrong))
                     {
-                        if (MaterialTheme.Current.IsLcars) MaterialLcars.PanelHeading(title, icon == MaterialIcon.Warning ? 3 : 1);
+                        if (MaterialTheme.Current.IsLcars || MaterialTheme.Current.IsCyberpunk)
+                            MaterialSkin.Heading(MaterialTheme.Current.IsCyberpunk ? title.ToUpper(Ui.Culture) : title,
+                                icon == MaterialIcon.Warning ? 3 : 1);
                         else MaterialText.Text(title);
                     }
                     if (ImGui.IsItemHovered()) MaterialText.SetTooltip(description);
@@ -402,7 +405,17 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             ImGui.TableSetColumnIndex(1);
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + MaterialTheme.Metrics.Scale);
             ImGui.PushTextWrapPos(0);
-            try { MaterialText.TextWrapped(value); }
+            try
+            {
+                if (MaterialTheme.Current.IsSpatial)
+                {
+                    var width = Math.Max(1, ImGui.GetContentRegionAvail().X);
+                    var height = Math.Max(ImGui.GetTextLineHeight(), MaterialText.Measure(value, wrapWidth: width).Y);
+                    var min = ImGui.GetCursorScreenPos();
+                    MaterialSkin.PanelFrame(min, min + new Vector2(width, height), inset: true);
+                }
+                MaterialText.TextWrapped(value);
+            }
             finally { ImGui.PopTextWrapPos(); }
         }
         finally { ImGui.PopTextWrapPos(); }
@@ -509,7 +522,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
             if (WindowLayout.Button(L("Reset progress")))
                 ImGui.OpenPopup(L("Reset relic purchase progress?"));
         }
-        if (ImGui.BeginPopup(L("Reset relic purchase progress?")))
+        if (WindowLayout.BeginPopup(L("Reset relic purchase progress?")))
         {
             MaterialText.TextWrapped(T("Resetting allows another purchase of every completed item. Unresolved purchases cannot be discarded."));
             if (WindowLayout.Button(L("Reset confirmed")))
@@ -618,7 +631,8 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 if (columns == 2) ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, actionsWidth);
                 ImGui.TableNextColumn();
                 var summaryTop = ImGui.GetCursorPosY();
-                MaterialText.TextDisabled(T("OWNERSHIP"));
+                if (MaterialTheme.Current.IsCyberpunk) MaterialSkin.Heading(T("OWNERSHIP"));
+                else MaterialText.TextDisabled(T("OWNERSHIP"));
                 using (plugin.Fonts.Push(AdsPresentation.Compact ? UiFontRole.BodyStrong : UiFontRole.PluginName))
                     MaterialText.Text(Display(execution.CurrentMode.ToString()));
                 MaterialText.TextWrapped(T(execution.IsOwned ? "Current objective and execution behaviour."
@@ -648,7 +662,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
                 WindowLayout.SameLineIfFits(WindowLayout.ButtonMinimum(L("More actions")));
                 if (WindowLayout.Button(L("More actions"))) ImGui.OpenPopup("ADSMoreDutyActions");
                 var actionRoot = ImGui.GetID("");
-                if (ImGui.BeginPopup("ADSMoreDutyActions"))
+                if (WindowLayout.BeginPopup("ADSMoreDutyActions"))
                 {
                     // Moving actions into a menu retains their original table ID root.
                     ImGuiP.PushOverrideID(actionRoot);

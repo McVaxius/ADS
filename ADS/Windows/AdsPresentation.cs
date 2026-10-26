@@ -26,6 +26,8 @@ internal static class AdsPresentation
     internal static readonly string[] FontFiles = ["segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisb.ttf", "seguisb.ttf", "seguisb.ttf", "segoeuib.ttf", "segoeui.ttf", "seguisb.ttf"];
     internal static float AtlasHeight(UiFontRole role) => FontSizes[(int)role] * 4 / 3;
     internal static bool Compact => MaterialTheme.Current.Density == MaterialDensity.Compact;
+    internal static bool IsMaterial => MaterialTheme.Current.IsGlassmorphism
+        || MaterialTheme.Current.IsSpatial || MaterialTheme.Current.IsCyberpunk;
     internal static float HeaderHeight => Compact ? 32 : 68;
     internal static float Gap => Compact ? 6 : 14;
     internal static float ControlHeight => Compact ? 28 : 66;
@@ -134,6 +136,8 @@ internal static class AdsPresentation
             var c = MaterialTheme.Current.Colors;
             if (MaterialTheme.Current.IsLcars)
                 MaterialLcars.PanelFrame(start, new(start.X + width, bottom), emphasis ? 0 : inner ? 2 : 1);
+            else if (IsMaterial)
+                MaterialSkin.PanelFrame(start, new(start.X + width, bottom), emphasis ? 0 : 1, inner);
             else
             {
                 MaterialCanvas.Surface(start, new(start.X + width, bottom), emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
@@ -190,6 +194,7 @@ internal static class AdsPresentation
         style.Color(ImGuiCol.Border, colors.OutlineVariant);
         style.Style(ImGuiStyleVar.FrameBorderSize, 1 * scale);
         var lcars = MaterialTheme.Current.IsLcars;
+        using var material = IsMaterial ? MaterialSkin.NativeButtonStyle() : default(MaterialStyleScope);
         if (lcars)
         {
             style.Color(ImGuiCol.Button, MaterialLcars.Background);
@@ -203,8 +208,11 @@ internal static class AdsPresentation
         {
             using var font = pushFont(UiFontRole.CompactAction);
             var text = MaterialText.Measure(label);
-            var clickedCompact = ImGui.Button("###" + id, new Vector2(width, Math.Max(height * scale, text.Y + 8 * scale)));
+            bool clickedCompact;
+            using (var face = IsMaterial ? MaterialSkin.TransparentButtonFace() : default(MaterialStyleScope))
+                clickedCompact = ImGui.Button("###" + id, new Vector2(width, Math.Max(height * scale, text.Y + 8 * scale)));
             var start = ImGui.GetItemRectMin(); var end = ImGui.GetItemRectMax();
+            if (IsMaterial) MaterialSkin.PaintButton(start, end);
             var foregroundCompact = lcars ? MaterialLcars.Text : fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
             var iconCompact = id switch { "Start Outside" or "Start Inside" => MaterialIcon.Play, "Resume" => MaterialIcon.Refresh,
                 "Leave" => MaterialIcon.DoorExit, "Stop" => MaterialIcon.Stop, _ => MaterialIcon.Wrench };
@@ -235,9 +243,12 @@ internal static class AdsPresentation
             captionTop = Math.Max(captionTop,titleTop+titleSize.Y+Math.Max(0,captionTop-titleTop-nativeTitleHeight));
             buttonHeight = Math.Max(buttonHeight,captionTop+captionSize.Y+bottomGap);
         }
-        var clicked = ImGui.Button("###" + id, new Vector2(width, buttonHeight));
+        bool clicked;
+        using (var face = IsMaterial ? MaterialSkin.TransparentButtonFace() : default(MaterialStyleScope))
+            clicked = ImGui.Button("###" + id, new Vector2(width, buttonHeight));
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
+        if (IsMaterial) MaterialSkin.PaintButton(min, max);
         var foreground = lcars ? MaterialLcars.Text : fill is null ? colors.OnSurface : MaterialColor.Contrast(fill.Value, colors.Background) > MaterialColor.Contrast(fill.Value, colors.OnSurface) ? colors.Background : colors.OnSurface;
         var icon = id switch { "Start Outside" or "Start Inside" => MaterialIcon.Play, "Resume" => MaterialIcon.Refresh,
             "Leave" => MaterialIcon.DoorExit, "Stop" => MaterialIcon.Stop, _ => MaterialIcon.Wrench };
@@ -300,9 +311,10 @@ internal static class AdsPresentation
     {
         using var style = new MaterialStyleScope();
         style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(0, 2) * MaterialTheme.Metrics.Scale);
-        if (MaterialTheme.Current.IsLcars)
+        if (MaterialTheme.Current.IsLcars || MaterialTheme.Current.IsCyberpunk)
         {
-            using (pushFont(UiFontRole.BodyStrong)) MaterialLcars.PanelHeading(title, 2);
+            using (pushFont(UiFontRole.BodyStrong))
+                MaterialSkin.Heading(MaterialTheme.Current.IsCyberpunk ? title.ToUpper(Ui.Culture) : title, 2);
             MaterialText.TextWrapped(description);
             return;
         }

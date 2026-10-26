@@ -110,7 +110,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
         ImGui.SameLine();
         ImGui.SetNextItemWidth(320f);
         var comboLabel = GetRouteLabel(draft.Routes.FirstOrDefault(x => x.TerritoryTypeId == selectedTerritoryId));
-        if (MaterialText.BeginCombo("##ADSTreasureRouteSelect", comboLabel))
+        if (WindowLayout.BeginCombo("##ADSTreasureRouteSelect", comboLabel))
         {
             try {
             foreach (var route in visibleRoutes)

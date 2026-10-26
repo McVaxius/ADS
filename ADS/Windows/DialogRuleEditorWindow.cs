@@ -145,7 +145,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
         MaterialText.Text(Ui.T("Preset"));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(220f);
-        if (MaterialText.BeginCombo("##DialogRulePreset", selectedPresetName))
+        if (WindowLayout.BeginCombo("##DialogRulePreset", selectedPresetName))
         {
             try {
             foreach (var presetName in plugin.DialogYesNoRuleService.GetPresetNames())
@@ -225,7 +225,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawCreatePresetPopup()
     {
-        if (!ImGui.BeginPopup("ADSCreateDialogPreset"))
+        if (!WindowLayout.BeginPopup("ADSCreateDialogPreset"))
             return;
 
         MaterialText.Text(Ui.T("Create preset from the current draft"));
@@ -264,7 +264,7 @@ public sealed class DialogRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawDiskTransferPopup()
     {
-        if (!ImGui.BeginPopup("ADSDialogPresetDiskTransfer"))
+        if (!WindowLayout.BeginPopup("ADSDialogPresetDiskTransfer"))
             return;
 
         MaterialText.Text(Ui.T("Full-manifest disk import/export"));

@@ -456,7 +456,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawReloadDraftConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmReloadRuleDraft"))
+        if (!WindowLayout.BeginPopup("ADSConfirmReloadRuleDraft"))
             return;
 
         MaterialText.TextWrapped(Ui.T("Reload {0} from disk and discard the unsaved in-memory draft?", selectedPresetName));
@@ -490,7 +490,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         }
 
         ImGui.SetNextItemWidth(-1);
-        if (!MaterialText.BeginCombo("##ADSRuleContexts", selectedContextFileNames.Count switch
+        if (!WindowLayout.BeginCombo("##ADSRuleContexts", selectedContextFileNames.Count switch
             {
                 0 => Ui.T("All contexts"),
                 1 => GetContextDisplayLabel(selectedContextFileNames.Single(), translate: true),
@@ -627,7 +627,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawRevertContextConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmRevertRuleContext"))
+        if (!WindowLayout.BeginPopup("ADSConfirmRevertRuleContext"))
             return;
 
         var selected = GetSelectedContextDescriptors();
@@ -669,7 +669,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawEmptyPromotionConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmPromoteEmptyContext"))
+        if (!WindowLayout.BeginPopup("ADSConfirmPromoteEmptyContext"))
             return;
         var emptyFiles = ResolvePromotionContextDescriptors(contextDescriptors, selectedContextFileNames)
             .Where(descriptor => descriptor.IsEmptyOverride)
@@ -694,7 +694,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawPromotionOverwriteConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmPromotionOverwrite"))
+        if (!WindowLayout.BeginPopup("ADSConfirmPromotionOverwrite"))
             return;
         MaterialText.TextWrapped(pendingPromotion is null
             ? Ui.T("The promotion destination has local changes.")
@@ -979,7 +979,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawSaveConflictConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmSaveRuleDraftConflict"))
+        if (!WindowLayout.BeginPopup("ADSConfirmSaveRuleDraftConflict"))
             return;
 
         MaterialText.TextWrapped(Ui.Display(presetFileConflictStatus));
@@ -1021,7 +1021,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawProtectedDefaultSavePopup()
     {
-        if (!ImGui.BeginPopup("ADSProtectDefaultRuleSave"))
+        if (!WindowLayout.BeginPopup("ADSProtectDefaultRuleSave"))
             return;
 
         MaterialText.TextWrapped(Ui.T("DEFAULT is protected during ordinary use. Create and activate a sparse custom preset from this draft, or cancel and run /ads debug on to permit a direct DEFAULT shard save. Debug mode is remembered until /ads debug off."));
@@ -1040,7 +1040,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawEmptyContextSaveConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmEmptyRuleContextSave"))
+        if (!WindowLayout.BeginPopup("ADSConfirmEmptyRuleContextSave"))
             return;
 
         var emptyContexts = pendingSaveChangedFiles.Where(file => GetDraftContextRules(file).Count == 0).ToList();
@@ -1145,7 +1145,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawDeleteSelectedConfirmation(IReadOnlyList<int> visibleRuleIndices)
     {
-        if (!ImGui.BeginPopup("ADSConfirmDeleteSelectedRules"))
+        if (!WindowLayout.BeginPopup("ADSConfirmDeleteSelectedRules"))
             return;
 
         var visibleSelected = visibleRuleIndices.Count(index => selectedRules.Contains(draft.Rules[index]));
@@ -1503,7 +1503,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
         MaterialText.Text(Ui.T("Preset management"));
         ImGui.SameLine();
         ImGui.SetNextItemWidth(220f);
-        if (MaterialText.BeginCombo("##RulePreset", selectedPresetName))
+        if (WindowLayout.BeginCombo("##RulePreset", selectedPresetName))
         {
             try {
             foreach (var presetName in plugin.ObjectPriorityRuleService.GetPresetNames())
@@ -2396,7 +2396,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private static void DrawClassHelpPopup(RuleClassificationSemantics? semantics)
     {
-        if (!ImGui.BeginPopup("ADSClassHelp"))
+        if (!WindowLayout.BeginPopup("ADSClassHelp"))
             return;
 
         if (semantics is null)
@@ -2432,7 +2432,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private bool DrawDutyCell(int ruleIndex, ObjectPriorityRule rule)
     {
         ImGui.SetNextItemWidth(-1f);
-        if (!MaterialText.BeginCombo("##DutyEnglishName", GetDutyDisplayLabel(rule)))
+        if (!WindowLayout.BeginCombo("##DutyEnglishName", GetDutyDisplayLabel(rule)))
             return false;
 
         if (dutySearchRow != ruleIndex)
@@ -2506,7 +2506,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
                 ? rule.Alliance.Trim().ToUpperInvariant()
                 : $"[Invalid] {rule.Alliance.Trim()}";
         ImGui.SetNextItemWidth(-1f);
-        if (!MaterialText.BeginCombo($"##Alliance{ruleIndex}", string.IsNullOrWhiteSpace(rule.Alliance)
+        if (!WindowLayout.BeginCombo($"##Alliance{ruleIndex}", string.IsNullOrWhiteSpace(rule.Alliance)
                 ? Ui.T("(Any)")
                 : AllianceScopeParser.IsValidScope(rule.Alliance)
                     ? currentLabel
@@ -2555,7 +2555,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
         var currentLabel = string.IsNullOrWhiteSpace(rule.Layer) ? "(blank)" : rule.Layer;
         ImGui.SetNextItemWidth(-1f);
-        if (!MaterialText.BeginCombo($"##Layer{ruleIndex}", string.IsNullOrWhiteSpace(rule.Layer) ? Ui.T("(blank)") : currentLabel))
+        if (!WindowLayout.BeginCombo($"##Layer{ruleIndex}", string.IsNullOrWhiteSpace(rule.Layer) ? Ui.T("(blank)") : currentLabel))
             return false;
 
         var changed = false;
@@ -2791,7 +2791,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawPresetSwitchConfirmation()
     {
-        if (!ImGui.BeginPopup("ADSConfirmRulePresetSwitch"))
+        if (!WindowLayout.BeginPopup("ADSConfirmRulePresetSwitch"))
             return;
 
         MaterialText.TextWrapped(Ui.T("Switch from {0} to {1} and discard the unsaved in-memory draft?", selectedPresetName, pendingPresetSwitchName));
@@ -2842,7 +2842,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawCreatePresetPopup()
     {
-        if (!ImGui.BeginPopup("ADSCreatePreset"))
+        if (!WindowLayout.BeginPopup("ADSCreatePreset"))
             return;
 
         MaterialText.Text(Ui.T("Create preset from the current draft"));
@@ -2864,7 +2864,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
 
     private void DrawDiskTransferPopup()
     {
-        if (!ImGui.BeginPopup("ADSPresetDiskTransfer"))
+        if (!WindowLayout.BeginPopup("ADSPresetDiskTransfer"))
             return;
 
         MaterialText.Text(Ui.T("File Import/Export"));
@@ -3105,7 +3105,7 @@ public sealed class ObjectRuleEditorWindow : PositionedWindow, IDisposable
     private void DrawManifestImportPreviewPopup()
     {
         ImGui.SetNextWindowSize(new Vector2(820f, 720f), ImGuiCond.FirstUseEver);
-        if (!ImGui.BeginPopup("ADSManifestImportPreview"))
+        if (!WindowLayout.BeginPopup("ADSManifestImportPreview"))
             return;
 
         if (presetImportPreview is not null)

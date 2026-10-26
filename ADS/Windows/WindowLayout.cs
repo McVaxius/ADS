@@ -7,6 +7,60 @@ namespace ADS.Windows;
 
 internal static class WindowLayout
 {
+    internal static bool PrepareMaterialBackdrop()
+    {
+        if (!AdsPresentation.IsMaterial) return false;
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
+        return true;
+    }
+
+    internal static void RestoreMaterialBackdrop(ref bool pending)
+    {
+        if (!pending) return;
+        ImGui.PopStyleColor();
+        pending = false;
+    }
+
+    internal static bool BeginPopup(string id, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
+    {
+        bool open;
+        using (var backdrop = MaterialSkin.BackdropStyle(popup: true))
+            open = ImGui.BeginPopup(id, flags);
+        if (open) MaterialSkin.Backdrop();
+        return open;
+    }
+
+    internal static bool BeginCombo(string nativeLabel, string preview, ImGuiComboFlags flags = ImGuiComboFlags.None)
+    {
+        bool open;
+        using (var backdrop = MaterialSkin.BackdropStyle(popup: true))
+        {
+            var style = ImGui.GetStyle();
+            var framePadding = style.FramePadding;
+            var prepaintPadding = framePadding;
+            if (AdsPresentation.IsMaterial)
+            {
+                var caption = nativeLabel.Split("##", 2)[0];
+                var visiblePreview = (flags & ImGuiComboFlags.NoPreview) == 0 ? preview.Split("##", 2)[0] : "";
+                // Query the native helper's renderer-aware padding without keeping its height scope active.
+                using (var height = MaterialText.PushLineHeight(caption, visiblePreview))
+                    prepaintPadding = style.FramePadding;
+            }
+            MaterialStyleScope field;
+            try
+            {
+                // Paint at the shaped height; the native helper reserves that height itself.
+                style.FramePadding = prepaintPadding;
+                field = MaterialSkin.NativeFieldStyle();
+            }
+            finally { style.FramePadding = framePadding; }
+            using (field)
+                open = MaterialText.BeginCombo(nativeLabel, preview, flags);
+        }
+        if (open) MaterialSkin.Backdrop();
+        return open;
+    }
+
     internal static void SameLineIfFits(float nextWidth)
     {
         var windowRight = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
@@ -59,7 +113,7 @@ internal static class WindowLayout
     {
         using var controls = ImGui.GetStyle().FramePadding.Y == 0 || MaterialControls.Context == MaterialControlContext.Dense
             ? default(MaterialControls.ControlScope) : MaterialControls.Push(MaterialControlContext.Toolbar);
-        using var outline = MaterialLcars.NativeButtonStyle();
+        using var outline = MaterialSkin.NativeButtonStyle();
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         size.X = MaterialLayout.FitNextItemWidth(size.X, Math.Max(size.X, ButtonMinimum(nativeLabel, icon)));
         var caption = nativeLabel.Split("##", 2)[0];
@@ -76,16 +130,22 @@ internal static class WindowLayout
         }
         // Native centered text clips descenders that extend beyond the font's line box.
         size.Y = MathF.Ceiling(Math.Max(size.Y, Math.Max(ImGui.GetFrameHeight() + 2 * inkOverflow, icon == MaterialIcon.None ? 0 : 20 * MaterialTheme.Metrics.Scale)));
-        if (icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0]))
+        if (!AdsPresentation.IsMaterial && icon == MaterialIcon.None && !MaterialText.RequiresShaping(nativeLabel.Split("##", 2)[0]))
         {
             var pressed = ImGui.Button(nativeLabel, size);
             MaterialLcars.Feedback(pressed);
             return pressed;
         }
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
-        var clicked = ImGui.Button(nativeLabel, size);
-        ImGui.PopStyleColor();
+        bool clicked;
+        try
+        {
+            using var face = AdsPresentation.IsMaterial ? MaterialSkin.TransparentButtonFace() : default(MaterialStyleScope);
+            clicked = ImGui.Button(nativeLabel, size);
+        }
+        finally { ImGui.PopStyleColor(); }
         var min = ImGui.GetItemRectMin();var max = ImGui.GetItemRectMax();var scale = MaterialTheme.Metrics.Scale;
+        if (AdsPresentation.IsMaterial) MaterialSkin.PaintButton(min, max);
         var label = nativeLabel.Split("##", 2)[0];var text = MaterialText.Measure(label);var iconWidth = icon == MaterialIcon.None ? 0 : 28 * scale;var width = text.X + iconWidth;
         var x = min.X + Math.Max(ImGui.GetStyle().FramePadding.X, (max.X - min.X - width) * .5f);
         var color = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
@@ -111,10 +171,21 @@ internal static class WindowLayout
             style.Color(ImGuiCol.HeaderActive, MaterialLcars.Orange);
             style.Color(ImGuiCol.Text, MaterialLcars.Background);
         }
+        else if (AdsPresentation.IsMaterial)
+        {
+            var colors = ImGui.GetStyle().Colors;
+            style.Color(ImGuiCol.Button, colors[(int)ImGuiCol.Header]);
+            style.Color(ImGuiCol.ButtonHovered, colors[(int)ImGuiCol.HeaderHovered]);
+            style.Color(ImGuiCol.ButtonActive, colors[(int)ImGuiCol.HeaderActive]);
+            style.Color(ImGuiCol.Header, Vector4.Zero);
+            style.Color(ImGuiCol.HeaderHovered, Vector4.Zero);
+            style.Color(ImGuiCol.HeaderActive, Vector4.Zero);
+        }
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);var open = ImGui.CollapsingHeader(nativeLabel, flags);ImGui.PopStyleColor();
         MaterialLcars.Feedback(ImGui.IsItemActivated(), MaterialUiSoundCue.Toggle);
         var min = ImGui.GetItemRectMin();var max = ImGui.GetItemRectMax();var scale = MaterialTheme.Metrics.Scale;
+        if (AdsPresentation.IsMaterial) MaterialSkin.PaintButton(min, max);
         var label = nativeLabel.Split("##", 2)[0];var size = Math.Min(20 * scale, max.Y - min.Y);
         var color = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];var dl = ImGui.GetWindowDrawList();dl.PushClipRect(min, max, true);
         try
@@ -132,6 +203,14 @@ internal static class WindowLayout
         var scale = MaterialTheme.Metrics.Scale;
         using var padding = new MaterialStyleScope();
         padding.Style(ImGuiStyleVar.FramePadding, new Vector2(AdsPresentation.Compact ? 22 : 42, AdsPresentation.Compact ? 3 : 12) * scale);
+        if (AdsPresentation.IsMaterial)
+        {
+            padding.Color(ImGuiCol.Tab, Vector4.Zero);
+            padding.Color(ImGuiCol.TabHovered, Vector4.Zero);
+            padding.Color(ImGuiCol.TabActive, Vector4.Zero);
+            padding.Color(ImGuiCol.TabUnfocused, Vector4.Zero);
+            padding.Color(ImGuiCol.TabUnfocusedActive, Vector4.Zero);
+        }
         using var naturalHeight = MaterialText.PushLineHeight(nativeLabel.Split("##", 2)[0]);
         ImGui.SetNextItemWidth(MaterialText.Measure(nativeLabel, true).X + 2 * ImGui.GetStyle().FramePadding.X);
         ImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
@@ -140,6 +219,17 @@ internal static class WindowLayout
         ImGui.PopStyleColor();
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
+        using var selectedStyle = new MaterialStyleScope();
+        if (AdsPresentation.IsMaterial)
+        {
+            var colors = MaterialTheme.Current.Colors;
+            var fill = selected ? colors.Primary : colors.SurfaceContainerHigh;
+            selectedStyle.Color(ImGuiCol.Button, fill);
+            selectedStyle.Color(ImGuiCol.ButtonHovered, Vector4.Lerp(fill, colors.OnSurface, .12f));
+            selectedStyle.Color(ImGuiCol.ButtonActive, Vector4.Lerp(fill, colors.Background, .12f));
+            if (selected) selectedStyle.Color(ImGuiCol.Text, colors.OnPrimary);
+            MaterialSkin.PaintButton(min, max);
+        }
         var label = nativeLabel.Split("##", 2)[0];
         var text = MaterialText.Measure(label);
         var x = min.X + (max.X - min.X - text.X - 32 * scale) * .5f;
@@ -216,7 +306,7 @@ internal static class WindowLayout
     {
         var preview = value >= 0 && value < count ? options[value] : "";
         var changed = false;
-        if (MaterialText.BeginCombo(nativeLabel, preview))
+        if (BeginCombo(nativeLabel, preview))
         {
             try
             {
@@ -245,6 +335,7 @@ internal static class WindowLayout
     {
         var caption = nativeLabel.Split("##", 2)[0];
         using var height = MaterialText.PushLineHeight(caption, value, hint);
+        using var field = MaterialSkin.NativeFieldStyle();
         if(!MaterialText.RequiresShaping(caption)) return MaterialShapedInput.SingleLine(nativeLabel, hint, ref value, length, flags);
         var origin = ImGui.GetCursorScreenPos(); var width = ImGui.CalcItemWidth(); var window = ImGuiP.GetCurrentWindow();
         var previousMax = window.DC.CursorMaxPos;
@@ -267,8 +358,9 @@ internal static class WindowLayout
     internal static bool InputInt(string nativeLabel, ref int value, int step = 0, int fastStep = 0, ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
     {
         var caption = nativeLabel.Split("##", 2)[0];
-        if(!MaterialText.RequiresShaping(caption)) return ImGui.InputInt(nativeLabel, ref value, step, fastStep, flags: flags);
         using var height = MaterialText.PushLineHeight(caption);
+        using var field = MaterialSkin.NativeFieldStyle();
+        if(!MaterialText.RequiresShaping(caption)) return ImGui.InputInt(nativeLabel, ref value, step, fastStep, flags: flags);
         var origin = ImGui.GetCursorScreenPos(); var width = ImGui.CalcItemWidth(); var window = ImGuiP.GetCurrentWindow();
         var previousMax = window.DC.CursorMaxPos; var drawing = ImGui.GetWindowDrawList();
         drawing.PushClipRect(new(origin.X,window.Pos.Y),new(origin.X+width,window.Pos.Y+window.Size.Y),true);
@@ -282,8 +374,9 @@ internal static class WindowLayout
     internal static bool InputFloat(string nativeLabel, ref float value, float step = 0, float fastStep = 0, string format = "%.3f", ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
     {
         var caption = nativeLabel.Split("##", 2)[0];
-        if(!MaterialText.RequiresShaping(caption)) return ImGui.InputFloat(nativeLabel, ref value, step, fastStep, format, flags);
         using var height = MaterialText.PushLineHeight(caption);
+        using var field = MaterialSkin.NativeFieldStyle();
+        if(!MaterialText.RequiresShaping(caption)) return ImGui.InputFloat(nativeLabel, ref value, step, fastStep, format, flags);
         var origin = ImGui.GetCursorScreenPos(); var width = ImGui.CalcItemWidth(); var window = ImGuiP.GetCurrentWindow();
         var previousMax = window.DC.CursorMaxPos; var drawing = ImGui.GetWindowDrawList();
         drawing.PushClipRect(new(origin.X,window.Pos.Y),new(origin.X+width,window.Pos.Y+window.Size.Y),true);
