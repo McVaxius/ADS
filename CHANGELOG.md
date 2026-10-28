@@ -1,3 +1,8 @@
+2026-10-28 - 2.0.0.10 Keybound Brawler activity exclusion
+
+- Exclude the KBB arena (1359) and Keybound Square (1360) from ADS automation through the existing activity policy. Park ownership/execution before generic dialogs or duty-exit automation; refuse explicit duty/utility actions in those territories. Preserve ordinary duties and other existing activity rules.
+- Validate the production policy with focused KBB exclusion tests and a Release/x64 build. This addresses the reported ADS auto-leave/menu conflict; live-client crash reproduction remains unverified.
+
 2026-10-26 - 2.0.0.9 - Retain duty truth from the third native bound flag (I666)
 
 - Include BoundByDuty95 in captured duty state, held identity and the direct desynthesis duty check. Keep ownership when only that native flag remains, without treating it as completion.
