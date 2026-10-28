@@ -12,6 +12,7 @@ internal static class AutomationTerritoryPolicy
     [
         512, 514, 515, 579, 624, 625, 656, 732, 763, 795, 827, 940, 941,
         900, 901, 920, 929, 939, 975, 1163, 1252, 1346,
+        1359, 1360, // Keybound Brawler arena and Square: the event owns results and menus.
     ];
 
     public static bool IsAutomationExcludedTerritory(uint territoryTypeId)
