@@ -4283,4 +4283,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>Màu sóng 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>Màu sóng 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>Đặt lại màu sóng</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>Chính sách BMR</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>Tắt mô-đun BMR trong nhiệm vụ đơn này</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>Dừng các mô-đun giao chiến gốc của BMR khi ADS điều khiển nhiệm vụ đơn này.</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>Dùng chính sách BMR chung</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>Chuẩn bị đóng góp chính sách BMR</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Hãy lưu trước. Thao tác này chuẩn bị ads/duty-bmr-policy.json trong bản sao kho mã đã cấu hình để bạn tự xem xét và gửi.</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>Ghi đè chính sách BMR</value></data>
 </root>

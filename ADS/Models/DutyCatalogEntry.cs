@@ -4,6 +4,7 @@ public sealed class DutyCatalogEntry : IDutyMaturityCatalogRow
 {
     public required uint ContentFinderConditionId { get; init; }
     public required uint TerritoryTypeId { get; init; }
+    public uint LinkedQuestId { get; init; }
     public required string Name { get; init; }
     public required string EnglishName { get; init; }
     public required string ContentTypeName { get; init; }

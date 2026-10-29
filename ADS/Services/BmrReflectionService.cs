@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
+using ADS.Models;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 
@@ -31,6 +32,9 @@ public sealed class BmrReflectionService : IDisposable
     private readonly IPluginLog log;
     private readonly object syncRoot = new();
     private readonly Dictionary<uint, object> removedRegistryEntries = [];
+    private readonly HashSet<uint> dutySuppressedOids = [];
+    private uint dutyPolicyCfc;
+    private uint dutyPolicyQuest;
 
     private BmrReflectionStatus lastStatus;
     private object? trackedRegistry;
@@ -97,6 +101,74 @@ public sealed class BmrReflectionService : IDisposable
 
     public void Dispose()
     {
+        ReleaseDutyPolicy();
+        UpdateDutyPolicyCleanup();
+    }
+
+    public void ReleaseDutyPolicy()
+    {
+        lock (syncRoot) (dutyPolicyCfc, dutyPolicyQuest) = (0, 0);
+    }
+
+    // Native cleanup is called from the framework path, including excluded-territory frames.
+    public void UpdateDutyPolicyCleanup()
+    {
+        lock (syncRoot)
+        {
+            if (dutyPolicyCfc != 0 || dutyPolicyQuest != 0 || dutySuppressedOids.Count == 0) return;
+            try
+            {
+                var provider = FindBmrPlugin();
+                if (provider is not { IsLoaded: true } || !TryResolveContext(provider, out var context, out _)) return;
+                RestoreOwnedDutyRegistry(context);
+            }
+            catch (Exception ex) { log.Warning(ex, "[ADS] BMR duty-policy cleanup failed."); }
+        }
+    }
+
+    private void RestoreOwnedDutyRegistry(BmrReflectionContext context)
+    {
+        if (!ReferenceEquals(trackedRegistry, context.RegisteredModules))
+        {
+            removedRegistryEntries.Clear();
+            dutySuppressedOids.Clear();
+            return;
+        }
+        foreach (var oid in dutySuppressedOids.ToArray())
+        {
+            if (configuration.ReflectionToolsEnabled
+                && (configuration.ReflectionQueenLunatenderDisabled && oid == QueenLunatenderOid
+                    || configuration.ReflectionHuntsDisabled && removedRegistryEntries.TryGetValue(oid, out var hunt) && IsHuntInfo(hunt))) continue;
+            if (!removedRegistryEntries.Remove(oid, out var info)) continue;
+            if (!context.RegisteredModules.Contains(oid)) context.RegisteredModules[oid] = info;
+            RestoreDutyActors(context, oid);
+        }
+        dutySuppressedOids.Clear();
+    }
+
+    public void SetDutyPolicy(DutyContextSnapshot context, OwnershipMode mode, bool disableBmr)
+    {
+        var identity = ResolveDutyPolicyIdentity(context, mode, disableBmr);
+        lock (syncRoot) (dutyPolicyCfc, dutyPolicyQuest) = identity;
+    }
+
+    internal static (uint Cfc, uint Quest) ResolveDutyPolicyIdentity(DutyContextSnapshot context, OwnershipMode mode, bool disabled)
+        => disabled && context.PluginEnabled && context.IsLoggedIn && context.InInstancedDuty
+            && !AutomationTerritoryPolicy.IsAutomationExcludedTerritory(context.TerritoryTypeId)
+            && !context.IsUnsafeTransition && context.CurrentDuty is { Category: DutyCategory.Solo } duty
+            && context.ContentFinderConditionId == duty.ContentFinderConditionId && context.TerritoryTypeId == duty.TerritoryTypeId
+            && mode is OwnershipMode.OwnedStartOutside or OwnershipMode.OwnedStartInside or OwnershipMode.OwnedResumeInside or OwnershipMode.Leaving
+                ? (duty.ContentFinderConditionId, duty.LinkedQuestId) : (0, 0);
+
+    internal static bool MatchesDutyModuleInfo(object info, uint cfc, uint quest)
+    {
+        if (!TryGetUIntMember(info, "GroupID", out var group)) return false;
+        return GetMemberValue(info, "GroupType")?.ToString() switch
+        {
+            "CFC" => cfc != 0 && group == cfc,
+            "Quest" => quest != 0 && group == quest,
+            _ => false,
+        };
     }
 
     public void Update()
@@ -303,7 +375,7 @@ public sealed class BmrReflectionService : IDisposable
     private string BuildUpdateRequestKeyLocked()
         => string.Create(
             CultureInfo.InvariantCulture,
-            $"{configuration.ReflectionToolsEnabled}|{configuration.ReflectionQueenLunatenderDisabled}|{configuration.ReflectionHuntsDisabled}|{configuration.ReflectionMaxLoadDistanceMinimized}|{configuration.ReflectionMinimizedMaxLoadDistance:0.###}|{configuration.ReflectionHasOriginalMaxLoadDistance}|{configuration.ReflectionOriginalMaxLoadDistance:0.###}|{pendingRegistryRestore}|{pendingMaxLoadDistanceRestore}|{clearMaxLoadDistanceDesiredAfterRestore}|{removedRegistryEntries.Count}");
+            $"{configuration.ReflectionToolsEnabled}|{configuration.ReflectionQueenLunatenderDisabled}|{configuration.ReflectionHuntsDisabled}|{configuration.ReflectionMaxLoadDistanceMinimized}|{configuration.ReflectionMinimizedMaxLoadDistance:0.###}|{configuration.ReflectionHasOriginalMaxLoadDistance}|{configuration.ReflectionOriginalMaxLoadDistance:0.###}|{pendingRegistryRestore}|{pendingMaxLoadDistanceRestore}|{clearMaxLoadDistanceDesiredAfterRestore}|{removedRegistryEntries.Count}|{dutyPolicyCfc}|{dutyPolicyQuest}");
 
     private TimeSpan GetNextPollIntervalLocked(BmrReflectionStatus status)
     {
@@ -325,6 +397,7 @@ public sealed class BmrReflectionService : IDisposable
         var bmrLoaded = exposedPlugin?.IsLoaded == true;
 
         var shouldResolveInternals = configuration.ReflectionToolsEnabled
+                                     || dutyPolicyCfc != 0 || dutyPolicyQuest != 0
                                      || pendingRegistryRestore
                                      || pendingMaxLoadDistanceRestore
                                      || removedRegistryEntries.Count > 0;
@@ -366,6 +439,7 @@ public sealed class BmrReflectionService : IDisposable
         if (!ReferenceEquals(trackedRegistry, context.RegisteredModules))
         {
             removedRegistryEntries.Clear();
+            dutySuppressedOids.Clear();
             trackedRegistry = context.RegisteredModules;
         }
 
@@ -380,6 +454,17 @@ public sealed class BmrReflectionService : IDisposable
                 foreach (var oid in knownHuntOids)
                     disabledOids.Add(oid);
             }
+        }
+
+        if (dutyPolicyCfc != 0 || dutyPolicyQuest != 0)
+        {
+            foreach (DictionaryEntry entry in context.RegisteredModules)
+                if (entry.Value is not null && TryConvertUInt(entry.Key, out var oid)
+                    && MatchesDutyModuleInfo(entry.Value, dutyPolicyCfc, dutyPolicyQuest))
+                { disabledOids.Add(oid); dutySuppressedOids.Add(oid); }
+            foreach (var (oid, info) in removedRegistryEntries)
+                if (MatchesDutyModuleInfo(info, dutyPolicyCfc, dutyPolicyQuest))
+                { disabledOids.Add(oid); dutySuppressedOids.Add(oid); }
         }
 
         var registryResult = MeasureReflection("registry", () => ApplyRegistryState(context, disabledOids));
@@ -548,6 +633,7 @@ public sealed class BmrReflectionService : IDisposable
             }
 
             removedRegistryEntries.Remove(oid);
+            if (dutySuppressedOids.Remove(oid)) RestoreDutyActors(context, oid);
         }
 
         foreach (var oid in disabledOids)
@@ -566,6 +652,15 @@ public sealed class BmrReflectionService : IDisposable
             removedLive = RemoveLiveModules(context, disabledOids);
 
         return new RegistryApplyResult(removedRegistry, restoredRegistry, removedLive);
+    }
+
+    private static void RestoreDutyActors(BmrReflectionContext context, uint oid)
+    {
+        var world = GetMemberValue(context.BossModuleManager, "WorldState");
+        if (world is null || GetMemberValue(world, "Actors") is not IEnumerable actors) return;
+        foreach (var actor in actors)
+            if (actor is not null && TryGetUIntMember(actor, "OID", out var actorOid) && actorOid == oid)
+                FindMethod(context.BossModuleManager.GetType(), "ActorAdded", actor.GetType())?.Invoke(context.BossModuleManager, [actor]);
     }
 
     private MaxLoadDistanceApplyResult ApplyMaxLoadDistanceState(BmrReflectionContext context)

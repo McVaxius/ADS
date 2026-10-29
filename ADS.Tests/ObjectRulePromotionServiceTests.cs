@@ -7,6 +7,29 @@ namespace ADS.Tests;
 
 public sealed class ObjectRulePromotionServiceTests
 {
+    [Fact]
+    public void BmrPolicyPromotionUsesValidatedCheckoutAndRequiresDirtyDestinationConfirmation()
+    {
+        using var checkout = new TempDirectory();
+        InitializeCheckout(checkout.Path, []);
+        var target = Path.Combine(checkout.Path, "ads", DutyBmrPolicyService.FileName);
+        var original = "{\"SchemaVersion\":1,\"Duties\":[{\"ContentFinderConditionId\":11,\"TerritoryTypeId\":22,\"DisableBmr\":true}]}";
+        File.WriteAllText(target, original);
+        var service = new ObjectRulePromotionService(Catalog);
+        var changed = "{\"SchemaVersion\":1,\"Duties\":[{\"ContentFinderConditionId\":11,\"TerritoryTypeId\":22,\"disablebmr\":false}]}";
+        Assert.False(service.PromoteDutyBmrPolicy(checkout.Path, "{}", true).Success);
+        Assert.False(service.PromoteDutyBmrPolicy(checkout.Path,
+            "{\"SchemaVersion\":1,\"Duties\":[{\"ContentFinderConditionId\":11,\"TerritoryTypeId\":22}]}", true).Success);
+        Assert.Equal(original, File.ReadAllText(target));
+        Assert.True(Assert.Single(DutyBmrPolicyService.ValidateJson(File.ReadAllText(target), Catalog).Duties).DisableBmr);
+        Assert.True(service.PromoteDutyBmrPolicy(checkout.Path, changed, false).RequiresOverwriteConfirmation);
+        Assert.Equal(original, File.ReadAllText(target));
+        Assert.True(service.PromoteDutyBmrPolicy(checkout.Path, changed, true).Success);
+        Assert.Equal(changed, File.ReadAllText(target));
+        Assert.False(Assert.Single(DutyBmrPolicyService.ValidateJson(File.ReadAllText(target), Catalog).Duties).DisableBmr);
+        Assert.Empty(Git(checkout.Path, "diff", "--cached", "--name-only"));
+    }
+
     private static readonly DutyCatalogEntry[] Catalog =
     [RemoteJsonUpdateServiceTests.Duty(2, 1037, "the Tam-Tara Deepcroft")];
 

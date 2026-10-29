@@ -11711,4 +11711,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>물결 색상 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>물결 색상 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>물결 색상 초기화</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>BMR 정책</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>이 솔로 임무에서 BMR 모듈 비활성화</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>ADS가 이 솔로 임무를 제어하는 동안 BMR 기본 전투 모듈을 중지합니다.</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>공유 BMR 정책 사용</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>BMR 정책 반영 준비</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>먼저 저장하세요. 설정된 로컬 저장소에 ads/duty-bmr-policy.json을 준비합니다. 검토와 제출은 수동으로 진행하세요.</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR 정책 덮어쓰기</value></data>
 </root>

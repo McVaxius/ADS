@@ -9,6 +9,37 @@ internal sealed class ObjectRulePromotionService(IReadOnlyList<DutyCatalogEntry>
     private const string RepositoryTerritoriesPath = "ads/territories";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    public ObjectRulePromotionResult PromoteDutyBmrPolicy(string checkoutPath, string json, bool overwriteConfirmed)
+    {
+        if (!TryValidateCheckout(checkoutPath, out var root, out var status))
+            return ObjectRulePromotionResult.Failed(string.Empty, status);
+        var relativePath = "ads/" + DutyBmrPolicyService.FileName;
+        var targetPath = Path.Combine(root, "ads", DutyBmrPolicyService.FileName);
+        try
+        {
+            DutyBmrPolicyService.ValidateJson(json, dutyCatalog);
+            if (File.Exists(targetPath))
+            {
+                var existing = File.ReadAllText(targetPath);
+                DutyBmrPolicyService.ValidateJson(existing, dutyCatalog);
+                if (existing == json)
+                    return ObjectRulePromotionResult.Completed(root, [], [], [relativePath], [], 0, "BMR policy promotion: no changes.");
+            }
+            if (!TryRunGit(root, ["status", "--porcelain", "--", relativePath], out var dirty, out status))
+                return ObjectRulePromotionResult.Failed(root, status);
+            if (!string.IsNullOrWhiteSpace(dirty) && !overwriteConfirmed)
+                return ObjectRulePromotionResult.OverwriteRequired(root, [targetPath], [relativePath], [], [], 0,
+                    "BMR policy promotion would overwrite local changes in " + relativePath + ".");
+            ObjectRuleShardStore.WriteJsonAtomic(targetPath, json);
+            return ObjectRulePromotionResult.Completed(root, [targetPath], [relativePath], [], [], 0,
+                "BMR policy promotion prepared " + relativePath + ". Review and submit it manually; Git was not otherwise modified.");
+        }
+        catch (Exception ex)
+        {
+            return ObjectRulePromotionResult.Failed(root, "BMR policy promotion failed: " + ex.Message);
+        }
+    }
+
     public bool TryValidateCheckout(string candidatePath, out string rootPath, out string status)
     {
         rootPath = string.Empty;

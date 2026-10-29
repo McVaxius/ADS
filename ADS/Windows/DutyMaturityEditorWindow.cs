@@ -22,6 +22,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
     private string editorStatus = "Duty Manager ready.";
     private bool showActivityPolicies;
     private int activityPolicyFilter;
+    private readonly Dictionary<string, bool?> bmrDraftChanges = [];
+    private ObjectRulePromotionResult? pendingBmrPromotion;
 
     public DutyMaturityEditorWindow(Plugin plugin)
         : base("ADS Duty Manager###ADSDutyMaturityEditor")
@@ -67,7 +69,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         var coverage = DutyRuleCoverageHelper.BuildSnapshot(
             plugin.DutyCatalogService.Entries,
             plugin.ObjectPriorityRuleService.Current.Rules);
-        var hasDraftChanges = draftRows.Any(row => row.IsChanged);
+        var hasDraftChanges = draftRows.Any(row => row.IsChanged) || bmrDraftChanges.Count > 0;
         var visibleRows = draftRows
             .Where(row => DutyMaturityFilterHelper.Matches(
                 row,
@@ -78,6 +80,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             .ToList();
 
         DrawToolbar(hasDraftChanges);
+        DrawBmrPolicyActions(hasDraftChanges);
         DrawFilters();
         DrawBulkActions(visibleRows);
         MaterialText.TextDisabled(Ui.T(
@@ -164,6 +167,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
 
     private void LoadDraftRows(bool clearSelection)
     {
+        bmrDraftChanges.Clear();
         draftRows.Clear();
         draftRows.AddRange(plugin.DutyCatalogService.Entries.Select(DutyMaturityDraftRow.FromEntry));
         if (clearSelection)
@@ -197,6 +201,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             {
                 if (plugin.DutyCatalogService.SaveMaturityOverrides(draftRows))
                 {
+                    if (bmrDraftChanges.Count > 0) plugin.DutyBmrPolicyService.ApplyOverrides(bmrDraftChanges);
+                    bmrDraftChanges.Clear();
                     foreach (var row in draftRows)
                         row.AcceptChanges();
                     selectedKeys.Clear();
@@ -209,6 +215,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         if (WindowLayout.Button(Ui.L("Reload")))
         {
             plugin.DutyCatalogService.ReloadMaturity();
+            plugin.DutyBmrPolicyService.Reload();
             LoadDraftRows(clearSelection: true);
             editorStatus = plugin.DutyCatalogService.LastMaturityLoadStatus;
         }
@@ -217,6 +224,40 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             plugin.OpenPath(plugin.DutyCatalogService.MaturityConfigPath);
         ImGui.EndTable();
     }
+
+    private void DrawBmrPolicyActions(bool hasDraftChanges)
+    {
+        var checkout = plugin.ObjectRuleCheckoutState;
+        checkout.RefreshFromConfiguration();
+        using (new ImGuiDisabledBlock(hasDraftChanges || !checkout.IsValid))
+            if (WindowLayout.Button(Ui.L("Promote BMR policy"))) RunBmrPromotion(false);
+        MaterialText.TextWrapped(Ui.T("Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission."));
+        MaterialText.TextDisabled(Ui.Display(plugin.DutyBmrPolicyService.LastLoadStatus));
+        if (!checkout.IsValid) MaterialText.TextWrapped(Ui.Display(checkout.Status));
+        if (!ImGui.BeginPopup("ADSDutyBmrPromotionOverwrite")) return;
+        MaterialText.TextWrapped(Ui.Display(pendingBmrPromotion?.Status ?? string.Empty));
+        if (WindowLayout.Button(Ui.L("Overwrite BMR policy")))
+        {
+            RunBmrPromotion(true);
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.SameLine();
+        if (WindowLayout.Button(Ui.L("Cancel"))) ImGui.CloseCurrentPopup();
+        ImGui.EndPopup();
+    }
+
+    private void RunBmrPromotion(bool overwriteConfirmed)
+    {
+        pendingBmrPromotion = plugin.ObjectRulePromotionService.PromoteDutyBmrPolicy(
+            plugin.ObjectRuleCheckoutState.ConfiguredRoot, plugin.DutyBmrPolicyService.BuildContributionJson(), overwriteConfirmed);
+        editorStatus = pendingBmrPromotion.Status;
+        if (pendingBmrPromotion.RequiresOverwriteConfirmation) ImGui.OpenPopup("ADSDutyBmrPromotionOverwrite");
+    }
+
+    private bool DraftDisablesBmr(DutyCatalogEntry duty)
+        => bmrDraftChanges.TryGetValue(DutyBmrPolicyService.Key(duty.ContentFinderConditionId, duty.TerritoryTypeId), out var choice)
+            ? choice ?? plugin.DutyBmrPolicyService.SharedDisablesBmr(duty)
+            : plugin.DutyBmrPolicyService.DisablesBmr(duty);
 
     private void DrawFilters()
     {
@@ -358,7 +399,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         using var rowSpacing = MaterialTable.PushTightRows();
         if (!ImGui.BeginTable(
                 "ADSDutyManagerRows",
-                9,
+                10,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
                 new Vector2(-1f, height * MaterialTheme.Metrics.Scale)))
             return;
@@ -371,6 +412,7 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
         ImGui.TableSetupColumn(Ui.L("Waypoints"), ImGuiTableColumnFlags.WidthFixed, 76f);
         ImGui.TableSetupColumn(Ui.L("Scope"), ImGuiTableColumnFlags.WidthFixed, 58f);
         ImGui.TableSetupColumn(Ui.L("Note"), ImGuiTableColumnFlags.WidthFixed, 54f);
+        ImGui.TableSetupColumn(Ui.L("BMR policy"), ImGuiTableColumnFlags.WidthFixed, 72f);
         ImGui.TableSetupScrollFreeze(0, 1);
         WindowLayout.TableHeadersRow();
         var clipper = new ImGuiListClipper();
@@ -416,6 +458,8 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
             MaterialText.TextDisabled(Ui.T("-"));
         ImGui.TableSetColumnIndex(8);
         MaterialText.Text(DutyMaturityCatalog.HasCustomSupportNote(row.SupportNote) ? Ui.T("YES") : "-");
+        ImGui.TableSetColumnIndex(9);
+        MaterialText.Text(Ui.T(DraftDisablesBmr(ResolveCatalogEntry(row)) ? "OFF" : "ON"));
         ImGui.PopID();
     }
 
@@ -440,6 +484,15 @@ public sealed class DutyMaturityEditorWindow : PositionedWindow, IDisposable
                 ImGui.EndTable();
             }
             ImGui.Spacing();
+            var duty = ResolveCatalogEntry(row);
+            var disableBmr = DraftDisablesBmr(duty);
+            using (new ImGuiDisabledBlock(row.Category != DutyCategory.Solo))
+                if (WindowLayout.NativeCheckbox(Ui.L("Disable BMR modules in this solo duty"), ref disableBmr))
+                    bmrDraftChanges[DutyBmrPolicyService.Key(row.ContentFinderConditionId, row.TerritoryTypeId)] = disableBmr;
+            MaterialText.TextWrapped(Ui.T("Stops native BMR encounter modules while ADS owns this solo duty."));
+            using (new ImGuiDisabledBlock(row.Category != DutyCategory.Solo))
+                if (WindowLayout.SmallButton(Ui.L("Use shared BMR policy")))
+                    bmrDraftChanges[DutyBmrPolicyService.Key(row.ContentFinderConditionId, row.TerritoryTypeId)] = null;
             DrawMaturityCombo(row, "Maturity");
             var msq = row.IsMainScenario;
             if (WindowLayout.NativeCheckbox(Ui.L("MSQ"), ref msq))

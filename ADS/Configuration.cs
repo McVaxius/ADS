@@ -79,6 +79,7 @@ public sealed class Configuration : IPluginConfiguration
     public string ActiveObjectRulePreset { get; set; } = "DEFAULT";
     public string ActiveDialogRulePreset { get; set; } = "DEFAULT";
     public string BotologyUpdatesCheckoutPath { get; set; } = string.Empty;
+    public Dictionary<string, bool> DutyBmrPolicyOverrides { get; set; } = [];
     public List<string> ObjectRuleSelectedContextFileNames { get; set; } = [];
     public bool ObjectRuleEditorCompactMode { get; set; }
     public bool ObjectRuleShardMigrationComplete { get; set; }

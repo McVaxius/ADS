@@ -11,6 +11,35 @@ namespace ADS.Tests;
 public sealed class RemoteJsonUpdateServiceTests
 {
     [Fact]
+    public async Task InvalidBmrPolicyRejectsDownloadBeforeReplacingOtherCacheFiles()
+    {
+        using var directory = new TempDirectory();
+        var log = DispatchProxy.Create<IPluginLog, AdsRulePrecedenceTests.NoOpProxy>();
+        var files = new Dictionary<string, string>
+        {
+            [RemoteJsonUpdateService.TerritoriesIndexFileName] = "{\"SchemaVersion\":1,\"Files\":[]}",
+            [RemoteJsonUpdateService.DialogRulesFileName] = "{\"SchemaVersion\":1,\"Rules\":[]}",
+            [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
+            [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+            [DutyBmrPolicyService.FileName] = "{\"SchemaVersion\":9,\"Duties\":[]}",
+        };
+        var preservedPath = Path.Combine(directory.Path, RemoteJsonUpdateService.DialogRulesFileName);
+        File.WriteAllText(preservedPath, "preserve existing cache");
+        using var updater = new RemoteJsonUpdateService(log, directory.Path);
+        var httpField = typeof(RemoteJsonUpdateService).GetField("httpClient", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        ((HttpClient)httpField.GetValue(updater)!).Dispose();
+        httpField.SetValue(updater, new HttpClient(new RemoteFilesHandler(files, false)));
+        Assert.True(updater.TryStartUpdate(true, "invalid BMR policy fixture"));
+        await ((Task)typeof(RemoteJsonUpdateService).GetField("activeUpdateTask", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(updater)!).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(updater.TryConsumeCompletedUpdate(out var completion));
+        Assert.False(completion.Success);
+        Assert.Empty(completion.ChangedFiles);
+        Assert.Equal("preserve existing cache", File.ReadAllText(preservedPath));
+        Assert.False(File.Exists(Path.Combine(directory.Path, DutyBmrPolicyService.FileName)));
+    }
+
+    [Fact]
     public async Task DialogDefaultRefreshPreservesCustomSelectionContentsAndDisabledRules()
     {
         using var directory = new TempDirectory();
@@ -32,6 +61,7 @@ public sealed class RemoteJsonUpdateServiceTests
             { Rules = [new() { PromptPattern = "Shared prompt", MatchMode = "Exact" }] }),
             [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
             [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+            [DutyBmrPolicyService.FileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
         };
         using var updater = new RemoteJsonUpdateService(log, directory.Path);
         var field = typeof(RemoteJsonUpdateService).GetField("httpClient", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -124,6 +154,7 @@ public sealed class RemoteJsonUpdateServiceTests
             [RemoteJsonUpdateService.DialogRulesFileName] = "{\"SchemaVersion\":1,\"Rules\":[]}",
             [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
             [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+            [DutyBmrPolicyService.FileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
         };
         var config = new Configuration { ActiveObjectRulePreset = "Personal" };
         Assert.True(store.TryWriteFullPreset("DEFAULT", new ObjectPriorityRuleManifest(), out _));
@@ -192,6 +223,7 @@ public sealed class RemoteJsonUpdateServiceTests
     public void SharedRemoteFilesUseTerritoryIndexAndExcludeLegacyMonoliths()
     {
         Assert.Contains(RemoteJsonUpdateService.TerritoriesIndexFileName, RemoteJsonUpdateService.RemoteCacheFileNames);
+        Assert.Contains(DutyBmrPolicyService.FileName, RemoteJsonUpdateService.RemoteCacheFileNames);
         Assert.DoesNotContain("duty-object-rules.json", RemoteJsonUpdateService.RemoteCacheFileNames);
         Assert.DoesNotContain("duty-object-rules-mature-proposals.json", RemoteJsonUpdateService.RemoteCacheFileNames);
     }
@@ -350,6 +382,7 @@ public sealed class RemoteJsonUpdateServiceTests
             [RemoteJsonUpdateService.DialogRulesFileName] = "{\"SchemaVersion\":1,\"Rules\":[]}",
             [RemoteJsonUpdateService.DutyMaturityFileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
             [RemoteJsonUpdateService.TreasureRoutesFileName] = "{\"SchemaVersion\":1,\"Routes\":[]}",
+            [DutyBmrPolicyService.FileName] = "{\"SchemaVersion\":1,\"Duties\":[]}",
         };
         foreach (var (file, json) in files)
         {
@@ -385,7 +418,7 @@ public sealed class RemoteJsonUpdateServiceTests
         var calls = new List<string>();
         bool TryRestart() => batch.TryRestart(context, OwnershipMode.OwnedStartInside,
             () => calls.Add("Stop"), () => { calls.Add("Start Inside"); return true; });
-        var expectedReloads = !failDownload && (manual || changed) ? 4 : 0;
+        var expectedReloads = !failDownload && (manual || changed) ? 5 : 0;
         Assert.Equal(expectedReloads, batch.RemainingSteps);
         for (var i = 0; i < expectedReloads; i++)
         {
@@ -396,7 +429,7 @@ public sealed class RemoteJsonUpdateServiceTests
         Assert.Equal(manual && !failDownload, TryRestart());
         Assert.False(TryRestart()); // The completion cannot restart twice.
         if (manual && !failDownload)
-            Assert.Equal(["ObjectRules", "DialogRules", "DutyMaturity", "TreasureRoutes", "Stop", "Start Inside"], calls);
+            Assert.Equal(["ObjectRules", "DialogRules", "DutyMaturity", "TreasureRoutes", "DutyBmrPolicy", "Stop", "Start Inside"], calls);
         else
             Assert.DoesNotContain("Stop", calls);
     }
@@ -406,8 +439,10 @@ public sealed class RemoteJsonUpdateServiceTests
     [InlineData(1, false)]
     [InlineData(2, false)]
     [InlineData(3, false)]
+    [InlineData(4, false)]
     [InlineData(0, true)]
     [InlineData(3, true)]
+    [InlineData(4, true)]
     public void AnyFailedOrThrowingReloadPreventsRestart(int failedStep, bool throws)
     {
         var context = UpdateContext();
@@ -426,7 +461,7 @@ public sealed class RemoteJsonUpdateServiceTests
             else
                 batch.RunNext(Reload);
         }
-        Assert.Equal(4, reloads);
+        Assert.Equal(5, reloads);
         Assert.False(batch.TryRestart(context, OwnershipMode.OwnedStartInside,
             () => Assert.Fail("Unexpected Stop"), () => throw new Exception("Unexpected Start")));
     }
@@ -465,7 +500,7 @@ public sealed class RemoteJsonUpdateServiceTests
         Assert.Equal(0, starts);
         Tick(context, false);
         Tick(context, false);
-        Assert.Equal(4, reloads);
+        Assert.Equal(5, reloads);
         Assert.Equal(1, stops);
         Assert.Equal(1, starts);
     }

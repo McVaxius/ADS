@@ -4267,4 +4267,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>तरंग का रंग 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>तरंग का रंग 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>तरंगों के रंग रीसेट करें</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>BMR नीति</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>इस एकल ड्यूटी में BMR मॉड्यूल बंद करें</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>जब ADS इस एकल ड्यूटी को नियंत्रित करता है, तब BMR के मूल मुठभेड़ मॉड्यूल रोकता है।</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>साझा BMR नीति का उपयोग करें</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>BMR नीति योगदान तैयार करें</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>पहले सहेजें। यह प्रक्रिया कॉन्फ़िगर की गई स्थानीय रिपॉज़िटरी में ads/duty-bmr-policy.json को मैन्युअल समीक्षा और जमा करने के लिए तैयार करती है।</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR नीति अधिलेखित करें</value></data>
 </root>

@@ -45,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
         DialogRules,
         DutyMaturity,
         TreasureRoutes,
+        DutyBmrPolicy,
     }
 
     internal sealed class RemoteJsonReloadBatch(RemoteJsonUpdateCompletion completion)
@@ -129,6 +130,7 @@ public sealed class Plugin : IDalamudPlugin
     internal UiAppearance Appearance { get; }
     public WindowSystem WindowSystem { get; } = new(PluginInfo.InternalName);
     public DutyCatalogService DutyCatalogService { get; }
+    public DutyBmrPolicyService DutyBmrPolicyService { get; }
     public DutyContextService DutyContextService { get; }
     public ObjectPriorityRuleService ObjectPriorityRuleService { get; }
     internal ObjectRulePromotionService ObjectRulePromotionService { get; }
@@ -243,6 +245,7 @@ public sealed class Plugin : IDalamudPlugin
         BossModMultiboxFollowService = new BossModMultiboxFollowService(PluginInterface, CommandManager, Configuration, Log);
         TreasureFollowerAutoMoveAssistService = new TreasureFollowerAutoMoveAssistService(ObjectTable, PartyList, CommandManager, Log);
         DutyCatalogService = new DutyCatalogService(DataManager, Log, configDirectory);
+        DutyBmrPolicyService = new DutyBmrPolicyService(Log, configDirectory, DutyCatalogService.Entries, Configuration);
         DutyContextService = new DutyContextService(ClientState, Condition, DutyCatalogService, PartyList);
         ObjectRulePromotionService = new ObjectRulePromotionService(DutyCatalogService.Entries);
         ObjectRuleCheckoutState = new ObjectRuleCheckoutState(ObjectRulePromotionService, Configuration, Configuration.Save);
@@ -1536,6 +1539,7 @@ public sealed class Plugin : IDalamudPlugin
         var stoppedUtility = UtilityAutomationService.IsRunning;
         DebugStrafeService.Release("ADS stop");
         ExecutionService.Stop(DutyContextService.Current, idleStatus);
+        BmrReflectionService.ReleaseDutyPolicy();
         ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
         ResetOwnedTreasureRoleInferenceLatch();
         ClearTreasureDutyRecoveryMarker("ownership stop");
@@ -2816,6 +2820,9 @@ public sealed class Plugin : IDalamudPlugin
             else
                 sectionStartedAt = 0;
             DutyContextService.Update(Configuration.PluginEnabled);
+            BmrReflectionService.SetDutyPolicy(DutyContextService.Current, ExecutionService.CurrentMode,
+                DutyBmrPolicyService.DisablesBmr(DutyContextService.Current.CurrentDuty));
+            BmrReflectionService.UpdateDutyPolicyCleanup();
             DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
                 DutyContextService.Current.TerritoryTypeId);
@@ -3193,7 +3200,7 @@ public sealed class Plugin : IDalamudPlugin
         if (batch.RemainingSteps > 0)
             pendingRemoteJsonReloads.Enqueue(batch);
         Log.Information(completion.ManualUpdate
-            ? "[ADS] Manual remote config update completed; queued all four data reloads."
+            ? "[ADS] Manual remote config update completed; queued all five data reloads."
             : $"[ADS] Remote config update completed; queued reload for {string.Join(", ", completion.ChangedFiles)}.");
     }
 
@@ -3203,7 +3210,7 @@ public sealed class Plugin : IDalamudPlugin
             return [];
         if (completion.ManualUpdate)
             return [RemoteJsonReloadStep.ObjectRules, RemoteJsonReloadStep.DialogRules,
-                RemoteJsonReloadStep.DutyMaturity, RemoteJsonReloadStep.TreasureRoutes];
+                RemoteJsonReloadStep.DutyMaturity, RemoteJsonReloadStep.TreasureRoutes, RemoteJsonReloadStep.DutyBmrPolicy];
 
         var steps = new List<RemoteJsonReloadStep>();
         foreach (var fileName in completion.ChangedFiles)
@@ -3225,6 +3232,9 @@ public sealed class Plugin : IDalamudPlugin
                     break;
                 case RemoteJsonUpdateService.TreasureRoutesFileName:
                     steps.Add(RemoteJsonReloadStep.TreasureRoutes);
+                    break;
+                case DutyBmrPolicyService.FileName:
+                    steps.Add(RemoteJsonReloadStep.DutyBmrPolicy);
                     break;
             }
         }
@@ -3305,6 +3315,7 @@ public sealed class Plugin : IDalamudPlugin
             RemoteJsonReloadStep.DialogRules => DialogYesNoRuleService.Reload(),
             RemoteJsonReloadStep.DutyMaturity => DutyCatalogService.ReloadMaturity(),
             RemoteJsonReloadStep.TreasureRoutes => TreasureDungeonData.Reload(),
+            RemoteJsonReloadStep.DutyBmrPolicy => DutyBmrPolicyService.Reload(),
             _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown remote JSON reload step."),
         };
 

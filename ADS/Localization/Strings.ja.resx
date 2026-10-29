@@ -11711,4 +11711,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>波の色 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>波の色 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>波の色をリセット</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>BMRポリシー</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>このソロコンテンツでBMRモジュールを無効にする</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>ADSがこのソロコンテンツを制御している間、BMR標準の戦闘モジュールを停止します。</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>共有BMRポリシーを使う</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>BMRポリシーを反映用にコピー</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>先に保存してください。設定済みのローカルリポジトリにads/duty-bmr-policy.jsonを用意します。確認と提出は手動で行ってください。</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>BMRポリシーを上書き</value></data>
 </root>

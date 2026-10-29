@@ -22,6 +22,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
         new(DialogRulesFileName, RemoteJsonKind.DialogRules),
         new(DutyMaturityFileName, RemoteJsonKind.DutyMaturity),
         new(TreasureRoutesFileName, RemoteJsonKind.TreasureRoutes),
+        new(DutyBmrPolicyService.FileName, RemoteJsonKind.DutyBmrPolicy),
     ];
 
     internal static IReadOnlyList<string> RemoteCacheFileNames
@@ -510,7 +511,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
             ? Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3)
             : Encoding.UTF8.GetString(bytes);
 
-    private static void ValidateJson(RemoteJsonKind kind, string json, string source)
+    private void ValidateJson(RemoteJsonKind kind, string json, string source)
     {
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidDataException($"{source} was empty.");
@@ -528,6 +529,9 @@ public sealed class RemoteJsonUpdateService : IDisposable
                 break;
             case RemoteJsonKind.TreasureRoutes:
                 TreasureDungeonData.ValidateJson(json, source);
+                break;
+            case RemoteJsonKind.DutyBmrPolicy:
+                DutyBmrPolicyService.ValidateJson(json, dutyCatalog);
                 break;
             default:
                 throw new InvalidDataException($"Unsupported remote JSON kind {kind}.");
@@ -568,6 +572,7 @@ public sealed class RemoteJsonUpdateService : IDisposable
         DialogRules,
         DutyMaturity,
         TreasureRoutes,
+        DutyBmrPolicy,
     }
 }
 

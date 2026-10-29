@@ -11711,4 +11711,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>Wellenfarbe 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>Wellenfarbe 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>Wellenfarben zurücksetzen</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>BMR-Richtlinie</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>BMR-Module in diesem Solo-Inhalt deaktivieren</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>Stoppt native BMR-Begegnungsmodule, während ADS diesen Solo-Inhalt steuert.</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>Gemeinsame BMR-Richtlinie verwenden</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>BMR-Richtlinie übertragen</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Zuerst speichern. Die Übertragung bereitet ads/duty-bmr-policy.json im konfigurierten Checkout zur manuellen Prüfung und Einreichung vor.</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR-Richtlinie überschreiben</value></data>
 </root>

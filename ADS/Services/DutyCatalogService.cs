@@ -96,6 +96,7 @@ public sealed class DutyCatalogService
             {
                 ContentFinderConditionId = row.RowId,
                 TerritoryTypeId = row.TerritoryType.Value.RowId,
+                LinkedQuestId = linkedQuestId,
                 Name = localizedName,
                 EnglishName = englishName,
                 ContentTypeName = contentTypeName,

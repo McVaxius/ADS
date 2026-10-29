@@ -11711,4 +11711,11 @@
   <data name="Wave colour 2" xml:space="preserve"><value>波纹颜色 2</value></data>
   <data name="Wave colour 3" xml:space="preserve"><value>波纹颜色 3</value></data>
   <data name="Reset wave colours" xml:space="preserve"><value>重置波纹颜色</value></data>
+  <data name="BMR policy" xml:space="preserve"><value>BMR策略</value></data>
+  <data name="Disable BMR modules in this solo duty" xml:space="preserve"><value>在此单人任务中禁用BMR模块</value></data>
+  <data name="Stops native BMR encounter modules while ADS owns this solo duty." xml:space="preserve"><value>ADS控制此单人任务期间，停止BMR原生战斗模块。</value></data>
+  <data name="Use shared BMR policy" xml:space="preserve"><value>使用共享BMR策略</value></data>
+  <data name="Promote BMR policy" xml:space="preserve"><value>准备提交BMR策略</value></data>
+  <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>请先保存。此操作在配置的本地仓库中准备ads/duty-bmr-policy.json，供手动审核和提交。</value></data>
+  <data name="Overwrite BMR policy" xml:space="preserve"><value>覆盖BMR策略</value></data>
 </root>
