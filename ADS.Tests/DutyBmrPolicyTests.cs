@@ -1,5 +1,8 @@
 using System.Collections;
 using System.Reflection;
+using System.Resources;
+using System.Text.RegularExpressions;
+using ADS.Localization;
 using ADS.Models;
 using ADS.Services;
 using Dalamud.Plugin;
@@ -9,6 +12,50 @@ namespace ADS.Tests;
 
 public sealed class DutyBmrPolicyTests
 {
+    [Fact]
+    public void ActualLoadStatusesDisplayThroughEveryCompiledLanguageCatalog()
+    {
+        const string loadedTemplate = "Loaded BMR duty policy: {0} shared row(s).";
+        const string failureTemplate = "BMR duty policy reload failed; retained the last valid policy: {0}";
+        const string failurePrefix = "BMR duty policy reload failed; retained the last valid policy: ";
+        using var directory = new TempDirectory();
+        var service = new DutyBmrPolicyService(Log(), directory.Path, [Duty()], new Configuration());
+        File.WriteAllText(service.ConfigPath, Policy(true));
+        Assert.True(service.Reload());
+        var loaded = service.LastLoadStatus;
+        Assert.Equal("Loaded BMR duty policy: 1 shared row(s).", loaded);
+        File.WriteAllText(service.ConfigPath, "{\"SchemaVersion\":2,\"Duties\":[]}");
+        Assert.False(service.Reload());
+        var failure = service.LastLoadStatus;
+        Assert.StartsWith(failurePrefix, failure);
+        var reason = failure[failurePrefix.Length..];
+        Assert.False(string.IsNullOrWhiteSpace(reason));
+        foreach (var language in Enum.GetValues<UiLanguage>())
+        {
+            var suffix = language == UiLanguage.English ? string.Empty : "." + Ui.CultureFor(language).Name;
+            using var stream = typeof(Plugin).Assembly.GetManifestResourceStream($"ADS.Localization.Strings{suffix}.resources");
+            Assert.NotNull(stream);
+            using var reader = new ResourceReader(stream);
+            var values = reader.Cast<DictionaryEntry>().ToDictionary(entry => (string)entry.Key, entry => (string)entry.Value!);
+            foreach (var key in new[] { loadedTemplate, failureTemplate })
+            {
+                Assert.True(values.TryGetValue(key, out var value), $"{language}: missing {key}");
+                Assert.False(string.IsNullOrWhiteSpace(value));
+                Assert.Equal(["{0}"], Regex.Matches(value!, @"\{\d+\}").Select(match => match.Value));
+            }
+            var loadedDisplay = Ui.Display(language, loaded);
+            var failureDisplay = Ui.Display(language, failure);
+            Assert.Equal(string.Format(Ui.CultureFor(language), values[loadedTemplate], 1), loadedDisplay);
+            Assert.Equal(string.Format(Ui.CultureFor(language), values[failureTemplate], reason), failureDisplay);
+            Assert.EndsWith(reason, failureDisplay);
+            if (language != UiLanguage.English)
+            {
+                Assert.NotEqual(loaded, loadedDisplay);
+                Assert.NotEqual(failure, failureDisplay);
+            }
+        }
+    }
+
     [Fact]
     public void SharedRefreshPreservesExplicitLocalChoicesAndContributionKeepsBoth()
     {

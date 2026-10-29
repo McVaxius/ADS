@@ -4290,4 +4290,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>Siapkan kontribusi kebijakan BMR</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Simpan dahulu. Tindakan ini menyiapkan ads/duty-bmr-policy.json di salinan repositori yang dikonfigurasi untuk ditinjau dan dikirim secara manual.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>Timpa kebijakan BMR</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>Kebijakan BMR tugas dimuat: {0} baris bersama.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>Gagal memuat ulang kebijakan BMR tugas; kebijakan valid terakhir dipertahankan: {0}</value></data>
 </root>

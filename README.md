@@ -75,6 +75,8 @@ While ADS owns a duty, native cutscenes hold execution and pause its existing na
 
 ## Regular-Duty BossMod Follow
 
+The duty list also has a separate per-solo-duty BMR policy: follow the shared choice, preserve BMR, or disable its matching encounter modules during ADS-owned work. Save applies the local choice; data refresh keeps local overrides. The dedicated `duty-bmr-policy.json` travels through BotologyUpdates and the existing validated checkout promotion path. Missing entries preserve BMR. This controls encounter modules independently of autorotation and the regular-duty follow setting. Ownership release restores the modules without undoing independent Queen/Hunt preferences. The prepared feed changes are local until the normal publication process runs.
+
 **Settings > Automation > Enable BMRAI/VBM in regular duties** is enabled by default. When enabled, ADS resets BMRAI and VBM follow targets to `Slot1` on the next regular-duty entry. Disable it to skip only those regular-duty Slot1 commands; treasure opener follow and treasure-exit cleanup are unchanged.
 
 ## Feature Map

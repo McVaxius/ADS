@@ -11718,4 +11718,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>BMR-Richtlinie übertragen</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Zuerst speichern. Die Übertragung bereitet ads/duty-bmr-policy.json im konfigurierten Checkout zur manuellen Prüfung und Einreichung vor.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR-Richtlinie überschreiben</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>BMR-Inhaltsrichtlinie geladen: {0} gemeinsame Zeile(n).</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR-Inhaltsrichtlinie konnte nicht neu geladen werden; die letzte gültige Richtlinie wurde beibehalten: {0}</value></data>
 </root>

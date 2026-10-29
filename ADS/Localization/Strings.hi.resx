@@ -4274,4 +4274,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>BMR नीति योगदान तैयार करें</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>पहले सहेजें। यह प्रक्रिया कॉन्फ़िगर की गई स्थानीय रिपॉज़िटरी में ads/duty-bmr-policy.json को मैन्युअल समीक्षा और जमा करने के लिए तैयार करती है।</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR नीति अधिलेखित करें</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>BMR ड्यूटी नीति लोड हुई: {0} साझा पंक्तियाँ।</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR ड्यूटी नीति फिर से लोड नहीं हुई; पिछली मान्य नीति रखी गई: {0}</value></data>
 </root>

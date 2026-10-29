@@ -4290,4 +4290,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>Chuẩn bị đóng góp chính sách BMR</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Hãy lưu trước. Thao tác này chuẩn bị ads/duty-bmr-policy.json trong bản sao kho mã đã cấu hình để bạn tự xem xét và gửi.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>Ghi đè chính sách BMR</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>Đã tải chính sách BMR cho nhiệm vụ: {0} dòng dùng chung.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>Không thể tải lại chính sách BMR cho nhiệm vụ; đã giữ lại chính sách hợp lệ gần nhất: {0}</value></data>
 </root>

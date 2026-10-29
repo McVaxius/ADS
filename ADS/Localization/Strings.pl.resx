@@ -4290,4 +4290,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>Przygotuj zasady BMR do przekazania</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Najpierw zapisz. Ta operacja przygotowuje ads/duty-bmr-policy.json w skonfigurowanej lokalnej kopii repozytorium do ręcznej oceny i przesłania.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>Nadpisz zasady BMR</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>Wczytano zasady BMR dla instancji: {0} wspólnych wpisów.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>Nie udało się ponownie wczytać zasad BMR dla instancji; zachowano ostatnie prawidłowe zasady: {0}</value></data>
 </root>

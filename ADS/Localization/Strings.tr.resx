@@ -4290,4 +4290,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>BMR ilkesi katkısını hazırla</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Önce kaydedin. Bu işlem, elle inceleme ve gönderim için yapılandırılmış yerel depoda ads/duty-bmr-policy.json dosyasını hazırlar.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR ilkesinin üzerine yaz</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>BMR görev ilkesi yüklendi: {0} paylaşılan satır.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR görev ilkesi yeniden yüklenemedi; son geçerli ilke korundu: {0}</value></data>
 </root>

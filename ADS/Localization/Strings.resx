@@ -11718,4 +11718,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>Promote BMR policy</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>Overwrite BMR policy</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>Loaded BMR duty policy: {0} shared row(s).</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR duty policy reload failed; retained the last valid policy: {0}</value></data>
 </root>

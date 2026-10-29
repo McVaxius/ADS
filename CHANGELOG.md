@@ -1,3 +1,11 @@
+2026-10-29 - Per-duty BMR policy (I682)
+
+- Add a dedicated solo-duty BMR policy list, explicit local overrides, duty-list editing and validated checkout promotion. Refresh it through BotologyUpdates alongside existing data while preserving local choices and the last valid policy on malformed input.
+- Suppress only encounter modules matching the exact ADS-owned solo duty's native CFC or linked Quest identity. Restore owned removals on Stop, exclusions, exit and unload; preserve independent Queen/Hunt choices, runtime provider boundaries and rotation behavior.
+- Mark the existing The Lominsan Way route (CFC354/territory307) supported/MSQ from operator approval while retaining its clearance tier. The BMR policy list remains empty by default.
+- Translate load and retained-policy failure status messages in all sixteen catalogs, preserving diagnostic details through the existing display formatter.
+- Fresh production/test builds passed; all 139 selected integration cases passed in one serial run with unchanged deadlines, plus root's focused verification. Feed changes remain local and native BMR/game acceptance remains pending.
+
 2026-10-28 - 2.0.0.11 - Select actual full-spiritbond materia rows
 
 - Read the current native materia category and sorted inventory entries before selecting a full-spiritbond item. Preserve the unsigned row callback and native-busy wait; do not assume the eligible item is row zero.

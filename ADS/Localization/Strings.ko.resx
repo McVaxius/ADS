@@ -11718,4 +11718,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>BMR 정책 반영 준비</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>먼저 저장하세요. 설정된 로컬 저장소에 ads/duty-bmr-policy.json을 준비합니다. 검토와 제출은 수동으로 진행하세요.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>BMR 정책 덮어쓰기</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>BMR 임무 정책을 불러왔습니다: 공유 항목 {0}개.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR 임무 정책을 다시 불러오지 못했습니다. 마지막으로 유효한 정책을 유지합니다: {0}</value></data>
 </root>

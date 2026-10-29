@@ -4648,4 +4648,6 @@
   <data name="Promote BMR policy" xml:space="preserve"><value>Trasferisci criteri BMR</value></data>
   <data name="Save first. Promotion prepares ads/duty-bmr-policy.json in the configured checkout for manual review and submission." xml:space="preserve"><value>Salva prima. Il trasferimento prepara ads/duty-bmr-policy.json nel repository locale configurato per la revisione e l’invio manuali.</value></data>
   <data name="Overwrite BMR policy" xml:space="preserve"><value>Sovrascrivi criteri BMR</value></data>
+  <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>Politica BMR dell'istanza caricata: {0} riga/righe condivise.</value></data>
+  <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>Ricaricamento della politica BMR dell'istanza non riuscito; è stata mantenuta l'ultima politica valida: {0}</value></data>
 </root>
