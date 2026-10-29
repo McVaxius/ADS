@@ -2216,6 +2216,14 @@ public sealed unsafe class UtilityAutomationService
         if (!PrepareForUiWork("materia extraction"))
             return;
 
+        // Native extraction keeps the character occupied after its dialog
+        // closes. Do not submit another row or advance its category mid-action.
+        if (condition[ConditionFlag.Occupied39])
+        {
+            StatusMessage = "Waiting for materia extraction to finish.";
+            return;
+        }
+
         var inventoryManager = InventoryManager.Instance();
         if (inventoryManager == null)
         {
@@ -2276,9 +2284,9 @@ public sealed unsafe class UtilityAutomationService
 
         if (!materializeCategoryArmed)
         {
-            if (now - lastActionUtc >= UiRetryCooldown)
+            if (now - lastActionUtc >= UiRetryCooldown
+                && GameInteractionHelper.TryFireAddonCallback("Materialize", false, 1, materializeCategory))
             {
-                GameInteractionHelper.FireAddonCallback("Materialize", false, 1, materializeCategory);
                 materializeCategoryArmed = true;
                 materializeAttemptPending = false;
                 lastActionUtc = now;
@@ -2290,9 +2298,11 @@ public sealed unsafe class UtilityAutomationService
 
         if (!materializeAttemptPending)
         {
-            if (now - lastActionUtc >= UiRetryCooldown)
+            // Materialize expects an Int action and a UInt row, matching the
+            // native payload used by Pandora's Extract All implementation.
+            if (now - lastActionUtc >= UiRetryCooldown
+                && GameInteractionHelper.TryFireAddonCallback("Materialize", false, 2, 0u))
             {
-                GameInteractionHelper.FireAddonCallback("Materialize", true, 2, 0);
                 materializeAttemptPending = true;
                 lastActionUtc = now;
                 StatusMessage = $"Trying materia extraction in category {materializeCategory}.";

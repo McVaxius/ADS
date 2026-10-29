@@ -1,3 +1,9 @@
+2026-10-28 - 2.0.0.10 - Materia extraction callback and action readiness
+
+- Submit the native materia row callback with its required unsigned row value and default update state. Keep the existing category callback and advance request state only after dispatch succeeds.
+- Wait for the native extraction action to finish before selecting another item or advancing categories. The completed-run logs report no extractable items but do not establish the available spiritbond stock; live extraction acceptance remains pending.
+- Validation: three native-busy regression cases pass. The exact unchanged `aids.bat` completes with zero errors and two existing obsolete-distance warnings; version remains 2.0.0.10.
+
 2026-10-28 - 2.0.0.10 Keybound Brawler activity exclusion
 
 - Exclude the KBB arena (1359) and Keybound Square (1360) from ADS automation through the existing activity policy. Park ownership/execution before generic dialogs or duty-exit automation; refuse explicit duty/utility actions in those territories. Preserve ordinary duties and other existing activity rules.

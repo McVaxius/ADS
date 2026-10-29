@@ -29,6 +29,30 @@ namespace ADS.Tests;
 public sealed class StartingCityInnRepairRegressionTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void MateriaExtractionRetainsItsPendingCategoryWhileTheNativeActionIsOccupied(bool categoryArmed, bool attemptPending)
+    {
+        using var fixture = new NpcSaleFixture { MaterializeOccupied = true };
+        Assert.True(fixture.Service.StartExtractMateria());
+        var requestedAt = DateTime.UtcNow.AddSeconds(-5);
+        Set(fixture.Service, "materializeCategory", 3);
+        Set(fixture.Service, "materializeCategoryArmed", categoryArmed);
+        Set(fixture.Service, "materializeAttemptPending", attemptPending);
+        Set(fixture.Service, "lastActionUtc", requestedAt);
+
+        fixture.Service.Update();
+
+        Assert.True(fixture.Service.IsExtractMateriaRunning);
+        Assert.False(fixture.Service.ExtractMateriaDone);
+        Assert.Equal(3, Get(fixture.Service, "materializeCategory"));
+        Assert.Equal(categoryArmed, Get(fixture.Service, "materializeCategoryArmed"));
+        Assert.Equal(attemptPending, Get(fixture.Service, "materializeAttemptPending"));
+        Assert.Equal(requestedAt, Get(fixture.Service, "lastActionUtc"));
+    }
+
+    [Theory]
     [InlineData(0, false)]
     [InlineData(1, false)]
     [InlineData(2, false)]
@@ -2534,6 +2558,7 @@ public sealed class StartingCityInnRepairRegressionTests
         public bool Loading { get; set; }
         public bool Mounted { get; set; }
         public bool Combat { get; set; }
+        public bool MaterializeOccupied { get; set; }
         public bool NearAetheryte { get; set; }
         public bool DutyOwned { get; set; }
         public bool InnOwned { get; set; }
@@ -2636,6 +2661,7 @@ public sealed class StartingCityInnRepairRegressionTests
                     ConditionFlag.BetweenAreas or ConditionFlag.BetweenAreas51 => Loading,
                     ConditionFlag.Mounted => Mounted,
                     ConditionFlag.InCombat => Combat,
+                    ConditionFlag.Occupied39 => MaterializeOccupied,
                     _ => false,
                 });
             var command = Fake<ICommandManager>((method, args) =>
