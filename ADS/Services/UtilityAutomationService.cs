@@ -2241,7 +2241,8 @@ public sealed unsafe class UtilityAutomationService
         var materializeDialog = GetVisibleAddon<AddonMaterializeDialog>("MaterializeDialog");
         if (materializeDialog != null)
         {
-            if (now - lastActionUtc >= UiRetryCooldown)
+            if (now - lastActionUtc >= UiRetryCooldown
+                && materializeDialog->YesButton != null && materializeDialog->YesButton->IsEnabled)
             {
                 ClickButtonIfEnabled(materializeDialog->YesButton, (AtkUnitBase*)materializeDialog);
                 extractAttemptedAny = true;
@@ -2298,16 +2299,33 @@ public sealed unsafe class UtilityAutomationService
 
         if (!materializeAttemptPending)
         {
-            // Materialize expects an Int action and a UInt row, matching the
-            // native payload used by Pandora's Extract All implementation.
-            if (now - lastActionUtc >= UiRetryCooldown
-                && GameInteractionHelper.TryFireAddonCallback("Materialize", false, 2, 0u))
+            if (now - lastActionUtc < UiSettleCooldown)
+                return;
+
+            if (!TryFindExtractableMaterializeRow(AgentMaterialize.Instance(), materializeCategory, out var row))
             {
-                materializeAttemptPending = true;
-                lastActionUtc = now;
-                StatusMessage = $"Trying materia extraction in category {materializeCategory}.";
+                StatusMessage = $"Waiting for materia extraction category {materializeCategory} to populate.";
+                return;
             }
 
+            if (row is { } selectedRow)
+            {
+                // The second callback value is the displayed sorted row, not
+                // necessarily row zero or the inventory slot number.
+                if (GameInteractionHelper.TryFireAddonCallback("Materialize", false, 2, selectedRow))
+                {
+                    materializeAttemptPending = true;
+                    lastActionUtc = now;
+                    StatusMessage = $"Trying materia extraction in category {materializeCategory}.";
+                }
+                return;
+            }
+
+            materializeCategory++;
+            materializeCategoryArmed = false;
+            StatusMessage = materializeCategory <= LastMaterializeCategory
+                ? $"No extractable item found in the previous category; advancing to {materializeCategory}."
+                : "No further materia categories remain.";
             return;
         }
 
@@ -2317,12 +2335,30 @@ public sealed unsafe class UtilityAutomationService
             return;
         }
 
-        materializeCategory++;
-        materializeCategoryArmed = false;
-        materializeAttemptPending = false;
-        StatusMessage = materializeCategory <= LastMaterializeCategory
-            ? $"No extractable item found in the previous category; advancing to {materializeCategory}."
-            : "No further materia categories remain.";
+        Fail("The materia extraction dialog did not open for an item with full spiritbond.");
+    }
+
+    internal static bool TryFindExtractableMaterializeRow(AgentMaterialize* agent, int category, out uint? row)
+    {
+        row = null;
+        if (agent == null || agent->Category != category || agent->ItemCount is < 0 or > 140
+            || agent->ItemCount > 0 && agent->ItemArraySorted == null)
+            return false;
+
+        for (var index = 0; index < agent->ItemCount; index++)
+        {
+            var entry = agent->ItemArraySorted[index];
+            if (entry == null || entry->Item == null)
+                return false;
+            // Read actual inventory spiritbond; neither the current UI sort nor
+            // a missing confirmation dialog establishes that a category is empty.
+            if (entry->Item->ItemId != 0 && entry->Item->SpiritbondOrCollectability >= 10000)
+            {
+                row = (uint)index;
+                return true;
+            }
+        }
+        return true;
     }
 
     private void UpdateDesynthFromInventory()

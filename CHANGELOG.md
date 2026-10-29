@@ -1,3 +1,9 @@
+2026-10-28 - 2.0.0.11 - Select actual full-spiritbond materia rows
+
+- Read the current native materia category and sorted inventory entries before selecting a full-spiritbond item. Preserve the unsigned row callback and native-busy wait; do not assume the eligible item is row zero.
+- Advance only when the populated native category has no full-spiritbond item. Report a missing extraction dialog as a failure instead of claiming no extractable items; confirm only an enabled Yes button.
+- Validation: all four focused extraction cases pass in isolated outputs. Live acceptance remains pending. Later historical attempts still reported no extractable items; those logs do not establish their actual inventory stock or the row selected by the game.
+
 2026-10-28 - 2.0.0.10 - Materia extraction callback and action readiness
 
 - Submit the native materia row callback with its required unsigned row value and default update state. Keep the existing category callback and advance request state only after dispatch succeeds.

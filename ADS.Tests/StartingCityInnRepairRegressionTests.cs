@@ -21,6 +21,7 @@ using ADS.Services;
 using ADS.Models;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Xunit;
 
 namespace ADS.Tests;
@@ -28,6 +29,34 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class StartingCityInnRepairRegressionTests
 {
+    [Fact]
+    public unsafe void MateriaExtractionSelectsTheFullSpiritbondItemFromTheCurrentNativeSort()
+    {
+        var items = stackalloc InventoryItem[2];
+        items[0] = new InventoryItem { ItemId = 1681, SpiritbondOrCollectability = 3200 };
+        items[1] = new InventoryItem { ItemId = 1682, SpiritbondOrCollectability = 10000 };
+        var entries = stackalloc AgentMaterialize.MaterializeEntry[2];
+        entries[0] = new AgentMaterialize.MaterializeEntry { Item = &items[0], Index = 12 };
+        entries[1] = new AgentMaterialize.MaterializeEntry { Item = &items[1], Index = 7 };
+        var sorted = stackalloc AgentMaterialize.MaterializeEntry*[2];
+        sorted[0] = &entries[0];
+        sorted[1] = &entries[1];
+        var agent = new AgentMaterialize { Category = 3, ItemCount = 2, ItemArraySorted = sorted };
+
+        Assert.True(UtilityAutomationService.TryFindExtractableMaterializeRow(&agent, 3, out var row));
+        Assert.Equal(1u, row);
+        Assert.False(UtilityAutomationService.TryFindExtractableMaterializeRow(&agent, 2, out _));
+
+        items[1].SpiritbondOrCollectability = 0; // Actual extraction has drained the item.
+        Assert.True(UtilityAutomationService.TryFindExtractableMaterializeRow(&agent, 3, out row));
+        Assert.Null(row);
+        agent.ItemArraySorted = null; // A changing list is not an empty category.
+        Assert.False(UtilityAutomationService.TryFindExtractableMaterializeRow(&agent, 3, out _));
+        agent.ItemCount = 0;
+        Assert.True(UtilityAutomationService.TryFindExtractableMaterializeRow(&agent, 3, out row));
+        Assert.Null(row);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
