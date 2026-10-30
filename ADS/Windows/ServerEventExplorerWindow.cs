@@ -46,6 +46,7 @@ public sealed class ServerEventExplorerWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);
 

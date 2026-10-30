@@ -109,6 +109,7 @@ public sealed class ObjectExplorerWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         DrawToolGuideOffer(plugin.Configuration, plugin.SaveConfiguration, ToolGuide.ObjectExplorer, ref guideOfferRequested, ref guideOfferVisible, plugin.OpenObjectExplorerGuideUi);
         if (WindowLayout.SmallButton(Ui.L("Guide###ADSExplorerToolbarGuide")))

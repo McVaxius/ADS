@@ -91,6 +91,7 @@ public sealed class MainWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
 
         if (AdsPresentation.IsMaterial) AdsPresentation.Panel(DrawHeader, ImGui.GetID(""));

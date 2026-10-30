@@ -11720,4 +11720,34 @@
   <data name="Overwrite BMR policy" xml:space="preserve"><value>覆寫BMR策略</value></data>
   <data name="Loaded BMR duty policy: {0} shared row(s)." xml:space="preserve"><value>已載入 BMR 副本政策：{0} 筆共用記錄。</value></data>
   <data name="BMR duty policy reload failed; retained the last valid policy: {0}" xml:space="preserve"><value>BMR 副本政策重新載入失敗；已保留上次有效的政策：{0}</value></data>
+  <data name="Use native UI" xml:space="preserve"><value>使用原生介面</value></data>
+  <data name="Use styled UI" xml:space="preserve"><value>使用樣式化介面</value></data>
+  <data name="Unlock windows" xml:space="preserve"><value>解除視窗鎖定</value></data>
+  <data name="Lock windows" xml:space="preserve"><value>鎖定視窗</value></data>
+  <data name="Background mode" xml:space="preserve"><value>背景模式</value></data>
+  <data name="Waves" xml:space="preserve"><value>波浪</value></data>
+  <data name="Lights" xml:space="preserve"><value>光效</value></data>
+  <data name="Image" xml:space="preserve"><value>圖片</value></data>
+  <data name="Light effect" xml:space="preserve"><value>光效類型</value></data>
+  <data name="Ambient glows" xml:space="preserve"><value>環境光暈</value></data>
+  <data name="Sweeping beams" xml:space="preserve"><value>掃動光束</value></data>
+  <data name="Pointer glow" xml:space="preserve"><value>指標光暈</value></data>
+  <data name="Light colours" xml:space="preserve"><value>光效顏色</value></data>
+  <data name="Light colour 1" xml:space="preserve"><value>光效顏色 1</value></data>
+  <data name="Light colour 2" xml:space="preserve"><value>光效顏色 2</value></data>
+  <data name="Light colour 3" xml:space="preserve"><value>光效顏色 3</value></data>
+  <data name="Reset light colours" xml:space="preserve"><value>重設光效顏色</value></data>
+  <data name="Image file" xml:space="preserve"><value>圖片檔案</value></data>
+  <data name="Browse..." xml:space="preserve"><value>瀏覽…</value></data>
+  <data name="Load image" xml:space="preserve"><value>載入圖片</value></data>
+  <data name="The image fills the window. Blur (%) applies to the image." xml:space="preserve"><value>圖片會填滿視窗。模糊程度 (%) 會套用至圖片。</value></data>
+  <data name="Background blur" xml:space="preserve"><value>背景模糊</value></data>
+  <data name="Blur (%)" xml:space="preserve"><value>模糊程度 (%)</value></data>
+  <data name="Choose background image" xml:space="preserve"><value>選擇背景圖片</value></data>
+  <data name="Images" xml:space="preserve"><value>圖片</value></data>
+  <data name="Image backgrounds remain visible to screenshots." xml:space="preserve"><value>圖片背景仍會顯示於螢幕截圖中。</value></data>
+  <data name="Pause backdrop for screenshots" xml:space="preserve"><value>暫停背景以擷取螢幕截圖</value></data>
+  <data name="Choose an image file." xml:space="preserve"><value>請選擇圖片檔案。</value></data>
+  <data name="Loading image..." xml:space="preserve"><value>圖片載入中…</value></data>
+  <data name="Image could not be loaded." xml:space="preserve"><value>無法載入圖片。</value></data>
 </root>

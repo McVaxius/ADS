@@ -63,6 +63,7 @@ public sealed class ShopListsWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         RefreshPreviewIfChanged();
         RefreshAfterBatchCompletion();

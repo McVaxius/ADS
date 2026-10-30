@@ -15,6 +15,38 @@ public sealed class GuideNativeUiCollection;
 public sealed class WizardCatalogTests
 {
     [Fact]
+    public void SharedBackgroundChoicesRoundTripWithoutChangingAutomationOrUnknownSettings()
+    {
+        var config = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
+            """{"UiWindowOpacityPercent":83,"UiAutoFade":false,"OpenMainWindowOnLoad":true,"UnrelatedFixture":17}""")!;
+        Assert.True(config.UiStylingEnabled);
+        Assert.False(config.UiWindowsLocked);
+        Assert.Equal(75, config.UiColors.BackgroundBlurPercent);
+        foreach (var mode in Enum.GetValues<MaterialColorMode>())
+            Assert.Equal(mode == MaterialColorMode.Glassmorphism, config.UiColors.HasBackgroundBlur(mode));
+        config.UiStylingEnabled = false;
+        config.UiWindowsLocked = true;
+        config.UiColors = config.UiColors.WithBackgroundBlur(MaterialColorMode.Cyberpunk, true) with
+        {
+            Mode = MaterialColorMode.Glassmorphism, GlassBackground = MaterialGlassBackground.Image,
+            GlassLights = MaterialGlassLights.PointerGlow, GlassImagePath = @"C:\fixtures\background.png",
+            GlassWave1Rgb = 0x123456, GlassLight3Rgb = 0x654321, GlassAnimation = false, BackgroundBlurPercent = 42,
+        };
+        var storage = typeof(Dalamud.Plugin.IDalamudPluginInterface).Assembly.GetType("Dalamud.Configuration.PluginConfigurations", true)!;
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        var saved = (string)storage.GetMethod("SerializeConfig", flags)!.Invoke(null, [config])!;
+        var restored = (Configuration)storage.GetMethod("DeserializeConfig", flags)!.Invoke(null, [saved])!;
+        Assert.False(restored.UiStylingEnabled);
+        Assert.True(restored.UiWindowsLocked);
+        Assert.Equal(config.UiColors, restored.UiColors);
+        Assert.True(restored.UiColors.HasBackgroundBlur(MaterialColorMode.Cyberpunk));
+        Assert.Equal(83, restored.UiWindowOpacityPercent);
+        Assert.False(restored.UiAutoFade);
+        Assert.True(restored.OpenMainWindowOnLoad);
+        Assert.Equal(17, (int)restored.AdditionalSettings!["UnrelatedFixture"]);
+    }
+
+    [Fact]
     public void ColourPreferencesPreserveLegacyThemeLanguageOrdinalsAndUnknownSettings()
     {
         var configuration = Newtonsoft.Json.JsonConvert.DeserializeObject<Configuration>(
@@ -63,7 +95,37 @@ public sealed class WizardCatalogTests
     [Fact]
     public void AllSixteenCompiledCatalogsContainAppearanceAndNoticeLabels()
     {
-        string[] keys = ["Auto", "Picker", "Default", "Background, controls and text follow your theme.", "Theme colour",
+        string[] keys = ["Use native UI",
+            "Use styled UI",
+            "Unlock windows",
+            "Lock windows",
+            "Background mode",
+            "Waves",
+            "Lights",
+            "Image",
+            "Light effect",
+            "Ambient glows",
+            "Sweeping beams",
+            "Pointer glow",
+            "Light colours",
+            "Light colour 1",
+            "Light colour 2",
+            "Light colour 3",
+            "Reset light colours",
+            "Image file",
+            "Browse...",
+            "Load image",
+            "The image fills the window. Blur (%) applies to the image.",
+            "Background blur",
+            "Blur (%)",
+            "Choose background image",
+            "Images",
+            "Image backgrounds remain visible to screenshots.",
+            "Pause backdrop for screenshots",
+            "Choose an image file.",
+            "Loading image...",
+            "Image could not be loaded.",
+            "Auto", "Picker", "Default", "Background, controls and text follow your theme.", "Theme colour",
             "Choose each colour independently.", "Background", "Controls", "Text", "Aa  Preview text", "Control",
             "Switch to Picker to set each colour yourself.", "Switch back to Auto to use the automatic theme.",
             "LCARS", "LCARS panels, bars and controls", "LCARS UI sounds", "UI sounds", "Preview sound",
@@ -202,7 +264,7 @@ public sealed class WizardCatalogTests
             Assert.Equal(5, proxy.Saves);
             Assert.Equal(manual with { Mode = MaterialColorMode.Lcars }, configuration.UiColors);
             Assert.True(configuration.UiLcarsSoundsMuted);
-            Assert.Equal(9, owner.TitleBarButtons.Count);
+            Assert.Equal(11, owner.TitleBarButtons.Count);
             Assert.Equal(nativeTitleButtons, owner.TitleBarButtons.Take(6));
             Assert.Contains(owner.TitleBarButtons, button => button.Icon == Dalamud.Interface.FontAwesomeIcon.Globe);
             var speaker = owner.TitleBarButtons.Single(button => button.Icon == Dalamud.Interface.FontAwesomeIcon.VolumeMute);
@@ -222,7 +284,7 @@ public sealed class WizardCatalogTests
             Click("Auto"); Frame();
             Assert.Equal(8, proxy.Saves);
             Assert.DoesNotContain(speaker, owner.TitleBarButtons);
-            Assert.Equal(8, owner.TitleBarButtons.Count);
+            Assert.Equal(10, owner.TitleBarButtons.Count);
             Assert.Equal(manual with { Mode = MaterialColorMode.Auto }, configuration.UiColors);
             Assert.Equal(AdsPresentation.ReferenceAccent, configuration.UiAccentRgb);
         }

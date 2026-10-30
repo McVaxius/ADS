@@ -51,6 +51,7 @@ public sealed class TreasureRouteEditorWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         EnsureDraftLoaded();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);

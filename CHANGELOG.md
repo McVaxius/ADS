@@ -1,3 +1,9 @@
+2026-10-29 - 2.0.0.15 - Shared window appearance
+
+- Add styled/native UI and movement/resize lock titlebar controls and settings. Use /ads style [on|off|toggle], /ads lock or /ads unlock; lock and unlock are idempotent.
+- Add shared Glasswork backgrounds with independent per-style blur and Frost, Waves, three Lights effects, native background-image selection and session-only screenshot pause in Colour and Transparency. Match each titlebar popup's glass opacity to its actual owner, including reopened and faded windows. Preserve saved palettes, opacity, language and automation settings.
+- Ship the shared renderer dependencies and Glasswork MIT notice. Native GPU, detached-window, picker and screenshot acceptance remain user-controlled.
+
 2026-10-29 - Per-duty BMR policy (I682)
 
 - Add a dedicated solo-duty BMR policy list, explicit local overrides, duty-list editing and validated checkout promotion. Refresh it through BotologyUpdates alongside existing data while preserving local choices and the last valid policy on malformed input.

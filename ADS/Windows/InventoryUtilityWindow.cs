@@ -94,6 +94,7 @@ public sealed class InventoryUtilityWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         var character = Plugin.PlayerState.IsLoaded ? Plugin.PlayerState.ContentId : 0;
         if (lastCompletion != plugin.UtilityAutomationService.LastCompletionUtc || summaryCharacter != character) Refresh();

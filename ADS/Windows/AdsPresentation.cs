@@ -140,8 +140,8 @@ internal static class AdsPresentation
                 MaterialSkin.PanelFrame(start, new(start.X + width, bottom), emphasis ? 0 : 1, inner);
             else
             {
-                MaterialCanvas.Surface(start, new(start.X + width, bottom), emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh,
-                    inner ? c.SurfaceContainerLow : c.Surface, 5 * s);
+                MaterialCanvas.Surface(start, new(start.X + width, bottom), MaterialSkin.BackgroundFill(emphasis ? c.PrimaryContainer : inner ? c.SurfaceContainerLowest : c.SurfaceContainerHigh),
+                    MaterialSkin.BackgroundFill(inner ? c.SurfaceContainerLow : c.Surface), 5 * s);
                 dl.AddRect(start, new(start.X + width, bottom), MaterialCanvas.Color(c.OutlineVariant), 5 * s);
             }
             ImGui.SetCursorScreenPos(new(start.X, bottom));

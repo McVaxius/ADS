@@ -11,6 +11,7 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     private readonly AethertekUI.Dalamud.MaterialWindowMotion windowMotion = new();
     private readonly Plugin plugin;
     private bool materialBackdropPending;
+    private readonly AethertekUI.Dalamud.MaterialWindowLock windowLock = new();
 
     public LazyLootWarningWindow(Plugin plugin)
         : base(
@@ -32,12 +33,14 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     public override void PreDraw()
     {
         WindowName = Ui.L("LazyLoot Warning###ADSLazyLootWarning");
-        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
-        materialBackdropPending = WindowLayout.PrepareMaterialBackdrop();
+        windowMotion.Prepare(this, reducedMotion: !plugin.Configuration.UiStylingEnabled, roundedCorners: plugin.Configuration.UiStylingEnabled);
+        materialBackdropPending = WindowLayout.PrepareMaterialBackdrop(plugin.Appearance.BackgroundRequested);
+        windowLock.Apply(this, plugin.Configuration.UiWindowsLocked);
     }
 
     public override void PostDraw()
     {
+        windowLock.Restore(this);
         WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
         windowMotion.Restore(this);
     }
@@ -46,7 +49,8 @@ public sealed class LazyLootWarningWindow : Window, IDisposable
     {
         WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
         windowMotion.DrawChrome();
-        MaterialSkin.Backdrop();
+        plugin.Appearance.DrawBackdrop(this);
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         if (MaterialTheme.Current.IsLcars) MaterialLcars.Header(Ui.T("LazyLoot Warning"));
         MaterialText.TextWrapped(Ui.T("Are you sure you want to use LazyLoot? It can't recover hidden loot windows and only tries once."));
         ImGui.Spacing();

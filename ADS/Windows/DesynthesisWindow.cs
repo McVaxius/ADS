@@ -67,6 +67,7 @@ public sealed class DesynthesisWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         EnsureDesynthItemsLoaded();
         using var controls = MaterialControls.Push(MaterialControlContext.Toolbar);

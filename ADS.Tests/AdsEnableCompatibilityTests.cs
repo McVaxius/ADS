@@ -346,6 +346,7 @@ public sealed class AdsEnableCompatibilityTests
         {
             switch (method!.Name)
             {
+                case "get_UiBuilder": return DispatchProxy.Create(method.ReturnType, typeof(IpcProxy));
                 case "get_TerritoryType": return TerritoryType;
                 case "get_ContentId":
                     return 9UL;

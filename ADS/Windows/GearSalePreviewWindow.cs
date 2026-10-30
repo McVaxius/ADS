@@ -27,6 +27,7 @@ public sealed class GearSalePreviewWindow(Plugin plugin) : PositionedWindow("Equ
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
         var current = selection;
         if (current == null) { IsOpen = false; return; }

@@ -40,6 +40,7 @@ public sealed class VfxExplorerWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
 
         var context = plugin.DutyContextService.Current;

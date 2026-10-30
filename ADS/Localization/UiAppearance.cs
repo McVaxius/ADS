@@ -3,11 +3,24 @@ using ADS.Windows;
 using AethertekUI;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using AethertekUI.Dalamud;
+using Dalamud.Interface.ImGuiFileDialog;
 
 namespace ADS.Localization;
 
-internal sealed class UiAppearance(Plugin plugin) : IDisposable
+internal sealed class UiAppearance : IDisposable
 {
+    private readonly Plugin plugin;
+    private readonly FileDialogManager imagePicker = new();
+    private MaterialGlassRenderer? backgroundGlass;
+    internal bool BackgroundRequested { get; private set; }
+    internal bool StylingEnabled => plugin.Configuration.UiStylingEnabled;
+    internal bool WindowsLocked => plugin.Configuration.UiWindowsLocked;
+    internal UiAppearance(Plugin plugin)
+    {
+        this.plugin = plugin;
+        Plugin.PluginInterface.UiBuilder.ResizeBuffers += ReleaseResources;
+    }
     private AethertekUI.Dalamud.MaterialTextHost? shapedText;
     private MaterialTheme? theme;
     private readonly Dictionary<Dalamud.Interface.Windowing.Window, AethertekUI.Dalamud.MaterialAppearanceTitleBar> appearanceTitleBars = new();
@@ -26,8 +39,18 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     internal void Draw()
     {
+        var requested = false;
+        var completed = false;
+        try { imagePicker.Draw(); completed = DrawOwner(out requested); }
+        finally { backgroundGlass?.EndFrame(requested && completed); BackgroundRequested = false; }
+    }
+
+    private bool DrawOwner(out bool requested)
+    {
+        requested = false;
+        BackgroundRequested = false;
         Ui.SetLanguage(Ui.ResolveLanguage(plugin.Configuration.UiLanguage, Plugin.ClientState.ClientLanguage));
-        if (!plugin.WindowSystem.Windows.Any(window => window.IsOpen)) return;
+        if (!plugin.WindowSystem.Windows.Any(window => window.IsOpen)) return false;
         shapedText ??= new(Plugin.TextureProvider);
         using var text = shapedText.Push();
         var savedColors = plugin.Configuration.UiColors ?? new MaterialColorSettings();
@@ -56,19 +79,21 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         {
             if (!fontErrorLogged && plugin.Fonts.LoadException is { } error)
             { Plugin.Log.Error(error, "[ADS] Required UI fonts failed to load."); fontErrorLogged = true; }
-            using var statusPalette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale, MaterialStyleMode.ColorsOnly);
+            using var statusPalette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale,
+                StylingEnabled ? MaterialStyleMode.ColorsOnly : MaterialStyleMode.Native);
             using var statusChrome = MaterialWindowChrome.Push();
             ImGui.SetNextWindowSize(new Vector2(460 * ImGuiHelpers.GlobalScale, 0), ImGuiCond.Always);
-            fontStatusFold.PreDraw("ADS##FontStatus", null, null, reducedMotion: false,
-                prepareDecorations: fontStatusDecorations.Prepare);
+            fontStatusFold.PreDraw("ADS##FontStatus", null, null, reducedMotion: !StylingEnabled,
+                prepareDecorations: StylingEnabled ? fontStatusDecorations.Prepare : null);
             bool statusVisible;
             using (var backdrop = MaterialSkin.BackdropStyle())
-                statusVisible = ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize);
+                statusVisible = ImGui.Begin("ADS##FontStatus", ImGuiWindowFlags.AlwaysAutoResize |
+                    (WindowsLocked ? ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize : ImGuiWindowFlags.None));
             try
             {
                 if (statusVisible)
                 {
-                    fontStatusDecorations.Paint();
+                    if (StylingEnabled) fontStatusDecorations.Paint();
                     MaterialSkin.Backdrop();
                     if (theme.IsLcars) MaterialLcars.Header("ADS");
                     var failed = plugin.Fonts.LoadException is not null;
@@ -81,38 +106,56 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
             finally
             {
                 ImGui.End();
-                fontStatusDecorations.Paint();
+                if (StylingEnabled) fontStatusDecorations.Paint();
                 fontStatusFold.PostDraw();
             ApplyWindowOpacity("ADS##FontStatus");
             }
-            return;
+            return false;
         }
         fontErrorLogged = false;
-        using var palette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale, MaterialStyleMode.ColorsOnly);
+        var blurEnabled = StylingEnabled && colorDraft.HasBackgroundBlur(colorDraft.Mode);
+        var imageEnabled = StylingEnabled && colorDraft.Mode == MaterialColorMode.Glassmorphism &&
+            colorDraft.GlassBackground == MaterialGlassBackground.Image;
+        requested = BackgroundRequested = blurEnabled || imageEnabled;
+        if (requested) backgroundGlass ??= new(Plugin.PluginInterface, Plugin.Log);
+        backgroundGlass?.ConfigureImage(Plugin.TextureProvider, imageEnabled, colorDraft.GlassImagePath);
+        backgroundGlass?.BeginFrame();
+        using var rendererScope = MaterialSkin.PushBackgroundRenderer(requested ? backgroundGlass : null,
+            blurEnabled, colorDraft.BackgroundBlurPercent / 100f);
+        using var palette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale,
+                StylingEnabled ? MaterialStyleMode.ColorsOnly : MaterialStyleMode.Native);
         using var style = new MaterialStyleScope();
         var scale = ImGuiHelpers.GlobalScale;
-        style.Style(ImGuiStyleVar.WindowPadding, new Vector2(plugin.Configuration.UiCompact ? 8 : 20) * scale);
-        style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(plugin.Configuration.UiCompact ? 6 : 12, plugin.Configuration.UiCompact ? 4 : 10) * scale);
-        style.Style(ImGuiStyleVar.FramePadding, new Vector2(plugin.Configuration.UiCompact ? 6 : 14, plugin.Configuration.UiCompact ? 2 : 7) * scale);
-        style.Style(ImGuiStyleVar.CellPadding, new Vector2(plugin.Configuration.UiCompact ? 4 : 10, plugin.Configuration.UiCompact ? 2 : 8) * scale);
-        style.Style(ImGuiStyleVar.FrameRounding, 4 * scale);
-        style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
+        if (StylingEnabled)
+        {
+            style.Style(ImGuiStyleVar.WindowPadding, new Vector2(plugin.Configuration.UiCompact ? 8 : 20) * scale);
+            style.Style(ImGuiStyleVar.ItemSpacing, new Vector2(plugin.Configuration.UiCompact ? 6 : 12, plugin.Configuration.UiCompact ? 4 : 10) * scale);
+            style.Style(ImGuiStyleVar.FramePadding, new Vector2(plugin.Configuration.UiCompact ? 6 : 14, plugin.Configuration.UiCompact ? 2 : 7) * scale);
+            style.Style(ImGuiStyleVar.CellPadding, new Vector2(plugin.Configuration.UiCompact ? 4 : 10, plugin.Configuration.UiCompact ? 2 : 8) * scale);
+            style.Style(ImGuiStyleVar.FrameRounding, 4 * scale);
+            style.Style(ImGuiStyleVar.ChildRounding, 4 * scale);
+        }
         using var body = plugin.Fonts.Push(UiFontRole.Body);
         using var chrome = MaterialWindowChrome.Push();
-        if (theme.IsGlassmorphism)
+        if (StylingEnabled && theme.IsGlassmorphism)
             style.Color(ImGuiCol.ChildBg, MaterialColor.Alpha(theme.Colors.Surface, .42f));
         using var nativeButtons = MaterialSkin.NativeButtonStyle();
         PrepareAppearanceTitleBars(plugin.WindowSystem);
         plugin.WindowSystem.Draw();
-        foreach (var titlebar in appearanceTitleBars.Values) titlebar.DrawPopups();
+        foreach (var (owner, titlebar) in appearanceTitleBars)
+        {
+            PrepareBackgroundOpacity(owner);
+            titlebar.DrawPopups();
+        }
         foreach (var window in plugin.WindowSystem.Windows)
             if (window.IsOpen)
             {
-                if (window is Dalamud.Interface.Windowing.Window owner)
+                if (StylingEnabled && window is Dalamud.Interface.Windowing.Window owner)
                     WindowLayout.PaintTitleWithImageAndStatus(owner,
                         plugin.Configuration.UiShowTitlebarStatus ? TitlebarStatus(owner) : null);
                 ApplyWindowOpacity(window.WindowName);
             }
+        return true;
     }
 
     private MaterialTitlebarStatus TitlebarStatus(Dalamud.Interface.Windowing.Window owner)
@@ -256,6 +299,10 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
 
     private void DrawMainWindowControls()
     {
+        var styling = StylingEnabled;
+        if (WindowLayout.Checkbox("Use styled UI", ref styling)) SetWindowControls(styling: styling);
+        var locked = WindowsLocked;
+        if (WindowLayout.Checkbox("Lock windows", ref locked)) SetWindowControls(locked: locked);
         var showStatus = plugin.Configuration.UiShowTitlebarStatus;
         if (WindowLayout.Checkbox("Show titlebar status", ref showStatus))
         { plugin.Configuration.UiShowTitlebarStatus = showStatus; plugin.SaveConfiguration(); }
@@ -277,8 +324,11 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
     {
         foreach (var window in windows.Windows.OfType<Dalamud.Interface.Windowing.Window>())
         {
+            window.AllowBackgroundBlur = false;
+            if (window is PositionedWindow positioned) positioned.Appearance = this;
             if ((window.Flags & ImGuiWindowFlags.NoTitleBar) != 0) continue;
             if (!appearanceTitleBars.ContainsKey(window))
+            {
                 appearanceTitleBars.Add(window, AethertekUI.Dalamud.MaterialAppearanceTitleBar.Register(window,
                     () => new(Ui.T("Language"), Ui.T("Compact mode"), Ui.T("Transparency"), Ui.T("Color")),
                     DrawLanguageSelector,
@@ -288,6 +338,12 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                         ? new(plugin.Configuration.UiLanguageVisibleOnMainWindow, plugin.Configuration.UiCompactVisibleOnMainWindow,
                             plugin.Configuration.UiTransparencyVisibleOnMainWindow, true)
                         : new(true, true, true, true)));
+                appearanceTitleBars[window].RegisterWindowControls(
+                    () => SetWindowControls(styling: !StylingEnabled),
+                    () => Ui.T(StylingEnabled ? "Use native UI" : "Use styled UI"),
+                    () => SetWindowControls(locked: !WindowsLocked),
+                    () => Ui.T(WindowsLocked ? "Unlock windows" : "Lock windows"));
+            }
             appearanceTitleBars[window].RefreshVisibility();
             appearanceTitleBars[window].SetLcarsIcons(MaterialTheme.Current.IsLcars);
             if (!soundTitleButtons.TryGetValue(window, out var sound))
@@ -329,8 +385,20 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
                 AnimationSpeed = Ui.T("Animation speed (0.1–10x; default 1x)"), WaveColors = Ui.T("Wave colours"),
                 GlassWave1 = Ui.T("Wave colour 1"), GlassWave2 = Ui.T("Wave colour 2"), GlassWave3 = Ui.T("Wave colour 3"),
                 ResetWaveColors = Ui.T("Reset wave colours"),
+                BackgroundMode = Ui.T("Background mode"), Waves = Ui.T("Waves"), Lights = Ui.T("Lights"), Image = Ui.T("Image"),
+                LightEffect = Ui.T("Light effect"), AmbientGlows = Ui.T("Ambient glows"),
+                SweepingBeams = Ui.T("Sweeping beams"), PointerGlow = Ui.T("Pointer glow"),
+                LightColors = Ui.T("Light colours"), GlassLight1 = Ui.T("Light colour 1"),
+                GlassLight2 = Ui.T("Light colour 2"), GlassLight3 = Ui.T("Light colour 3"), ResetLightColors = Ui.T("Reset light colours"),
+                ImageFile = Ui.T("Image file"), BrowseImage = Ui.T("Browse..."), LoadImage = Ui.T("Load image"),
+                ImageHelp = Ui.T("The image fills the window. Blur (%) applies to the image."),
+                BackgroundBlur = Ui.T("Background blur"), BlurPercent = Ui.T("Blur (%)"),
             }, new MaterialColorSettings(), MaterialColorSettings.Rgb(AdsPresentation.ReferenceAccent),
+            BrowseImage,
             plugin.Configuration.UiCompact ? 298 : 316);
+        DrawScreenshotPause(id + "-screenshots");
+        if (backgroundGlass?.ImageProblem is { } problem && colorDraft.Mode == MaterialColorMode.Glassmorphism &&
+            colorDraft.GlassBackground == MaterialGlassBackground.Image) MaterialText.TextWrapped(Ui.T(problem));
         if (!changed) return false;
         plugin.Configuration.UiColors = colorDraft;
         if (!LcarsActive) uiSoundPlayer?.Stop();
@@ -354,6 +422,7 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         var normalOpacity = plugin.Configuration.UiWindowOpacityPercent;
         if (WindowLayout.InputInt("##UiWindowOpacityPercent", ref normalOpacity))
         { plugin.Configuration.UiWindowOpacityPercent = normalOpacity; plugin.SaveConfiguration(); }
+        DrawBlurControls();
     }
 
     private void DrawUnfocusedOpacity()
@@ -445,8 +514,96 @@ internal sealed class UiAppearance(Plugin plugin) : IDisposable
         finally { ImGui.EndDisabled(); }
     }
 
+    internal void DrawBackdrop(Dalamud.Interface.Windowing.Window owner)
+    {
+        if (!windowOpacities.TryGetValue(owner.WindowName, out var opacity))
+            windowOpacities.Add(owner.WindowName, opacity = new());
+        PrepareBackgroundOpacity(owner);
+        MaterialSkin.Backdrop();
+    }
+
+    private void PrepareBackgroundOpacity(Dalamud.Interface.Windowing.Window owner)
+    {
+        if (backgroundGlass == null) return;
+        var native = ImGuiP.FindWindowByName(owner.WindowName);
+        backgroundGlass.Opacity = !plugin.Configuration.UiTransparencyEnabled ? 1 :
+            !native.IsNull && !native.Appearing && windowOpacities.TryGetValue(owner.WindowName, out var opacity)
+                ? opacity.CurrentOpacity : plugin.Configuration.UiWindowOpacityPercent / 100f;
+    }
+
+    private void SetWindowControls(bool? styling = null, bool? locked = null)
+    {
+        if ((!styling.HasValue || styling.Value == StylingEnabled) && (!locked.HasValue || locked.Value == WindowsLocked)) return;
+        if (styling.HasValue) plugin.Configuration.UiStylingEnabled = styling.Value;
+        if (locked.HasValue) plugin.Configuration.UiWindowsLocked = locked.Value;
+        plugin.SaveConfiguration();
+    }
+
+    internal bool HandleCommand(string arguments)
+    {
+        var parts = arguments.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || parts[0].ToLowerInvariant() is not ("style" or "styling" or "lock" or "unlock")) return false;
+        if (parts[0].ToLowerInvariant() is "lock" or "unlock")
+        { SetWindowControls(locked: parts[0].Equals("lock", StringComparison.OrdinalIgnoreCase)); return true; }
+        bool? selected = parts.Length == 1 ? !StylingEnabled : parts.Length == 2 ? parts[1].ToLowerInvariant() switch
+        { "on" => true, "off" => false, "toggle" => !StylingEnabled, _ => (bool?)null } : null;
+        if (!selected.HasValue) { Plugin.ChatGui.Print("/ads style [on|off|toggle], /ads lock, /ads unlock"); return true; }
+        SetWindowControls(styling: selected.Value);
+        return true;
+    }
+
+    private void BrowseImage()
+    {
+        var owner = plugin.Configuration;
+        imagePicker.OpenFileDialog(Ui.T("Choose background image") + "###AdsBackgroundImagePicker",
+            Ui.T("Images") + "{.png,.jpg,.jpeg,.bmp,.gif,.webp,.tif,.tiff,.dds,.tga},.*", (accepted, path) =>
+            {
+                if (!accepted || !ReferenceEquals(owner, plugin.Configuration)) return;
+                owner.UiColors = (owner.UiColors ?? new MaterialColorSettings()) with { GlassImagePath = path };
+                colorDraft = owner.UiColors;
+                plugin.SaveConfiguration();
+            });
+    }
+
+    private void DrawScreenshotPause(string id)
+    {
+        if (colorDraft.Mode == MaterialColorMode.Glassmorphism && colorDraft.GlassBackground == MaterialGlassBackground.Image)
+        { MaterialText.TextWrapped(Ui.T("Image backgrounds remain visible to screenshots.")); return; }
+        var paused = backgroundGlass?.ScreenshotsPaused == true;
+        ImGui.BeginDisabled(!paused && backgroundGlass?.CanPauseForScreenshots != true);
+        try
+        {
+            if (WindowLayout.Checkbox("Pause backdrop for screenshots###" + id, ref paused))
+                backgroundGlass?.TrySetScreenshotsPaused(paused);
+        }
+        finally { ImGui.EndDisabled(); }
+    }
+
+    private void DrawBlurControls()
+    {
+        var settings = plugin.Configuration.UiColors ?? new MaterialColorSettings();
+        var enabled = settings.HasBackgroundBlur(settings.Mode);
+        var changed = WindowLayout.Checkbox("Background blur###background-blur", ref enabled);
+        if (changed) settings = settings.WithBackgroundBlur(settings.Mode, enabled);
+        var percent = settings.BackgroundBlurPercent;
+        ImGui.BeginDisabled(!enabled);
+        try
+        {
+            if (WindowLayout.InputInt("Blur (%)###background-frost", ref percent))
+            { settings = settings with { BackgroundBlurPercent = percent }; changed = true; }
+        }
+        finally { ImGui.EndDisabled(); }
+        if (changed) { plugin.Configuration.UiColors = colorDraft = settings; plugin.SaveConfiguration(); }
+        DrawScreenshotPause("window-screenshots");
+    }
+
+    private void ReleaseResources() => backgroundGlass?.ReleaseResources();
+
     public void Dispose()
     {
+        Plugin.PluginInterface.UiBuilder.ResizeBuffers -= ReleaseResources;
+        imagePicker.Reset();
+        backgroundGlass?.Dispose();
         uiSoundPlayer?.Dispose();
         shapedText?.Dispose();
     }

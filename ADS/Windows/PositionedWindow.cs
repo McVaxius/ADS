@@ -10,6 +10,8 @@ namespace ADS.Windows;
 
 public abstract class PositionedWindow : Window
 {
+    internal UiAppearance? Appearance { get; set; }
+    private readonly AethertekUI.Dalamud.MaterialWindowLock windowLock = new();
     protected readonly AethertekUI.Dalamud.MaterialWindowMotion windowMotion = new();
     private readonly string originalWindowName;
     private Vector2? pendingWindowPosition;
@@ -39,12 +41,14 @@ public abstract class PositionedWindow : Window
 
     protected void PrepareWindowChrome()
     {
-        windowMotion.Prepare(this, reducedMotion: false, roundedCorners: true);
-        materialBackdropPending = WindowLayout.PrepareMaterialBackdrop();
+        windowMotion.Prepare(this, reducedMotion: Appearance?.StylingEnabled == false, roundedCorners: Appearance?.StylingEnabled != false);
+        materialBackdropPending = WindowLayout.PrepareMaterialBackdrop(Appearance?.BackgroundRequested == true);
+        windowLock.Apply(this, Appearance?.WindowsLocked == true);
     }
 
     public override void PostDraw()
     {
+        windowLock.Restore(this);
         WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
         windowMotion.Restore(this);
     }
@@ -53,7 +57,8 @@ public abstract class PositionedWindow : Window
     {
         WindowLayout.RestoreMaterialBackdrop(ref materialBackdropPending);
         windowMotion.DrawChrome();
-        MaterialSkin.Backdrop();
+        if (Appearance is { } appearance) appearance.DrawBackdrop(this);
+        else MaterialSkin.Backdrop();
         if (MaterialTheme.Current.IsLcars && (Flags & ImGuiWindowFlags.NoTitleBar) == 0)
             MaterialLcars.Header(this is MainWindow ? string.Empty : WindowName.Split("##", 2)[0]);
     }
@@ -126,7 +131,8 @@ public abstract class PositionedWindow : Window
         var launch = false;
         bool drawContent;
         using (var backdrop = MaterialSkin.BackdropStyle())
-            drawContent = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize);
+            drawContent = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize |
+                (configuration.UiWindowsLocked ? ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize : ImGuiWindowFlags.None));
         try
         {
             if (drawContent)

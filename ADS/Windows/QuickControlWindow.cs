@@ -93,6 +93,7 @@ public sealed class QuickControlWindow : PositionedWindow, IDisposable
     public override void Draw()
     {
         DrawWindowChrome();
+        using var structuralBackground = MaterialSkin.StructuralBackgroundStyle();
         FinalizePendingWindowPlacement();
 
         DrawStatusSummary();

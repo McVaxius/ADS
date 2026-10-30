@@ -7,9 +7,9 @@ namespace ADS.Windows;
 
 internal static class WindowLayout
 {
-    internal static bool PrepareMaterialBackdrop()
+    internal static bool PrepareMaterialBackdrop(bool backgroundRequested = false)
     {
-        if (!AdsPresentation.IsMaterial) return false;
+        if (!AdsPresentation.IsMaterial && !backgroundRequested) return false;
         ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
         return true;
     }
