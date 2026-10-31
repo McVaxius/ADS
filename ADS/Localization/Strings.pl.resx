@@ -4322,4 +4322,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Wybierz plik obrazu.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Wczytywanie obrazu...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Nie można wczytać obrazu.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Koszt</value></data>
+  <data name="Move up" xml:space="preserve"><value>Przenieś w górę</value></data>
+  <data name="Move down" xml:space="preserve"><value>Przenieś w dół</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Kup ten wiersz według reguł sprawdzonego zestawu.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Łącznie potrzeba: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Wiersze: {0} | Planowany zakup: {1:N0} | Zablokowane: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Zapisz zmienione wiersze i sprawdź zestaw przed zakupem.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Tylko koszty podglądu; zablokowane i odroczone wiersze nie są wycenione.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Tryb rajdu zarządza oknami odzyskiwania; powrót jest ręczny</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Zatrzymaj aktywne narzędzie ADS przed zmianą kolejności listy zakupów.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>Nie można przenieść wybranego wiersza w tym kierunku.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>Wybranego wiersza nie ma już w aktywnym zestawie; sprawdź go ponownie.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>Wybrany wiersz nie wymaga już zakupu; sprawdź zestaw ponownie.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>Nowa sesja rajdu anulowała wcześniej przygotowane wyjście z instancji.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Tryb rajdu anulował poprzedni oczekujący start z zewnątrz; czeka na nowe odliczanie do walki.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Postęp rajdu anulowany; oczekiwanie na jawny start lub nowe odliczanie.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Postęp rajdu czeka na nowe odliczanie do walki.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Automatyczne wyjście z rajdu anulowane.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Automatyczne wyjście z rajdu czeka na bieżącą zgodę, ręczne odzyskanie kontroli i zakończenie rozdawania łupów.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Tryb rajdu zastępuje oczekujące przejęcie z zewnątrz; użyj odliczania do walki lub jawnego startu wewnątrz.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Tryb rajdu anulował oczekujący start z zewnątrz; czeka na nowe odliczanie do walki.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Obsługa ostatniej skrzyni rajdu czeka na rozdanie łupów przez grę przed zwolnieniem kontroli.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Tryb rajdu czeka na ręczne odzyskanie kontroli przed opuszczeniem instancji.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Instancja rajdu</value></data>
 </root>

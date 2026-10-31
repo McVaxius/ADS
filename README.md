@@ -2,7 +2,7 @@
 
 AI Duty Solver (ADS) is an operator-controlled Dalamud plugin for observing, planning, and executing supported instanced-duty routes. It exposes live duty truth, planner decisions, execution phases, authored object/dialog rules, treasure state, and specialist diagnostics.
 
-ADS is observer-first. Entering a duty does not automatically grant ADS ownership unless the operator starts or resumes execution.
+ADS is observer-first. Entering a duty alone does not grant ownership; execution requires an operator start/resume or a valid request from an explicitly enabled integration.
 
 Inactivity-kick protection is automatic while ADS is enabled and you are logged in, including while execution is stopped. Disabling ADS or unloading the plugin ends this protection.
 
@@ -37,6 +37,14 @@ ADS can resolve deterministic NPC vendor offers and NPC placements from local ga
 ## Loot Automation
 
 Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot. Ownership includes all four inventory bags, equipped items, the Armoury Chest, both left and right normal/premium chocobo saddlebags, retainers, armoire and glamour dresser. Live NQ/HQ copies and registration establish ownership; XADB supplies recorded copies for these locations when they are not loaded. An item without a native or recorded copy is treated as missing, including unrecorded or unavailable storage. Recorded copies remain owned regardless of snapshot age; users must open storage and refresh XADB to update its contents. Live Greed/Pass availability still caps the result, and the option remains manual to enable.
+
+## FrenRider Raid mode
+
+Raid mode requires updated builds of both FrenRider and ADS. Open **Raid Mode** from FrenRider Main or Mini. A genuine completed party pull countdown can request one scoped ADS inside start. While armed, Raid replaces queued **Start Outside** takeover and automatic reload/update restarts; deliberate current-duty **Start Inside**, **Resume**, **Stop** and **Leave** remain available. After a confirmed wipe or manual Return, progression waits for a fresh countdown or deliberate inside start/resume. Normal combat choices remain under FrenRider's control.
+
+**ADS Loot** starts off and temporarily controls ADS chest and roll work. Turning it on uses the saved non-Off ADS roll policy, or Need when the saved policy is Off, with the existing native Need/Greed/Pass limits. It never overwrites normal ADS preferences. **Accept Rez** starts checked; Return/respawn stays manual, including after completion.
+
+**Remain until manually exited** starts checked and suppresses both plugins' automatic departure paths. Uncheck it to let Raid alone request exit after final completion: wait up to the configured first-loot appearance limit (default ten seconds), then wait for actual outstanding loot to be distributed. Already-rolled items and hidden loot windows still count. A dead player waits for manual recovery. **Disable Raid Mode** cancels pending Raid work without leaving the duty; closing its window only hides it. See the [Raid IPC contract](docs/IPC.md#frenrider-raid-coordination).
 
 ## Installation
 

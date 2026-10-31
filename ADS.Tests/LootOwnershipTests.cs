@@ -9,6 +9,26 @@ namespace ADS.Tests;
 public sealed class LootOwnershipTests
 {
     [Theory]
+    [InlineData(RollState.Rolled)]
+    [InlineData(RollState.Unavailable)]
+    [InlineData(RollState.Unknown)]
+    public void RaidDistributionIncludesUnawardedItemsEvenAfterTheirLocalRollIsFinished(RollState rollState)
+    {
+        var item = new LootItem
+        {
+            ItemId = 100, ChestObjectId = 1, RollResult = RollResult.UnAwarded, RollState = rollState,
+        };
+        Assert.True(RaidDutyPolicy.IsOutstanding(item));
+        item.RollResult = RollResult.Needed;
+        Assert.False(RaidDutyPolicy.IsOutstanding(item));
+        item.RollResult = RollResult.UnAwarded;
+        item.ChestObjectId = 0;
+        Assert.False(RaidDutyPolicy.IsOutstanding(item));
+        item.ChestObjectId = 0xE0000000;
+        Assert.False(RaidDutyPolicy.IsOutstanding(item));
+    }
+
+    [Theory]
     [InlineData(RollResult.Needed, 0, RollResult.Passed)]
     [InlineData(RollResult.Greeded, 0, RollResult.Passed)]
     [InlineData(RollResult.Passed, 0, RollResult.Passed)]

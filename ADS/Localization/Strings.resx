@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Choose an image file.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Loading image...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Image could not be loaded.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Cost</value></data>
+  <data name="Move up" xml:space="preserve"><value>Move up</value></data>
+  <data name="Move down" xml:space="preserve"><value>Move down</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Buy this row using the tested preset rules.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Total needed: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Rows: {0} | Would buy: {1:N0} | Blocked: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Save edited rows, then test the preset before purchasing.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Preview costs only; blocked and deferred rows are not priced.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Raid mode owns recovery dialogs; Return is manual</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Stop the active ADS utility before reordering a shop list.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>The selected row cannot move in that direction.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>The selected row is no longer in the active preset; test it again.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>The selected row no longer needs a purchase; test it again.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>New Raid session cancelled the previous staged duty exit.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Raid progression cancelled; waiting for an explicit start or fresh countdown.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Raid progression is waiting for a fresh pull countdown.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Raid automatic exit cancelled.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Raid automatic exit is waiting for current permission, manual recovery and distributed loot.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Raid mode cancelled the queued outside start; waiting for a fresh pull countdown.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Raid final chest work is waiting for native loot distribution before releasing ownership.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Raid mode waits for manual recovery before leaving duty.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Raid duty</value></data>
 </root>

@@ -10,6 +10,8 @@ Existing ADS IPC endpoints remain available.
 - `ADS.StartDutyFromInside() -> bool`
 - `ADS.ResumeDutyFromInside() -> bool`
 - `ADS.LeaveDuty() -> bool`
+- `ADS.Raid.StartDutyFromInside() -> bool`
+- `ADS.Raid.LeaveDuty() -> bool`
 - `ADS.GetCapabilitiesJson() -> string`
 - `ADS.GetStatusJson() -> string`
 - `ADS.Invoke(string action, string payloadJson) -> string`
@@ -90,9 +92,9 @@ Poll `GetGearSaleStatusJson` with the same ID. The receipt contains `operationId
 
 `CancelGearSale` cancels only its matching active equipment sale. Existing `StartNpcSale`/status/cancel still operate AutoRetainer's configured list and remain compatible with fishing. Their backend/UI-settlement receipt is separate from the exact equipment item/gil verification above.
 
-`ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. They best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty.
+`ADS.StartDutyFromOutside` and `ADS.StartDutyFromInside` share the same start methods as ADS chat, UI, and operator actions. When **Disable AutoDuty on ADS start** is enabled, they best-effort-send `/xldisableplugin AutoDuty` before ownership work; a dispatch failure is logged and the start still proceeds. `ADS.ResumeDutyFromInside` does not disable AutoDuty. Raid mode replaces queued outside takeover; its current-duty manual actions and scoped endpoints are described below.
 
-`dutyCompletionSweepWithoutExit: 1` in the existing capabilities response enables `ADS.Invoke("duty.start-inside", "{\"sweepWithoutExit\":true}")`. A successful response acknowledges `sweepWithoutExit`, `territoryTypeId` and `contentFinderConditionId` in `data`. This transient choice applies to that ownership run: normal completion runs the existing coffer search, spawn grace, interaction, settlement and distribution waits, then releases ownership without leaving. Parameterless IPC, ordinary commands and standalone starts keep their existing completion behavior. Explicit Stop/Leave still works.
+`dutyCompletionSweepWithoutExit: 1` in the existing capabilities response enables `ADS.Invoke("duty.start-inside", "{\"sweepWithoutExit\":true}")`. A successful response acknowledges `sweepWithoutExit`, `territoryTypeId` and `contentFinderConditionId` in `data`. This transient choice applies to that ownership run: normal completion runs the existing coffer search, spawn grace, interaction, settlement and distribution waits, then releases ownership without leaving. Outside Raid mode, parameterless IPC, ordinary commands and standalone starts keep their existing completion behavior. Explicit Stop/Leave still works.
 
 `ADS.GetStatusJson` exposes `completionTreasureSweep`, either `null` or an object with `territoryTypeId`, `contentFinderConditionId`, `withoutExit` and `completed`. Only normal completion of the selected sweep sets `completed: true`; observing or losing ownership alone does not. The result remains readable after release and clears on Stop, explicit Leave, new ownership/duty, logout or stable duty departure. Callers must match both duty IDs against current status and reread valid status immediately before an automatic exit. Missing, cancelled, failed or malformed results require a hold. The result confirms ADS's existing sweep checks, not inventory receipt.
 
@@ -205,6 +207,37 @@ The action is additive and capability schema version remains `1`.
 The additive `shopKind` values are `special-shop-mixed`, `inclusion-shop`, `grand-company-shop`, and `free-company-shop`. Additive currency kinds include `company-seal`, `mgp`, `wolf-mark`, `allied-seal`, `currency-manager`, and `free-company-credit`. `outputs` describes every deterministic output per transaction. `availabilityKnown` is false when a sheet gate or balance must be proven in the live shop, such as Free Company credits.
 
 The stable failure-code vocabulary is `invalid-request`, `busy`, `unsupported-offer`, `no-route`, `insufficient-currency`, `ambiguous-currency`, `missing-dependency`, `inventory-capacity`, `ui-mismatch`, `timeout`, and `cancelled`. Accepted runs place an applicable terminal code in `failureCode`. Rejected starts preserve the prior `failureCode` and update only `lastStartError`; they do not replace the last accepted purchase result. Unrelated utility runs also leave that result intact. Capability schema version remains `1`.
+
+## FrenRider Raid coordination
+
+This contract requires updated FrenRider and ADS builds. `ADS.GetCapabilitiesJson()` advertises `raidDutyCoordination:1` and lists both typed endpoints in `raidDutyIpc`; the capability schema remains `1`. Run calls on the framework thread. An unavailable Raid endpoint does not authorize substituting an ordinary start/leave command.
+
+| Endpoint | Admission and result |
+| --- | --- |
+| `ADS.Raid.StartDutyFromInside()` | Accepts only a current, readable FrenRider session during its synchronous completed-countdown grant. Live duty identity, living-player, idle utility/inn ownership and native excluded-activity checks still apply. A cancelled/stale countdown grants no start; rejection does not create a retry loop. |
+| `ADS.Raid.LeaveDuty()` | Accepts a staged Raid exit only for the matching completed duty, a living player, current FrenRider permission and readable native loot with no outstanding distribution. `true` means accepted, not departed. ADS repeats those checks before each native leave step; it never accepts Return for this request. |
+
+ADS pulls the read-only `FrenRider.Raid.GetRuntimeStateJson()` snapshot with these fields:
+
+| Fields | Meaning |
+| --- | --- |
+| `schemaVersion` | `1`. |
+| `enabled`, `sourceReadable` | Raid is armed, and the producer has current readable native evidence. Cached fields with `sourceReadable:false` grant no automatic action. |
+| `sessionId`, `territoryTypeId`, `contentFinderConditionId` | Current session/duty scope. Starts, pending exits and recovery state cannot carry into a replacement session or duty. |
+| `countdownRevision` | Nonnegative revision of the current observed countdown within this session. Only a new/replaced timer advances it. Completion, cancellation and source-read failures do not create a fresh revision. Required for automatic start; missing revision withholds automatic start while manual commands remain available. |
+| `awaitingCountdown`, `recoveryGeneration` | Current countdown hold and confirmed wipe/manual-Return boundary. A later recovery generation holds inherited and manually started progression until a fresh countdown or deliberate current-duty start/resume. |
+| `automaticStartAllowedNow` | A temporary grant during FrenRider's actual completed-countdown dispatch. Reading existing ADS ownership does not grant a start. |
+| `adsLootEnabled`, `automaticExitAllowedNow` | Effective Raid loot choice and permission to request automatic exit now. Permission is rechecked at dispatch. |
+
+Within a known active duty, unreadable producer state or a missing endpoint withholds automatic progression, loot and exit. Confirmed departure, duty/session replacement or logout clears the old scope; a stale hold cannot suppress a later ordinary duty. Raid may remain visibly armed for the same character across duties, with fresh scoped state for the next countdown.
+
+While Raid is armed, ADS refuses queued outside-start admission, cancels inherited outside takeover and suppresses automatic reload/update restarts. New current-duty manual Start Inside, Resume, Stop and Leave remain available. Activating a new Raid session cancels inherited staged exits, including an older FrenRider `/ads leave` request that used the ordinary explicit-leave flag. A new deliberate manual Leave after activation remains distinct from Raid's automatic exit.
+
+Explicit Inside, Resume, Stop and Leave capture current duty state and invalidate the current countdown revision before processing the command. A queued automatic grant from that revision cannot restart ADS or replace manual ownership. An accepted automatic revision is consumed once. If an operator boundary was unreadable, ADS withholds its first readable revision and requires a later new countdown; session/duty replacement clears the old watermark.
+
+Raid's **ADS Loot** switch is an effective runtime policy for both chests and rolls. Off suppresses even ADS's visible-loot helper outside duty ownership. On uses the saved non-Off `LootMode`, or temporary Need if the saved mode is Off; normal native eligibility and fallback caps remain in force. No normal saved loot/coffer preference is patched. `ADS.GetStatusJson()` reports effective `considerTreasureCoffers`/`lootMode`; `ADS.GetConfigurationJson()` retains saved preferences.
+
+FrenRider is the sole automatic exit decision-maker during Raid. With **Remain until manually exited** checked, ordinary completion, timed and everyone-left exits stay suppressed. Otherwise FrenRider waits up to the configured maximum for first loot to appear (default ten seconds), then waits for actual unawarded loot to be distributed, including already-rolled items and hidden/minimized UI. ADS independently rechecks native outstanding loot before leaving; its ordinary fixed sweep delay is not proof of distribution. Death requires manual recovery. Automatic generic recovery dialogs yield to FrenRider's **Accept Rez** choice; Return/respawn remains manual. Disable cancels pending Raid work without issuing Leave or replaying a cancelled exit.
 
 ## Shop List Presets
 

@@ -4322,4 +4322,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Pilih berkas gambar.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Memuat gambar...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Gambar tidak dapat dimuat.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Biaya</value></data>
+  <data name="Move up" xml:space="preserve"><value>Pindah ke atas</value></data>
+  <data name="Move down" xml:space="preserve"><value>Pindah ke bawah</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Beli baris ini sesuai aturan preset yang telah diuji.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Total diperlukan: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Baris: {0} | Rencana beli: {1:N0} | Terblokir: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Simpan baris yang diedit, lalu uji preset sebelum membeli.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Hanya biaya pratinjau; baris yang terblokir dan ditunda tidak dihitung.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Mode Raid mengatur dialog pemulihan; kembali dilakukan secara manual</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Hentikan utilitas ADS yang aktif sebelum mengubah urutan daftar belanja.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>Baris yang dipilih tidak dapat dipindahkan ke arah itu.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>Baris yang dipilih tidak lagi ada dalam preset aktif; uji kembali.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>Baris yang dipilih tidak lagi memerlukan pembelian; uji kembali.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>Sesi Raid baru membatalkan proses keluar instans yang disiapkan sebelumnya.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Mode Raid membatalkan mulai dari luar yang sebelumnya tertunda; menunggu hitung mundur pull baru.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Progres Raid dibatalkan; menunggu perintah mulai eksplisit atau hitung mundur baru.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Progres Raid menunggu hitung mundur pull baru.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Keluar otomatis dari Raid dibatalkan.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Keluar otomatis dari Raid menunggu izin saat ini, pemulihan manual, dan pembagian jarahan selesai.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Mode Raid menggantikan pengambilalihan dari luar yang tertunda; gunakan hitung mundur pull atau perintah mulai dari dalam secara eksplisit.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Mode Raid membatalkan mulai dari luar yang tertunda; menunggu hitung mundur pull baru.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Penanganan peti terakhir Raid menunggu pembagian jarahan oleh game sebelum melepas kendali.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Mode Raid menunggu pemulihan manual sebelum keluar dari instans.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Instans Raid</value></data>
 </root>

@@ -1,3 +1,14 @@
+2026-10-31 - Raid coordination, repair and shopping (I704/I707/I705/I701, unversioned)
+
+- Add paired FrenRider Raid capability and scoped start/leave IPC. Hold ordinary automatic starts/exits and generic recovery dialogs while Raid owns that policy; require a fresh countdown grant for automatic start and preserve deliberate current-duty operator commands. Cancel inherited queued departures when Raid activates.
+- Scope countdown grants by timer revision and current duty. Explicit Inside/Resume/Stop/Leave invalidates queued permission before automatic preparation; consume accepted revisions once and retain conservative unreadable-state handling.
+- Apply Raid's temporary ADS Loot selection to chest/roll work while preserving saved ordinary settings. Observe unawarded loot even after a roll or hidden loot UI; distribution clearance replaces the ordinary fixed sweep delay for coordinated departure.
+- Dispatch NPC Repair All through its registered native click event/receiver, bound confirmation attempts and require verified equipped durability before success. Report unsuccessful dispatch or settlement instead of treating a visible repair window or expired timer as completion.
+- Retain Gridania's level-aware mender approach and enter the nearby inn directly after verified repair instead of replaying the airship-landing route.
+- Present shopping plans as item/vendor/cost/target/action rows with icons, saved reorder, row-cart actions and grouped totals. Re-evaluate the whole saved plan before a row run, preserve finite-order credit and Spend priority, and block operations on unsaved row or preset drafts. Keep existing catalog, presets/import and purchase authority.
+- Keep shopping row actions on one line inside the horizontally scrolling table, with complete header/row/scrollbar height and localized control widths, preserving IDs, appearance and guards.
+- Reserve the complete shaped checkbox caption and its native click area when the native font reports zero caption width, preventing adjacent shopping controls from covering Hindi text.
+
 2026-10-29 - 2.0.0.15 - Shared window appearance
 
 - Add styled/native UI and movement/resize lock titlebar controls and settings. Use /ads style [on|off|toggle], /ads lock or /ads unlock; lock and unlock are idempotent.

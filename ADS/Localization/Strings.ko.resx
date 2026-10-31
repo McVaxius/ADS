@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>이미지 파일을 선택하세요.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>이미지 불러오는 중...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>이미지를 불러올 수 없습니다.</value></data>
+  <data name="Cost" xml:space="preserve"><value>비용</value></data>
+  <data name="Move up" xml:space="preserve"><value>위로 이동</value></data>
+  <data name="Move down" xml:space="preserve"><value>아래로 이동</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>테스트한 프리셋 규칙에 따라 이 행을 구매합니다.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>필요 합계: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>행: {0} | 구매 예정: {1:N0} | 차단: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>편집한 행을 저장한 뒤 구매 전에 프리셋을 테스트하세요.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>미리보기 비용만 표시합니다. 차단되거나 보류된 행은 계산하지 않습니다.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>레이드 모드가 회복 대화창을 제어합니다. 귀환은 수동입니다</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>쇼핑 목록의 순서를 바꾸기 전에 실행 중인 ADS 유틸리티를 중지하세요.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>선택한 행을 해당 방향으로 이동할 수 없습니다.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>선택한 행이 현재 프리셋에 없습니다. 다시 테스트하세요.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>선택한 행은 더 이상 구매할 필요가 없습니다. 다시 테스트하세요.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>새 레이드 세션이 이전에 준비된 콘텐츠 퇴장을 취소했습니다.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>레이드 모드가 이전에 대기 중이던 외부 시작을 취소했습니다. 새 전투 시작 카운트다운을 기다립니다.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>레이드 진행이 취소되었습니다. 명시적인 시작 또는 새 카운트다운을 기다립니다.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>레이드 진행이 새 전투 시작 카운트다운을 기다립니다.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>레이드 자동 퇴장이 취소되었습니다.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>레이드 자동 퇴장이 현재 허가, 수동 회복 및 전리품 분배 완료를 기다립니다.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>레이드 모드가 대기 중인 외부 제어 인계를 대체합니다. 전투 시작 카운트다운 또는 명시적인 내부 시작을 사용하세요.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>레이드 모드가 대기 중이던 외부 시작을 취소했습니다. 새 전투 시작 카운트다운을 기다립니다.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>레이드 마지막 상자 처리는 제어권을 해제하기 전에 게임 내 전리품 분배를 기다립니다.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>레이드 모드가 콘텐츠를 떠나기 전에 수동 회복을 기다립니다.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>레이드 콘텐츠</value></data>
 </root>

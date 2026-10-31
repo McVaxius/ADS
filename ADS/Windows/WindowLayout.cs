@@ -258,12 +258,23 @@ internal static class WindowLayout
         using var height = MaterialText.PushLineHeight(caption);
         var gap = ImGui.GetStyle().ItemInnerSpacing;
         var color = ImGui.GetColorU32(ImGuiCol.Text);
+        var nativeWidth = ImGui.CalcTextSize(caption).X;
+        var captionWidth = MaterialText.Measure(caption).X;
+        var sizingLabel = nativeLabel;
+        if (nativeWidth == 0)
+        {
+            // Native Checkbox omits the caption gap when all shaped glyphs have zero native advance.
+            // Keep the caller's complete stable ID and let the native item own the painted caption too.
+            sizingLabel = "x" + nativeLabel[nativeLabel.IndexOf("###", StringComparison.Ordinal)..];
+            nativeWidth = ImGui.CalcTextSize(sizingLabel, true).X;
+            captionWidth += gap.X;
+        }
         bool changed;
         using(var style = new MaterialStyleScope())
         {
-            style.Style(ImGuiStyleVar.ItemInnerSpacing, new Vector2(Math.Max(0, gap.X + MaterialText.Measure(caption).X - ImGui.CalcTextSize(caption).X), gap.Y));
+            style.Style(ImGuiStyleVar.ItemInnerSpacing, new Vector2(Math.Max(0, gap.X + captionWidth - nativeWidth), gap.Y));
             style.Color(ImGuiCol.Text, Vector4.Zero);
-            changed = ImGui.Checkbox(nativeLabel, ref value);
+            changed = ImGui.Checkbox(sizingLabel, ref value);
         }
         MaterialText.AddText(ImGui.GetWindowDrawList(), ImGui.GetItemRectMin() + new Vector2(ImGui.GetFrameHeight() + gap.X, (ImGui.GetItemRectMax().Y-ImGui.GetItemRectMin().Y-MaterialText.Measure(caption).Y)*.5f), color, caption);
         MaterialLcars.Feedback(changed, MaterialUiSoundCue.Toggle);

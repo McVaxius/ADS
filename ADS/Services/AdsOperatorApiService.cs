@@ -27,6 +27,8 @@ public sealed class AdsOperatorApiService
             equipmentSaleScopes = new[] { "inventory", "armoury", "both" },
             equipmentSaleIpc = new[] { "ADS.PreviewGearSaleJson", "ADS.StartGearSale", "ADS.GetGearSaleStatusJson", "ADS.CancelGearSale" },
             dutyCompletionSweepWithoutExit = 1,
+            raidDutyCoordination = 1,
+            raidDutyIpc = new[] { "ADS.Raid.StartDutyFromInside", "ADS.Raid.LeaveDuty" },
             settings = AdsIpcValidation.KnownConfigurationSettings.OrderBy(x => x).ToArray(),
             preferredSettings = new[] { "desynthInventoryScope" },
             deprecatedSettings = new[] { "desynthCategories", "desynthProtectGearsets" },

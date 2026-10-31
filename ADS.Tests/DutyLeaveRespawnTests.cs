@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using ADS.Models;
 using ADS.Services;
 using Dalamud.Game;
@@ -464,6 +466,538 @@ public sealed class DutyLeaveRespawnTests
             Assert.Equal(1, clicks);
         }
     }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void AutomaticRaidAdmissionRejectsAnExistingUtilityOrInnOwnerBeforeTouchingDutyState(bool utilityBusy, bool insideRoute)
+    {
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var utility = (UtilityAutomationService)RuntimeHelpers.GetUninitializedObject(typeof(UtilityAutomationService));
+        var inn = (InnEntryService)RuntimeHelpers.GetUninitializedObject(typeof(InnEntryService));
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        if (utilityBusy)
+        {
+            var task = typeof(UtilityAutomationService).GetField("activeTask", flags)!;
+            task.SetValue(utility, Enum.Parse(task.FieldType, "SelfRepair"));
+        }
+        else
+        {
+            var state = typeof(InnEntryService).GetField("state", flags)!;
+            state.SetValue(inn, Enum.Parse(state.FieldType, "MovingToNpc"));
+        }
+        typeof(Plugin).GetField("<UtilityAutomationService>k__BackingField", flags)!.SetValue(plugin, utility);
+        typeof(Plugin).GetField("<InnEntryService>k__BackingField", flags)!.SetValue(plugin, inn);
+        // No duty context or execution engine is supplied: admission must reject
+        // before refreshing native truth or changing the existing owners.
+        var admission = insideRoute
+            ? typeof(Plugin).GetMethod("StartDutyFromInside", flags, null, [typeof(bool), typeof(bool)], null)!
+            : typeof(Plugin).GetMethod("StartRaidDutyFromInside", flags)!;
+        Assert.False((bool)admission.Invoke(plugin, insideRoute ? [false, true] : null)!);
+        Assert.True(utilityBusy ? utility.IsRunning : inn.IsRunning);
+    }
+
+    [Fact]
+    public void RaidAutomaticLeaveRechecksDistributionDeathPermissionAndDisableBeforeDispatch()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var enabled = true;
+        var allowed = false;
+        bool? outstanding = false;
+        bool? dead = false;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled, allowExit: allowed);
+        execution.QueryRaidOutstandingLoot = () => outstanding;
+        execution.QueryRaidPlayerDead = () => dead;
+        execution.MarkDutyCompleted(context, 1044, 831);
+        Assert.False(execution.LeaveRaidDuty(context));
+        allowed = true;
+        Assert.True(execution.LeaveRaidDuty(context));
+        var exits = 0;
+        void Tick() => execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => exits++);
+
+        outstanding = true; // The player may already have rolled; distribution is still pending.
+        Tick();
+        outstanding = null; // Unavailable native state never authorizes departure.
+        Tick();
+        outstanding = false;
+        dead = true;
+        Tick();
+        dead = null;
+        Tick();
+        dead = false;
+        allowed = false; // Remain can be checked after the leave was staged.
+        Tick();
+        Assert.Equal(0, exits);
+        allowed = true;
+        Tick();
+        Assert.Equal(1, exits);
+
+        enabled = false; // Disable cancels the staged Raid request rather than replaying ordinary leave.
+        Tick();
+        Assert.False(execution.IsLeaveRequested);
+        Assert.Equal(1, exits);
+        Tick();
+        Assert.Equal(1, exits);
+        Assert.True(execution.LeaveDuty(context, false)); // Deliberate manual leave remains available.
+        Tick();
+        Assert.Equal(2, exits);
+    }
+
+    [Fact]
+    public void RaidNeverAcceptsReturnFromAnExplicitOrRaidManagedLeave()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(allowExit: true);
+        execution.QueryRaidOutstandingLoot = () => false;
+        execution.QueryRaidPlayerDead = () => false;
+        execution.MarkDutyCompleted(context, 1044, 831);
+        Assert.True(execution.LeaveRaidDuty(context));
+        var returns = 0;
+        Assert.True(execution.TryHandleLeaveRespawn(context, true, () => { returns++; return true; }));
+        Assert.Equal(0, returns);
+        Assert.True(execution.LeaveDuty(context, false));
+        Assert.True(execution.TryHandleLeaveRespawn(context, true, () => { returns++; return true; }));
+        Assert.Equal(0, returns);
+    }
+
+    [Fact]
+    public void RaidReservesDeadPlayerDialogRulesForItsRecoveryPolicyWithoutChangingOrdinaryDialogRules()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var enabled = true;
+        var readable = true;
+        bool? dead = true;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled, sourceReadable: readable);
+        execution.QueryRaidPlayerDead = () => dead;
+        Assert.True(execution.SuppressRaidRecoveryDialogs(context));
+        dead = null;
+        Assert.True(execution.SuppressRaidRecoveryDialogs(context));
+        dead = false;
+        Assert.False(execution.SuppressRaidRecoveryDialogs(context));
+        readable = false;
+        Assert.True(execution.SuppressRaidRecoveryDialogs(context));
+        enabled = false;
+        dead = true;
+        Assert.False(execution.SuppressRaidRecoveryDialogs(context));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EnablingRaidCancelsAnInheritedFrCommandOrSweepLeaveButAllowsANewDeliberateManualLeave(bool explicitCommand)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var enabled = false;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled);
+        if (explicitCommand)
+            Assert.True(execution.LeaveDuty(context, false)); // Ordinary FR used this explicit command too.
+        else
+        {
+            Assert.True(execution.StartDutyFromInside(context));
+            Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Synthetic completed duty"));
+        }
+        Assert.Equal(OwnershipMode.Leaving, execution.CurrentMode);
+        enabled = true;
+        var exits = 0;
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => exits++);
+        Assert.False(execution.IsLeaveRequested);
+        Assert.Equal(0, exits);
+        Assert.True(execution.LeaveDuty(context, false)); // A new manual action after activation is preserved.
+        execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, false, () => exits++);
+        Assert.Equal(1, exits);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RaidAutomaticCompletionUsesNativeDistributionWithoutLeaving(bool lootEnabled)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = TreasureContext();
+        var enabled = true;
+        var outstanding = true;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled, loot: lootEnabled);
+        execution.QueryRaidOutstandingLoot = () => outstanding;
+        Assert.True(execution.StartDutyFromInside(context));
+        execution.MarkDutyCompleted(context, 1044, 831);
+        Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Synthetic completed duty"));
+        SetField(execution, "leaveTreasureInteractionSent", true);
+        var now = DateTime.UtcNow.AddMinutes(1);
+        var exits = 0;
+        void Tick(DateTime time) => execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => exits++, time);
+        Tick(now);
+        Tick(now.AddHours(1));
+        if (lootEnabled)
+        {
+            Assert.Equal(OwnershipMode.Leaving, execution.CurrentMode);
+            Assert.Contains("native loot distribution", execution.LastStatus);
+            outstanding = false;
+            Tick(now.AddHours(1).AddSeconds(1));
+        }
+        Assert.Equal(OwnershipMode.Observing, execution.CurrentMode);
+        Assert.Equal(0, exits);
+        enabled = false;
+        Tick(now.AddHours(2));
+        Assert.Equal(0, exits); // Disabling Raid cannot restore the cancelled automatic leave.
+    }
+
+    [Fact]
+    public void RaidCountdownDispatchHoldsProgressionOnceUntilAFreshManualCommand()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var countdownDispatch = false;
+        var awaiting = true;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: countdownDispatch, awaiting: awaiting);
+        execution.QueryRaidPlayerDead = () => false;
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        countdownDispatch = true;
+        awaiting = false;
+        Assert.True(execution.StartRaidDutyFromInside(context));
+        countdownDispatch = false;
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+        awaiting = true;
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        var cancelled = Field<ulong>(execution, "interactionCancellationGeneration");
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        Assert.Equal(cancelled, Field<ulong>(execution, "interactionCancellationGeneration"));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.True(execution.ResumeDutyFromInside(context)); // Explicit operator override is preserved.
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+    }
+
+    [Theory]
+    [InlineData("stop", false)]
+    [InlineData("stop", true)]
+    [InlineData("inside", false)]
+    [InlineData("inside", true)]
+    [InlineData("resume", false)]
+    [InlineData("resume", true)]
+    [InlineData("leave", false)]
+    [InlineData("leave", true)]
+    public void QueuedCountdownCannotReplaceLaterOperatorIntentEvenWhenFrStillSeesUnowned(string command, bool alreadyOwned)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var dispatch = false;
+        long revision = 7;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: dispatch, revision: revision);
+        execution.QueryRaidPlayerDead = () => false;
+        if (alreadyOwned)
+            Assert.True(execution.StartDutyFromInside(context));
+
+        // FR has observed genuine completion but has not entered its synchronous
+        // start pulse yet. This boundary is independent of FR's cached owned bit.
+        execution.InvalidateRaidCountdownForOperator(context);
+        switch (command)
+        {
+            case "stop": execution.Stop(context); break;
+            case "inside": Assert.True(execution.StartDutyFromInside(context)); break;
+            case "resume": Assert.True(execution.ResumeDutyFromInside(context)); break;
+            case "leave": Assert.True(execution.LeaveDuty(context, false)); break;
+        }
+        var mode = execution.CurrentMode;
+        var status = execution.LastStatus;
+        var cancellation = Field<ulong>(execution, "interactionCancellationGeneration");
+        var manual = Field<bool>(execution, "raidOwnershipIsManual");
+        dispatch = true;
+
+        Assert.False(execution.CanStartRaidDuty(context));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.Equal(mode, execution.CurrentMode);
+        Assert.Equal(status, execution.LastStatus);
+        Assert.Equal(cancellation, Field<ulong>(execution, "interactionCancellationGeneration"));
+        Assert.Equal(manual, Field<bool>(execution, "raidOwnershipIsManual"));
+
+        revision++; // A demonstrably new timer, rather than another read/tick of the old one.
+        Assert.True(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.StartRaidDutyFromInside(context)); // Consume this revision once.
+        Assert.False(Field<bool>(execution, "raidOwnershipIsManual"));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void UnreadableOperatorBoundaryWithholdsTheFirstReadableCountdownRevision(bool previouslyKnown, bool endpointThrows)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var readable = true;
+        var dispatch = false;
+        long revision = 7;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => !readable && endpointThrows
+            ? throw new InvalidOperationException("Synthetic unavailable producer")
+            : RaidJson(start: dispatch, sourceReadable: readable, revision: revision);
+        execution.QueryRaidPlayerDead = () => false;
+        if (previouslyKnown)
+            execution.ReadRaidState(context);
+        readable = false;
+        execution.InvalidateRaidCountdownForOperator(context);
+        execution.Stop(context);
+
+        readable = dispatch = true;
+        revision = 8; // Could already have existed when the operator boundary was unreadable.
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.IsOwned);
+        revision = 9;
+        Assert.True(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+    }
+
+    [Theory]
+    [InlineData("session")]
+    [InlineData("duty")]
+    [InlineData("logout")]
+    [InlineData("disable")]
+    public void OperatorCountdownWatermarkEndsAtItsSessionOrDutyBoundary(string boundary)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var session = "synthetic-raid-session";
+        var enabled = true;
+        long revision = 7;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled, start: true,
+            revision: revision, session: session, territory: context.TerritoryTypeId, content: context.ContentFinderConditionId);
+        execution.QueryRaidPlayerDead = () => false;
+        execution.InvalidateRaidCountdownForOperator(context);
+        Assert.False(execution.StartRaidDutyFromInside(context));
+
+        switch (boundary)
+        {
+            case "session": session = "synthetic-next-session"; break;
+            case "duty": context = Context(territory: 1045, content: 832); break;
+            case "logout": execution.ReadRaidState(Context(loggedIn: false)); break;
+            case "disable":
+                enabled = false;
+                execution.ReadRaidState(context);
+                enabled = true;
+                break;
+        }
+        revision = 0;
+        Assert.True(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+    }
+
+    [Fact]
+    public void AutomaticCleanupDoesNotInvalidateAQueuedCountdownAndOrdinaryManualCommandsRemainAvailable()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: true);
+        execution.QueryRaidPlayerDead = () => false;
+        execution.Stop(context); // Automatic cleanup does not use the explicit operator boundary.
+        Assert.True(execution.StartRaidDutyFromInside(context));
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: false);
+        execution.InvalidateRaidCountdownForOperator(context);
+        Assert.True(execution.StartDutyFromInside(context));
+        Assert.True(execution.ResumeDutyFromInside(context));
+        Assert.True(execution.LeaveDuty(context, false));
+        execution.Stop(context);
+        Assert.False(execution.IsOwned);
+    }
+
+    [Fact]
+    public void MissingAdditiveCountdownRevisionAllowsManualOwnershipButNeverAnAutomaticGrant()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: true).Replace(",\"countdownRevision\":1", string.Empty);
+        execution.QueryRaidPlayerDead = () => false;
+        Assert.True(execution.ReadRaidState(context).Readable);
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        execution.InvalidateRaidCountdownForOperator(context);
+        Assert.True(execution.StartDutyFromInside(context));
+        Assert.True(execution.ResumeDutyFromInside(context));
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.True(Field<bool>(execution, "raidOwnershipIsManual"));
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("1.5")]
+    [InlineData("null")]
+    [InlineData("\"invalid\"")]
+    public void InvalidCountdownRevisionCannotAuthorizeAutomaticOwnership(string invalid)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: true).Replace(
+            ",\"countdownRevision\":1", ",\"countdownRevision\":" + invalid);
+        execution.QueryRaidPlayerDead = () => false;
+        Assert.False(execution.ReadRaidState(context).Readable);
+        Assert.False(execution.StartRaidDutyFromInside(context));
+        Assert.False(execution.IsOwned);
+    }
+
+    [Fact]
+    public void UnreadableSessionFieldsCannotEraseAnExistingOperatorCountdownWatermark()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var readable = true;
+        var session = "synthetic-raid-session";
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: true, sourceReadable: readable, session: session);
+        execution.QueryRaidPlayerDead = () => false;
+        execution.InvalidateRaidCountdownForOperator(context);
+        readable = false;
+        session = "synthetic-unverified-session";
+        execution.ReadRaidState(context);
+        readable = true;
+        session = "synthetic-raid-session";
+        Assert.False(execution.StartRaidDutyFromInside(context));
+    }
+
+    [Fact]
+    public void PluginRejectsInvalidatedAutomaticStartBeforeTouchingOtherOwnersOrStartSideEffects()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(start: true);
+        execution.QueryRaidPlayerDead = () => false;
+        execution.InvalidateRaidCountdownForOperator(context);
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var contextService = (DutyContextService)RuntimeHelpers.GetUninitializedObject(typeof(DutyContextService));
+        typeof(DutyContextService).GetField("<Current>k__BackingField", flags)!.SetValue(contextService, context);
+        typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin, contextService);
+        typeof(Plugin).GetField("<ExecutionService>k__BackingField", flags)!.SetValue(plugin, execution);
+        typeof(Plugin).GetField("<UtilityAutomationService>k__BackingField", flags)!.SetValue(plugin,
+            RuntimeHelpers.GetUninitializedObject(typeof(UtilityAutomationService)));
+        typeof(Plugin).GetField("<InnEntryService>k__BackingField", flags)!.SetValue(plugin,
+            RuntimeHelpers.GetUninitializedObject(typeof(InnEntryService)));
+        // Missing every later start dependency: reject before policy changes,
+        // remote restart cancellation, provider commands or run resets.
+        var admission = typeof(Plugin).GetMethod("StartDutyFromInside", flags, null, [typeof(bool), typeof(bool)], null)!;
+        Assert.False((bool)admission.Invoke(plugin, [false, true])!);
+    }
+
+    [Theory]
+    [InlineData("inherited")]
+    [InlineData("inside")]
+    [InlineData("resume")]
+    public void RaidWipeBoundaryHoldsInheritedAndManualRunsEvenWhenAlreadyAwaitingAtTheirStart(string origin)
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var enabled = origin != "inherited";
+        long recovery = 0;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: enabled, awaiting: true, recovery: recovery);
+        if (origin == "resume")
+            Assert.True(execution.ResumeDutyFromInside(context));
+        else
+            Assert.True(execution.StartDutyFromInside(context));
+        if (origin == "inherited")
+        {
+            enabled = true;
+            Assert.True(execution.RefreshRaidProgressionHold(context));
+        }
+        else
+            Assert.False(execution.RefreshRaidProgressionHold(context)); // Immediate explicit operator intent.
+
+        recovery++; // Confirmed wipe/Return is a new boundary despite awaitingCountdown already being true.
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        Assert.False(execution.RefreshDebugReturn(context, debugEnabled: true));
+        Assert.True(execution.ResumeDutyFromInside(context));
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+        recovery++;
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+    }
+
+    [Fact]
+    public void ProducerNativeReadFailureWithCachedRaidFieldsCannotContinueProgressionLootOrExit()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        var readable = true;
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(loot: true, allowExit: true, awaiting: false, sourceReadable: readable);
+        Assert.True(execution.StartDutyFromInside(context));
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+        Assert.True(execution.AreTreasureCoffersEnabled(context));
+        readable = false;
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        Assert.False(execution.AreTreasureCoffersEnabled(context));
+        Assert.Equal(LootRollMode.Off, execution.GetEffectiveLootMode(context));
+        Assert.False(execution.ReadRaidState(context).AutomaticExitAllowedNow);
+        readable = true;
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+    }
+
+    [Fact]
+    public void RaidCancelsOutsideTakeoverQueuesAndPreservesExplicitCurrentDutyStarts()
+    {
+        using var directory = new TempDirectory();
+        var execution = CreateExecution(directory.Path, out _);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson();
+        Assert.True(execution.StartDutyFromOutside()); // The queue predates the Raid session.
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        Assert.False(execution.IsOwned);
+        Assert.True(execution.StartDutyFromOutside()); // Queued entry also requires the Raid countdown boundary.
+        Assert.True(execution.RefreshRaidProgressionHold(context));
+        Assert.False(execution.IsOwned);
+        Assert.True(execution.StartDutyFromInside(context)); // Deliberate current-duty command is preserved.
+        Assert.False(execution.RefreshRaidProgressionHold(context));
+        Assert.Equal(OwnershipMode.OwnedStartInside, execution.CurrentMode);
+    }
+
+    [Fact]
+    public void RaidLootUsesEffectivePoliciesAndKeepsOrdinaryPreferencesAcrossIpcFailureAndDisable()
+    {
+        using var directory = new TempDirectory();
+        var configuration = new Configuration { LootMode = LootRollMode.Off, ConsiderTreasureCoffers = false };
+        var execution = CreateExecution(directory.Path, out _, configuration);
+        var context = Context();
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(loot: true);
+        Assert.True(execution.AreTreasureCoffersEnabled(context));
+        Assert.Equal(LootRollMode.Need, execution.GetEffectiveLootMode(context));
+        Assert.False(configuration.ConsiderTreasureCoffers);
+        Assert.Equal(LootRollMode.Off, configuration.LootMode);
+        configuration.LootMode = LootRollMode.Greed;
+        Assert.Equal(LootRollMode.Greed, execution.GetEffectiveLootMode(context));
+        execution.RaidPolicy.QueryRuntimeStateJson = () => throw new InvalidOperationException("IPC unavailable");
+        Assert.False(execution.AreTreasureCoffersEnabled(context));
+        Assert.Equal(LootRollMode.Off, execution.GetEffectiveLootMode(context));
+        Assert.Equal(LootRollMode.Greed, configuration.LootMode);
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(enabled: false);
+        Assert.Equal(LootRollMode.Greed, execution.GetEffectiveLootMode(context));
+        Assert.False(execution.AreTreasureCoffersEnabled(context));
+    }
+
+    private static string RaidJson(bool enabled = true, bool loot = false, bool allowExit = false,
+        bool start = false, bool awaiting = true, uint territory = 1044, uint content = 831,
+        bool sourceReadable = true, long recovery = 0, long revision = 1, string session = "synthetic-raid-session")
+        => JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1, enabled, sessionId = session, territoryTypeId = territory,
+            contentFinderConditionId = content, adsLootEnabled = loot, automaticExitAllowedNow = allowExit,
+            automaticStartAllowedNow = start, awaitingCountdown = awaiting,
+            sourceReadable, recoveryGeneration = recovery, countdownRevision = revision,
+        });
 
     private static DutyContextSnapshot Context(bool inDuty = true, bool loggedIn = true, bool transition = false,
         uint territory = 1044, uint content = 831, DutyCatalogEntry? duty = null, bool occupied = false,

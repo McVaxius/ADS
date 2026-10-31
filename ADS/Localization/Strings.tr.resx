@@ -4322,4 +4322,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Bir resim dosyası seçin.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Resim yükleniyor...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Resim yüklenemedi.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Maliyet</value></data>
+  <data name="Move up" xml:space="preserve"><value>Yukarı taşı</value></data>
+  <data name="Move down" xml:space="preserve"><value>Aşağı taşı</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Bu satırı test edilen ön ayarın kurallarıyla satın al.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Gerekli toplam: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Satır: {0} | Planlanan alım: {1:N0} | Engellenen: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Düzenlenen satırları kaydedin ve satın almadan önce ön ayarı test edin.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Yalnızca önizleme maliyetleri; engellenen ve ertelenen satırlar hesaplanmaz.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Raid modu toparlanma iletişimlerini yönetir; Dönüş işlemi elle yapılır</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Alışveriş listesini yeniden sıralamadan önce etkin ADS aracını durdurun.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>Seçili satır bu yönde taşınamaz.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>Seçili satır artık etkin ön ayarda yok; yeniden test edin.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>Seçili satır artık satın alma gerektirmiyor; yeniden test edin.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>Yeni Raid oturumu daha önce hazırlanmış görevden çıkışı iptal etti.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Raid modu önceki bekleyen dışarıdan başlatmayı iptal etti; yeni bir çekiş geri sayımı bekleniyor.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Raid ilerleyişi iptal edildi; açık bir başlatma veya yeni geri sayım bekleniyor.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Raid ilerleyişi yeni bir çekiş geri sayımı bekliyor.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Otomatik Raid çıkışı iptal edildi.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Otomatik Raid çıkışı mevcut izni, elle toparlanmayı ve ganimet dağıtımının tamamlanmasını bekliyor.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Raid modu bekleyen dışarıdan devralmanın yerini alır; çekiş geri sayımı veya açık bir içeriden başlatma kullanın.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Raid modu bekleyen dışarıdan başlatmayı iptal etti; yeni bir çekiş geri sayımı bekleniyor.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Raid son sandık işlemi, kontrolü bırakmadan önce oyunun ganimet dağıtımını bekliyor.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Raid modu görevden ayrılmadan önce elle toparlanmayı bekler.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Raid görevi</value></data>
 </root>

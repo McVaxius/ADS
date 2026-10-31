@@ -6,6 +6,34 @@ namespace ADS.Tests;
 
 public sealed class ShopListExamplesTests
 {
+    [Fact]
+    public void ReorderingPreservesRowIdentityFiniteProgressAndPreviouslyCapturedOrder()
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.True(store.Select(store.Presets.First(preset => preset.Mode == ShopListMode.FillOrderOverMultipleRuns).PresetId, out _));
+        var captured = store.ActivePreset;
+        var originalIds = captured.Items.Select(row => row.RowId).ToArray();
+        var originalRows = captured.Items.ToDictionary(row => row.RowId, row => JsonSerializer.Serialize(row));
+        var progress = originalIds.Select((id, index) => (id, quantity: (long)index + 1)).ToDictionary(pair => pair.id, pair => pair.quantity);
+        Assert.True(store.SaveOrderProgress(17, captured.PresetId, progress, out _));
+
+        Assert.True(store.MoveItem(originalIds[1], -1, out var error), error);
+        Assert.Equal(new[] { originalIds[1], originalIds[0] }.Concat(originalIds.Skip(2)), store.ActivePreset.Items.Select(row => row.RowId));
+        Assert.Equal(originalIds, captured.Items.Select(row => row.RowId));
+        Assert.All(store.ActivePreset.Items, row => Assert.Equal(originalRows[row.RowId], JsonSerializer.Serialize(row)));
+        Assert.Equal(progress.OrderBy(pair => pair.Key), store.GetOrderProgress(17, captured.PresetId).OrderBy(pair => pair.Key));
+        var saved = File.ReadAllText(store.ConfigPath);
+        Assert.False(store.MoveItem(originalIds[1], -1, out _));
+        Assert.False(store.MoveItem(Guid.NewGuid(), 1, out _));
+        Assert.False(store.MoveItem(originalIds[0], 2, out _));
+        Assert.Equal(saved, File.ReadAllText(store.ConfigPath));
+        store.Reload();
+        Assert.Equal(captured.PresetId, store.ActivePresetId);
+        Assert.Equal(originalIds[1], store.ActivePreset.Items[0].RowId);
+        Assert.Equal(progress.OrderBy(pair => pair.Key), store.GetOrderProgress(17, captured.PresetId).OrderBy(pair => pair.Key));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

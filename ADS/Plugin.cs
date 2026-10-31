@@ -411,10 +411,16 @@ public sealed class Plugin : IDalamudPlugin
             ShopListService.CancelShopListPreset,
             ShopListService.SearchShopCatalogJson,
             OpenPlayerObjectExplorer,
-            Log);
+            Log,
+            StartRaidDutyFromInside,
+            LeaveRaidDuty);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
         ExecutionService.QueryPhoenixDownRecoveryHold = () =>
             PluginInterface.GetIpcSubscriber<bool>("FrenRider.PhoenixDown.ShouldPauseDutyProgression").InvokeFunc();
+        var raidRuntimeState = PluginInterface.GetIpcSubscriber<string>("FrenRider.Raid.GetRuntimeStateJson");
+        ExecutionService.RaidPolicy.QueryRuntimeStateJson = () =>
+            raidRuntimeState.HasFunction ? raidRuntimeState.InvokeFunc() : null;
+        LootAutomationService.QueryEffectiveMode = () => ExecutionService.GetEffectiveLootMode(DutyContextService.Current);
 
         mainWindow = new MainWindow(this);
         configWindow = new ConfigWindow(this);
@@ -883,7 +889,9 @@ public sealed class Plugin : IDalamudPlugin
         DutyContextService.Update(Configuration.PluginEnabled);
         var context = DutyContextService.Current;
         pendingRemoteJsonOwnedDutyRestart?.Observe(context, ExecutionService.CurrentMode);
-        if (pendingRemoteJsonOwnedDutyRestart is not { IsPending: true })
+        if (ExecutionService.ReadRaidState(context).Enabled)
+            pendingRemoteJsonOwnedDutyRestart?.Cancel();
+        else if (pendingRemoteJsonOwnedDutyRestart is not { IsPending: true })
             pendingRemoteJsonOwnedDutyRestart = RemoteJsonOwnedDutyRestart.Capture(context, ExecutionService.CurrentMode);
 
         RemoteJsonUpdateService.TryStartUpdate(force: true, "operator Update button", manualUpdate: true,
@@ -1361,6 +1369,8 @@ public sealed class Plugin : IDalamudPlugin
             return AutomationTerritoryPolicy.InactiveStatus;
         if (action is "Start Outside" or "Start Inside" or "Resume")
         {
+            if (action == "Start Outside" && ExecutionService.ReadRaidState(context).Enabled)
+                return "Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start.";
             var liveType = DutyCatalogService?.ResolveContentType(0, ClientState.TerritoryType) ?? 0;
             if (AutomationTerritoryPolicy.GetPolicy(ClientState.TerritoryType, liveType) == ActivityOwnershipPolicy.ExplicitOnly
                 && (ClientState.TerritoryType != context.TerritoryTypeId || action == "Start Outside"))
@@ -1408,8 +1418,25 @@ public sealed class Plugin : IDalamudPlugin
     public bool StartDutyFromInside()
         => StartDutyFromInside(sweepWithoutExit: false);
 
-    internal bool StartDutyFromInside(bool sweepWithoutExit)
+    private bool StartRaidDutyFromInside()
     {
+        if (UtilityAutomationService.IsRunning || InnEntryService.IsRunning)
+            return false;
+        DutyContextService.Update(Configuration.PluginEnabled);
+        return ExecutionService.CanStartRaidDuty(DutyContextService.Current)
+               && StartDutyFromInside(sweepWithoutExit: false, raidStart: true);
+    }
+
+    internal bool StartDutyFromInside(bool sweepWithoutExit, bool raidStart = false)
+    {
+        if (raidStart && (UtilityAutomationService.IsRunning || InnEntryService.IsRunning
+            || !ExecutionService.CanStartRaidDuty(DutyContextService.Current)))
+            return false;
+        if (!raidStart)
+        {
+            DutyContextService.Update(Configuration.PluginEnabled);
+            ExecutionService.InvalidateRaidCountdownForOperator(DutyContextService.Current);
+        }
         if (RejectDutyOwnershipRequest("Start Inside"))
             return false;
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
@@ -1418,7 +1445,10 @@ public sealed class Plugin : IDalamudPlugin
         QueueDutyOwnershipRemoteUpdate();
         TreasurePortalOpenerTracker.BeginEntryCycle("inside start", preserveRecentDirectOpener: true);
         InferAndApplyTreasureDungeonRole("inside start", resetFollowerProgressForOwnership: true);
-        var result = ExecutionService.StartDutyFromInside(DutyContextService.Current, sweepWithoutExit);
+        var result = raidStart
+            ? !UtilityAutomationService.IsRunning && !InnEntryService.IsRunning
+              && ExecutionService.StartRaidDutyFromInside(DutyContextService.Current)
+            : ExecutionService.StartDutyFromInside(DutyContextService.Current, sweepWithoutExit);
         if (result)
         {
             ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.BeginOwnershipRun());
@@ -1468,6 +1498,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public bool ResumeDutyFromInside()
     {
+        DutyContextService.Update(Configuration.PluginEnabled);
+        ExecutionService.InvalidateRaidCountdownForOperator(DutyContextService.Current);
         if (RejectDutyOwnershipRequest("Resume"))
             return false;
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
@@ -1488,9 +1520,16 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool LeaveDuty()
+        => LeaveDuty(raidManaged: false);
+
+    private bool LeaveRaidDuty() => LeaveDuty(raidManaged: true);
+
+    private bool LeaveDuty(bool raidManaged)
     {
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         DutyContextService.Update(Configuration.PluginEnabled);
+        if (!raidManaged)
+            ExecutionService.InvalidateRaidCountdownForOperator(DutyContextService.Current);
         if (RejectAutomationActionInExcludedTerritory("Duty leave"))
             return false;
 
@@ -1500,7 +1539,10 @@ public sealed class Plugin : IDalamudPlugin
             BossModMultiboxFollowService.BmraiFollowCommandAccepted == true ||
             BossModMultiboxFollowService.CleanupPending;
 
-        var result = ExecutionService.LeaveDuty(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+        var result = raidManaged
+            ? ExecutionService.LeaveRaidDuty(DutyContextService.Current)
+            : ExecutionService.LeaveDuty(DutyContextService.Current,
+                ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
         TreasurePortalOpenerTracker.ClearPendingOpener("leave duty");
         TreasurePortalOpenerRelayService.Clear("leave duty");
         BossModMultiboxFollowService.Clear("leave duty request", shouldClearTreasureFollow);
@@ -1528,7 +1570,11 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public void StopOwnership()
-        => StopOwnership(null);
+    {
+        DutyContextService.Update(Configuration.PluginEnabled);
+        ExecutionService.InvalidateRaidCountdownForOperator(DutyContextService.Current);
+        StopOwnership(null);
+    }
 
     private void StopOwnership(string? idleStatus, bool stopRelicTest = true)
     {
@@ -1804,7 +1850,7 @@ public sealed class Plugin : IDalamudPlugin
         return result;
     }
 
-    internal bool StartShopListBatch(out string status)
+    internal bool StartShopListBatch(out string status, Guid? rowId = null)
     {
         if (AutomationTerritoryPolicy.IsAutomationExcludedTerritory(ClientState.TerritoryType)
             || AutomationTerritoryPolicy.IsAutomationExcludedTerritory(DutyContextService.Current.TerritoryTypeId))
@@ -1826,7 +1872,7 @@ public sealed class Plugin : IDalamudPlugin
             return false;
         }
 
-        var result = ShopListService.TryStartBatch(out status);
+        var result = ShopListService.TryStartBatch(out status, rowId);
         PrintStatus(result ? status : $"Shop list not started: {status}");
         return result;
     }
@@ -2020,9 +2066,9 @@ public sealed class Plugin : IDalamudPlugin
             new
             {
                 pluginEnabled = Configuration.PluginEnabled,
-                considerTreasureCoffers = Configuration.ConsiderTreasureCoffers,
+                considerTreasureCoffers = ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current),
                 frameworkHitchProfilerEnabled = Configuration.FrameworkHitchProfilerEnabled,
-                lootMode = Configuration.LootMode.ToString(),
+                lootMode = ExecutionService.GetEffectiveLootMode(DutyContextService.Current).ToString(),
                 lootGlamourNeedingEnabled = Configuration.LootGlamourNeedingEnabled,
                 lootRegistrableNeedingEnabled = Configuration.LootRegistrableNeedingEnabled,
                 lootStatus = LootAutomationService.Status,
@@ -2680,6 +2726,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private void TryRecoverTreasureDutyOwnership()
     {
+        if (ExecutionService.ReadRaidState(DutyContextService.Current).Enabled)
+        {
+            treasureDutyRecoveryAttemptedThisLoad = true;
+            return;
+        }
         if (treasureDutyRecoveryAttemptedThisLoad || !HasTreasureDutyRecoveryMarker())
             return;
 
@@ -2823,7 +2874,7 @@ public sealed class Plugin : IDalamudPlugin
             BmrReflectionService.SetDutyPolicy(DutyContextService.Current, ExecutionService.CurrentMode,
                 DutyBmrPolicyService.DisablesBmr(DutyContextService.Current.CurrentDuty));
             BmrReflectionService.UpdateDutyPolicyCleanup();
-            DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+            DungeonFrontierService.RefreshCutsceneHold(DutyContextService.Current, ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
             automationExcludedTerritory = AutomationTerritoryPolicy.IsAutomationExcludedTerritory(
                 DutyContextService.Current.TerritoryTypeId);
             if (automationExcludedTerritory)
@@ -2851,6 +2902,15 @@ public sealed class Plugin : IDalamudPlugin
             parkedAutomationExcludedTerritoryId = 0;
             if (ExecutionService.ReleaseDisallowedActivityOwnership(DutyContextService.Current))
                 StopOwnership(ExecutionService.LastStatus);
+
+            if (ExecutionService.ReadRaidState(DutyContextService.Current).Enabled)
+                pendingRemoteJsonOwnedDutyRestart?.Cancel();
+            if (ExecutionService.RefreshRaidProgressionHold(DutyContextService.Current))
+            {
+                CameraRecoveryService.Release("Raid countdown hold");
+                UpdateDtrBar();
+                return;
+            }
 
             if (ExecutionService.RefreshDebugReturn(DutyContextService.Current, DebugStrafeService.Enabled))
             {
@@ -2919,12 +2979,15 @@ public sealed class Plugin : IDalamudPlugin
                 RecordFrameworkSection(sectionStartedAt, "remote-json-complete", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
+            var raidRecoveryDialogHold = ExecutionService.SuppressRaidRecoveryDialogs(DutyContextService.Current);
             DialogAutomationService.Update(
                 DutyContextService.Current,
                 ExecutionService.CurrentMode,
                 Configuration.PluginEnabled,
                 Configuration.ProcessDialogRulesOutsideOwnedDuty,
-                UtilityAutomationService.SuppressesGenericYesNo);
+                UtilityAutomationService.SuppressesGenericYesNo
+                || raidRecoveryDialogHold,
+                raidRecoveryDialogHold ? "Raid mode owns recovery dialogs; Return is manual" : null);
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "dialog", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
@@ -2952,13 +3015,13 @@ public sealed class Plugin : IDalamudPlugin
                     DutyContextService.Current,
                     ObservationSnapshot.Empty,
                     ExecutionService.CurrentMode,
-                    Configuration.ConsiderTreasureCoffers);
+                    ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
                 ExecutionService.Update(
                     DutyContextService.Current,
                     ObjectivePlannerService.Current,
                     ObservationSnapshot.Empty,
                     Configuration.PluginEnabled,
-                    Configuration.ConsiderTreasureCoffers,
+                    ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current),
                     DialogAutomationService.DialogStatus,
                     DebugStrafeService.Enabled);
                 ReportXaSlaveSkipperLifecycleResult(XaSlaveSkipperService.Synchronize(ExecutionService.CurrentMode));
@@ -3080,12 +3143,12 @@ public sealed class Plugin : IDalamudPlugin
                 RecordFrameworkSection(sectionStartedAt, "loot", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
-            ObservationMemoryService.Update(DutyContextService.Current, Configuration.ConsiderTreasureCoffers);
+            ObservationMemoryService.Update(DutyContextService.Current, ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "observation", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
                 sectionStartedAt = Stopwatch.GetTimestamp();
-            DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current, Configuration.ConsiderTreasureCoffers);
+            DungeonFrontierService.Update(DutyContextService.Current, ObservationMemoryService.Current, ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "frontier", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
@@ -3094,7 +3157,7 @@ public sealed class Plugin : IDalamudPlugin
                 DutyContextService.Current,
                 ObservationMemoryService.Current,
                 ExecutionService.CurrentMode,
-                Configuration.ConsiderTreasureCoffers);
+                ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current));
             if (frameworkHitchProfilerEnabled)
                 RecordFrameworkSection(sectionStartedAt, "planner", ref slowestSection, ref slowestMs);
             if (frameworkHitchProfilerEnabled)
@@ -3104,7 +3167,7 @@ public sealed class Plugin : IDalamudPlugin
                 ObjectivePlannerService.Current,
                 ObservationMemoryService.Current,
                 Configuration.PluginEnabled,
-                Configuration.ConsiderTreasureCoffers,
+                ExecutionService.AreTreasureCoffersEnabled(DutyContextService.Current),
                 DialogAutomationService.DialogStatus,
                 DebugStrafeService.Enabled);
             if (frameworkHitchProfilerEnabled)
@@ -3265,7 +3328,9 @@ public sealed class Plugin : IDalamudPlugin
             if (batch.RemainingSteps == 0)
             {
                 pendingRemoteJsonReloads.Dequeue();
-                if (batch.TryRestart(DutyContextService.Current, ExecutionService.CurrentMode, StopOwnership, StartDutyFromInside))
+                if (ExecutionService.ReadRaidState(DutyContextService.Current).Enabled)
+                    pendingRemoteJsonOwnedDutyRestart?.Cancel();
+                else if (batch.TryRestart(DutyContextService.Current, ExecutionService.CurrentMode, StopOwnership, StartDutyFromInside))
                     Log.Information("[ADS] Manual Update reloaded all data and restarted the owned duty with Stop -> Start Inside.");
             }
             return;
@@ -3500,7 +3565,9 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (ShouldRunDutyCompletionTreasureSweep(context, Configuration.ConsiderTreasureCoffers)
+        var considerTreasureCoffers = ExecutionService.AreTreasureCoffersEnabled(context);
+        if ((ShouldRunDutyCompletionTreasureSweep(context, considerTreasureCoffers)
+             || ExecutionService.ReadRaidState(context).Enabled && considerTreasureCoffers)
             && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
         {
             PrintStatus(ExecutionService.LastStatus);

@@ -293,6 +293,20 @@ public sealed class ShopListPresetStore
         }, out error);
     }
 
+    public bool MoveItem(Guid rowId, int direction, out string error)
+    {
+        var activeId = ActivePresetId;
+        return Commit(candidate =>
+        {
+            var items = candidate.Presets.First(preset => preset.PresetId == activeId).Items;
+            var index = items.FindIndex(item => item.RowId == rowId);
+            if (index < 0 || direction is not (-1 or 1) || index + direction < 0 || index + direction >= items.Count)
+                throw new InvalidDataException("The selected row cannot move in that direction.");
+            // Order alone changes. Keep row identities and the quantities already credited to them.
+            (items[index], items[index + direction]) = (items[index + direction], items[index]);
+        }, out error);
+    }
+
     public bool ReplaceActiveItems(IReadOnlyDictionary<uint, int> items, out string error)
     {
         if (items.Count == 0)

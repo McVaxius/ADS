@@ -55,12 +55,16 @@ public sealed class AdsIpcService : IDisposable
         Func<string, bool> cancelShopListPreset,
         Func<string, string> searchShopCatalogJson,
         Func<bool> openPlayerObjectExplorer,
-        IPluginLog log)
+        IPluginLog log,
+        Func<bool>? startRaidDutyFromInside = null,
+        Func<bool>? leaveRaidDuty = null)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
         Register(pluginInterface, "ADS.ResumeDutyFromInside", resumeDutyFromInside);
         Register(pluginInterface, "ADS.LeaveDuty", leaveDuty);
+        Register(pluginInterface, "ADS.Raid.StartDutyFromInside", startRaidDutyFromInside ?? (() => false));
+        Register(pluginInterface, "ADS.Raid.LeaveDuty", leaveRaidDuty ?? (() => false));
         Register(pluginInterface, "ADS.OpenLootUi", openLootUi);
         Register(pluginInterface, "ADS.ToggleLootUi", toggleLootUi);
         Register(pluginInterface, "ADS.StartRepair", startRepair);

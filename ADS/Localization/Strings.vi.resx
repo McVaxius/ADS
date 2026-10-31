@@ -4322,4 +4322,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Chọn tệp hình ảnh.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Đang tải hình ảnh...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Không thể tải hình ảnh.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Chi phí</value></data>
+  <data name="Move up" xml:space="preserve"><value>Chuyển lên</value></data>
+  <data name="Move down" xml:space="preserve"><value>Chuyển xuống</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Mua hàng này theo quy tắc của cấu hình đã kiểm tra.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Tổng cần: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Hàng: {0} | Dự kiến mua: {1:N0} | Bị chặn: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Lưu các hàng đã sửa rồi kiểm tra cấu hình trước khi mua.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Chỉ tính chi phí xem trước; không tính các hàng bị chặn hoặc hoãn.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Chế độ Raid quản lý hộp thoại hồi phục; phải quay về thủ công</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Dừng tiện ích ADS đang chạy trước khi sắp xếp lại danh sách mua sắm.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>Không thể chuyển hàng đã chọn theo hướng đó.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>Hàng đã chọn không còn trong cấu hình hiện tại; hãy kiểm tra lại.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>Hàng đã chọn không còn cần mua; hãy kiểm tra lại.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>Phiên Raid mới đã hủy thao tác rời phụ bản được chuẩn bị trước đó.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Chế độ Raid đã hủy lần khởi động bên ngoài chờ sẵn trước đó; đang chờ đếm ngược pull mới.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Đã hủy tiến trình Raid; đang chờ lệnh bắt đầu rõ ràng hoặc đếm ngược mới.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Tiến trình Raid đang chờ đếm ngược pull mới.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Đã hủy tự động rời Raid.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Tự động rời Raid đang chờ quyền hiện tại, hồi phục thủ công và phân chia chiến lợi phẩm xong.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Chế độ Raid thay thế việc tiếp quản bên ngoài đang chờ; hãy dùng đếm ngược pull hoặc lệnh bắt đầu rõ ràng bên trong.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Chế độ Raid đã hủy lần khởi động bên ngoài đang chờ; đang chờ đếm ngược pull mới.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Xử lý rương cuối Raid đang chờ trò chơi phân chia chiến lợi phẩm trước khi nhả quyền điều khiển.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Chế độ Raid chờ hồi phục thủ công trước khi rời phụ bản.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Phụ bản Raid</value></data>
 </root>

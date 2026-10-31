@@ -121,6 +121,10 @@ public sealed class AdsEnableCompatibilityTests
         typeof(Plugin).GetField("<Configuration>k__BackingField", flags)!.SetValue(plugin, new Configuration());
         var contextService = (DutyContextService)RuntimeHelpers.GetUninitializedObject(typeof(DutyContextService));
         typeof(Plugin).GetField("<DutyContextService>k__BackingField", flags)!.SetValue(plugin, contextService);
+        var execution = new ExecutionService(null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, plugin.Configuration);
+        execution.RaidPolicy.QueryRuntimeStateJson = () => "{\"schemaVersion\":1,\"enabled\":false}";
+        typeof(Plugin).GetField("<ExecutionService>k__BackingField", flags)!.SetValue(plugin, execution);
         void SetContext(bool inside, uint territory)
             => typeof(DutyContextService).GetField("<Current>k__BackingField", flags)!.SetValue(contextService,
                 Newtonsoft.Json.JsonConvert.DeserializeObject<DutyContextSnapshot>(
@@ -142,8 +146,8 @@ public sealed class AdsEnableCompatibilityTests
             var buttons = window.TitleBarButtons.OrderByDescending(button => button.Priority).ToArray();
             Assert.Equal(6, buttons.Length);
             foreach (var button in buttons) Click(button, "Right");
-            // Compound collaborators are absent: a rejected click cannot perform preparation,
-            // change ownership, save configuration or call a lower-level execution service.
+            // Execution can read its inert Raid policy, but its action collaborators are absent:
+            // a rejected click cannot prepare work, change ownership or save configuration.
             Click(buttons[3], "Left");
             Click(buttons[4], "Left");
             Assert.Null(plugin.GetDutyUiActionBlocker("Start Outside"));

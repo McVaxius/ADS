@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Choisissez un fichier image.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Chargement de l’image...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Impossible de charger l’image.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Coût</value></data>
+  <data name="Move up" xml:space="preserve"><value>Monter</value></data>
+  <data name="Move down" xml:space="preserve"><value>Descendre</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Acheter cette ligne selon les règles du préréglage testé.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Total nécessaire : {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Lignes : {0} | Achat prévu : {1:N0} | Bloquées : {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Enregistrez les lignes modifiées, puis testez le préréglage avant d’acheter.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Coûts de l’aperçu uniquement ; les lignes bloquées ou différées ne sont pas chiffrées.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Le mode Raid contrôle les dialogues de récupération ; le retour est manuel</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Arrêtez l’utilitaire ADS actif avant de réordonner une liste d’achats.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>La ligne sélectionnée ne peut pas être déplacée dans ce sens.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>La ligne sélectionnée n’est plus dans le préréglage actif ; testez-le à nouveau.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>La ligne sélectionnée ne nécessite plus d’achat ; testez le préréglage à nouveau.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>La nouvelle session de Raid a annulé la sortie d’instance précédemment préparée.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Le mode Raid a annulé le précédent démarrage en attente à l’extérieur ; un nouveau compte à rebours de pull est requis.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Progression du Raid annulée ; en attente d’un démarrage explicite ou d’un nouveau compte à rebours.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>La progression du Raid attend un nouveau compte à rebours de pull.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Sortie automatique du Raid annulée.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>La sortie automatique du Raid attend l’autorisation actuelle, la récupération manuelle et l’attribution du butin.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Le mode Raid remplace la prise en charge en attente à l’extérieur ; utilisez un compte à rebours de pull ou un démarrage explicite à l’intérieur.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Le mode Raid a annulé le démarrage en attente à l’extérieur ; un nouveau compte à rebours de pull est requis.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Le traitement du coffre final du Raid attend l’attribution native du butin avant de libérer le contrôle.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Le mode Raid attend une récupération manuelle avant de quitter l’instance.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Instance de Raid</value></data>
 </root>

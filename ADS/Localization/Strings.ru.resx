@@ -4680,4 +4680,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Выберите файл изображения.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Загрузка изображения...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>Не удалось загрузить изображение.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Стоимость</value></data>
+  <data name="Move up" xml:space="preserve"><value>Вверх</value></data>
+  <data name="Move down" xml:space="preserve"><value>Вниз</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Купить эту строку по правилам проверенного набора.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Всего требуется: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Строки: {0} | План покупки: {1:N0} | Заблокировано: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Сохраните изменённые строки и проверьте набор перед покупкой.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Только стоимость предпросмотра; заблокированные и отложенные строки не рассчитаны.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>Режим рейда управляет окнами восстановления; возврат выполняется вручную</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Остановите активную утилиту ADS перед изменением порядка списка покупок.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>Выбранную строку нельзя переместить в этом направлении.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>Выбранной строки больше нет в активном наборе; проверьте его снова.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>Покупка для выбранной строки больше не нужна; проверьте набор снова.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>Новая сессия рейда отменила ранее подготовленный выход из подземелья.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Режим рейда отменил предыдущий ожидающий внешний запуск; требуется новый отсчёт до начала боя.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Продвижение в рейде отменено; ожидается явный запуск или новый отсчёт.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>Продвижение в рейде ожидает нового отсчёта до начала боя.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Автоматический выход из рейда отменён.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>Автоматический выход из рейда ожидает текущего разрешения, ручного восстановления и завершения распределения добычи.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>Режим рейда заменяет ожидающий внешний перехват управления; используйте отсчёт до начала боя или явный запуск внутри.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>Режим рейда отменил ожидающий внешний запуск; требуется новый отсчёт до начала боя.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Обработка последнего сундука рейда ожидает штатного распределения добычи перед освобождением управления.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Режим рейда ожидает ручного восстановления перед выходом из подземелья.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Рейд</value></data>
 </root>

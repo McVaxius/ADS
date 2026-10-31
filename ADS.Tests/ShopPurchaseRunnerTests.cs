@@ -572,6 +572,40 @@ public sealed class ShopPurchaseRunnerTests
             7, character, 100, (nint)addon, 35, addonId, 200, (nint)receiver, exactOffer, foreignTarget));
 
     [Fact]
+    public void SingleRowOrderPurchasePreservesOtherRowsCreditAndRejectsLiveReordering()
+    {
+        using var temp = new TempDirectory();
+        var store = new ShopListPresetStore(temp.Path);
+        Assert.True(store.ConfigureActive(ShopListMode.FillOrderOverMultipleRuns, ShopCurrencyKind.Tomestone, 28, 0, out _));
+        Assert.True(store.SetItem(100, 5, 5, false, ShopListOwnershipScope.InventoryOnly, out _));
+        Assert.True(store.SetItem(101, 10, 10, false, ShopListOwnershipScope.InventoryOnly, out _));
+        var presetId = store.ActivePresetId;
+        var selected = store.ActivePreset.Items[0].RowId;
+        var other = store.ActivePreset.Items[1].RowId;
+        Assert.True(store.SaveOrderProgress(1, presetId, new Dictionary<Guid, long> { [selected] = 2, [other] = 10 }, out _));
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ItemCount = 2 };
+        var clock = new FakeClock();
+        var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, clock, log);
+        var service = new ShopListService(store, null!, utility, _ => throw new InvalidOperationException("Inventory-only order queried retainers"), log);
+        Assert.False(service.TryStartBatch(out _, Guid.NewGuid()));
+        Assert.False(utility.IsRunning);
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.True(service.TryStartBatch(out var error, selected), error);
+        Assert.Equal(selected, Assert.Single(utility.ShopListBatchStatus.Rows).RowId);
+        Assert.False(service.MoveItem(selected, 1, out _));
+        for (var tick = 0; tick < 200 && utility.IsRunning; tick++) utility.Update();
+        Assert.False(utility.IsRunning);
+        Assert.True(utility.ShopListBatchStatus.Succeeded, utility.ShopListBatchStatus.FailureMessage);
+        Assert.Equal(5, store.GetOrderProgress(1, presetId)[selected]);
+        Assert.Equal(10, store.GetOrderProgress(1, presetId)[other]);
+        store.Reload();
+        Assert.Equal(10, store.GetOrderProgress(1, presetId)[other]);
+        Assert.True(service.MoveItem(selected, 1, out var moveError), moveError);
+        Assert.Equal(other, store.ActivePreset.Items[0].RowId);
+    }
+
+    [Fact]
     public void FiniteOrderCreditsOnlyVerifiedPurchasesAcrossCurrencyLimitedPassesAndReload()
     {
         using var temp = new TempDirectory();

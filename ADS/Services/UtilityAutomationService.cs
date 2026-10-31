@@ -2147,14 +2147,17 @@ public sealed unsafe class UtilityAutomationService
     }
 
     private void UpdateNpcRepairWindow(DateTime now)
+        => UpdateNpcRepairWindow(now, GetVisibleAddon<AddonRepair>("Repair"),
+            GetVisibleAddon<AddonSelectYesno>("SelectYesno"));
+
+    internal void UpdateNpcRepairWindow(DateTime now, AddonRepair* repairAddon, AddonSelectYesno* confirmation)
     {
         if (TryCompleteRepairIfFinished($"NPC repair finished with {targetNpcName}; equipped gear is fully repaired."))
             return;
 
-        if (TryHandleRepairConfirm(now, $"Confirming NPC repair with {targetNpcName}."))
+        if (TryHandleRepairConfirm(now, $"Confirming NPC repair with {targetNpcName}.", confirmation))
             return;
 
-        var repairAddon = GetVisibleAddon<AddonRepair>("Repair");
         if (repairAddon == null)
         {
             repairWindowSeenUtc = DateTime.MinValue;
@@ -2173,14 +2176,19 @@ public sealed unsafe class UtilityAutomationService
 
             if (!IsRepairAllEnabled(repairAddon))
             {
-                GameInteractionHelper.TryCloseAddon("Repair", log);
-                Complete($"No NPC-repairable gear was available through {targetNpcName}.");
+                CloseRepairAddons();
+                Fail($"NPC repair with {targetNpcName} could not repair equipped gear: Repair All is unavailable and full durability was not verified.");
                 return;
             }
 
             if (now - lastActionUtc >= UiRetryCooldown)
             {
-                ClickRepairAll(repairAddon);
+                if (!TryClickRepairAll(repairAddon))
+                {
+                    CloseRepairAddons();
+                    Fail($"NPC repair with {targetNpcName} could not dispatch its registered Repair All button.");
+                    return;
+                }
                 repairSubmissionSent = true;
                 lastActionUtc = now;
                 StatusMessage = $"Submitting NPC repair with {targetNpcName}.";
@@ -2192,23 +2200,14 @@ public sealed unsafe class UtilityAutomationService
         if (TryCompleteRepairIfFinished($"NPC repair finished with {targetNpcName}; equipped gear is fully repaired."))
             return;
 
-        if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
-        {
-            StatusMessage = $"Confirming NPC repair with {targetNpcName}.";
-            return;
-        }
-
         if (now - lastActionUtc < TimeSpan.FromSeconds(5))
         {
             StatusMessage = $"Waiting for NPC repair with {targetNpcName} to settle.";
             return;
         }
 
-        var stillEnabled = IsRepairAllEnabled(repairAddon);
-        GameInteractionHelper.TryCloseAddon("Repair", log);
-        Complete(stillEnabled
-            ? $"NPC repair settled with {targetNpcName}, but some gear may remain unrepaired."
-            : $"NPC repair finished with {targetNpcName}.");
+        CloseRepairAddons();
+        Fail($"NPC repair with {targetNpcName} did not verify fully repaired equipped gear after its submission settled.");
     }
 
     private void UpdateExtractMateria()
@@ -2666,8 +2665,22 @@ public sealed unsafe class UtilityAutomationService
     private unsafe void ClickRepairAll(AddonRepair* repairAddon)
         => ClickButtonIfEnabled(repairAddon->RepairAllButton, (AtkUnitBase*)repairAddon);
 
+    internal static unsafe bool TryClickRepairAll(AddonRepair* repairAddon)
+        => repairAddon != null && TryClickRepairButton(repairAddon->RepairAllButton);
+
+    private static unsafe bool TryClickRepairButton(AtkComponentButton* button)
+    {
+        if (button == null || button->AtkComponentBase.OwnerNode == null || !button->IsEnabled)
+            return false;
+        var registeredEvent = button->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event;
+        while (registeredEvent != null && registeredEvent->State.EventType != AtkEventType.ButtonClick)
+            registeredEvent = registeredEvent->NextEvent;
+        return GameInteractionHelper.TryDispatchRegisteredClick(registeredEvent);
+    }
+
     private static unsafe bool IsRepairAllEnabled(AddonRepair* repairAddon)
-        => repairAddon->RepairAllButton != null && repairAddon->RepairAllButton->IsEnabled;
+        => repairAddon != null && repairAddon->RepairAllButton != null
+            && repairAddon->RepairAllButton->AtkComponentBase.OwnerNode != null && repairAddon->RepairAllButton->IsEnabled;
 
     private bool TryCompleteRepairIfFinished(string message)
     {
@@ -2691,15 +2704,24 @@ public sealed unsafe class UtilityAutomationService
             return false;
 
         var equippedContainer = inventoryManager->GetInventoryContainer(InventoryType.EquippedItems);
-        if (equippedContainer == null)
+        return TryGetEquippedGearNeedsRepair(equippedContainer, out needsRepair);
+    }
+
+    internal static unsafe bool TryGetEquippedGearNeedsRepair(InventoryContainer* equippedContainer, out bool needsRepair)
+    {
+        needsRepair = false;
+        if (equippedContainer == null || !equippedContainer->IsLoaded
+            || equippedContainer->Size <= 0 || equippedContainer->Items == null)
             return false;
 
+        var hasEquippedItem = false;
         for (var i = 0; i < equippedContainer->Size; i++)
         {
-            var item = equippedContainer->GetInventorySlot(i);
-            if (item == null || item->ItemId == 0)
+            var item = &equippedContainer->Items[i];
+            if (item->ItemId == 0)
                 continue;
 
+            hasEquippedItem = true;
             var conditionPercent = item->Condition / 300;
             if (conditionPercent < FullyRepairedConditionPercent)
             {
@@ -2708,7 +2730,7 @@ public sealed unsafe class UtilityAutomationService
             }
         }
 
-        return true;
+        return hasEquippedItem;
     }
 
     private void NoteRepairWindowSeen(DateTime now)
@@ -2720,6 +2742,14 @@ public sealed unsafe class UtilityAutomationService
     private bool TryHandleRepairConfirm(DateTime now, string statusMessage)
     {
         if (!GameInteractionHelper.IsAddonVisible("SelectYesno"))
+            return false;
+
+        return TryHandleRepairConfirm(now, statusMessage, GetVisibleAddon<AddonSelectYesno>("SelectYesno"));
+    }
+
+    private bool TryHandleRepairConfirm(DateTime now, string statusMessage, AddonSelectYesno* confirmation)
+    {
+        if (confirmation == null)
             return false;
 
         repairSubmissionSent = true;
@@ -2734,6 +2764,12 @@ public sealed unsafe class UtilityAutomationService
 
         if (repairConfirmClickAttempts >= RepairConfirmMaxAttempts)
         {
+            if (activeTask == UtilityTask.NpcRepair && now - lastRepairConfirmClickUtc >= RepairConfirmRetryCooldown)
+            {
+                CloseRepairAddons();
+                Fail($"NPC repair confirmation did not close after {RepairConfirmMaxAttempts} attempts; full equipped durability was not verified.");
+                return true;
+            }
             StatusMessage = $"{statusMessage} Waiting for the confirmation dialog to close.";
             return true;
         }
@@ -2748,7 +2784,9 @@ public sealed unsafe class UtilityAutomationService
         lastRepairConfirmClickUtc = now;
         lastActionUtc = now;
 
-        if (GameInteractionHelper.ClickYesIfVisible(log))
+        if (activeTask == UtilityTask.NpcRepair
+                ? TryClickRepairButton(confirmation->YesButton)
+                : GameInteractionHelper.ClickYesIfVisible(log))
         {
             repairConfirmClickAttempts++;
             StatusMessage = repairConfirmClickAttempts == 1
@@ -2880,7 +2918,7 @@ public sealed unsafe class UtilityAutomationService
 
         if (route.TerritoryTypeId == clientState.TerritoryType)
         {
-            if (TryFindNearbyRepairNpc(out var targetNpc))
+            if (TryFindNearbyRepairNpc(out var targetNpc) && CanApproachInnRepairNpc(route, targetNpc))
             {
                 BeginNpcRepairWithCandidate(targetNpc, "Starting inn repair with");
                 return IsRunning;
@@ -3332,7 +3370,7 @@ public sealed unsafe class UtilityAutomationService
         }
 
         if (npcRepairTravelStage != NpcRepairTravelStage.ReturningToInn
-            && TryFindNearbyRepairNpc(out var targetNpc))
+            && TryFindNearbyRepairNpc(out var targetNpc) && CanApproachInnRepairNpc(route, targetNpc))
         {
             BeginNpcRepairWithCandidate(targetNpc, $"Found a mender on the {route.TerritoryName} inn route:");
             return;
@@ -3379,7 +3417,7 @@ public sealed unsafe class UtilityAutomationService
 
     private void UpdateNpcRepairInnNpcSearch(ResolvedInnRepairRoute route)
     {
-        if (TryFindNearbyRepairNpc(out var targetNpc))
+        if (TryFindNearbyRepairNpc(out var targetNpc) && CanApproachInnRepairNpc(route, targetNpc))
         {
             BeginNpcRepairWithCandidate(targetNpc, $"Reached the {route.TerritoryName} inn fallback and found");
             return;
@@ -3387,6 +3425,12 @@ public sealed unsafe class UtilityAutomationService
 
         StatusMessage = $"Looking for a repair NPC near the {route.TerritoryName} inn.";
     }
+
+    private bool CanApproachInnRepairNpc(ResolvedInnRepairRoute route, RepairNpcCandidate npc)
+        // Gridania's airship landing is below the mender. Keep the existing stairs
+        // until the player is on the NPC's level instead of pathfinding straight up.
+        => route.AethernetId != 94 || objectTable.LocalPlayer is { } player
+            && MathF.Abs(player.Position.Y - npc.GameObject.Position.Y) <= RepairNpcInteractRadius;
 
     private void UpdateNpcRepairInnExit()
     {
@@ -4469,6 +4513,11 @@ public sealed unsafe class UtilityAutomationService
             StopMovementIfNpcRepair();
             CloseRepairAddons();
             CloseOwnedNpcRepairMenus();
+            // The Gridania mender and innkeeper share the upper level. Do not
+            // replay the landing/stairs after repairing beside the innkeeper.
+            if (activeNpcRepairInnRoute is { AethernetId: 94 } route && npcRepairMenderReached
+                && route.TerritoryTypeId == clientState.TerritoryType)
+                npcRepairInnPathIndex = route.Path.Length;
             SetNpcRepairTravelStage(NpcRepairTravelStage.ReturningToInn, $"{message} Returning to the inn room.");
             return;
         }

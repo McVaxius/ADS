@@ -4306,4 +4306,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>छवि फ़ाइल चुनें।</value></data>
   <data name="Loading image..." xml:space="preserve"><value>छवि लोड हो रही है...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>छवि लोड नहीं हो सकी।</value></data>
+  <data name="Cost" xml:space="preserve"><value>लागत</value></data>
+  <data name="Move up" xml:space="preserve"><value>ऊपर ले जाएँ</value></data>
+  <data name="Move down" xml:space="preserve"><value>नीचे ले जाएँ</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>जाँचे गए प्रीसेट के नियमों से इस पंक्ति को खरीदें।</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>कुल आवश्यक: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>पंक्तियाँ: {0} | प्रस्तावित खरीद: {1:N0} | अवरुद्ध: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>संपादित पंक्तियाँ सहेजें, फिर खरीदने से पहले प्रीसेट जाँचें।</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>केवल पूर्वावलोकन लागत; अवरुद्ध और स्थगित पंक्तियों की लागत शामिल नहीं है।</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>रेड मोड पुनर्प्राप्ति संवाद सँभालता है; वापसी मैन्युअल है</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>खरीदारी सूची का क्रम बदलने से पहले सक्रिय ADS उपकरण रोकें।</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>चुनी गई पंक्ति को उस दिशा में नहीं ले जा सकते।</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>चुनी गई पंक्ति अब सक्रिय प्रीसेट में नहीं है; फिर से जाँचें।</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>चुनी गई पंक्ति को अब खरीद की आवश्यकता नहीं है; फिर से जाँचें।</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>नए रेड सत्र ने पहले से तैयार ड्यूटी छोड़ने की कार्रवाई रद्द कर दी।</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>रेड मोड ने पहले से लंबित बाहरी शुरुआत रद्द कर दी; नई पुल उलटी गिनती की प्रतीक्षा है।</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>रेड प्रगति रद्द हुई; स्पष्ट शुरुआत या नई उलटी गिनती की प्रतीक्षा है।</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>रेड प्रगति नई पुल उलटी गिनती की प्रतीक्षा कर रही है।</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>स्वचालित रेड निकास रद्द हुआ।</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>स्वचालित रेड निकास वर्तमान अनुमति, मैन्युअल पुनर्प्राप्ति और लूट का वितरण पूरा होने की प्रतीक्षा कर रहा है।</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>रेड मोड लंबित बाहरी नियंत्रण अधिग्रहण की जगह लेता है; पुल उलटी गिनती या अंदर से स्पष्ट शुरुआत का उपयोग करें।</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>रेड मोड ने लंबित बाहरी शुरुआत रद्द कर दी; नई पुल उलटी गिनती की प्रतीक्षा है।</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>रेड के अंतिम संदूक का कार्य नियंत्रण छोड़ने से पहले गेम में लूट वितरण की प्रतीक्षा कर रहा है।</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>रेड मोड ड्यूटी छोड़ने से पहले मैन्युअल पुनर्प्राप्ति की प्रतीक्षा करता है।</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>रेड ड्यूटी</value></data>
 </root>

@@ -38,6 +38,11 @@ public sealed partial class ExecutionService
     // True holds progression only while confirmed Return is settling into living state.
     internal bool RefreshDebugReturn(DutyContextSnapshot context, bool debugEnabled)
     {
+        if (ReadRaidState(context).Enabled)
+        {
+            CancelDebugReturn();
+            return false;
+        }
         if (!debugEnabled || !context.PluginEnabled || !context.IsLoggedIn || !IsActiveOwnedDutyMode()
             || completedDuty is not null || !context.InInstancedDuty && !context.IsUnsafeTransition && !context.IsCutscene)
         {

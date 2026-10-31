@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>画像ファイルを選択してください。</value></data>
   <data name="Loading image..." xml:space="preserve"><value>画像を読み込み中...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>画像を読み込めませんでした。</value></data>
+  <data name="Cost" xml:space="preserve"><value>費用</value></data>
+  <data name="Move up" xml:space="preserve"><value>上へ移動</value></data>
+  <data name="Move down" xml:space="preserve"><value>下へ移動</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>テスト済みプリセットのルールでこの行を購入します。</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>必要合計：{0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>行数：{0} | 購入予定：{1:N0} | ブロック：{2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>編集した行を保存し、購入前にプリセットをテストしてください。</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>プレビューの費用のみです。ブロック中・保留中の行の費用は含みません。</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>レイドモードが復帰ダイアログを制御します。リターンは手動です</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>買い物リストの順序を変更する前に、実行中のADSユーティリティを停止してください。</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>選択した行をその方向には移動できません。</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>選択した行は有効なプリセットに含まれていません。もう一度テストしてください。</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>選択した行は購入不要になりました。もう一度テストしてください。</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>新しいレイドセッションにより、以前準備されたコンテンツ退出を取り消しました。</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>レイドモードにより、以前予約された外部開始を取り消しました。新しい戦闘開始カウントダウンを待っています。</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>レイド進行を取り消しました。明示的な開始または新しいカウントダウンを待っています。</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>レイド進行は新しい戦闘開始カウントダウンを待っています。</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>レイドの自動退出を取り消しました。</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>レイドの自動退出は、現在の許可、手動での復帰、戦利品の分配完了を待っています。</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>レイドモードは予約された外部引き継ぎに優先します。戦闘開始カウントダウン、または内部からの明示的な開始を使用してください。</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>レイドモードにより、予約された外部開始を取り消しました。新しい戦闘開始カウントダウンを待っています。</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>レイドの最終宝箱処理は、制御を解放する前にゲーム側の戦利品分配を待っています。</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>レイドモードはコンテンツを退出する前に手動での復帰を待っています。</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>レイドコンテンツ</value></data>
 </root>

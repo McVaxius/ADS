@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>請選擇圖片檔案。</value></data>
   <data name="Loading image..." xml:space="preserve"><value>圖片載入中…</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>無法載入圖片。</value></data>
+  <data name="Cost" xml:space="preserve"><value>費用</value></data>
+  <data name="Move up" xml:space="preserve"><value>上移</value></data>
+  <data name="Move down" xml:space="preserve"><value>下移</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>依已測試預設的規則購買此列。</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>所需總計：{0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>列數：{0} | 預計購買：{1:N0} | 已阻擋：{2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>儲存編輯的列，然後在購買前測試預設。</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>僅顯示預覽費用；不計算被阻擋或延後的列。</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>團隊副本模式管理復原對話框；返回須手動操作</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>重新排序購物清單前，請停止執行中的ADS工具。</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>無法將所選列向該方向移動。</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>所選列已不在目前預設中；請重新測試。</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>所選列已無須購買；請重新測試。</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>新的團隊副本工作階段已取消先前準備的離開副本操作。</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>團隊副本模式已取消先前排隊等待的副本外啟動；正在等待新的開怪倒數計時。</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>團隊副本推進已取消；正在等待明確啟動或新的倒數計時。</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>團隊副本推進正在等待新的開怪倒數計時。</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>團隊副本自動離開已取消。</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>團隊副本自動離開正在等待目前許可、手動復原及戰利品分配完成。</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>團隊副本模式取代排隊等待的副本外接管；請使用開怪倒數計時或明確的副本內啟動。</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>團隊副本模式已取消排隊等待的副本外啟動；正在等待新的開怪倒數計時。</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>團隊副本最終寶箱處理正在等待遊戲內戰利品分配完成，之後才釋放控制權。</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>團隊副本模式在離開副本前等待手動復原。</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>團隊副本</value></data>
 </root>

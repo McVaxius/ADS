@@ -140,6 +140,30 @@ public sealed class DialogYesNoRuleServiceTests
         Assert.False(File.Exists(service.GetPresetPath("Personal")));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CurrentDialogOwnerCancelsPendingAutomaticResponsesAndReportsTheCorrectOwner(bool raid)
+    {
+        using var directory = new TempDirectory();
+        var service = new DialogYesNoRuleService(Log(), directory.Path, new Configuration());
+        var automation = new DialogAutomationService(
+            DispatchProxy.Create<IGameGui, AdsRulePrecedenceTests.NoOpProxy>(), service, Log());
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(DialogAutomationService).GetField("selectYesNoResponsePending", flags)!.SetValue(automation, true);
+        typeof(DialogAutomationService).GetField("pendingSelectYesNoActionKey", flags)!.SetValue(automation, "synthetic-return-rule");
+        automation.Update(TestDutyContextFactory.Create(), OwnershipMode.OwnedStartInside,
+            pluginEnabled: true, processDialogRulesOutsideOwnedDuty: false, suppressGenericYesNo: true,
+            suppressionReason: raid ? "Raid mode owns recovery dialogs; Return is manual" : null);
+        Assert.False((bool)typeof(DialogAutomationService).GetField("selectYesNoResponsePending", flags)!.GetValue(automation)!);
+        Assert.Empty(automation.DialogLastAction);
+        Assert.Empty(automation.DialogRule);
+        Assert.Contains(raid ? "Raid mode owns recovery dialogs; Return is manual" : "utility repair owns SelectYesno confirmations",
+            automation.DialogStatus);
+        if (raid)
+            Assert.DoesNotContain("utility repair", automation.DialogStatus);
+    }
+
     [Fact]
     public void ChangingManifestCancelsPreviousRuleResponseBeforeItCanRetryOrClaimSuccess()
     {

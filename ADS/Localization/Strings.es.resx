@@ -11750,4 +11750,28 @@
   <data name="Choose an image file." xml:space="preserve"><value>Elige un archivo de imagen.</value></data>
   <data name="Loading image..." xml:space="preserve"><value>Cargando imagen...</value></data>
   <data name="Image could not be loaded." xml:space="preserve"><value>No se pudo cargar la imagen.</value></data>
+  <data name="Cost" xml:space="preserve"><value>Coste</value></data>
+  <data name="Move up" xml:space="preserve"><value>Subir</value></data>
+  <data name="Move down" xml:space="preserve"><value>Bajar</value></data>
+  <data name="Buy this row using the tested preset rules." xml:space="preserve"><value>Comprar esta fila con las reglas del ajuste probado.</value></data>
+  <data name="Total needed: {0:N0} {1}" xml:space="preserve"><value>Total necesario: {0:N0} {1}</value></data>
+  <data name="Rows: {0} | Would buy: {1:N0} | Blocked: {2}" xml:space="preserve"><value>Filas: {0} | Compra prevista: {1:N0} | Bloqueadas: {2}</value></data>
+  <data name="Save edited rows, then test the preset before purchasing." xml:space="preserve"><value>Guarda las filas editadas y prueba el ajuste antes de comprar.</value></data>
+  <data name="Preview costs only; blocked and deferred rows are not priced." xml:space="preserve"><value>Solo costes de la vista previa; no se valoran las filas bloqueadas ni aplazadas.</value></data>
+  <data name="Raid mode owns recovery dialogs; Return is manual" xml:space="preserve"><value>El modo Raid controla los diálogos de recuperación; el regreso es manual</value></data>
+  <data name="Stop the active ADS utility before reordering a shop list." xml:space="preserve"><value>Detén la utilidad ADS activa antes de reordenar una lista de compras.</value></data>
+  <data name="The selected row cannot move in that direction." xml:space="preserve"><value>La fila seleccionada no puede moverse en esa dirección.</value></data>
+  <data name="The selected row is no longer in the active preset; test it again." xml:space="preserve"><value>La fila seleccionada ya no está en el ajuste activo; vuelve a probarlo.</value></data>
+  <data name="The selected row no longer needs a purchase; test it again." xml:space="preserve"><value>La fila seleccionada ya no necesita una compra; vuelve a probar el ajuste.</value></data>
+  <data name="New Raid session cancelled the previous staged duty exit." xml:space="preserve"><value>La nueva sesión de Raid canceló la salida de instancia preparada anteriormente.</value></data>
+  <data name="Raid mode cancelled the previous queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>El modo Raid canceló el inicio exterior pendiente anterior; espera una nueva cuenta atrás de pull.</value></data>
+  <data name="Raid progression cancelled; waiting for an explicit start or fresh countdown." xml:space="preserve"><value>Progresión del Raid cancelada; espera un inicio explícito o una nueva cuenta atrás.</value></data>
+  <data name="Raid progression is waiting for a fresh pull countdown." xml:space="preserve"><value>La progresión del Raid espera una nueva cuenta atrás de pull.</value></data>
+  <data name="Raid automatic exit cancelled." xml:space="preserve"><value>Salida automática del Raid cancelada.</value></data>
+  <data name="Raid automatic exit is waiting for current permission, manual recovery and distributed loot." xml:space="preserve"><value>La salida automática del Raid espera el permiso actual, la recuperación manual y el reparto del botín.</value></data>
+  <data name="Raid mode replaces queued outside takeover; use a pull countdown or an explicit inside start." xml:space="preserve"><value>El modo Raid sustituye la toma de control exterior pendiente; usa una cuenta atrás de pull o un inicio interior explícito.</value></data>
+  <data name="Raid mode cancelled the queued outside start; waiting for a fresh pull countdown." xml:space="preserve"><value>El modo Raid canceló el inicio exterior pendiente; espera una nueva cuenta atrás de pull.</value></data>
+  <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>El procesamiento del cofre final del Raid espera el reparto nativo del botín antes de liberar el control.</value></data>
+  <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>El modo Raid espera la recuperación manual antes de salir de la instancia.</value></data>
+  <data name="Raid duty" xml:space="preserve"><value>Instancia de Raid</value></data>
 </root>

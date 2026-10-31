@@ -139,6 +139,19 @@ public sealed class ShopListService
         return succeeded;
     }
 
+    public bool MoveItem(Guid rowId, int direction, out string error)
+    {
+        if (utilityAutomation.IsRunning)
+        {
+            error = "Stop the active ADS utility before reordering a shop list.";
+            return false;
+        }
+        var succeeded = presetStore.MoveItem(rowId, direction, out error);
+        if (succeeded)
+            InvalidateOwnership("Shop-list row changed; test the preset before running.");
+        return succeeded;
+    }
+
     public string ExportActivePresetBase64()
         => presetStore.ExportActiveBase64();
 
@@ -349,7 +362,7 @@ public sealed class ShopListService
         return rows;
     }
 
-    internal bool TryStartBatch(out string status)
+    internal bool TryStartBatch(out string status, Guid? rowId = null)
     {
         var request = new ShopListPresetStartRequest
         {
@@ -361,11 +374,15 @@ public sealed class ShopListService
             CreditedQuantities = new(presetStore.GetOrderProgress(utilityAutomation.ShopCharacterId, presetStore.ActivePresetId)),
         };
         var characterId = utilityAutomation.ShopCharacterId;
+        var savedProgress = new Dictionary<Guid, long>(request.CreditedQuantities);
         var response = StartPreset(request, progress =>
         {
-            if (!presetStore.SaveOrderProgress(characterId, request.PresetId, progress, out var error))
+            // A one-row run reports only its selected row after a purchase. Keep every
+            // other row's existing credit and the fresh initial-ownership observations.
+            foreach (var pair in progress) savedProgress[pair.Key] = pair.Value;
+            if (!presetStore.SaveOrderProgress(characterId, request.PresetId, savedProgress, out var error))
                 throw new InvalidOperationException(error);
-        });
+        }, rowId);
         status = response.Message;
         return response.Accepted;
     }
@@ -520,10 +537,12 @@ public sealed class ShopListService
     }
 
     private ShopListPresetStartResponse StartPreset(ShopListPresetStartRequest request,
-        Action<IReadOnlyDictionary<Guid, long>>? saveProgress = null)
+        Action<IReadOnlyDictionary<Guid, long>>? saveProgress = null, Guid? rowId = null)
     {
         if (!TryGetPreset(request.PresetId, out var preset))
             return StartError(request, $"Shop-list preset '{request.PresetId:D}' was not found.");
+        if (rowId.HasValue && !preset.Items.Any(item => item.RowId == rowId.Value))
+            return StartError(request, "The selected row is no longer in the active preset; test it again.");
         if (preset.Mode == ShopListMode.FillOrderOverMultipleRuns && !request.SupportsFiniteOrderProgress)
             return StartError(request, "This list fills an order over multiple runs. Update DAD/the calling plugin to support finite-order quantity progress before running it.");
         if (!TryValidateCompletedRows(preset, request.CompletedRowIds, out var completedRows, out var error))
@@ -540,6 +559,9 @@ public sealed class ShopListService
             return StartError(request, ownershipStatus);
 
         var preview = EvaluatePreset(preset, completedRows, request.CreditedQuantities);
+        if (rowId.HasValue && preview.Disposition == "ready"
+            && !preview.Rows.Any(row => row.RowId == rowId.Value && row.PurchaseQuantity > 0))
+            return StartError(request, preview.Rows.Single(row => row.RowId == rowId.Value).StatusMessage);
         if (preview.Disposition != "error" && preview.CreditedQuantities != null)
         {
             try { saveProgress?.Invoke(preview.CreditedQuantities); }
@@ -578,9 +600,9 @@ public sealed class ShopListService
             preset.Mode,
             preset.Currency,
             preset.CurrencyThreshold,
-            completedRows.ToArray(),
-            preview.CompletedNonRepeatableRowIds,
-            preset.Items.Select(item =>
+            completedRows.Where(id => !rowId.HasValue || id == rowId.Value).ToArray(),
+            preview.CompletedNonRepeatableRowIds.Where(id => !rowId.HasValue || id == rowId.Value).ToArray(),
+            preset.Items.Where(item => !rowId.HasValue || item.RowId == rowId.Value).Select(item =>
             {
                 var previewRow = rowsById[item.RowId];
                 return new ShopListBatchItem(

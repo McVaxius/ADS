@@ -40,6 +40,8 @@ public sealed class LootAutomationService
     private uint lastAttemptIndex;
     private RollResult lastAttemptResult = RollResult.UnAwarded;
     private DateTime lastAttemptUtc = DateTime.MinValue;
+    internal Func<LootRollMode>? QueryEffectiveMode { get; set; }
+    private LootRollMode EffectiveMode => QueryEffectiveMode?.Invoke() ?? configuration.LootMode;
 
     public LootAutomationService(
         IDataManager dataManager,
@@ -79,11 +81,11 @@ public sealed class LootAutomationService
     public string Status { get; private set; } = "Loot off.";
 
     public bool IsActive
-        => configuration.LootMode != LootRollMode.Off;
+        => EffectiveMode != LootRollMode.Off;
 
     public void Update(DutyContextSnapshot context, OwnershipMode ownershipMode)
     {
-        if (configuration.LootMode == LootRollMode.Off)
+        if (EffectiveMode == LootRollMode.Off)
         {
             ResetOwnershipLatch();
             Status = "Loot off.";
@@ -147,7 +149,7 @@ public sealed class LootAutomationService
         {
             LogLootDiagnostic(
                 "visible-loot-assist",
-                $"Visible loot assist active outside ADS ownership; mode={configuration.LootMode}, needGreed={needGreedVisible}, notificationLoot={notificationLootVisible}, territory={context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}, cfc={context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}.");
+                $"Visible loot assist active outside ADS ownership; mode={EffectiveMode}, needGreed={needGreedVisible}, notificationLoot={notificationLootVisible}, territory={context.TerritoryTypeId.ToString(CultureInfo.InvariantCulture)}, cfc={context.ContentFinderConditionId.ToString(CultureInfo.InvariantCulture)}.");
         }
 
         if (!needGreedVisible)
@@ -163,7 +165,7 @@ public sealed class LootAutomationService
             if (!needGreedVisible)
             {
                 if (!restoreAttempted)
-                    Status = $"Loot {configuration.LootMode}; waiting for loot window.";
+                    Status = $"Loot {EffectiveMode}; waiting for loot window.";
                 return;
             }
         }
@@ -176,12 +178,12 @@ public sealed class LootAutomationService
                 var duplicateName = TryGetItem(blockedDuplicateItemId, out var duplicateItem)
                     ? duplicateItem.Name.ToString()
                     : $"item {blockedDuplicateItemId.ToString(CultureInfo.InvariantCulture)}";
-                Status = $"Loot {configuration.LootMode}; waiting {GetRemainingSeconds(lastAttemptUtc + SameLootRetryDelay):0.0}s to retry {duplicateName}.";
+                Status = $"Loot {EffectiveMode}; waiting {GetRemainingSeconds(lastAttemptUtc + SameLootRetryDelay):0.0}s to retry {duplicateName}.";
                 return;
             }
 
             ResetAttemptState();
-            Status = $"Loot {configuration.LootMode}; NeedGreed visible but no eligible loot rows.";
+            Status = $"Loot {EffectiveMode}; NeedGreed visible but no eligible loot rows.";
             return;
         }
 
@@ -203,13 +205,13 @@ public sealed class LootAutomationService
             lastAttemptIndex = index;
             lastAttemptResult = decision.Result;
             lastAttemptUtc = now;
-            Status = $"Loot {configuration.LootMode}; {FormatRollResult(decision.Result)} {itemName}.";
+            Status = $"Loot {EffectiveMode}; {FormatRollResult(decision.Result)} {itemName}.";
             log.Information(
                 $"[ADS][Loot] Rolled {FormatRollResult(decision.Result)} on {EscapeLogText(itemName)} ({itemId}) slot={index.ToString(CultureInfo.InvariantCulture)}; {decision.Reason}");
             return;
         }
 
-        Status = $"Loot {configuration.LootMode}; failed to roll {itemName}.";
+        Status = $"Loot {EffectiveMode}; failed to roll {itemName}.";
         LogRollFailure(itemId, index, "native roll call failed");
     }
 
@@ -249,15 +251,17 @@ public sealed class LootAutomationService
 
     private bool TryRestoreMinimizedLoot()
     {
+        if (EffectiveMode == LootRollMode.Off)
+            return false;
         var now = DateTime.UtcNow;
         if (now < nextRestoreAttemptUtc)
         {
-            Status = $"Loot {configuration.LootMode}; minimized loot restore cooling down.";
+            Status = $"Loot {EffectiveMode}; minimized loot restore cooling down.";
             return false;
         }
 
         nextRestoreAttemptUtc = now + RestoreCooldown;
-        if (GameInteractionHelper.TryFireAddonCallback("_Notification", true, 0, 2))
+        if (EffectiveMode != LootRollMode.Off && GameInteractionHelper.TryFireAddonCallback("_Notification", true, 0, 2))
         {
             Status = "Loot notification restored; waiting for NeedGreed.";
             LogLootDiagnostic("restore-minimized-loot", "Restored minimized loot via _Notification true 0 2.");
@@ -271,11 +275,11 @@ public sealed class LootAutomationService
 
     private RollDecision ResolveMissingItemDecision(LootItem lootItem)
     {
-        var baseDesired = MapBaseMode(configuration.LootMode);
+        var baseDesired = MapBaseMode(EffectiveMode);
         var hardCap = GetHardCap(lootItem);
         var final = ResultMerge(baseDesired, hardCap);
         var reason =
-            $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
+            $"base={EffectiveMode}/{FormatRollResult(baseDesired)}, " +
             $"registrable=unknown(itemSheet=missing), " +
             $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
             $"glamour=unknown(itemSheet=missing), " +
@@ -290,7 +294,7 @@ public sealed class LootAutomationService
 
     private RollDecision ResolveDecision(LootItem lootItem, uint itemId, Item item)
     {
-        var baseDesired = MapBaseMode(configuration.LootMode);
+        var baseDesired = MapBaseMode(EffectiveMode);
         var desired = baseDesired;
         var registrableReason = "not-registrable";
         var glamourReason = item.EquipSlotCategory.RowId == 0 ? "not-equippable" : "disabled";
@@ -354,7 +358,7 @@ public sealed class LootAutomationService
 
         var final = ResultMerge(desired, hardCap);
         var reason =
-            $"base={configuration.LootMode}/{FormatRollResult(baseDesired)}, " +
+            $"base={EffectiveMode}/{FormatRollResult(baseDesired)}, " +
             $"registrable={registrableReason}, " +
             $"needMissing={configuration.LootRegistrableNeedingEnabled}, " +
             $"glamour={glamourReason}, " +
@@ -571,6 +575,8 @@ public sealed class LootAutomationService
     {
         try
         {
+            if (EffectiveMode == LootRollMode.Off)
+                return false;
             if (rollItemRaw == null)
             {
                 var now = DateTime.UtcNow;
@@ -582,7 +588,7 @@ public sealed class LootAutomationService
             }
 
             var loot = Loot.Instance();
-            return loot != null && rollItemRaw.Invoke(loot, result, index);
+            return loot != null && EffectiveMode != LootRollMode.Off && rollItemRaw.Invoke(loot, result, index);
         }
         catch (Exception ex)
         {

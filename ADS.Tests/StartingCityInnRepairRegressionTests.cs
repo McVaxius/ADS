@@ -1,4 +1,5 @@
 using System.Numerics;
+using AethertekUI;
 using Dalamud.Bindings.ImGui;
 using System.Buffers.Binary;
 using System.Collections.Frozen;
@@ -21,7 +22,9 @@ using ADS.Services;
 using ADS.Models;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using Xunit;
 
 namespace ADS.Tests;
@@ -29,6 +32,251 @@ namespace ADS.Tests;
 [Collection("ADS configuration IPC")]
 public sealed class StartingCityInnRepairRegressionTests
 {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RepairClickReceiver
+    {
+        public AtkEventListener Listener;
+        public int Calls;
+        public bool ValidClick;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct RepairInventoryManager
+    {
+        public InventoryManager Manager;
+        public InventoryContainer* Equipped;
+    }
+
+    [UnmanagedCallersOnly]
+    private static unsafe InventoryContainer* GetRepairEquippedInventory(InventoryManager* manager, InventoryType inventory)
+        => inventory == InventoryType.EquippedItems ? ((RepairInventoryManager*)manager)->Equipped : null;
+
+    [UnmanagedCallersOnly]
+    private static unsafe void ReceiveRepairClick(AtkEventListener* listener, AtkEventType eventType, int parameter,
+        AtkEvent* click, AtkEventData* data)
+    {
+        var receiver = (RepairClickReceiver*)listener;
+        receiver->Calls++;
+        receiver->ValidClick = eventType == AtkEventType.ButtonClick && parameter == 6 && data != null
+            && click != null && click->Listener == listener;
+        if (click != null) click->Param = 999;
+    }
+
+    [Fact]
+    public unsafe void NpcRepairDispatchesTheRegisteredButtonClickInsteadOfTheFirstNodeEvent()
+    {
+        var vtable = new AtkEventListener.AtkEventListenerVirtualTable { ReceiveEvent = &ReceiveRepairClick };
+        var receiver = new RepairClickReceiver { Listener = new AtkEventListener { VirtualTable = &vtable } };
+        var click = new AtkEvent { Listener = &receiver.Listener, Param = 6 };
+        click.State.EventType = AtkEventType.ButtonClick;
+        var unrelated = new AtkEvent { Listener = &receiver.Listener, Param = 1, NextEvent = &click };
+        unrelated.State.EventType = AtkEventType.MouseDown;
+        var owner = new AtkComponentNode();
+        owner.AtkResNode.NodeFlags = NodeFlags.Enabled;
+        owner.AtkResNode.AtkEventManager.Event = &unrelated;
+        var button = new AtkComponentButton { OwnerNode = &owner };
+        var addon = new AddonRepair { RepairAllButton = &button };
+
+        Assert.True(UtilityAutomationService.TryClickRepairAll(&addon));
+        Assert.True(receiver.ValidClick);
+        Assert.Equal(1, receiver.Calls);
+        Assert.Equal(6u, click.Param);
+        owner.AtkResNode.NodeFlags = 0;
+        Assert.False(UtilityAutomationService.TryClickRepairAll(&addon));
+        owner.AtkResNode.NodeFlags = NodeFlags.Enabled;
+        unrelated.NextEvent = null;
+        Assert.False(UtilityAutomationService.TryClickRepairAll(&addon));
+        button.OwnerNode = null;
+        Assert.False(UtilityAutomationService.TryClickRepairAll(&addon));
+        addon.RepairAllButton = null;
+        Assert.False(UtilityAutomationService.TryClickRepairAll(&addon));
+        Assert.False(UtilityAutomationService.TryClickRepairAll(null));
+        Assert.Equal(1, receiver.Calls);
+    }
+
+    [Fact]
+    public unsafe void RepairCompletionRequiresLoadedEquippedGearAtFullDurability()
+    {
+        var items = stackalloc InventoryItem[3];
+        items[0] = new InventoryItem { ItemId = 1681, Condition = 30000 };
+        items[1] = new InventoryItem { ItemId = 1682, Condition = 21600 };
+        items[2] = new InventoryItem();
+        var equipped = new InventoryContainer { Type = InventoryType.EquippedItems, Items = items, Size = 3, IsLoaded = true };
+
+        Assert.True(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out var needsRepair));
+        Assert.True(needsRepair);
+        items[1].Condition = 30000;
+        Assert.True(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out needsRepair));
+        Assert.False(needsRepair);
+        items[1].Condition = 60000; // Existing self-repair bonus remains fully repaired.
+        Assert.True(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out needsRepair));
+        Assert.False(needsRepair);
+        equipped.IsLoaded = false;
+        Assert.False(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out _));
+        equipped.IsLoaded = true;
+        equipped.Items = null;
+        Assert.False(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out _));
+        equipped.Items = items;
+        equipped.Size = 0;
+        Assert.False(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out _));
+        equipped.Size = 3;
+        items[0] = items[1] = default;
+        Assert.False(UtilityAutomationService.TryGetEquippedGearNeedsRepair(&equipped, out _));
+        Assert.False(UtilityAutomationService.TryGetEquippedGearNeedsRepair(null, out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public unsafe void NpcRepairCannotFinishUntilActualEquippedDurabilityConfirmsTheResult(bool localOnly)
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(localOnly ? fixture.Service.StartNpcRepairNoTeleportNoInn() : fixture.Service.StartNpcRepairNoInn());
+        var item = new InventoryItem { ItemId = 1681, Condition = 21600 };
+        var equipped = new InventoryContainer { Type = InventoryType.EquippedItems, Items = &item, Size = 1, IsLoaded = true };
+        var manager = new RepairInventoryManager { Equipped = &equipped };
+        var previousManager = InventoryManager.Addresses.Instance.Value;
+        var previousContainer = InventoryManager.Addresses.GetInventoryContainer.Value;
+        try
+        {
+            InventoryManager.Addresses.Instance.Value = (nint)(&manager.Manager);
+            InventoryManager.Addresses.GetInventoryContainer.Value =
+                (nint)(delegate* unmanaged<InventoryManager*, InventoryType, InventoryContainer*>)&GetRepairEquippedInventory;
+            Assert.False((bool)Invoke(fixture.Service, "TryCompleteRepairIfFinished", "Fully repaired.")!);
+            Assert.True(fixture.Service.IsRunning);
+            Assert.Empty(fixture.Service.LastSuccessMessage);
+            item.Condition = 30000;
+            equipped.IsLoaded = false;
+            Assert.False((bool)Invoke(fixture.Service, "TryCompleteRepairIfFinished", "Fully repaired.")!);
+            Assert.True(fixture.Service.IsRunning);
+            equipped.IsLoaded = true;
+            Assert.True((bool)Invoke(fixture.Service, "TryCompleteRepairIfFinished", "Fully repaired.")!);
+            Assert.False(fixture.Service.IsRunning);
+            Assert.Equal("Fully repaired.", fixture.Service.LastSuccessMessage);
+            Assert.Empty(fixture.Service.LastFailureMessage);
+        }
+        finally
+        {
+            InventoryManager.Addresses.Instance.Value = previousManager;
+            InventoryManager.Addresses.GetInventoryContainer.Value = previousContainer;
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public unsafe void NpcRepairWindowFailsAnUndispatchedOrSettledButStillDamagedRepair(bool submitted)
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoInn());
+        var item = new InventoryItem { ItemId = 1681, Condition = 21600 };
+        var equipped = new InventoryContainer { Type = InventoryType.EquippedItems, Items = &item, Size = 1, IsLoaded = true };
+        var manager = new RepairInventoryManager { Equipped = &equipped };
+        var vtable = new AtkEventListener.AtkEventListenerVirtualTable { ReceiveEvent = &ReceiveRepairClick };
+        var receiver = new RepairClickReceiver { Listener = new AtkEventListener { VirtualTable = &vtable } };
+        var unrelated = new AtkEvent { Listener = &receiver.Listener, Param = 1 };
+        unrelated.State.EventType = AtkEventType.MouseDown;
+        var owner = new AtkComponentNode();
+        owner.AtkResNode.NodeFlags = NodeFlags.Enabled;
+        owner.AtkResNode.AtkEventManager.Event = &unrelated; // No registered ButtonClick exists.
+        var button = new AtkComponentButton { OwnerNode = &owner };
+        var addon = new AddonRepair { RepairAllButton = &button };
+        addon.AtkUnitBase.IsVisible = true;
+        var previousManager = InventoryManager.Addresses.Instance.Value;
+        var previousContainer = InventoryManager.Addresses.GetInventoryContainer.Value;
+        try
+        {
+            InventoryManager.Addresses.Instance.Value = (nint)(&manager.Manager);
+            InventoryManager.Addresses.GetInventoryContainer.Value =
+                (nint)(delegate* unmanaged<InventoryManager*, InventoryType, InventoryContainer*>)&GetRepairEquippedInventory;
+            var now = DateTime.UtcNow;
+            Set(fixture.Service, "repairWindowSeenUtc", now.AddSeconds(-2));
+            Set(fixture.Service, "repairSubmissionSent", submitted);
+            Set(fixture.Service, "lastActionUtc", now.AddSeconds(-6));
+
+            fixture.Service.UpdateNpcRepairWindow(now, &addon, null);
+
+            Assert.False(fixture.Service.IsRunning);
+            Assert.Empty(fixture.Service.LastSuccessMessage);
+            Assert.Contains(submitted ? "did not verify fully repaired equipped gear" : "could not dispatch",
+                fixture.Service.LastFailureMessage);
+            Assert.Equal(0, receiver.Calls);
+            Assert.Equal(21600, item.Condition);
+        }
+        finally
+        {
+            InventoryManager.Addresses.Instance.Value = previousManager;
+            InventoryManager.Addresses.GetInventoryContainer.Value = previousContainer;
+        }
+    }
+
+    [Fact]
+    public unsafe void NpcRepairWindowDispatchesRepairThenBoundsItsStillVisibleConfirmationWithoutClaimingSuccess()
+    {
+        using var fixture = new NpcSaleFixture(repair: true);
+        Assert.True(fixture.Service.StartNpcRepairNoInn());
+        var item = new InventoryItem { ItemId = 1681, Condition = 21600 };
+        var equipped = new InventoryContainer { Type = InventoryType.EquippedItems, Items = &item, Size = 1, IsLoaded = true };
+        var manager = new RepairInventoryManager { Equipped = &equipped };
+        var vtable = new AtkEventListener.AtkEventListenerVirtualTable { ReceiveEvent = &ReceiveRepairClick };
+        var repairReceiver = new RepairClickReceiver { Listener = new AtkEventListener { VirtualTable = &vtable } };
+        var confirmReceiver = new RepairClickReceiver { Listener = new AtkEventListener { VirtualTable = &vtable } };
+        var repairEvent = new AtkEvent { Listener = &repairReceiver.Listener, Param = 6 };
+        repairEvent.State.EventType = AtkEventType.ButtonClick;
+        var confirmEvent = new AtkEvent { Listener = &confirmReceiver.Listener, Param = 6 };
+        confirmEvent.State.EventType = AtkEventType.ButtonClick;
+        var repairOwner = new AtkComponentNode();
+        repairOwner.AtkResNode.NodeFlags = NodeFlags.Enabled;
+        repairOwner.AtkResNode.AtkEventManager.Event = &repairEvent;
+        var confirmOwner = new AtkComponentNode();
+        confirmOwner.AtkResNode.NodeFlags = NodeFlags.Enabled;
+        confirmOwner.AtkResNode.AtkEventManager.Event = &confirmEvent;
+        var repairButton = new AtkComponentButton { OwnerNode = &repairOwner };
+        var confirmButton = new AtkComponentButton { OwnerNode = &confirmOwner };
+        var addon = new AddonRepair { RepairAllButton = &repairButton };
+        addon.AtkUnitBase.IsVisible = true;
+        var confirmation = new AddonSelectYesno { YesButton = &confirmButton };
+        confirmation.AtkUnitBase.IsVisible = true;
+        var previousManager = InventoryManager.Addresses.Instance.Value;
+        var previousContainer = InventoryManager.Addresses.GetInventoryContainer.Value;
+        try
+        {
+            InventoryManager.Addresses.Instance.Value = (nint)(&manager.Manager);
+            InventoryManager.Addresses.GetInventoryContainer.Value =
+                (nint)(delegate* unmanaged<InventoryManager*, InventoryType, InventoryContainer*>)&GetRepairEquippedInventory;
+            var now = DateTime.UtcNow;
+            Set(fixture.Service, "repairWindowSeenUtc", now.AddSeconds(-2));
+            fixture.Service.UpdateNpcRepairWindow(now, &addon, null);
+            Assert.True(fixture.Service.IsRunning);
+            Assert.True((bool)Get(fixture.Service, "repairSubmissionSent")!);
+            Assert.True(repairReceiver.ValidClick);
+            Assert.Equal(1, repairReceiver.Calls);
+            Assert.Equal(0, confirmReceiver.Calls);
+
+            fixture.Service.UpdateNpcRepairWindow(now, &addon, &confirmation);
+            fixture.Service.UpdateNpcRepairWindow(now.AddSeconds(1), &addon, &confirmation);
+            Assert.Equal(1, confirmReceiver.Calls); // The existing two-second confirmation cooldown.
+            fixture.Service.UpdateNpcRepairWindow(now.AddSeconds(2), &addon, &confirmation);
+            fixture.Service.UpdateNpcRepairWindow(now.AddSeconds(4), &addon, &confirmation);
+            Assert.True(fixture.Service.IsRunning);
+            Assert.Equal(3, Get(fixture.Service, "repairConfirmClickAttempts"));
+            Assert.True(confirmReceiver.ValidClick);
+            Assert.Equal(3, confirmReceiver.Calls);
+            fixture.Service.UpdateNpcRepairWindow(now.AddSeconds(6), &addon, &confirmation);
+            Assert.False(fixture.Service.IsRunning);
+            Assert.Contains("after 3 attempts", fixture.Service.LastFailureMessage);
+            Assert.Empty(fixture.Service.LastSuccessMessage);
+            Assert.Equal(1, repairReceiver.Calls);
+            Assert.Equal(3, confirmReceiver.Calls); // No fourth confirmation or repeat repair dispatch.
+            Assert.Equal(21600, item.Condition);
+        }
+        finally
+        {
+            InventoryManager.Addresses.Instance.Value = previousManager;
+            InventoryManager.Addresses.GetInventoryContainer.Value = previousContainer;
+        }
+    }
+
     [Fact]
     public unsafe void MateriaExtractionSelectsTheFullSpiritbondItemFromTheCurrentNativeSort()
     {
@@ -749,9 +997,11 @@ public sealed class StartingCityInnRepairRegressionTests
             var style = ImGui.GetStyle();
             style.WindowPadding = new Vector2(compact ? 8 : 16) * scale;
             style.ItemSpacing = new Vector2(compact ? 6 : 10, compact ? 3 : 8) * scale;
+            var theme = new MaterialTheme(new Vector3(.3f, .7f, .4f), compact ? MaterialDensity.Compact : MaterialDensity.Standard);
             for (var frame = 0; frame < 2; frame++)
             {
                 ImGui.NewFrame();
+                using var themeScope = MaterialTheme.Push(theme, scale, MaterialStyleMode.ColorsOnly);
                 ImGui.SetNextWindowSize(new(1000, 700));
                 ImGui.Begin("Actual VMX settings origin", ImGuiWindowFlags.NoSavedSettings);
                 try
@@ -1325,7 +1575,6 @@ public sealed class StartingCityInnRepairRegressionTests
 
     [Theory]
     [InlineData(418u, 80u, 429u)]
-    [InlineData(132u, 94u, 179u)]
     public void InnRepairStopsAtAMenderAlongTheRouteAndFinishesTheSamePathAfterRepair(
         uint territory, uint aethernet, uint room)
     {
@@ -1359,6 +1608,50 @@ public sealed class StartingCityInnRepairRegressionTests
         fixture.Service.Update();
         Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
         Assert.Equal(1, Get(fixture.Service, "npcRepairInnPathIndex"));
+        fixture.Service.Cancel("test complete");
+    }
+
+    [Fact]
+    public void GridaniaInnRepairKeepsTheStairsBeforeApproachingAMenderOnTheUpperLevel()
+    {
+        var landing = new Vector3(40, -18.8f, 102.8f);
+        var stairs = new Vector3(40.1f, -10.4f, 122.5f);
+        var upperLevel = new Vector3(35, -8.2f, 128.3f);
+        using var fixture = new NpcSaleFixture(repair: true)
+        { TerritoryId = 132, PlayerPosition = landing, VendorPosition = new Vector3(30, -8.2f, 103) };
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        Set(fixture.Service, "activeNpcRepairMode", Enum.Parse(Get(fixture.Service, "activeNpcRepairMode")!.GetType(), "YesInn"));
+        Set(fixture.Service, "npcRepairRequiredInnTerritory", 179u);
+        var routeType = typeof(UtilityAutomationService).GetNestedType("ResolvedInnRepairRoute", BindingFlags.NonPublic)!;
+        var path = new[] { landing, stairs, upperLevel, new Vector3(27.9f, -8, 100.4f) };
+        var route = Activator.CreateInstance(routeType, 132u, "Synthetic Gridania", 94u, "Synthetic inn", path, 0)!;
+        Set(fixture.Service, "activeNpcRepairInnRoute", route);
+        Set(fixture.Service, "npcRepairTravelStage", Enum.Parse(Get(fixture.Service, "npcRepairTravelStage")!.GetType(), "WalkingInnPath"));
+        Set(fixture.Service, "npcRepairTravelStageStartedUtc", DateTime.UtcNow);
+        Set(fixture.Service, "lastMoveCommandUtc", DateTime.MinValue);
+        fixture.Commands.Clear();
+
+        fixture.Service.Update();
+        Assert.Equal("WalkingInnPath", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal(1, Get(fixture.Service, "npcRepairInnPathIndex"));
+        fixture.Service.Update();
+        Assert.Contains("/vnav moveto 40.10 -10.40 122.50", fixture.Commands);
+        Assert.DoesNotContain("/vnav moveto 30.00 -8.20 103.00", fixture.Commands);
+
+        fixture.PlayerPosition = upperLevel;
+        Set(fixture.Service, "lastMoveCommandUtc", DateTime.MinValue);
+        fixture.Service.Update();
+        Assert.Equal("None", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Contains("/vnav moveto 30.00 -8.20 103.00", fixture.Commands);
+        fixture.PlayerPosition = fixture.VendorPosition;
+        Set(fixture.Service, "npcRepairMenderReached", true);
+        fixture.Commands.Clear();
+        Invoke(fixture.Service, "Complete", "Synthetic verified repair");
+        Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal(path.Length, Get(fixture.Service, "npcRepairInnPathIndex"));
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto"));
+        Assert.Equal(179u, Get(fixture.Service, "npcRepairRequiredInnTerritory"));
+        Assert.Empty(fixture.Service.LastSuccessMessage);
         fixture.Service.Cancel("test complete");
     }
 

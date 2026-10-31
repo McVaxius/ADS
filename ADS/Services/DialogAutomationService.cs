@@ -79,7 +79,8 @@ public sealed class DialogAutomationService
         OwnershipMode ownershipMode,
         bool pluginEnabled,
         bool processDialogRulesOutsideOwnedDuty,
-        bool suppressGenericYesNo)
+        bool suppressGenericYesNo,
+        string? suppressionReason = null)
     {
         RefreshVisibleDialogSnapshot();
 
@@ -103,7 +104,7 @@ public sealed class DialogAutomationService
 
         if (suppressGenericYesNo)
         {
-            SetBlockedStatus("utility repair owns SelectYesno confirmations");
+            SetBlockedStatus(suppressionReason ?? "utility repair owns SelectYesno confirmations");
             return;
         }
 
