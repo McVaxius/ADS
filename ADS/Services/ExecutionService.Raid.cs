@@ -6,6 +6,10 @@ public sealed partial class ExecutionService
 {
     private RaidDutyPolicy? raidPolicy;
     internal RaidDutyPolicy RaidPolicy => raidPolicy ??= new RaidDutyPolicy();
+    private DadDutyLootPolicy? dadLootPolicy;
+    internal DadDutyLootPolicy DadLootPolicy => dadLootPolicy ??= new DadDutyLootPolicy();
+    internal bool HasDadChestOverride(DutyContextSnapshot context)
+        => DadLootPolicy.Read(context)?.OpenChests == true;
     private string? raidLeaveSessionId;
     private string? observedRaidSessionId;
     private string? raidOwnershipSessionId;
@@ -102,14 +106,15 @@ public sealed partial class ExecutionService
     internal bool AreTreasureCoffersEnabled(DutyContextSnapshot context)
     {
         var raid = ReadRaidState(context);
-        return raid.Enabled ? raid.Matches(context) && raid.AdsLootEnabled : configuration.ConsiderTreasureCoffers;
+        return raid.Enabled ? raid.Matches(context) && raid.AdsLootEnabled
+            : DadLootPolicy.Read(context)?.OpenChests ?? configuration.ConsiderTreasureCoffers;
     }
 
     internal LootRollMode GetEffectiveLootMode(DutyContextSnapshot context)
     {
         var raid = ReadRaidState(context);
         if (!raid.Enabled)
-            return configuration.LootMode;
+            return DadLootPolicy.Read(context)?.OpenChests == true ? LootRollMode.Need : configuration.LootMode;
         if (!raid.Matches(context) || !raid.AdsLootEnabled)
             return LootRollMode.Off;
         // The single Raid toggle enables the normal Need policy when ordinary
@@ -216,7 +221,7 @@ public sealed partial class ExecutionService
         return player is null ? null : player.IsDead || player.CurrentHp == 0;
     }
 
-    private bool? ReadRaidLootOutstanding()
+    private bool? ReadDutyLootOutstanding()
         => QueryRaidOutstandingLoot is { } read ? read() : RaidDutyPolicy.ReadOutstandingLoot();
 
     private bool CanDispatchRaidLeave(DutyContextSnapshot context, RaidDutyState raid)
@@ -224,7 +229,7 @@ public sealed partial class ExecutionService
            && !context.IsUnsafeTransition && !context.IsCutscene && !context.InCombat
            && completedDuty == (context.TerritoryTypeId, context.ContentFinderConditionId)
            && ReadRaidPlayerDead() == false
-           && ReadRaidLootOutstanding() == false;
+           && ReadDutyLootOutstanding() == false;
 
     // Runs before any ordinary exit work, and is rechecked immediately before
     // native dispatch. A Raid leave never borrows the explicit leave's Return.

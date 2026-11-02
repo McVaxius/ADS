@@ -988,6 +988,138 @@ public sealed class DutyLeaveRespawnTests
         Assert.False(execution.AreTreasureCoffersEnabled(context));
     }
 
+    [Theory]
+    [InlineData(LootRollMode.Off)]
+    [InlineData(LootRollMode.Greed)]
+    [InlineData(LootRollMode.Pass)]
+    public void DadLootOverrideIsTemporaryAndRevealsCurrentSavedPreferences(LootRollMode savedMode)
+    {
+        using var directory = new TempDirectory();
+        var configuration = new Configuration { LootMode = savedMode, ConsiderTreasureCoffers = false };
+        var execution = CreateExecution(directory.Path, out _, configuration);
+        execution.RaidPolicy.QueryRuntimeStateJson = () => "{\"schemaVersion\":1,\"enabled\":false}";
+        var state = DadLootJson();
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => state;
+        Assert.True(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Need, execution.GetEffectiveLootMode(Context()));
+        Assert.False(configuration.ConsiderTreasureCoffers);
+        Assert.Equal(savedMode, configuration.LootMode);
+        // User edits during the override remain saved; release exposes the new preferences.
+        configuration.ConsiderTreasureCoffers = true;
+        configuration.LootMode = LootRollMode.Greed;
+        Assert.Equal(LootRollMode.Need, execution.GetEffectiveLootMode(Context()));
+        state = "{\"schemaVersion\":1,\"active\":false}";
+        Assert.True(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Greed, execution.GetEffectiveLootMode(Context()));
+        Assert.True(configuration.ConsiderTreasureCoffers);
+        Assert.Equal(LootRollMode.Greed, configuration.LootMode);
+    }
+
+    [Fact]
+    public void DadPolicyCannotLeakAcrossDutyIdentityLogoutTransitionOrProviderLoss()
+    {
+        using var directory = new TempDirectory();
+        var configuration = new Configuration { LootMode = LootRollMode.Pass, ConsiderTreasureCoffers = false };
+        var execution = CreateExecution(directory.Path, out _, configuration);
+        execution.RaidPolicy.QueryRuntimeStateJson = () => "{\"schemaVersion\":1,\"enabled\":false}";
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => DadLootJson();
+        Assert.True(execution.AreTreasureCoffersEnabled(Context()));
+        foreach (var context in new[] { Context(territory: 999), Context(content: 999), Context(inDuty: false),
+                     Context(loggedIn: false), Context(transition: true), Context(transition51: true) })
+        {
+            Assert.False(execution.AreTreasureCoffersEnabled(context));
+            Assert.Equal(LootRollMode.Pass, execution.GetEffectiveLootMode(context));
+        }
+        foreach (var json in new[] { "", "{}", "malformed", DadLootJson().Replace("\"schemaVersion\":1", "\"schemaVersion\":2") })
+        {
+            execution.DadLootPolicy.QueryRuntimeStateJson = () => json;
+            Assert.False(execution.AreTreasureCoffersEnabled(Context()));
+            Assert.Equal(LootRollMode.Pass, execution.GetEffectiveLootMode(Context()));
+        }
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => throw new InvalidOperationException("DAD unloaded");
+        Assert.False(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Pass, execution.GetEffectiveLootMode(Context()));
+    }
+
+    [Fact]
+    public void DadLootSettingsDisableOnlyAdsChestWorkAndRaidPolicyKeepsPrecedence()
+    {
+        using var directory = new TempDirectory();
+        var configuration = new Configuration { LootMode = LootRollMode.Greed, ConsiderTreasureCoffers = true };
+        var execution = CreateExecution(directory.Path, out _, configuration);
+        execution.RaidPolicy.QueryRuntimeStateJson = () => "{\"schemaVersion\":1,\"enabled\":false}";
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => DadLootJson(treasure: false);
+        Assert.False(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Greed, execution.GetEffectiveLootMode(Context()));
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => DadLootJson(method: "Pandora");
+        Assert.False(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Greed, execution.GetEffectiveLootMode(Context()));
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => DadLootJson(method: "All");
+        Assert.True(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Need, execution.GetEffectiveLootMode(Context()));
+        execution.RaidPolicy.QueryRuntimeStateJson = () => RaidJson(loot: false);
+        Assert.False(execution.AreTreasureCoffersEnabled(Context()));
+        Assert.Equal(LootRollMode.Off, execution.GetEffectiveLootMode(Context()));
+        Assert.True(configuration.ConsiderTreasureCoffers);
+        Assert.Equal(LootRollMode.Greed, configuration.LootMode);
+    }
+
+    [Theory]
+    [InlineData(true, false, "AutoDuty", true)]
+    [InlineData(true, false, "All", true)]
+    [InlineData(false, true, "AutoDuty", true)]
+    [InlineData(true, true, "AutoDuty", false)]
+    [InlineData(true, true, "All", false)]
+    [InlineData(true, false, "unknown", false)]
+    public void DadPreflightRejectsUnsupportedPolicies(bool treasure, bool bossOnly, string method, bool accepted)
+    {
+        using var response = JsonDocument.Parse(DadDutyLootPolicy.ValidateJson(DadLootJson(treasure, bossOnly, method)));
+        Assert.Equal(1, response.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(accepted, response.RootElement.GetProperty("success").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(response.RootElement.GetProperty("message").GetString()));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DadForcedLootCompletionSweepsAndWaitsForAwardsBeforeReleasing(bool ownInteractionSent)
+    {
+        using var directory = new TempDirectory();
+        var configuration = new Configuration { LootMode = LootRollMode.Off, ConsiderTreasureCoffers = false };
+        var execution = CreateExecution(directory.Path, out _, configuration);
+        var context = Context(); // Ordinary dungeon identity, not a treasure/raid completion route.
+        execution.RaidPolicy.QueryRuntimeStateJson = () => "{\"schemaVersion\":1,\"enabled\":false}";
+        execution.DadLootPolicy.QueryRuntimeStateJson = () => DadLootJson();
+        var outstanding = true;
+        execution.QueryRaidOutstandingLoot = () => outstanding;
+        Assert.False(Plugin.ShouldRunDutyCompletionTreasureSweep(context, true));
+        Assert.True(execution.HasDadChestOverride(context));
+        Assert.True(execution.StartDutyFromInside(context));
+        execution.MarkDutyCompleted(context, 1044, 831);
+        Assert.True(execution.BeginDutyCompletionTreasureSweep(context, "Synthetic DAD duty"));
+        SetField(execution, "leaveTreasureInteractionSent", ownInteractionSent);
+        var now = DateTime.UtcNow.AddMinutes(1);
+        var exits = 0;
+        void Tick(DateTime time) => execution.UpdateLeaveDuty(context, ObservationSnapshot.Empty, true, () => exits++, time);
+        Tick(now);
+        Tick(now.AddHours(1));
+        Assert.Equal(OwnershipMode.Leaving, execution.CurrentMode);
+        Assert.Contains("DAD final chest work is waiting for native loot distribution", execution.LastStatus);
+        outstanding = false;
+        Tick(now.AddHours(1).AddSeconds(1));
+        Assert.Equal(OwnershipMode.Observing, execution.CurrentMode);
+        Assert.Equal(0, exits); // FrenRider retains departure authority.
+        Assert.False(configuration.ConsiderTreasureCoffers);
+        Assert.Equal(LootRollMode.Off, configuration.LootMode);
+    }
+
+    private static string DadLootJson(bool treasure = true, bool bossOnly = false, string method = "AutoDuty")
+        => JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1, active = true, sessionId = "synthetic-dad-session", territoryTypeId = 1044,
+            contentFinderConditionId = 831, lootTreasure = treasure, lootBossTreasureOnly = bossOnly, lootMethodEnum = method,
+        });
+
     private static string RaidJson(bool enabled = true, bool loot = false, bool allowExit = false,
         bool start = false, bool awaiting = true, uint territory = 1044, uint content = 831,
         bool sourceReadable = true, long recovery = 0, long revision = 1, string session = "synthetic-raid-session")
