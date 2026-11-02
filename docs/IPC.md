@@ -57,7 +57,7 @@ Existing ADS IPC endpoints remain available.
 
 `ADS.Duty.ValidateLootPolicy(string) -> string` validates the v1 policy before DAD queues.
 It returns `{ "schemaVersion": 1, "success": true|false, "message": "..." }` without changing settings or starting work.
-Both companion builds are required; this draft is not release acceptance.
+Requires ADS 2.0.0.17 and DAD 2.1.0.1 or later.
 
 ADS reads `dad.Duty.GetLootPolicyJson() -> string` for its effective loot policy:
 
@@ -88,9 +88,10 @@ preflight because ADS has no reliable boss-coffer classifier. WigglyQuest's requ
 
 Forced-loot ordinary duties also perform a final coffer sweep and wait for native loot distribution before
 releasing ADS ownership; FrenRider retains departure authority. Party-opened coffers are included in this wait.
+FrenRider's configured native automatic exit can bypass this ADS wait.
 
-The `[ADS][DutyLoot]` log records policy activation and release. Test duty, leveling and gearing through
-WigglyQuest before releasing the companion DAD compatibility gate.
+The `[ADS][DutyLoot]` log records policy activation and release. Live WigglyQuest duty, leveling and gearing
+verification has not been performed.
 
 ## Inventory equipment IPC reference
 

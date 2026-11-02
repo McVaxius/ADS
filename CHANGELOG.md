@@ -1,9 +1,9 @@
-2026-11-02 - Temporary DAD duty loot policy (draft, unpublished)
+2026-11-02 - 2.0.0.17 - Temporary DAD duty loot policy
 
 - Validate and consume exact-session DAD loot requests through IPC. Apply chest selection and Need rolls through the existing effective-loot paths without writing Configuration or saving preferences.
 - Release on inactive, missing, unreadable or mismatched DAD state; expose current saved settings, including user edits made during the override. Retain Raid policy precedence.
 - Include forced-loot ordinary duties in the final coffer sweep and wait for native loot awards before releasing ownership to FrenRider.
-- Reject unsupported boss-only chest selection during preflight and add regression coverage for restoration, identity, provider loss, validation and Raid precedence. Release tests and WigglyQuest proof runs remain pending.
+- Reject unsupported boss-only chest selection during preflight and add regression coverage for restoration, identity, provider loss, validation and Raid precedence. Release compilation passed; 2,015 tests passed initially and the remaining checkout-validation test passed with its temporary directory outside Git. Live WigglyQuest proof runs remain unverified. FrenRider's configured native automatic exit can bypass ADS's final-loot wait.
 
 2026-10-31 - Raid coordination, repair and shopping (I704/I707/I705/I701, unversioned)
 
