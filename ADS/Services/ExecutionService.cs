@@ -895,7 +895,8 @@ public sealed partial class ExecutionService
         BeginLeaveTreasureSweep(TimerUtcNow, $"DutyCompleted for {dutyName}");
         activeCompletionTreasureSweepDuty = duty;
         releaseAfterCompletionSweep = context.CurrentDuty?.ContentTypeRowId == 30
-                                      || CompletionTreasureSweepWithoutExitDuty == duty || raid.Enabled;
+                                      || CompletionTreasureSweepWithoutExitDuty == duty || raid.Enabled
+                                      || HasDadChestOverride(context);
         CurrentMode = OwnershipMode.Leaving;
         SetPhase(
             ExecutionPhase.LeavingDuty,
@@ -5436,15 +5437,16 @@ public sealed partial class ExecutionService
                 return;
             }
 
-            if (leaveTreasureInteractionSent)
+            if (leaveTreasureInteractionSent || HasDadChestOverride(context))
             {
-                if (ReadRaidState(context).Enabled)
+                var raidLoot = ReadRaidState(context).Enabled;
+                if (raidLoot || HasDadChestOverride(context))
                 {
-                    if (ReadRaidLootOutstanding() != false)
+                    if (ReadDutyLootOutstanding() != false)
                     {
                         StopMovementAssists();
                         SetPhase(ExecutionPhase.LeavingDuty,
-                            "Raid final chest work is waiting for native loot distribution before releasing ownership.");
+                            $"{(raidLoot ? "Raid" : "DAD")} final chest work is waiting for native loot distribution before {completionAction}.");
                         return;
                     }
                 }

@@ -17,6 +17,7 @@ Existing ADS IPC endpoints remain available.
 - `ADS.Invoke(string action, string payloadJson) -> string`
 - `ADS.GetConfigurationJson() -> string`
 - `ADS.PatchConfigurationJson(string patchJson) -> string`
+- `ADS.Duty.ValidateLootPolicy(string policyJson) -> string`
 - `ADS.StartExtractMateria() -> bool`
 - `ADS.GetExtractMateriaStatusJson() -> string`
 - `ADS.StartDesynth(string mode) -> bool`
@@ -51,6 +52,45 @@ Existing ADS IPC endpoints remain available.
 - `ADS.GetDesynthStatusJson() -> string`
 
 `ADS.OpenPlayerObjectExplorer` opens the existing object explorer, clears its search, level, targetable, and same-map filters, and selects Player. Player rows show a whitelist action only while the loaded DhogNav plugin exposes `DhogNav.AddWhitelistedPlayer(string identity) -> bool`; parasite mode may be off. The action resolves the live player by object ID and sends a complete `Name@HomeServer` identity. DhogNav rejects incomplete identities and active whitelist edits, deduplicates accepted entries, and returns false if saving fails. Save failures can leave the entry in memory; check DhogNav's save status.
+
+## DAD temporary duty loot
+
+`ADS.Duty.ValidateLootPolicy(string) -> string` validates the v1 policy before DAD queues.
+It returns `{ "schemaVersion": 1, "success": true|false, "message": "..." }` without changing settings or starting work.
+Both companion builds are required; this draft is not release acceptance.
+
+ADS reads `dad.Duty.GetLootPolicyJson() -> string` for its effective loot policy:
+
+```json
+{
+  "schemaVersion": 1,
+  "active": true,
+  "sessionId": "duty-ipc-example",
+  "territoryTypeId": 901,
+  "contentFinderConditionId": 41,
+  "lootTreasure": true,
+  "lootBossTreasureOnly": false,
+  "lootMethodEnum": "AutoDuty"
+}
+```
+
+An inactive state is `{ "schemaVersion": 1, "active": false }`. Overrides apply only while logged in,
+inside the exact territory/CFC and outside loading transitions. ADS reads the live DAD session on each evaluation;
+there is no persisted patch or stale settings snapshot to restore. Inactive/missing/unreadable DAD state exposes
+the current saved ADS settings, including user edits made during the override. Existing Raid policy has precedence.
+
+With `LootTreasure=True` and method `AutoDuty` or `All`, ADS collects chests and uses Need with its existing
+native eligibility/fallback rules. `LootTreasure=False` disables ADS chest work without changing ordinary roll
+preferences. Method `Pandora` leaves chest opening to the external provider and uses saved ADS roll preferences;
+ADS does not enable or configure Pandora. Boss-only selection with ADS-owned chest opening is rejected during
+preflight because ADS has no reliable boss-coffer classifier. WigglyQuest's required gearing values are
+`True`, `False`, `AutoDuty`. Unknown methods, schema versions or missing duty identity also fail validation.
+
+Forced-loot ordinary duties also perform a final coffer sweep and wait for native loot distribution before
+releasing ADS ownership; FrenRider retains departure authority. Party-opened coffers are included in this wait.
+
+The `[ADS][DutyLoot]` log records policy activation and release. Test duty, leveling and gearing through
+WigglyQuest before releasing the companion DAD compatibility gate.
 
 ## Inventory equipment IPC reference
 

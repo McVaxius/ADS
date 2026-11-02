@@ -38,6 +38,12 @@ ADS can resolve deterministic NPC vendor offers and NPC placements from local ga
 
 Open Loot Controls with `/ads loot` or the exact `/ads l` toggle alias. The default-off **Need/Greed missing glamour gear (XA Database)** option checks current-character ownership for equippable loot. Ownership includes all four inventory bags, equipped items, the Armoury Chest, both left and right normal/premium chocobo saddlebags, retainers, armoire and glamour dresser. Live NQ/HQ copies and registration establish ownership; XADB supplies recorded copies for these locations when they are not loaded. An item without a native or recorded copy is treated as missing, including unrecorded or unavailable storage. Recorded copies remain owned regardless of snapshot age; users must open storage and refresh XADB to update its contents. Live Greed/Pass availability still caps the result, and the option remains manual to enable.
 
+## DAD duty loot
+
+DAD's WigglyQuest duty bridge can temporarily force chest collection and Need rolls for its exact active duty.
+This uses an in-memory policy and never saves or replaces ADS loot preferences. When DAD stops, completes,
+unloads or no longer matches the duty, current saved preferences take effect. See [DAD duty loot IPC](docs/IPC.md#dad-temporary-duty-loot).
+
 ## FrenRider Raid mode
 
 Raid mode requires updated builds of both FrenRider and ADS. Open **Raid Mode** from FrenRider Main or Mini. A genuine completed party pull countdown can request one scoped ADS inside start. While armed, Raid replaces queued **Start Outside** takeover and automatic reload/update restarts; deliberate current-duty **Start Inside**, **Resume**, **Stop** and **Leave** remain available. After a confirmed wipe or manual Return, progression waits for a fresh countdown or deliberate inside start/resume. Normal combat choices remain under FrenRider's control.

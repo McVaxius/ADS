@@ -65,6 +65,7 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.LeaveDuty", leaveDuty);
         Register(pluginInterface, "ADS.Raid.StartDutyFromInside", startRaidDutyFromInside ?? (() => false));
         Register(pluginInterface, "ADS.Raid.LeaveDuty", leaveRaidDuty ?? (() => false));
+        Register<string, string>(pluginInterface, DadDutyLootPolicy.ValidationChannel, DadDutyLootPolicy.ValidateJson);
         Register(pluginInterface, "ADS.OpenLootUi", openLootUi);
         Register(pluginInterface, "ADS.ToggleLootUi", toggleLootUi);
         Register(pluginInterface, "ADS.StartRepair", startRepair);

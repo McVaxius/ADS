@@ -420,6 +420,10 @@ public sealed class Plugin : IDalamudPlugin
         var raidRuntimeState = PluginInterface.GetIpcSubscriber<string>("FrenRider.Raid.GetRuntimeStateJson");
         ExecutionService.RaidPolicy.QueryRuntimeStateJson = () =>
             raidRuntimeState.HasFunction ? raidRuntimeState.InvokeFunc() : null;
+        var dadLootState = PluginInterface.GetIpcSubscriber<string>(DadDutyLootPolicy.StateChannel);
+        ExecutionService.DadLootPolicy.QueryRuntimeStateJson = () =>
+            dadLootState.HasFunction ? dadLootState.InvokeFunc() : null;
+        ExecutionService.DadLootPolicy.Log = message => Log.Information($"[ADS][DutyLoot] {message}");
         LootAutomationService.QueryEffectiveMode = () => ExecutionService.GetEffectiveLootMode(DutyContextService.Current);
 
         mainWindow = new MainWindow(this);
@@ -3567,7 +3571,8 @@ public sealed class Plugin : IDalamudPlugin
 
         var considerTreasureCoffers = ExecutionService.AreTreasureCoffersEnabled(context);
         if ((ShouldRunDutyCompletionTreasureSweep(context, considerTreasureCoffers)
-             || ExecutionService.ReadRaidState(context).Enabled && considerTreasureCoffers)
+             || ExecutionService.ReadRaidState(context).Enabled && considerTreasureCoffers
+             || ExecutionService.HasDadChestOverride(context))
             && ExecutionService.BeginDutyCompletionTreasureSweep(context, dutyName))
         {
             PrintStatus(ExecutionService.LastStatus);
