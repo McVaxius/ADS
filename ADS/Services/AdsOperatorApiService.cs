@@ -15,6 +15,8 @@ public sealed class AdsOperatorApiService
         => JsonSerializer.Serialize(new
         {
             schemaVersion = 1,
+            dutyMaturityQuery = 1,
+            dutyMaturityIpc = DutyMaturityIpc.Channel,
             guardedShopPurchases = 1,
             shopPurchaseTravelPolicy = 1,
             achievementCertificatePurchases = 1,
