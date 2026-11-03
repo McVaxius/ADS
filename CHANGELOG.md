@@ -1,3 +1,9 @@
+2026-11-03 - 2.0.0.18 - Read-only duty maturity IPC
+
+- Add `ADS.Duty.GetMaturityJson(territoryTypeId, contentFinderConditionId)` for exact catalog maturity before queueing. Return schema/version, identity, clearance, support level and QST eligibility; maturity 0 is ineligible and 1–3 are eligible in every mode.
+- Reject missing, mismatched, ambiguous and invalid rows without substituting the current duty. Query live catalog values without changing configuration, duty execution, loot, or existing IPC signatures.
+- Advertise the additive query in capabilities and cover all maturity levels, identity rejection, duplicate/invalid rows and live edits. In-game paired DAD acceptance remains pending.
+
 2026-11-02 - 2.0.0.17 - Temporary DAD duty loot policy
 
 - Validate and consume exact-session DAD loot requests through IPC. Apply chest selection and Need rolls through the existing effective-loot paths without writing Configuration or saving preferences.

@@ -413,7 +413,8 @@ public sealed class Plugin : IDalamudPlugin
             OpenPlayerObjectExplorer,
             Log,
             StartRaidDutyFromInside,
-            LeaveRaidDuty);
+            LeaveRaidDuty,
+            GetDutyMaturityJson);
         ReflectionIpcService = new ReflectionIpcService(PluginInterface, BmrReflectionService);
         ExecutionService.QueryPhoenixDownRecoveryHold = () =>
             PluginInterface.GetIpcSubscriber<bool>("FrenRider.PhoenixDown.ShouldPauseDutyProgression").InvokeFunc();
@@ -1993,6 +1994,13 @@ public sealed class Plugin : IDalamudPlugin
 
     public string GetCapabilitiesJson()
         => AdsOperatorApiService.GetCapabilitiesJson();
+
+    private string GetDutyMaturityJson(uint territoryTypeId, uint contentFinderConditionId)
+        => Framework.IsInFrameworkUpdateThread
+            ? DutyMaturityIpc.Query(DutyCatalogService.Entries, territoryTypeId, contentFinderConditionId)
+            : Framework.RunOnFrameworkThread(() =>
+                DutyMaturityIpc.Query(DutyCatalogService.Entries, territoryTypeId, contentFinderConditionId))
+                .GetAwaiter().GetResult();
 
     public string Invoke(string action, string payloadJson)
         => AdsOperatorApiService.Invoke(action, payloadJson);

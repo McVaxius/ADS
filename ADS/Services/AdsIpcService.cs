@@ -57,7 +57,8 @@ public sealed class AdsIpcService : IDisposable
         Func<bool> openPlayerObjectExplorer,
         IPluginLog log,
         Func<bool>? startRaidDutyFromInside = null,
-        Func<bool>? leaveRaidDuty = null)
+        Func<bool>? leaveRaidDuty = null,
+        Func<uint, uint, string>? getDutyMaturityJson = null)
     {
         Register(pluginInterface, "ADS.StartDutyFromOutside", startDutyFromOutside);
         Register(pluginInterface, "ADS.StartDutyFromInside", startDutyFromInside);
@@ -65,6 +66,8 @@ public sealed class AdsIpcService : IDisposable
         Register(pluginInterface, "ADS.LeaveDuty", leaveDuty);
         Register(pluginInterface, "ADS.Raid.StartDutyFromInside", startRaidDutyFromInside ?? (() => false));
         Register(pluginInterface, "ADS.Raid.LeaveDuty", leaveRaidDuty ?? (() => false));
+        if (getDutyMaturityJson != null)
+            Register(pluginInterface, DutyMaturityIpc.Channel, getDutyMaturityJson);
         Register<string, string>(pluginInterface, DadDutyLootPolicy.ValidationChannel, DadDutyLootPolicy.ValidateJson);
         Register(pluginInterface, "ADS.OpenLootUi", openLootUi);
         Register(pluginInterface, "ADS.ToggleLootUi", toggleLootUi);

@@ -354,3 +354,23 @@ Deprecated compatibility inputs:
 
 - `desynthCategories`: accepted as raw legacy salvage category names, then normalized to `desynthInventoryScope`.
 - `desynthProtectGearsets`: accepted as legacy input, then folded into `desynthInventoryScope`.
+
+### Duty maturity before queueing
+
+`ADS.Duty.GetMaturityJson(uint territoryTypeId, uint contentFinderConditionId) -> string`
+returns the exact catalog row independently of the current territory or active duty. This read-only query does not start work or save settings. `ADS.GetCapabilitiesJson` advertises `dutyMaturityQuery: 1` and `dutyMaturityIpc`.
+
+```json
+{"schemaVersion":1,"success":true,"territoryTypeId":901,"contentFinderConditionId":41,"dutyName":"Example","clearanceStatus":"OnePlayerUnsyncCleared","clearanceLevel":1,"supportLevel":"PassiveOnly","eligibleForQuest":true,"message":""}
+```
+
+| Clearance level | Clearance status | QST eligible, in any mode |
+| --- | --- | --- |
+| 0 | `NotCleared` | No |
+| 1 | `OnePlayerUnsyncCleared` | Yes |
+| 2 | `OnePlayerDutySupport` | Yes |
+| 3 | `FourPlayerSyncCleared` | Yes |
+
+QST uses **any nonzero known maturity**, with no higher Duty Support or synced-mode threshold. This is recorded clearance evidence, not a guarantee of completion. A row marked `PassiveOnly` remains eligible when its maturity is nonzero; support level is reported separately.
+
+Zero IDs, unknown or mismatched territory/CFC, ambiguous rows and invalid clearance values return `success:false`, `clearanceLevel:null`, `eligibleForQuest:false` and a reason in `message`. Do not treat these as maturity 0 or borrow a different row. Query again after changing duty or immediately before starting; live maturity edits appear without an IPC reload. Existing status, start, loot and configuration endpoints retain their signatures and behavior.
