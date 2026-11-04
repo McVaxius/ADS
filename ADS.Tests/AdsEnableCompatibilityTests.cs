@@ -329,6 +329,21 @@ public sealed class AdsEnableCompatibilityTests
             Assert.Equal(2, equips);
             var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
             using var capabilities = JsonDocument.Parse(new AdsOperatorApiService(plugin).GetCapabilitiesJson());
+            Assert.Equal(1, capabilities.RootElement.GetProperty("schemaVersion").GetInt32());
+            var repairModes = capabilities.RootElement.GetProperty("repairModes").EnumerateArray()
+                .Select(item => item.GetString()).ToArray();
+            Assert.Equal(new[]
+            {
+                "self", "npc", "npc-yes-inn", "npc-no-inn", "npc-no-teleport-no-inn",
+                "npc-yes-inn-uldah", "npc-no-inn-uldah",
+                "npc-yes-inn-gridania", "npc-no-inn-gridania",
+                "npc-yes-inn-limsa", "npc-no-inn-limsa",
+                "npc-yes-inn-ishgard", "npc-no-inn-ishgard",
+                "npc-yes-inn-crystarium", "npc-no-inn-crystarium",
+                "npc-yes-inn-sharlayan", "npc-no-inn-sharlayan",
+                "npc-yes-inn-tuliyollal", "npc-no-inn-tuliyollal",
+            }, repairModes);
+            Assert.All(repairModes, mode => Assert.Equal(mode, Plugin.NormalizeRepairMode(mode)));
             Assert.Equal(1, capabilities.RootElement.GetProperty("equipmentMoving").GetInt32());
             Assert.Equal(1, capabilities.RootElement.GetProperty("autoEquip").GetInt32());
             Assert.Equal(new[] { "ADS.StartGearMove", "ADS.StartAutoEquip", "ADS.GetStatusJson", "ADS.CancelUtility" },

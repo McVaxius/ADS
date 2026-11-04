@@ -93,6 +93,21 @@ FrenRider's configured native automatic exit can bypass this ADS wait.
 The `[ADS][DutyLoot]` log records policy activation and release. Live WigglyQuest duty, leveling and gearing
 verification has not been performed.
 
+## NPC repair city selection
+
+`ADS.StartRepair(string mode)` accepts `self`, `npc`, `npc-yes-inn`, `npc-no-inn`, and
+`npc-no-teleport-no-inn`. Both `npc-yes-inn-<city>` and `npc-no-inn-<city>` support `uldah`,
+`gridania`, `limsa`, `ishgard`, `crystarium`, `sharlayan`, and `tuliyollal`.
+
+`ADS.GetCapabilitiesJson()` keeps `schemaVersion: 1` and adds `repairModes`, containing the exact 19
+canonical modes. Check membership before sending a new city-specific no-inn request; older ADS versions do
+not support that contract. Missing support must not silently substitute another mode.
+
+The start result confirms acceptance. Observe shared utility status until completion and correlate fresh
+terminal timestamps with the accepted request. `utilityMode` retains the requested city even when native
+unlock checks select an eligible starting-city fallback. Repair-then-inn remains active through verified
+room entry; no-inn ends after repair without entering a room. Shared cancellation is not operation-ID scoped.
+
 ## Inventory equipment IPC reference
 
 | Endpoint | Return | Purpose |

@@ -1633,11 +1633,19 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     public bool StartNpcRepairNoInn()
+        => StartNpcRepairNoInn(null);
+
+    public bool StartNpcRepairNoInn(string? destination)
     {
+        if (destination != null && !UtilityAutomationService.TryGetInnDestination(destination, out _, out _))
+        {
+            PrintStatus("Unknown repair city. Use uldah, gridania, limsa, ishgard, crystarium, sharlayan, or tuliyollal.");
+            return false;
+        }
         if (!CanStartManualUtility("NPC repair without inn fallback"))
             return false;
 
-        var result = UtilityAutomationService.StartNpcRepairNoInn();
+        var result = UtilityAutomationService.StartNpcRepairNoInn(destination);
         PrintStatus(result ? UtilityAutomationService.StatusMessage : $"NPC repair not started: {UtilityAutomationService.StatusMessage}");
         return result;
     }
@@ -1672,7 +1680,7 @@ public sealed class Plugin : IDalamudPlugin
         var normalized = NormalizeRepairMode(mode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            PrintStatus("Repair mode must be self, npc, npc-yes-inn[-destination], npc-no-inn, or npc-no-teleport-no-inn.");
+            PrintStatus("Repair mode must be self, npc, npc-yes-inn[-city], npc-no-inn[-city], or npc-no-teleport-no-inn.");
             return false;
         }
 
@@ -1683,6 +1691,8 @@ public sealed class Plugin : IDalamudPlugin
             "npc-yes-inn" => StartNpcRepairYesInn(),
             "npc-no-inn" => StartNpcRepairNoInn(),
             "npc-no-teleport-no-inn" => StartNpcRepairNoTeleportNoInn(),
+            _ when normalized.StartsWith("npc-no-inn-", StringComparison.Ordinal)
+                => StartNpcRepairNoInn(normalized["npc-no-inn-".Length..]),
             _ => StartNpcRepairYesInn(normalized["npc-yes-inn-".Length..]),
         };
     }
@@ -2503,6 +2513,9 @@ public sealed class Plugin : IDalamudPlugin
         var normalized = (mode ?? string.Empty).Trim().ToLowerInvariant();
         if (normalized.StartsWith("npc-yes-inn-", StringComparison.Ordinal)
             && UtilityAutomationService.TryGetInnDestination(normalized["npc-yes-inn-".Length..], out _, out _))
+            return normalized;
+        if (normalized.StartsWith("npc-no-inn-", StringComparison.Ordinal)
+            && UtilityAutomationService.TryGetInnDestination(normalized["npc-no-inn-".Length..], out _, out _))
             return normalized;
         return normalized switch
         {
@@ -3643,7 +3656,7 @@ public sealed class Plugin : IDalamudPlugin
                 "/ads selfrepair - open self-repair and repair equipped gear\n" +
                 "/ads npcrepair - move to a nearby repair NPC and repair equipped gear\n" +
                 "/ads npcrepair yesinn [uldah|gridania|limsa|ishgard|crystarium|sharlayan|tuliyollal] - repair near an inn, then enter its room\n" +
-                "/ads npcrepair noinn - NPC repair without inn fallback\n" +
+                "/ads npcrepair noinn [uldah|gridania|limsa|ishgard|crystarium|sharlayan|tuliyollal] - NPC repair without entering an inn\n" +
                 "/ads npcrepair-no-teleport-no-inn - NPC repair only if a mender is within 120y\n" +
                 "/ads extractmateria - extract ready materia from gear\n" +
                 "/ads desynth - open desynthesis controls\n" +
@@ -3921,6 +3934,13 @@ public sealed class Plugin : IDalamudPlugin
             || trimmed.Equals("npcrepair no-inn", StringComparison.OrdinalIgnoreCase))
         {
             StartNpcRepairNoInn();
+            return;
+        }
+
+        if (trimmed.StartsWith("npcrepair noinn ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("npcrepair no-inn ", StringComparison.OrdinalIgnoreCase))
+        {
+            StartNpcRepairNoInn(trimmed[(trimmed.IndexOf(' ', "npcrepair ".Length) + 1)..].Trim());
             return;
         }
 

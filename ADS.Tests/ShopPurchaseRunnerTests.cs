@@ -369,7 +369,14 @@ public sealed class ShopPurchaseRunnerTests
     public void CompanyActionsUseSeparateInventoryAndRequireVerifiedCreditDeltas(string scenario)
     {
         var clock = new FakeClock();
-        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = scenario != "missing-credit-delta", ItemCount = 999 };
+        var runtime = new FakeRuntime
+        {
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = scenario != "missing-credit-delta",
+            ItemCount = 999,
+            ShowConfirmationAfterSubmit = true,
+            AcceptOwnedConfirmation = true,
+        };
         var currency = new ShopCurrencyIdentity(ShopCurrencyKind.FreeCompanyCredit, 0);
         runtime.SetCurrency(currency, 100_000);
         var offer = Offer(10, 100, 2) with
@@ -400,6 +407,66 @@ public sealed class ShopPurchaseRunnerTests
             Assert.False(runner.Status.Succeeded);
             Assert.Equal(scenario == "missing-credit-delta" ? 1 : 0, runtime.SubmitCount);
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CompanyActionWaitsForDelayedConfirmationBeforeRefreshingInventory(bool dialogAppears)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { AcceptOwnedConfirmation = true };
+        var currency = new ShopCurrencyIdentity(ShopCurrencyKind.FreeCompanyCredit, 0);
+        runtime.SetCurrency(currency, 100_000);
+        var offer = Offer(10, 100, 1) with
+        {
+            Kind = ShopOfferKind.CompanyActionShop,
+            ReceiveItemName = "Seal Sweetener II",
+            Currencies = [new(ShopCurrencyKind.FreeCompanyCredit, 0, "Free Company Credits", 7000)],
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1) { CompanyAction = true }, false, currency));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+
+        // Submission closes the FC inventory windows before the native dialog may appear.
+        runtime.CompanyInventoryReady = false;
+        var inventoryPreparationsBeforeDialog = runtime.CompanyInventoryPreparationCount;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        runner.Update();
+
+        Assert.True(runner.IsRunning);
+        Assert.Equal(inventoryPreparationsBeforeDialog, runtime.CompanyInventoryPreparationCount);
+        Assert.Equal(0, runtime.AcceptedConfirmationCount);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(0, runner.VerifiedAcquiredQuantity);
+
+        if (dialogAppears)
+        {
+            runtime.HasUnexpectedConfirmation = true;
+            runner.Update();
+            Assert.Equal(1, runtime.AcceptedConfirmationCount);
+
+            runtime.CompanyInventoryReady = true;
+            runtime.CompanyActionCount = 1;
+            runtime.AdjustCurrency(currency, -7000);
+            DriveWithTime(runner, clock);
+
+            Assert.True(runner.Status.Succeeded, runner.Status.FailureMessage);
+            Assert.Equal(1, runner.VerifiedAcquiredQuantity);
+            Assert.Equal(93_000, runtime.GetAvailableCurrency(offer.Currencies[0]));
+            Assert.True(runtime.CompanyInventoryPreparationCount > inventoryPreparationsBeforeDialog);
+        }
+        else
+        {
+            DriveWithTime(runner, clock);
+
+            Assert.Equal(ShopPurchaseFailureCodes.Timeout, runner.Status.FailureCode);
+            Assert.Equal(inventoryPreparationsBeforeDialog, runtime.CompanyInventoryPreparationCount);
+            Assert.Equal(0, runtime.AcceptedConfirmationCount);
+            Assert.Equal(0, runner.VerifiedAcquiredQuantity);
+        }
+
+        Assert.Equal(1, runtime.SubmitCount);
     }
 
     [Theory]
@@ -2703,11 +2770,16 @@ public sealed class ShopPurchaseRunnerTests
         public ulong FreeCompanyId { get; set; } = 1;
         public byte FreeCompanyGrandCompany => 2;
         public byte FreeCompanyRank => 8;
-        public long CompanyActionCount { get; private set; }
+        public long CompanyActionCount { get; set; }
         public bool CompanyInventoryReady { get; set; } = true;
         public long GetCompanyActionCount(uint actionId) => CompanyInventoryReady ? CompanyActionCount : -1;
         public long GetCompanyActionCapacity() => 10 - CompanyActionCount;
-        public bool PrepareCompanyActionInventory() => CompanyInventoryReady;
+        public int CompanyInventoryPreparationCount { get; private set; }
+        public bool PrepareCompanyActionInventory()
+        {
+            CompanyInventoryPreparationCount++;
+            return CompanyInventoryReady;
+        }
         public bool CleanupBlocked { get; set; }
         public string? ShopListCleanupBlocker => CleanupBlocked || IsAnyShopVisible ? "Synthetic shop cleanup is pending" : null;
         public bool IsBetweenAreas { get; set; }

@@ -25,6 +25,10 @@ public sealed class AdsOperatorApiService
             equipmentSelling = 1,
             equipmentMoving = 1,
             autoEquip = 1,
+            repairModes = new[] { "self", "npc", "npc-yes-inn", "npc-no-inn", "npc-no-teleport-no-inn" }
+                .Concat(new[] { "uldah", "gridania", "limsa", "ishgard", "crystarium", "sharlayan", "tuliyollal" }
+                    .SelectMany(city => new[] { "npc-yes-inn-" + city, "npc-no-inn-" + city }))
+                .ToArray(),
             equipmentUtilityIpc = new[] { "ADS.StartGearMove", "ADS.StartAutoEquip", "ADS.GetStatusJson", "ADS.CancelUtility" },
             equipmentSaleScopes = new[] { "inventory", "armoury", "both" },
             equipmentSaleIpc = new[] { "ADS.PreviewGearSaleJson", "ADS.StartGearSale", "ADS.GetGearSaleStatusJson", "ADS.CancelGearSale" },

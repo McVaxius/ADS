@@ -1,3 +1,12 @@
+2026-11-04 - 2.0.0.20 - Company-action confirmation and NPC repair cities (I728/I729/I734-I737)
+
+- Wait for the owned company-action purchase confirmation before reopening FC inventory, preventing an inventory refresh from interrupting a delayed Seal Sweetener purchase dialog.
+- Keep exact confirmation and action/credit checks. A missing dialog uses the existing timeout and never repeats the purchase callback.
+- Validation: the delayed/missing-dialog regression failed before the fix; all 200 purchase-runner tests pass afterward. Native purchase acceptance remains user-controlled.
+- Support all seven selected cities with and without inn entry. Advertise exact repair modes under the existing capability schema and preserve the requested mode through fallback and cancellation.
+- Validate native destination-shard unlocks and the matching unlocked main crystal before inter-city travel. If the requested route is unavailable, consider only eligible starting-city fallbacks.
+- Approach a reachable mender directly after leaving an inn and enter the nearby innkeeper after repair without replaying arrival waypoints. Preserve Gridania's level-aware approach, verify the selected city before return and keep no-inn trips outside.
+
 2026-11-03 - 2.0.0.18 - Read-only duty maturity IPC
 
 - Add `ADS.Duty.GetMaturityJson(territoryTypeId, contentFinderConditionId)` for exact catalog maturity before queueing. Return schema/version, identity, clearance, support level and QST eligibility; maturity 0 is ineligible and 1–3 are eligible in every mode.

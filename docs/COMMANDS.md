@@ -90,16 +90,25 @@ Utility automation cannot start while ADS owns active duty execution or while in
 | `/ads repair self` | Start self-repair |
 | `/ads repair npc` | Start NPC repair with normal fallback behavior |
 | `/ads repair npc-no-inn` | Start NPC repair without inn fallback |
+| `/ads repair npc-yes-inn[-city]` | Repair in the selected city, then enter its inn |
+| `/ads repair npc-no-inn-<city>` | Repair in the selected city without entering its inn |
 | `/ads repair npc-no-teleport-no-inn` | Use nearby NPC repair only; no teleport or inn fallback |
 | `/ads selfrepair` | Open self-repair and repair equipped gear |
 | `/ads npcrepair` | Move to a nearby repair NPC and repair equipped gear |
 | `/ads npcrepair noinn` | NPC repair without inn fallback |
+| `/ads npcrepair noinn <city>` | NPC repair in the selected city without inn entry |
+| `/ads npcrepair yesinn [city]` | NPC repair followed by inn entry, optionally in the selected city |
 | `/ads npcrepair no-inn` | Alias for `/ads npcrepair noinn` |
 | `/ads npcrepair-no-teleport-no-inn` | NPC repair only when a mender is within `120y` |
 | `/ads extractmateria` | Extract ready materia from gear |
 | `/ads desynthfrominventory` | Desynthesize inventory equipment directly |
 
 Running `/ads repair` without a mode prints valid modes.
+
+City tokens are `uldah`, `gridania`, `limsa`, `ishgard`, `crystarium`, `sharlayan`, and `tuliyollal`.
+Selected-city travel validates the native shard unlock and matching main crystal. An unavailable preferred
+route falls back only to an eligible starting city. No-inn city travel starts from an inn, sanctuary or nearby
+aetheryte/aethernet and never enters an inn afterward. Omitting a city retains the existing automatic route.
 
 Shop item IDs and quantities must be decimal integers. Item ID must be a positive `uint`; quantity must be `1` through `9999`. Quantity means additional item units, not transactions and not a target inventory count. Deterministic gil, special/FATE, Inclusion, Grand Company, and Free Company families are eligible; turn-in, sale, lottery, ambiguous, or unprovable offers fail closed. Missing, extra, non-decimal, or out-of-range arguments are rejected without starting automation. See [Shop Purchasing](SHOP_PURCHASING.md).
 

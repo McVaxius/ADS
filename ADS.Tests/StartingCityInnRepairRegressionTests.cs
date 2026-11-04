@@ -22,6 +22,7 @@ using ADS.Services;
 using ADS.Models;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -1575,7 +1576,9 @@ public sealed class StartingCityInnRepairRegressionTests
 
     [Theory]
     [InlineData(418u, 80u, 429u)]
-    public void InnRepairStopsAtAMenderAlongTheRouteAndFinishesTheSamePathAfterRepair(
+    [InlineData(128u, 41u, 177u)]
+    [InlineData(130u, 33u, 178u)]
+    public void InnRepairStopsAtAMenderWithoutReplayingArrivalWaypointsAfterRepair(
         uint territory, uint aethernet, uint room)
     {
         using var fixture = new NpcSaleFixture(repair: true)
@@ -1598,16 +1601,161 @@ public sealed class StartingCityInnRepairRegressionTests
 
         fixture.PlayerPosition = fixture.VendorPosition;
         Set(fixture.Service, "npcRepairMenderReached", true);
+        fixture.Commands.Clear();
         Invoke(fixture.Service, "Complete", "Synthetic repair finished");
-        fixture.Service.Update();
         Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
         Assert.Equal(room, Get(fixture.Service, "npcRepairRequiredInnTerritory"));
-        Assert.Contains("/vnav moveto 12.00 0.00 0.00", fixture.Commands);
-        Assert.Empty(fixture.Service.LastSuccessMessage);
-        fixture.PlayerPosition = waypoint;
-        fixture.Service.Update();
-        Assert.Equal("ReturningToInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
         Assert.Equal(1, Get(fixture.Service, "npcRepairInnPathIndex"));
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto"));
+        Assert.Empty(fixture.Service.LastSuccessMessage);
+        fixture.Service.Cancel("test complete");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void InnReturnRejectsAnotherCityEvenWhenTheArrivalPathWasExhausted(int pathIndex)
+    {
+        using var fixture = new NpcSaleFixture(repair: true) { TerritoryId = 128 };
+        Assert.True(fixture.Service.StartNpcRepairNoTeleportNoInn());
+        Set(fixture.Service, "activeNpcRepairMode", Enum.Parse(Get(fixture.Service, "activeNpcRepairMode")!.GetType(), "YesInn"));
+        Set(fixture.Service, "npcRepairRequiredInnTerritory", 177u);
+        var routeType = typeof(UtilityAutomationService).GetNestedType("ResolvedInnRepairRoute", BindingFlags.NonPublic)!;
+        var route = Activator.CreateInstance(routeType, 128u, "Synthetic Limsa", 41u, "Synthetic inn",
+            new[] { new Vector3(12, 0, 0) }, 0)!;
+        Set(fixture.Service, "activeNpcRepairInnRoute", route);
+        Set(fixture.Service, "npcRepairMenderReached", true);
+        Invoke(fixture.Service, "Complete", "Synthetic repair finished");
+        Set(fixture.Service, "npcRepairInnPathIndex", pathIndex);
+        Set(fixture.Service, "npcRepairTravelStageStartedUtc", DateTime.UtcNow.AddSeconds(-3));
+        fixture.TerritoryId = 130;
+        fixture.Commands.Clear();
+
+        Invoke(fixture.Service, "UpdateNpcRepairInnReturn");
+
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains("left the selected inn city", fixture.Service.LastFailureMessage);
+        Assert.Empty(fixture.Service.LastSuccessMessage);
+        Assert.False((bool)Get(fixture.Service, "npcRepairInnEntryStarted")!);
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto") || command.StartsWith("/li "));
+    }
+
+    [Theory]
+    [InlineData("uldah", 33u)]
+    [InlineData("gridania", 94u)]
+    [InlineData("limsa", 41u)]
+    [InlineData("ishgard", 80u)]
+    [InlineData("crystarium", 152u)]
+    [InlineData("sharlayan", 185u)]
+    [InlineData("tuliyollal", 220u)]
+    public void SelectedCityNoInnExitsTheStartingInnBeforeApproachingAnyMender(string city, uint shard)
+    {
+        using var fixture = new NpcSaleFixture(repair: true)
+            { TerritoryId = 178, VendorPosition = new Vector3(4, 0, 0) };
+        Assert.True(fixture.Service.StartNpcRepairNoInn(city));
+        Assert.Equal("npc-no-inn-" + city, fixture.Service.ActiveModeName);
+        Assert.Equal(shard, Get(fixture.Service, "npcRepairDestinationAethernet"));
+        Assert.Equal(0u, Get(fixture.Service, "npcRepairRequiredInnTerritory"));
+        Assert.Equal("ExitingInn", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.False(fixture.Service.StartNpcRepairNoInn("unknown"));
+        Assert.True(fixture.Service.IsRunning);
+        Assert.Equal(shard, Get(fixture.Service, "npcRepairDestinationAethernet"));
+
+        fixture.Service.Update(); // The fabricated inn deliberately has a mender but no exit door.
+
+        Assert.False(fixture.Service.IsRunning);
+        Assert.Contains("inn-room exit door", fixture.Service.LastFailureMessage);
+        Assert.Equal(0, fixture.TargetChanges);
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto") || command.StartsWith("/li "));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public unsafe void SelectedCityRepairPrefersItsUnlockedRouteAndPreservesRequestedIdentityDuringFallback(bool enterInn)
+    {
+        var module = SaleExcelModule(repairRouteNames: true);
+        var aetherytes = RepairAetherytes(module,
+            (8, true, 129, 1), (41, false, 128, 1), (2, true, 132, 2), (94, false, 132, 2),
+            (9, true, 130, 3), (33, false, 130, 3), (70, true, 140, 4), (80, false, 140, 4),
+            (111, true, 150, 5), (152, false, 150, 5), (182, true, 160, 6), (185, false, 160, 6),
+            (216, true, 170, 7), (220, false, 170, 7));
+        Assert.Equal("Synthetic inn shard", aetherytes.GetRow(41).AethernetName.Value.Name.ToString());
+        var cities = new[] { ("uldah", 33u, 178u), ("gridania", 94u, 179u), ("limsa", 41u, 177u),
+            ("ishgard", 80u, 429u), ("crystarium", 152u, 843u), ("sharlayan", 185u, 990u), ("tuliyollal", 220u, 1205u) };
+        var roots = new uint[] { 2, 8, 9, 70, 111, 182, 216 };
+        var list = Fake<IAetheryteList>((method, args) => method.Name switch
+        {
+            "get_Length" => roots.Length,
+            "get_Item" => Fake<IAetheryteEntry>((entry, _) => entry.Name switch
+            {
+                "get_AetheryteId" => roots[(int)args![0]!],
+                "get_GilCost" => roots[(int)args![0]!] * 10u,
+                _ => Default(entry.ReturnType),
+            }),
+            _ => Default(method.ReturnType),
+        });
+        var listProperty = typeof(Plugin).GetProperty("AetheryteList", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previousList = listProperty.GetValue(null);
+        var previousNativeState = UIState.Addresses.Instance.Value;
+        var nativeState = new UIState();
+        try
+        {
+            listProperty.SetValue(null, list);
+            UIState.Addresses.Instance.Value = (nint)(&nativeState);
+            foreach (var (_, shard, _) in cities) nativeState.UnlockedAetherytesBitArray.Set((int)shard, true);
+            foreach (var (city, requestedShard, requestedRoom) in cities)
+            foreach (var requestedUnlocked in new[] { true, false })
+            {
+                nativeState.UnlockedAetherytesBitArray.Set((int)requestedShard, requestedUnlocked);
+                using var fixture = new NpcSaleFixture(repair: true, repairAetherytes: aetherytes)
+                    { TerritoryId = 1, NearAetheryte = true };
+                Set(fixture.Service, "cachedLifestreamLoaded", true);
+                Set(fixture.Service, "lifestreamCacheExpiresUtc", DateTime.UtcNow.AddHours(1));
+                Assert.True(enterInn ? fixture.Service.StartNpcRepairYesInn(city) : fixture.Service.StartNpcRepairNoInn(city),
+                    fixture.Service.LastFailureMessage);
+                Assert.Equal((enterInn ? "npc-yes-inn-" : "npc-no-inn-") + city, fixture.Service.ActiveModeName);
+                Assert.Equal(requestedShard, Get(fixture.Service, "npcRepairDestinationAethernet"));
+                var route = Get(fixture.Service, "activeNpcRepairInnRoute")!;
+                var actualShard = (uint)route.GetType().GetProperty("AethernetId")!.GetValue(route)!;
+                var expectedShard = requestedUnlocked ? requestedShard : requestedShard == 94 ? 41u : 94u;
+                Assert.Equal(expectedShard, actualShard);
+                Assert.Equal(enterInn ? requestedUnlocked ? requestedRoom : expectedShard == 41 ? 177u : 179u : 0u,
+                    Get(fixture.Service, "npcRepairRequiredInnTerritory"));
+                Assert.Equal(!requestedUnlocked, fixture.Service.StatusMessage.Contains("Requested repair city is unavailable"));
+                Assert.Single(fixture.Commands, command => command.StartsWith("/li "));
+                fixture.Service.Cancel("test complete");
+                nativeState.UnlockedAetherytesBitArray.Set((int)requestedShard, true);
+            }
+        }
+        finally
+        {
+            UIState.Addresses.Instance.Value = previousNativeState;
+            listProperty.SetValue(null, previousList);
+        }
+    }
+
+    [Fact]
+    public void LimsaInnExitApproachesTheVisibleMenderBeforeAnyArrivalWaypoint()
+    {
+        var aetherytes = RepairAetherytes(SaleExcelModule(repairRouteNames: true),
+            (8, true, 129, 1), (41, false, 128, 1));
+        using var fixture = new NpcSaleFixture(repair: true, repairAetherytes: aetherytes)
+            { TerritoryId = 177, VendorPosition = new Vector3(4, 0, 0) };
+        Assert.True(fixture.Service.StartNpcRepairYesInn("limsa"));
+        fixture.TerritoryId = 128;
+        fixture.Service.Update();
+
+        Assert.True(fixture.Service.IsRunning, fixture.Service.LastFailureMessage);
+        Assert.Equal("None", Get(fixture.Service, "npcRepairTravelStage")!.ToString());
+        Assert.Equal("/vnav moveto 4.00 0.00 0.00", Assert.Single(fixture.Commands, command => command.StartsWith("/vnav moveto")));
+        Assert.Equal(177u, Get(fixture.Service, "npcRepairRequiredInnTerritory"));
+        fixture.PlayerPosition = fixture.VendorPosition;
+        Set(fixture.Service, "npcRepairMenderReached", true);
+        fixture.Commands.Clear();
+        Invoke(fixture.Service, "Complete", "Synthetic verified repair");
+        Assert.Equal(3, Get(fixture.Service, "npcRepairInnPathIndex"));
+        Assert.DoesNotContain(fixture.Commands, command => command.StartsWith("/vnav moveto"));
         fixture.Service.Cancel("test complete");
     }
 
@@ -2018,7 +2166,7 @@ public sealed class StartingCityInnRepairRegressionTests
     }
 
     [Fact]
-    public void InnRouteUsesUnlockedRootFromTheSameAethernetGroup()
+    public unsafe void InnRouteRequiresTheNativeShardUnlockAndUnlockedRootFromTheSameAethernetGroup()
     {
         // Limsa's main crystal and inn shard occupy different territories.
         // Another main crystal in the inn territory must not be selected instead.
@@ -2044,6 +2192,9 @@ public sealed class StartingCityInnRepairRegressionTests
         });
         var property = typeof(Plugin).GetProperty("AetheryteList", BindingFlags.Static | BindingFlags.NonPublic)!;
         var previous = property.GetValue(null);
+        var nativeState = new UIState();
+        var previousNativeState = UIState.Addresses.Instance.Value;
+        UIState.Addresses.Instance.Value = (nint)(&nativeState);
         property.SetValue(null, list);
         try
         {
@@ -2051,7 +2202,8 @@ public sealed class StartingCityInnRepairRegressionTests
             var service = new UtilityAutomationService(data, null!, null!, null!, null!, null!,
                 new Configuration(), null!, null!, null!, () => false, () => false, Fake<IPluginLog>((call, args) =>
                 {
-                    if (call.Name == "Warning" && args?[0] is Exception exception)
+                    if (call.Name == "Warning" && args?[0] is Exception exception
+                        && UIState.Addresses.Instance.Value != 0)
                         throw new InvalidOperationException("Unexpected route lookup failure", exception);
                     return Default(call.ReturnType);
                 }));
@@ -2059,15 +2211,22 @@ public sealed class StartingCityInnRepairRegressionTests
             foreach (var (shard, root) in new[] { (41u, 8u), (94u, 2u), (33u, 9u) })
             {
                 object[] args = [aetherytes.GetRow(shard), 0];
+                Assert.False((bool)method.Invoke(service, args)!); // An unlocked main crystal does not unlock its shard.
+                nativeState.UnlockedAetherytesBitArray.Set((int)shard, true);
                 Assert.True((bool)method.Invoke(service, args)!);
                 Assert.Equal((int)root * 10, args[1]);
                 unlocked.Remove(root);
                 Assert.False((bool)method.Invoke(service, args)!);
                 unlocked.Add(root);
+                UIState.Addresses.Instance.Value = 0;
+                Assert.False((bool)method.Invoke(service, args)!); // Unknown native state must remain unavailable.
+                UIState.Addresses.Instance.Value = (nint)(&nativeState);
+                nativeState.UnlockedAetherytesBitArray.Set((int)shard, false);
             }
         }
         finally
         {
+            UIState.Addresses.Instance.Value = previousNativeState;
             property.SetValue(null, previous);
         }
     }
@@ -2456,11 +2615,13 @@ public sealed class StartingCityInnRepairRegressionTests
             Assert.Equal(route, actualRoute);
             Assert.Equal(room, actualRoom);
             Assert.Equal("npc-yes-inn-" + name, Plugin.NormalizeRepairMode(" NPC-YES-INN-" + name.ToUpperInvariant() + " "));
+            Assert.Equal("npc-no-inn-" + name, Plugin.NormalizeRepairMode(" NPC-NO-INN-" + name.ToUpperInvariant() + " "));
         }
         foreach (var invalid in new[] { "", "kugane", "unknown", "uldah extra" })
         {
             Assert.False(UtilityAutomationService.TryGetInnDestination(invalid, out _, out _));
             Assert.Empty(Plugin.NormalizeRepairMode("npc-yes-inn-" + invalid));
+            Assert.Empty(Plugin.NormalizeRepairMode("npc-no-inn-" + invalid));
         }
         Assert.Equal("npc-yes-inn", Plugin.NormalizeRepairMode("yesinn"));
         Assert.Equal("npc", Plugin.NormalizeRepairMode("npcrepair"));
@@ -2719,9 +2880,14 @@ public sealed class StartingCityInnRepairRegressionTests
     }
 
     private static ExcelSheet<Aetheryte> RepairAetherytes(params (uint Id, bool Main, byte Territory, byte Group)[] entries)
+        => RepairAetherytes(null, entries);
+
+    private static ExcelSheet<Aetheryte> RepairAetherytes(ExcelModule? module,
+        params (uint Id, bool Main, byte Territory, byte Group)[] entries)
     {
         entries = entries.OrderBy(entry => entry.Id).ToArray();
         var raw = (RawExcelSheet)RuntimeHelpers.GetUninitializedObject(typeof(RawExcelSheet));
+        if (module != null) Set(raw, "<Module>k__BackingField", module);
         var pages = new ExcelPage[entries.Length];
         var lookupType = typeof(RawExcelSheet).GetNestedType("RowOffsetLookup", BindingFlags.NonPublic)!;
         var lookups = Array.CreateInstance(lookupType, entries.Length);
@@ -2735,6 +2901,7 @@ public sealed class StartingCityInnRepairRegressionTests
             var row = CreateRow<Aetheryte>(page, entry.Id);
             WriteField(() => row.Territory.RowId, entry.Territory);
             WriteField(() => row.AethernetGroup, entry.Group);
+            if (module != null) WriteField(() => row.AethernetName.RowId, 1);
             if (entry.Main)
             {
                 var found = false;
@@ -2792,7 +2959,7 @@ public sealed class StartingCityInnRepairRegressionTests
         return new ExcelSheet<T>(raw);
     }
 
-    private static ExcelModule SaleExcelModule()
+    private static ExcelModule SaleExcelModule(bool repairRouteNames = false)
     {
         // Polymorphic ENpcData references resolve through Lumina's real sheet intervals.
         // Supply only row metadata; no installed game files or purchased-item catalog is loaded.
@@ -2823,6 +2990,7 @@ public sealed class StartingCityInnRepairRegressionTests
                 "GilShop" => new[] { 0x40001u },
                 "PreHandler" => new[] { 0x10000001u },
                 "TopicSelect" => new[] { 0x10000002u },
+                "PlaceName" when repairRouteNames => new[] { 1u },
                 _ => Array.Empty<uint>(),
             };
             var lookups = Array.CreateInstance(lookupType, ids.Length);
@@ -2831,6 +2999,17 @@ public sealed class StartingCityInnRepairRegressionTests
             Set(raw, "<Module>k__BackingField", module);
             Set(raw, "<Count>k__BackingField", ids.Length);
             Set(raw, "_pages", Array.Empty<ExcelPage>());
+            if (attribute.Name == "PlaceName" && repairRouteNames)
+            {
+                // Retain Lumina's native schema check for this fabricated typed sheet.
+                Set(raw, "<ColumnHash>k__BackingField", attribute.ColumnHash!.Value);
+                var bytes = new byte[512];
+                BinaryPrimitives.WriteUInt32BigEndian(bytes, 4);
+                System.Text.Encoding.UTF8.GetBytes("Synthetic inn shard").CopyTo(bytes, 4);
+                var page = (ExcelPage)Activator.CreateInstance(typeof(ExcelPage), BindingFlags.Instance | BindingFlags.NonPublic,
+                    null, [raw, bytes, (ushort)0], null)!;
+                Set(raw, "_pages", new[] { page });
+            }
             Set(raw, "_rowOffsetLookupTable", lookups);
             Set(raw, "_rowIndexLookupArray", Array.Empty<int>());
             Set(raw, "_rowIndexLookupDict", ids.Select((id, index) => ((int)id, index)).ToFrozenDictionary(pair => pair.Item1, pair => pair.index));
@@ -2929,7 +3108,7 @@ public sealed class StartingCityInnRepairRegressionTests
             get { fixed (ShopEventHandler* state = &nativeGearSale) return DalamudShopPurchaseRuntime.IsGearSaleTransactionIdle(state); }
         }
 
-        public NpcSaleFixture(string handler = "direct", bool repair = false)
+        public NpcSaleFixture(string handler = "direct", bool repair = false, ExcelSheet<Aetheryte>? repairAetherytes = null)
         {
             nativeGearSale.CurrentMode = 1;
             nativeGearSale.Info.EventId.Id = 0x40001;
@@ -3027,7 +3206,7 @@ public sealed class StartingCityInnRepairRegressionTests
             previousPlayerState = playerStateProperty.GetValue(null);
             piProperty.SetValue(null, pi);
             playerStateProperty.SetValue(null, Fake<IPlayerState>((method, _) => method.Name == "get_ContentId" ? CharacterId : Default(method.ReturnType)));
-            Service = new UtilityAutomationService(new TestData(InnTerritories([177, 178, 179]), npcs: npcs, preHandlers: preHandlers, topics: topics),
+            Service = new UtilityAutomationService(new TestData(InnTerritories([177, 178, 179]), repairAetherytes, npcs: npcs, preHandlers: preHandlers, topics: topics),
                 objects, target, command, client, condition, new Configuration(), null!, null!, null!,
                 () => DutyOwned, () => InnOwned, Fake<IPluginLog>());
             Set(Service, "shopRuntime", Fake<IShopPurchaseRuntime>((method, args) => method.Name switch

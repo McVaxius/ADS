@@ -95,6 +95,7 @@ internal sealed class ShopPurchaseRunner
     private bool interactionSent;
     private long achievementCertificatesClaimed;
     private int callbackTransactions;
+    private bool awaitingCompanyActionConfirmation;
     private long currencySpendReserved;
     private long callbackItemCountBefore;
     private IReadOnlyDictionary<uint, long> callbackOutputsBefore = new Dictionary<uint, long>();
@@ -356,6 +357,7 @@ internal sealed class ShopPurchaseRunner
         interactionSent = false;
         achievementCertificatesClaimed = 0;
         callbackTransactions = 0;
+        awaitingCompanyActionConfirmation = false;
         currencySpendReserved = 0;
         callbackOutputsBefore = new Dictionary<uint, long>();
         callbackCurrenciesBefore = new Dictionary<ShopCurrencyIdentity, long>();
@@ -501,6 +503,7 @@ internal sealed class ShopPurchaseRunner
                         && callbackTransactions > 0
                         && runtime.TryAcceptOwnedConfirmation(selected, callbackTransactions))
                     {
+                        awaitingCompanyActionConfirmation = false;
                         return;
                     }
                     Fail(ShopPurchaseFailureCodes.UiMismatch, DescribeBlockingUi("An unexpected confirmation dialog appeared; ADS did not accept it."));
@@ -513,6 +516,15 @@ internal sealed class ShopPurchaseRunner
                         ShopPurchaseFailureCodes.Timeout,
                         "Timed out waiting for the owned confirmation prompt to become readable; ADS did not resend the purchase callback.");
                 }
+                return;
+            }
+
+            // Reopening the FC inventory can interrupt a purchase dialog that is still appearing.
+            if (phase == RunnerPhase.VerifyingInventory && awaitingCompanyActionConfirmation)
+            {
+                if (clock.UtcNow - phaseStartedAtUtc > ShopPurchaseTiming.ConfirmationAndVerificationTimeout)
+                    Fail(ShopPurchaseFailureCodes.Timeout,
+                        "Timed out waiting for the owned company-action confirmation; ADS did not resend the purchase callback.");
                 return;
             }
 
@@ -1292,6 +1304,7 @@ internal sealed class ShopPurchaseRunner
         }
 
         anyPurchaseCallbackSent = true;
+        awaitingCompanyActionConfirmation = request.CompanyAction;
         currencySpendReserved = checked(currencySpendReserved + nextCurrencySpend);
         SetPhase(
             RunnerPhase.VerifyingInventory,
