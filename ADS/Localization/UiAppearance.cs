@@ -69,6 +69,7 @@ internal sealed class UiAppearance : IDisposable
             var rgb = AdsPresentation.Rgb(appliedAccent);
             accentDraft = new(rgb.X, rgb.Y, rgb.Z);
         }
+        theme.HighlightContrastPercent = plugin.Configuration.UiHighlightContrastPercent;
         theme.Density = plugin.Configuration.UiCompact ? MaterialDensity.Compact : MaterialDensity.Standard;
         if (appliedSoundsMuted != plugin.Configuration.UiLcarsSoundsMuted)
         {
@@ -371,7 +372,19 @@ internal sealed class UiAppearance : IDisposable
 
     private bool DrawColourEditor(string id)
     {
-        var changed = MaterialAppearanceSelector.DrawColors(id, ref colorDraft, ref accentDraft,
+        var contrast = plugin.Configuration.UiHighlightContrastPercent;
+        MaterialText.Text(Ui.T("Highlight contrast"), System.Math.Max(1f, ImGui.GetContentRegionAvail().X));
+        ImGui.SetNextItemWidth(MaterialLayout.FitNextItemWidth(280 * MaterialTheme.Metrics.Scale, 120 * MaterialTheme.Metrics.Scale));
+        var changed = false;
+        using (var field = MaterialSkin.NativeFieldStyle())
+        {
+            if (ImGui.SliderInt("##UiHighlightContrastPercent", ref contrast, 0, 100, "%d%%", ImGuiSliderFlags.AlwaysClamp))
+                plugin.Configuration.UiHighlightContrastPercent = contrast;
+            changed = ImGui.IsItemDeactivatedAfterEdit();
+        }
+        MaterialText.Text(Ui.T("Makes controls and selection states more distinct."), System.Math.Max(1f, ImGui.GetContentRegionAvail().X));
+        ImGui.Spacing();
+        changed |= MaterialAppearanceSelector.DrawColors(id, ref colorDraft, ref accentDraft,
             new(Ui.T("Color"), Ui.T("Language"), Ui.T("Teal"), Ui.T("Blue"), Ui.T("Pink"), Ui.T("Custom RGB")),
             new(Ui.T("Auto"), Ui.T("Picker"), Ui.T("Default"), Ui.T("Background, controls and text follow your theme."),
                 Ui.T("Theme colour"), Ui.T("Choose each colour independently."), Ui.T("Background"), Ui.T("Controls"),

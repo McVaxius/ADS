@@ -11774,4 +11774,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>團隊副本最終寶箱處理正在等待遊戲內戰利品分配完成，之後才釋放控制權。</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>團隊副本模式在離開副本前等待手動復原。</value></data>
   <data name="Raid duty" xml:space="preserve"><value>團隊副本</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>醒目提示對比度</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>讓控制項與選取狀態更易區分。</value></data>
 </root>

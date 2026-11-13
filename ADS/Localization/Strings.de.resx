@@ -11774,4 +11774,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Die abschließende Raid-Truhenverarbeitung wartet vor der Kontrollfreigabe auf die native Beuteverteilung.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Der Raid-Modus wartet vor dem Inhaltsaustritt auf manuelle Wiederherstellung.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Raid-Inhalt</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Kontrast der Hervorhebung</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Hebt Bedienelemente und Auswahlzustände deutlicher hervor.</value></data>
 </root>

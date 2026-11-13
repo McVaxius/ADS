@@ -4346,4 +4346,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Raid son sandık işlemi, kontrolü bırakmadan önce oyunun ganimet dağıtımını bekliyor.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Raid modu görevden ayrılmadan önce elle toparlanmayı bekler.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Raid görevi</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Vurgu kontrastı</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Denetimlerin ve seçim durumlarının daha belirgin görünmesini sağlar.</value></data>
 </root>

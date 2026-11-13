@@ -4346,4 +4346,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Penanganan peti terakhir Raid menunggu pembagian jarahan oleh game sebelum melepas kendali.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Mode Raid menunggu pemulihan manual sebelum keluar dari instans.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Instans Raid</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Kontras sorotan</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Membuat kontrol dan status pilihan lebih mudah dibedakan.</value></data>
 </root>

@@ -11774,4 +11774,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>레이드 마지막 상자 처리는 제어권을 해제하기 전에 게임 내 전리품 분배를 기다립니다.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>레이드 모드가 콘텐츠를 떠나기 전에 수동 회복을 기다립니다.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>레이드 콘텐츠</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>강조 대비</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>컨트롤과 선택 상태를 더 쉽게 구분할 수 있게 합니다.</value></data>
 </root>

@@ -11774,4 +11774,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>El procesamiento del cofre final del Raid espera el reparto nativo del botín antes de liberar el control.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>El modo Raid espera la recuperación manual antes de salir de la instancia.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Instancia de Raid</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Contraste de resaltado</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Hace que los controles y los estados de selección se distingan mejor.</value></data>
 </root>

@@ -11774,4 +11774,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Le traitement du coffre final du Raid attend l’attribution native du butin avant de libérer le contrôle.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Le mode Raid attend une récupération manuelle avant de quitter l’instance.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Instance de Raid</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Contraste de surbrillance</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Rend les commandes et les états de sélection plus distincts.</value></data>
 </root>

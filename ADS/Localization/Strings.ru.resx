@@ -4704,4 +4704,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Обработка последнего сундука рейда ожидает штатного распределения добычи перед освобождением управления.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Режим рейда ожидает ручного восстановления перед выходом из подземелья.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Рейд</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Контраст выделения</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Делает элементы управления и состояния выделения более заметными.</value></data>
 </root>

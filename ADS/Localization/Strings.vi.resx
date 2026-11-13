@@ -4346,4 +4346,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>Xử lý rương cuối Raid đang chờ trò chơi phân chia chiến lợi phẩm trước khi nhả quyền điều khiển.</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>Chế độ Raid chờ hồi phục thủ công trước khi rời phụ bản.</value></data>
   <data name="Raid duty" xml:space="preserve"><value>Phụ bản Raid</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>Độ tương phản khi làm nổi bật</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Làm cho các thành phần điều khiển và trạng thái chọn dễ phân biệt hơn.</value></data>
 </root>

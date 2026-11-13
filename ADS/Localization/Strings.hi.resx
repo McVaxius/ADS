@@ -4330,4 +4330,6 @@
   <data name="Raid final chest work is waiting for native loot distribution before releasing ownership." xml:space="preserve"><value>रेड के अंतिम संदूक का कार्य नियंत्रण छोड़ने से पहले गेम में लूट वितरण की प्रतीक्षा कर रहा है।</value></data>
   <data name="Raid mode waits for manual recovery before leaving duty." xml:space="preserve"><value>रेड मोड ड्यूटी छोड़ने से पहले मैन्युअल पुनर्प्राप्ति की प्रतीक्षा करता है।</value></data>
   <data name="Raid duty" xml:space="preserve"><value>रेड ड्यूटी</value></data>
+  <data name="Highlight contrast" xml:space="preserve"><value>हाइलाइट का कंट्रास्ट</value></data>
+  <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>नियंत्रणों और चयन की स्थितियों को अधिक स्पष्ट बनाता है।</value></data>
 </root>
