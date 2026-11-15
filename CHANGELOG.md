@@ -1,3 +1,7 @@
+2026-11-15 - 2.0.0.25 - Territory-entry reminder removal
+
+- **Removed Territory-entry reminder:** ADS no longer shows the hydration/stretch toast when Questionable Companion is loaded.
+
 2026-11-15 - 2.0.0.24 - Fresh-duty observation reset
 
 - **Fixed Duty observation:** Clear remembered objects and used markers on fresh duty starts, including repeat runs after excluded areas; Resume retains current-run history.

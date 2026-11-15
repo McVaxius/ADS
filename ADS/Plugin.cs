@@ -289,13 +289,6 @@ public sealed class Plugin : IDalamudPlugin
         if (Configuration.DebugModeEnabled)
             DebugStrafeService.Enable();
         QstCompanionWarningService = new QstCompanionWarningService(
-            () => PluginInterface.InstalledPlugins.Any(plugin =>
-                plugin.IsLoaded
-                && string.Equals(
-                    plugin.InternalName,
-                    QstCompanionWarningService.InternalName,
-                    StringComparison.OrdinalIgnoreCase)),
-            message => ToastGui.ShowNormal(message),
             command => CommandManager.ProcessCommand(command),
             message => Log.Warning(message));
         XaSlaveSkipperService = new XaSlaveSkipperService(
@@ -3561,7 +3554,6 @@ public sealed class Plugin : IDalamudPlugin
     {
         ExecutionService.ObserveDebugReturnTerritory(territoryType);
         pendingRemoteJsonOwnedDutyRestart?.ObserveTerritory(territoryType);
-        QstCompanionWarningService.HandleTerritoryChanged();
         if (territoryType is 1359 or 1360)
             ToastGui.ShowNormal(Ui.T("ADS is fully disabled in this area."));
         if (Configuration.PluginEnabled
