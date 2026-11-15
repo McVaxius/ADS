@@ -3543,6 +3543,7 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService.CancelDebugReturn();
         pendingRemoteJsonOwnedDutyRestart?.Cancel();
         ExecutionService.ResetDutyCompletion();
+        ObservationMemoryService.Reset();
     }
 
     private void OnLogout(int type, int code)

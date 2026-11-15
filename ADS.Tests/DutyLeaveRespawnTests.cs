@@ -17,6 +17,37 @@ namespace ADS.Tests;
 
 public sealed class DutyLeaveRespawnTests
 {
+    [Fact]
+    public void FreshNativeDutyStartClearsUsedMarkersEvenWithoutAnInterveningObservationUpdate()
+    {
+        using var fixture = new HyperFixatedTargetExecutionTests.Fixture(Vector3.Zero, includeObservationMemory: true);
+        var memory = fixture.Memory!;
+        memory.Update(Context(), true);
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var used = (Dictionary<string, ObservedInteractable>)typeof(ObservationMemoryService)
+            .GetField("usedProgressionInteractables", flags)!.GetValue(memory)!;
+        var marker = new ObservedInteractable
+        {
+            Key = "previous-run-gate", GameObjectId = 100, DataId = 100, MapId = 1,
+            ObjectKind = ObjectKind.EventNpc, Name = "Fixture gate", Position = Vector3.Zero,
+            LastSeenUtc = DateTime.UtcNow, Classification = default, GhostReason = default,
+        };
+        used.Add(marker.Key, marker);
+        var plugin = (Plugin)RuntimeHelpers.GetUninitializedObject(typeof(Plugin));
+        typeof(Plugin).GetField("<ExecutionService>k__BackingField", flags)!.SetValue(plugin, fixture.Execution);
+        typeof(Plugin).GetField("<ObservationMemoryService>k__BackingField", flags)!.SetValue(plugin, memory);
+
+        // An excluded area bypasses ObservationMemory.Update. The next native
+        // duty start must retire the old run even when its duty key is unchanged.
+        typeof(Plugin).GetMethod("OnDutyStarted", flags)!.Invoke(plugin, [null]);
+
+        Assert.Empty(used);
+        memory.Update(Context(), true);
+        Assert.Empty(used);
+        Assert.Equal(OwnershipMode.OwnedStartInside, fixture.Execution.CurrentMode);
+        Assert.Empty(fixture.Commands);
+    }
+
     [Theory]
     [InlineData("ongoing", false)]
     [InlineData("ongoing", true)]
