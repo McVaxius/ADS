@@ -3561,6 +3561,8 @@ public sealed class Plugin : IDalamudPlugin
         ExecutionService.ObserveDebugReturnTerritory(territoryType);
         pendingRemoteJsonOwnedDutyRestart?.ObserveTerritory(territoryType);
         QstCompanionWarningService.HandleTerritoryChanged();
+        if (territoryType is 1359 or 1360)
+            ToastGui.ShowNormal(Ui.T("ADS is fully disabled in this area."));
         if (Configuration.PluginEnabled
             && (DutyCatalogService.ResolveCurrentDuty(0, territoryType)?.Category == DutyCategory.TreasureDungeon
                 || TreasureDungeonData.IsSupportedDutyTerritory(territoryType)))

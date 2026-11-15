@@ -4348,4 +4348,5 @@
   <data name="Raid duty" xml:space="preserve"><value>Instancja rajdu</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>Kontrast wyróżnienia</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Ułatwia rozróżnianie elementów sterujących i stanów zaznaczenia.</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>ADS jest całkowicie wyłączony w tym obszarze.</value></data>
 </root>

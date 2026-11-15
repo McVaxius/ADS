@@ -11776,4 +11776,5 @@
   <data name="Raid duty" xml:space="preserve"><value>Instance de Raid</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>Contraste de surbrillance</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Rend les commandes et les états de sélection plus distincts.</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>ADS est entièrement désactivé dans cette zone.</value></data>
 </root>

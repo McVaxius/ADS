@@ -1,3 +1,7 @@
+2026-11-15 - 2.0.0.23 - Keybound entry warning
+
+- Show a flying-text toast on each entry into the Keybound Brawler arena or Square stating that ADS is fully disabled there.
+
 2026-11-12 - 2.0.0.22 - Highlight contrast
 
 - Add a saved Highlight contrast control in Appearance and the Colour menu, defaulting to 50%, with translated captions and help.

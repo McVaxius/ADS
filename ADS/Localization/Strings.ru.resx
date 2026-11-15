@@ -4706,4 +4706,5 @@
   <data name="Raid duty" xml:space="preserve"><value>Рейд</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>Контраст выделения</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Делает элементы управления и состояния выделения более заметными.</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>ADS полностью отключён в этой области.</value></data>
 </root>

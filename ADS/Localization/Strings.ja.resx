@@ -11776,4 +11776,5 @@
   <data name="Raid duty" xml:space="preserve"><value>レイドコンテンツ</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>ハイライトのコントラスト</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>コントロールや選択状態をより見分けやすくします。</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>このエリアではADSは完全に無効です。</value></data>
 </root>

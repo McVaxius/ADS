@@ -4348,4 +4348,5 @@
   <data name="Raid duty" xml:space="preserve"><value>Phụ bản Raid</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>Độ tương phản khi làm nổi bật</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>Làm cho các thành phần điều khiển và trạng thái chọn dễ phân biệt hơn.</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>ADS bị vô hiệu hóa hoàn toàn trong khu vực này.</value></data>
 </root>

@@ -11776,4 +11776,5 @@
   <data name="Raid duty" xml:space="preserve"><value>团队副本</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>高亮对比度</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>使控件和选中状态更易于区分。</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>ADS 在此区域已完全禁用。</value></data>
 </root>

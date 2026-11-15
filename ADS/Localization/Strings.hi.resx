@@ -4332,4 +4332,5 @@
   <data name="Raid duty" xml:space="preserve"><value>रेड ड्यूटी</value></data>
   <data name="Highlight contrast" xml:space="preserve"><value>हाइलाइट का कंट्रास्ट</value></data>
   <data name="Makes controls and selection states more distinct." xml:space="preserve"><value>नियंत्रणों और चयन की स्थितियों को अधिक स्पष्ट बनाता है।</value></data>
+  <data name="ADS is fully disabled in this area." xml:space="preserve"><value>इस क्षेत्र में ADS पूरी तरह अक्षम है।</value></data>
 </root>
