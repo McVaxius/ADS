@@ -865,21 +865,23 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
-    [InlineData(ShopListMode.FillOrderOverMultipleRuns)]
-    [InlineData(ShopListMode.TargetedRefill)]
-    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity)]
-    public void ShopListBatchDoesNotPublishTerminalSuccessUntilCleanupIsProven(ShopListMode mode)
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, false)]
+    [InlineData(ShopListMode.TargetedRefill, false)]
+    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity, false)]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, true)]
+    public void ShopListBatchDoesNotPublishTerminalSuccessUntilCleanupIsProven(ShopListMode mode, bool cleanupExpires)
     {
-        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CleanupBlocked = true };
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CleanupBlocked = true, CloseUiAllowed = false };
         runtime.SetCurrency(Poetics, 100);
         var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
-        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, new FakeClock(), log);
+        var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, clock, log);
         var row = Guid.NewGuid();
         Assert.True(utility.StartShopListBatch(new("cleanup", Guid.NewGuid(), mode,
             Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, mode == ShopListMode.SpendUntilCurrencyOrCapacity,
                 ShopListOwnershipScope.InventoryOnly, 0)])
         { CreditedQuantities = mode == ShopListMode.FillOrderOverMultipleRuns ? new Dictionary<Guid, long> { [row] = 0 } : null }));
-        for (var tick = 0; tick < 80; tick++) utility.Update();
+        for (var tick = 0; tick < 80 && runtime.CloseUiAttempts == 0; tick++) utility.Update();
         Assert.True(utility.IsRunning);
         Assert.False(utility.ShopListBatchStatus.Done);
         Assert.Null(utility.ShopListBatchStatus.Succeeded);
@@ -887,16 +889,44 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(1, runtime.SubmitCount);
         Assert.Equal(1, runtime.ItemCount);
         Assert.Equal(1, Assert.Single(utility.ShopListBatchStatus.Rows).PurchasedQuantity);
-        Assert.True(runtime.CloseUiCount > 0);
+        Assert.Equal(1, runtime.CloseUiAttempts);
+        Assert.Equal(0, runtime.CloseUiCount);
+        Assert.Equal(clock.UtcNow.AddSeconds(8), runtime.LastShopListCleanupDeadlineUtc);
         if (mode == ShopListMode.FillOrderOverMultipleRuns)
             Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
-        runtime.CleanupBlocked = false;
+
+        runtime.CloseUiAllowed = true;
+        clock.Advance(TimeSpan.FromMilliseconds(16));
+        utility.Update();
+        Assert.Equal(1, runtime.CloseUiCount);
+        Assert.False(runtime.IsAnyShopVisible);
+        Assert.False(runtime.IsSelectionMenuVisible);
+        Assert.False(utility.ShopListBatchStatus.Done);
+
+        // The vendor event remains occupied during the empty frame, then its parent menu returns.
+        runtime.IsSelectionMenuVisible = true;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        utility.Update();
+        Assert.False(runtime.IsSelectionMenuVisible);
+        Assert.False(utility.ShopListBatchStatus.Done);
+
+        if (cleanupExpires)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(6_984));
+            runtime.ExpectedShopVisible = true;
+        }
+        else
+            runtime.CleanupBlocked = false;
+
         utility.Update();
         Assert.False(utility.IsRunning);
         Assert.True(utility.ShopListBatchStatus.Done);
-        Assert.True(utility.ShopListBatchStatus.Succeeded);
+        Assert.Equal(!cleanupExpires, utility.ShopListBatchStatus.Succeeded);
         Assert.NotNull(utility.ShopListBatchStatus.CompletedAtUtc);
-        Assert.False(runtime.IsAnyShopVisible);
+        Assert.Equal(cleanupExpires, runtime.IsAnyShopVisible);
+        Assert.Equal(2, runtime.CloseUiCount);
+        if (cleanupExpires)
+            Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, utility.ShopListBatchStatus.FailureCode);
         Assert.Equal(1, runtime.SubmitCount);
         Assert.Equal(1, runtime.ItemCount);
         Assert.Equal(1, Assert.Single(utility.ShopListBatchStatus.Rows).PurchasedQuantity);
@@ -2781,7 +2811,18 @@ public sealed class ShopPurchaseRunnerTests
             return CompanyInventoryReady;
         }
         public bool CleanupBlocked { get; set; }
-        public string? ShopListCleanupBlocker => CleanupBlocked || IsAnyShopVisible ? "Synthetic shop cleanup is pending" : null;
+        public bool CloseUiAllowed { get; set; } = true;
+        public int CloseUiAttempts { get; private set; }
+        public DateTime LastShopListCleanupDeadlineUtc { get; private set; }
+        public string? ShopListCleanupBlocker => CleanupBlocked || IsAnyShopVisible || IsSelectionMenuVisible
+            ? "Synthetic shop cleanup is pending" : null;
+
+        public void ContinueShopListCleanup(DateTime deadlineUtc, bool attemptClose)
+        {
+            LastShopListCleanupDeadlineUtc = deadlineUtc;
+            if (attemptClose && (IsAnyShopVisible || IsSelectionMenuVisible))
+                CloseOwnedShopUi();
+        }
         public bool IsBetweenAreas { get; set; }
         public bool IsPlayerAvailable { get; set; } = true;
         public uint CurrentTerritoryId { get; set; } = 1;
@@ -2994,6 +3035,9 @@ public sealed class ShopPurchaseRunnerTests
 
         public void CloseOwnedShopUi()
         {
+            CloseUiAttempts++;
+            if (!CloseUiAllowed)
+                return;
             CloseUiCount++;
             ExpectedShopVisible = false;
             IsSelectionMenuVisible = false;

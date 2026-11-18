@@ -215,6 +215,7 @@ public sealed unsafe class UtilityAutomationService
     private readonly DesynthDutyLedgerStore desynthDutyLedgerStore;
     private readonly ShopCatalogService shopCatalogService;
     private readonly ShopPurchaseRunner shopPurchaseRunner;
+    private readonly IShopPurchaseClock shopClock = new SystemShopPurchaseClock();
     private readonly DalamudShopPurchaseRuntime shopPurchaseRuntime;
     private readonly IShopPurchaseRuntime shopRuntime;
     private readonly Func<bool> isDutyOwned;
@@ -360,8 +361,7 @@ public sealed unsafe class UtilityAutomationService
     private string shopListBatchTerminalFailureMessage = string.Empty;
     private ShopOfferIdentity? shopListHeldShop;
     private ShopListBatchStatusSnapshot shopListBatchStatus = EmptyShopListBatchStatus();
-    private (bool Succeeded, string Message, string? FailureCode)? shopListCleanup;
-    private DateTime shopListCleanupStartedAtUtc;
+    private (bool Succeeded, string Message, string? FailureCode, DateTime DeadlineUtc)? shopListCleanup;
 
     public UtilityAutomationService(
         IDataManager dataManager,
@@ -400,7 +400,7 @@ public sealed unsafe class UtilityAutomationService
         shopPurchaseRunner = new ShopPurchaseRunner(
             shopCatalogService,
             shopPurchaseRuntime,
-            new SystemShopPurchaseClock(),
+            shopClock,
             this.isDutyOwned,
             this.isInnEntryRunning,
             shopDiagnostic);
@@ -414,6 +414,7 @@ public sealed unsafe class UtilityAutomationService
     {
         shopCatalogService = catalog;
         shopRuntime = runtime;
+        shopClock = clock;
         shopPurchaseRunner = new(catalog, runtime, clock);
     }
 
@@ -4383,39 +4384,40 @@ public sealed unsafe class UtilityAutomationService
     {
         if (shopListBatchDefinition?.Mode == ShopListMode.FillOrderOverMultipleRuns || shopListHeldShop.HasValue)
         {
-            shopPurchaseRunner.ReleaseHeldShopUi();
-            shopListCleanup = (succeeded, message, failureCode);
-            shopListCleanupStartedAtUtc = DateTime.UtcNow;
-            ContinueShopListCleanup();
+            var deadlineUtc = shopClock.UtcNow.AddSeconds(8);
+            shopListCleanup = (succeeded, message, failureCode, deadlineUtc);
+            shopPurchaseRunner.ReleaseHeldShopUi(deadlineUtc);
+            ContinueShopListCleanup(attemptClose: false);
             return;
         }
         CompleteShopListBatch(succeeded, message, failureCode);
     }
 
-    private void ContinueShopListCleanup()
+    private void ContinueShopListCleanup(bool attemptClose = true)
     {
         if (shopListCleanup is not { } terminal)
             return;
         try
         {
-            shopRuntime.ContinueShopListCleanup();
+            shopRuntime.ContinueShopListCleanup(terminal.DeadlineUtc, attemptClose && shopClock.UtcNow < terminal.DeadlineUtc);
             var blocker = shopRuntime.ShopListCleanupBlocker;
             if (blocker != null)
             {
-                if (DateTime.UtcNow - shopListCleanupStartedAtUtc < ShopPurchaseTiming.ConfirmationAndVerificationTimeout)
+                if (shopClock.UtcNow < terminal.DeadlineUtc)
                 {
                     SyncShopListBatchStatus(message: $"Finishing order cleanup: {blocker}.");
                     return;
                 }
-                terminal = (false, $"Order cleanup failed: {blocker}.", ShopPurchaseFailureCodes.UiMismatch);
+                terminal = (false, $"Order cleanup failed: {blocker}.", ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
             }
             else if (shopListBatchCancelRequested)
-                terminal = (false, "Order cancelled; verified progress was retained.", ShopPurchaseFailureCodes.Cancelled);
+                terminal = (false, "Order cancelled; verified progress was retained.", ShopPurchaseFailureCodes.Cancelled, terminal.DeadlineUtc);
         }
         catch (Exception ex)
         {
-            terminal = (false, $"Order cleanup failed: {ex.Message}", ShopPurchaseFailureCodes.UiMismatch);
+            terminal = (false, $"Order cleanup failed: {ex.Message}", ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
         }
+        shopRuntime.EndShopListCleanup();
         shopListCleanup = null;
         CompleteShopListBatch(terminal.Succeeded, terminal.Message, terminal.FailureCode);
     }

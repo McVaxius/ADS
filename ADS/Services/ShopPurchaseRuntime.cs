@@ -275,7 +275,8 @@ internal interface IShopPurchaseRuntime
     bool IsAnyShopVisible { get; }
     string? VisibleBlockingAddon => null;
     string? ShopListCleanupBlocker => IsAnyShopVisible || IsSelectionMenuVisible || HasUnexpectedConfirmation ? "shop UI remains open" : null;
-    void ContinueShopListCleanup() { }
+    void ContinueShopListCleanup(DateTime deadlineUtc, bool attemptClose) { }
+    void EndShopListCleanup() { }
     void UpdateOwnedShopCleanup() { }
 
     bool IsAetheryteUnlocked(uint aetheryteId);
@@ -302,6 +303,7 @@ internal interface IShopPurchaseRuntime
     bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount) => false;
     bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount) => false;
     void CloseOwnedShopUi();
+    void CloseOwnedShopUi(DateTime deadlineUtc) => CloseOwnedShopUi();
     bool HasAutoRetainer => false;
     bool IsInventoryContextVisible => false;
     bool TryCaptureGearCleanup(GearCleanupScope scope, out IReadOnlyList<GearCleanupCandidate> items, out IReadOnlySet<uint> protectedItems)
@@ -346,9 +348,11 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private string? readableOwnedSelectYesNoPrompt;
     private bool unreadableOwnedSelectYesnoWarningLogged;
     private DateTime nextRelicUiCleanupUtc;
+    private bool lastShopCleanupDispatched;
     private DateTime nextCompanyActionInventoryUtc;
     private bool companyActionUiOwned;
     private ulong shopUiCharacter;
+    private uint shopUiTerritory;
     private ulong shopUiNpc;
     private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedMgpExchange;
     private GearCleanupCandidate? gearSaleContextItem;
@@ -372,6 +376,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private bool achievementExchangeSelected;
     private bool achievementCategorySelected;
     private DateTime ownedUiCleanupUntil;
+    private bool shopListOwnsUiCleanup;
 
     public ulong FreeCompanyId => InfoProxyFreeCompany.Instance() == null ? 0 : InfoProxyFreeCompany.Instance()->Id;
     public byte FreeCompanyGrandCompany => InfoProxyFreeCompany.Instance() == null ? (byte)0 : (byte)InfoProxyFreeCompany.Instance()->GrandCompany;
@@ -536,8 +541,41 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             ? "shop, menu, or confirmation UI remains open"
             : !TryGetNavigationRunning(out var running) ? "navigation stop could not be verified"
             : running ? "navigation is still active" : null;
-    string? IShopPurchaseRuntime.ShopListCleanupBlocker => RelicPurchaseCleanupBlocker;
-    void IShopPurchaseRuntime.ContinueShopListCleanup() => ContinueRelicUiCleanup();
+    string? IShopPurchaseRuntime.ShopListCleanupBlocker
+    {
+        get
+        {
+            if (shopListOwnsUiCleanup && ownedUiCleanupUntil == default)
+                return "vendor cleanup ownership was lost";
+            if (shopListOwnsUiCleanup && (IsTalkVisible || condition[ConditionFlag.OccupiedInQuestEvent]))
+                return "vendor interaction is still active";
+            return RelicPurchaseCleanupBlocker;
+        }
+    }
+
+    void IShopPurchaseRuntime.ContinueShopListCleanup(DateTime deadlineUtc, bool attemptClose)
+    {
+        // A failed child can already have started the ordinary owned cleanup.
+        // Once the batch adopts it, only the batch drives close attempts.
+        if (ownedUiCleanupUntil != default && !shopListOwnsUiCleanup)
+        {
+            shopListOwnsUiCleanup = true;
+            ownedUiCleanupUntil = deadlineUtc;
+            if (!lastShopCleanupDispatched)
+                nextRelicUiCleanupUtc = default;
+        }
+        if (ownedUiCleanupUntil != deadlineUtc || !RetainOwnedShopCleanup())
+            return;
+        if (attemptClose && DateTime.UtcNow < deadlineUtc)
+            ClosePendingShopUi();
+    }
+
+    void IShopPurchaseRuntime.EndShopListCleanup()
+    {
+        if (!shopListOwnsUiCleanup) return;
+        ownedUiCleanupUntil = default;
+        shopListOwnsUiCleanup = false;
+    }
     public byte CurrentGrandCompany
     {
         get
@@ -1287,12 +1325,14 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         if (nearest == null || !GameInteractionHelper.TryInteractWithObject(targetManager, nearest, log)) return false;
         shopUiCharacter = CharacterId;
+        shopUiTerritory = CurrentTerritoryId;
         shopUiNpc = nearest.GameObjectId;
         ownedMgpExchange = null;
         gearSaleContextItem = null;
         GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
         ownedUiCleanupUntil = default;
+        shopListOwnsUiCleanup = false;
         return true;
     }
 
@@ -1651,12 +1691,39 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return false;
     }
 
-    public void CloseOwnedShopUi()
+    public void CloseOwnedShopUi() => CloseOwnedShopUiCore(null);
+
+    void IShopPurchaseRuntime.CloseOwnedShopUi(DateTime deadlineUtc) => CloseOwnedShopUiCore(deadlineUtc);
+
+    private void CloseOwnedShopUiCore(DateTime? deadlineUtc)
     {
+        shopListOwnsUiCleanup = deadlineUtc.HasValue;
+        if (deadlineUtc.HasValue)
+        {
+            ownedUiCleanupUntil = deadlineUtc.Value;
+            if (!RetainOwnedShopCleanup() || DateTime.UtcNow >= deadlineUtc.Value)
+                return;
+        }
         if (!OwnsShopCleanupUi())
             return;
-        ownedUiCleanupUntil = shopUiCharacter == 0 ? default : DateTime.UtcNow.AddSeconds(10);
+        if (!deadlineUtc.HasValue)
+            ownedUiCleanupUntil = shopUiCharacter == 0 ? default : DateTime.UtcNow.AddSeconds(10);
         CloseShopUiOnce();
+    }
+
+    private bool RetainOwnedShopCleanup()
+    {
+        // The original interaction can outlive an empty frame before its parent
+        // menu returns. A visible window still has to prove the original NPC.
+        if (CharacterId == shopUiCharacter && !IsBetweenAreas &&
+            (!shopListOwnsUiCleanup || (shopUiCharacter != 0 && IsLoggedIn && CurrentTerritoryId == shopUiTerritory)) &&
+            (!(IsAnyShopVisible || IsSelectionMenuVisible || IsTalkVisible) || OwnsShopCleanupUi()))
+            return true;
+
+        // Keep the batch marker until terminal status so this deadline cannot
+        // adopt stale cleanup authority again.
+        ownedUiCleanupUntil = default;
+        return false;
     }
 
     internal static bool MatchesShopCleanupOwner(ulong ownerCharacter, ulong currentCharacter, ulong ownerNpc,
@@ -1696,6 +1763,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         // Entering a shop can clear the ordinary target. The active native NPC
         // interaction still proves ownership of the shop and its returning menu.
         var target = targetManager.Target?.GameObjectId ?? 0;
+        if (shopListOwnsUiCleanup &&
+            (nativeShopNpc != 0 && nativeShopNpc != shopUiNpc ||
+             nativeSelectorNpc != 0 && nativeSelectorNpc != shopUiNpc))
+            return false;
         if (MatchesShopCleanupOwner(shopUiCharacter, CharacterId, shopUiNpc, target, nativeShopNpc, nativeSelectorNpc))
             return true;
         if (ownedMgpExchange is not { } owned || IsSelectionMenuVisible || IsTalkVisible || HasUnexpectedConfirmation)
@@ -1712,24 +1783,26 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     private void CloseShopUiOnce()
     {
-        if (IsTalkVisible) TryAdvanceAchievementDialogue();
+        var dispatched = IsTalkVisible && TryAdvanceAchievementDialogue();
         foreach (var addon in UiAdapters.Select(adapter => adapter.AddonName).Distinct())
-            CloseShopAddon(addon);
-        CloseShopAddon("InclusionShop");
-        CloseShopAddon("GrandCompanyExchange");
-        CloseShopAddon("FreeCompanyCreditShop");
-        CloseShopAddon("FreeCompanyExchange");
+            dispatched |= CloseShopAddon(addon);
+        dispatched |= CloseShopAddon("InclusionShop");
+        dispatched |= CloseShopAddon("GrandCompanyExchange");
+        dispatched |= CloseShopAddon("FreeCompanyCreditShop");
+        dispatched |= CloseShopAddon("FreeCompanyExchange");
         if (companyActionUiOwned)
         {
-            CloseShopAddon("FreeCompanyAction");
-            CloseShopAddon("FreeCompany");
+            dispatched |= CloseShopAddon("FreeCompanyAction");
+            dispatched |= CloseShopAddon("FreeCompany");
             companyActionUiOwned = false;
         }
-        CloseShopAddon("ShopExchangeItemDialog");
-        CloseShopAddon("ShopExchangeCurrencyDialog");
-        CloseShopAddon("SelectIconString");
-        CloseShopAddon("SelectString");
-        nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
+        dispatched |= CloseShopAddon("ShopExchangeItemDialog");
+        dispatched |= CloseShopAddon("ShopExchangeCurrencyDialog");
+        dispatched |= CloseShopAddon("SelectIconString");
+        dispatched |= CloseShopAddon("SelectString");
+        lastShopCleanupDispatched = dispatched;
+        if (dispatched || !shopListOwnsUiCleanup)
+            nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
         inclusionRouteKey = string.Empty;
         inclusionSelectionStage = 0;
         grandCompanyRouteKey = string.Empty;
@@ -1741,10 +1814,12 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     internal void ContinueRelicUiCleanup()
     {
-        if (!OwnsShopCleanupUi())
-            return;
-        // Closing an exchange can return to its parent menu on a later frame.
-        // The opt-in test owns a ten-second cleanup phase, including after reload.
+        if (OwnsShopCleanupUi())
+            ClosePendingShopUi();
+    }
+
+    private void ClosePendingShopUi()
+    {
         if (DateTime.UtcNow >= nextRelicUiCleanupUtc && (IsAnyShopVisible || IsSelectionMenuVisible || IsTalkVisible))
             CloseShopUiOnce();
     }
@@ -1762,12 +1837,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 target != 0 && target != shopUiNpc)
                 ownedMgpExchange = null;
         }
-        if (ownedUiCleanupUntil == default) return;
-        // Keep ownership during the empty frame between a closing shop and its
-        // parent menu. Visible replacement UI must still prove the original NPC.
-        if (CharacterId != shopUiCharacter || IsBetweenAreas
-            || (IsAnyShopVisible || IsSelectionMenuVisible || IsTalkVisible) && !OwnsShopCleanupUi())
-        { ownedUiCleanupUntil = default; return; }
+        if (ownedUiCleanupUntil == default || shopListOwnsUiCleanup || !RetainOwnedShopCleanup()) return;
         if (DateTime.UtcNow >= ownedUiCleanupUntil)
         {
             if (IsAnyShopVisible || IsSelectionMenuVisible || condition[ConditionFlag.OccupiedInQuestEvent])

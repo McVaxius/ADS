@@ -159,6 +159,15 @@ public sealed class ShopReliabilityExpansionTests
         Assert.Equal(accepted ? 2 : 0, state.ResponseOrder);
         Assert.Equal(accepted, state.ValidResponse);
         Assert.Equal(!accepted, state.EventActive);
+
+        if (scenario == "transaction-pending")
+        {
+            handler.Handler.WaitingForTransactionToFinish = false;
+            Assert.True(DalamudShopPurchaseRuntime.TryCancelGilShop(
+                addonPointer, agentPointer, proxyPointer, unexpectedConfirmation));
+            Assert.Equal(2, state.DispatchCount);
+            Assert.False(state.EventActive);
+        }
     }
 
     [Fact]

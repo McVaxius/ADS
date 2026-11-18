@@ -232,11 +232,11 @@ internal sealed class ShopPurchaseRunner
 
     /// <summary>Closes a shop this runner deliberately left open under <see cref="KeepShopOpen"/>, and
     /// reports whether there was one. Never touches a live run's UI.</summary>
-    public bool ReleaseHeldShopUi()
+    public bool ReleaseHeldShopUi(DateTime? cleanupDeadlineUtc = null)
     {
         if (IsRunning || !shopUiOwned)
             return false;
-        CloseOwnedShopUi();
+        CloseOwnedShopUi(cleanupDeadlineUtc);
         return true;
     }
 
@@ -1621,11 +1621,14 @@ internal sealed class ShopPurchaseRunner
         diagnostic($"Validation {validation.State} row={validation.RuntimeRow}: {validation.Message}");
     }
 
-    private void CloseOwnedShopUi()
+    private void CloseOwnedShopUi(DateTime? cleanupDeadlineUtc = null)
     {
         if (!shopUiOwned)
             return;
-        runtime.CloseOwnedShopUi();
+        if (cleanupDeadlineUtc.HasValue)
+            runtime.CloseOwnedShopUi(cleanupDeadlineUtc.Value);
+        else
+            runtime.CloseOwnedShopUi();
         shopUiOwned = false;
     }
 

@@ -1,3 +1,7 @@
+## Unreleased - Shop Lists cleanup (I807)
+
+- Retry the close on the next update when a native shop transaction is still settling. Shop Lists allows up to eight seconds for the owned shop and returning vendor menu to close before reporting a cleanup failure. Verified purchases retain their credit.
+
 2026-11-15 - 2.0.0.25 - Territory-entry reminder removal
 
 - **Removed Territory-entry reminder:** ADS no longer shows the hydration/stretch toast when Questionable Companion is loaded.
