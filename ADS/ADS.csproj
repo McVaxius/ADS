@@ -6,9 +6,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>2.0.0.25</Version>
-    <FileVersion>2.0.0.25</FileVersion>
-    <AssemblyVersion>2.0.0.25</AssemblyVersion>
+    <Version>2.0.0.26</Version>
+    <FileVersion>2.0.0.26</FileVersion>
+    <AssemblyVersion>2.0.0.26</AssemblyVersion>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <RootNamespace>ADS</RootNamespace>

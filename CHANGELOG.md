@@ -1,6 +1,7 @@
-## Unreleased - Shop Lists cleanup (I807)
+2026-11-18 - 2.0.0.26 - Scheduled shop cleanup
 
-- Retry the close on the next update when a native shop transaction is still settling. Shop Lists allows up to eight seconds for the owned shop and returning vendor menu to close before reporting a cleanup failure. Verified purchases retain their credit.
+- **Fixed Shop Lists cleanup.** ADS retries a shop close as soon as the pending transaction allows it, including purchases started by a DAD schedule.
+- **Fixed cleanup reporting.** ADS gives the owned shop and returning vendor menu up to eight seconds to close and retains verified purchases if cleanup fails.
 
 2026-11-15 - 2.0.0.25 - Territory-entry reminder removal
 
