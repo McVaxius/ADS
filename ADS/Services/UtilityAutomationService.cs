@@ -4408,18 +4408,24 @@ public sealed unsafe class UtilityAutomationService
                     SyncShopListBatchStatus(message: $"Finishing order cleanup: {blocker}.");
                     return;
                 }
-                terminal = (false, $"Order cleanup failed: {blocker}.", ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
+                terminal = (false, FormatShopListCleanupFailure(blocker), ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
             }
             else if (shopListBatchCancelRequested)
                 terminal = (false, "Order cancelled; verified progress was retained.", ShopPurchaseFailureCodes.Cancelled, terminal.DeadlineUtc);
         }
         catch (Exception ex)
         {
-            terminal = (false, $"Order cleanup failed: {ex.Message}", ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
+            terminal = (false, FormatShopListCleanupFailure(ex.Message), ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
         }
         shopRuntime.EndShopListCleanup();
         shopListCleanup = null;
         CompleteShopListBatch(terminal.Succeeded, terminal.Message, terminal.FailureCode);
+    }
+
+    private string FormatShopListCleanupFailure(string detail)
+    {
+        var verifiedQuantity = shopListBatchRows.Sum(row => (long)row.PurchasedQuantity);
+        return $"Order cleanup failed: {detail} ({verifiedQuantity} verified item(s) purchased this run).";
     }
 
     private void CompleteShopListBatch(bool succeeded, string message, string? failureCode)
@@ -4503,16 +4509,16 @@ public sealed unsafe class UtilityAutomationService
         SyncShopListBatchStatus();
     }
 
-    private void MarkCurrentBatchRow(string outcome, string message, int acquiredQuantity = 0)
+    private void MarkCurrentBatchRow(string outcome, string message, int? acquiredQuantity = null)
     {
         if (shopListBatchIndex < 0 || shopListBatchIndex >= shopListBatchRows.Count)
             return;
         var row = shopListBatchRows[shopListBatchIndex];
         shopListBatchRows[shopListBatchIndex] = row with
         {
-            PurchasedQuantity = Math.Max(
-                row.PurchasedQuantity,
-                checked(shopListBatchChildPurchasedBaseline + acquiredQuantity)),
+            PurchasedQuantity = acquiredQuantity.HasValue
+                ? Math.Max(row.PurchasedQuantity, checked(shopListBatchChildPurchasedBaseline + acquiredQuantity.Value))
+                : row.PurchasedQuantity,
             Outcome = outcome,
             Message = message,
         };

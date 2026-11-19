@@ -1,3 +1,7 @@
+2026-11-18 - 2.0.0.27 - Shop cleanup reporting
+
+- **Updated Shop Lists cleanup.** Cleanup failures now report how many items ADS verified as purchased during that run.
+
 2026-11-18 - 2.0.0.26 - Scheduled shop cleanup
 
 - **Fixed Shop Lists cleanup.** ADS retries a shop close as soon as the pending transaction allows it, including purchases started by a DAD schedule.

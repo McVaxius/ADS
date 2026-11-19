@@ -877,10 +877,13 @@ public sealed class ShopPurchaseRunnerTests
         var log = System.Reflection.DispatchProxy.Create<Dalamud.Plugin.Services.IPluginLog, ForceMarchLockTests.NoOpProxy>();
         var utility = new UtilityAutomationService(new ShopCatalogService(new BatchSheets()), runtime, clock, log);
         var row = Guid.NewGuid();
+        var finiteOrder = mode == ShopListMode.FillOrderOverMultipleRuns;
+        const int priorCredit = 2;
+        var target = finiteOrder ? priorCredit + 1 : 1;
         Assert.True(utility.StartShopListBatch(new("cleanup", Guid.NewGuid(), mode,
-            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, mode == ShopListMode.SpendUntilCurrencyOrCapacity,
+            Poetics, 0, [], [], [new(row, 100, "Fixture", 1, target, mode == ShopListMode.SpendUntilCurrencyOrCapacity,
                 ShopListOwnershipScope.InventoryOnly, 0)])
-        { CreditedQuantities = mode == ShopListMode.FillOrderOverMultipleRuns ? new Dictionary<Guid, long> { [row] = 0 } : null }));
+        { CreditedQuantities = finiteOrder ? new Dictionary<Guid, long> { [row] = priorCredit } : null }));
         for (var tick = 0; tick < 80 && runtime.CloseUiAttempts == 0; tick++) utility.Update();
         Assert.True(utility.IsRunning);
         Assert.False(utility.ShopListBatchStatus.Done);
@@ -892,8 +895,8 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(1, runtime.CloseUiAttempts);
         Assert.Equal(0, runtime.CloseUiCount);
         Assert.Equal(clock.UtcNow.AddSeconds(8), runtime.LastShopListCleanupDeadlineUtc);
-        if (mode == ShopListMode.FillOrderOverMultipleRuns)
-            Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
+        if (finiteOrder)
+            Assert.Equal(priorCredit + 1, utility.ShopListBatchStatus.CreditedQuantities![row]);
 
         runtime.CloseUiAllowed = true;
         clock.Advance(TimeSpan.FromMilliseconds(16));
@@ -926,13 +929,17 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(cleanupExpires, runtime.IsAnyShopVisible);
         Assert.Equal(2, runtime.CloseUiCount);
         if (cleanupExpires)
+        {
             Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, utility.ShopListBatchStatus.FailureCode);
+            Assert.Equal("Order cleanup failed: Synthetic shop cleanup is pending (1 verified item(s) purchased this run).",
+                utility.ShopListBatchStatus.FailureMessage);
+        }
         Assert.Equal(1, runtime.SubmitCount);
         Assert.Equal(1, runtime.ItemCount);
         Assert.Equal(1, Assert.Single(utility.ShopListBatchStatus.Rows).PurchasedQuantity);
-        if (mode == ShopListMode.FillOrderOverMultipleRuns)
+        if (finiteOrder)
         {
-            Assert.Equal(1, utility.ShopListBatchStatus.CreditedQuantities![row]);
+            Assert.Equal(priorCredit + 1, utility.ShopListBatchStatus.CreditedQuantities![row]);
             runtime.SetCurrency(Poetics, -1);
             Assert.False(utility.StartShopListBatch(new("unknown-balance", Guid.NewGuid(), ShopListMode.FillOrderOverMultipleRuns,
                 Poetics, 0, [], [], [new(row, 100, "Fixture", 1, 1, false, ShopListOwnershipScope.InventoryOnly, 0)])));
