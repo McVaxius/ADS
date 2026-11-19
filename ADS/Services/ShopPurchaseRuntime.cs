@@ -255,6 +255,7 @@ internal interface IShopPurchaseRuntime
     bool IsLoggedIn { get; }
     ulong CharacterId => 0;
     bool IsBetweenAreas { get; }
+    bool HasLocalPlayer { get; }
     bool IsPlayerAvailable { get; }
     uint CurrentTerritoryId { get; }
     byte CurrentGrandCompany => 0;
@@ -354,7 +355,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private ulong shopUiCharacter;
     private uint shopUiTerritory;
     private ulong shopUiNpc;
+    private uint shopUiNpcBaseId;
     private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedMgpExchange;
+    private bool poeticsExchangeCleanup;
+    private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedPoeticsExchange;
     private GearCleanupCandidate? gearSaleContextItem;
     private uint gearSaleConfirmedAddon;
     private string? gearSaleConfirmedPrompt;
@@ -510,8 +514,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     public bool IsLoggedIn => clientState.IsLoggedIn;
     public ulong CharacterId => IsLoggedIn ? Plugin.PlayerState.ContentId : 0;
     public bool IsBetweenAreas => condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51];
+    public bool HasLocalPlayer => objectTable.LocalPlayer != null;
     public bool IsPlayerAvailable => IsLoggedIn
-        && objectTable.LocalPlayer != null
+        && HasLocalPlayer
         && !IsBetweenAreas
         && !condition[ConditionFlag.OccupiedInCutSceneEvent]
         && !condition[ConditionFlag.WatchingCutscene]
@@ -575,6 +580,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (!shopListOwnsUiCleanup) return;
         ownedUiCleanupUntil = default;
         shopListOwnsUiCleanup = false;
+        ownedPoeticsExchange = null;
     }
     public byte CurrentGrandCompany
     {
@@ -1327,7 +1333,10 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         shopUiCharacter = CharacterId;
         shopUiTerritory = CurrentTerritoryId;
         shopUiNpc = nearest.GameObjectId;
+        shopUiNpcBaseId = npcId;
         ownedMgpExchange = null;
+        poeticsExchangeCleanup = false;
+        ownedPoeticsExchange = null;
         gearSaleContextItem = null;
         GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
@@ -1549,6 +1558,11 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     {
         if (transactionCount is < 1 or > 99 || runtimeRow < 0 || HasUnexpectedConfirmation)
             return false;
+        var isPoetics = offer.Offer.Kind == ShopOfferKind.SpecialShopTomestone
+            && offer.Offer.Currencies.Count == 1
+            && offer.Offer.Currencies[0].Identity == new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28);
+        var interaction = (shopUiCharacter, shopUiTerritory, shopUiNpc);
+        var poeticsExchange = isPoetics ? ReadPoeticsExchangeReceipt(offer, runtimeRow) : null;
         if (offer.Offer.Kind == ShopOfferKind.SpecialShopMgp && shopUiCharacter != 0 && shopUiNpc != 0 &&
             CharacterId == shopUiCharacter && (targetManager.Target == null || targetManager.Target.GameObjectId == shopUiNpc))
         {
@@ -1577,6 +1591,11 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         };
         if (accepted)
         {
+            if (interaction == (shopUiCharacter, shopUiTerritory, shopUiNpc))
+            {
+                poeticsExchangeCleanup = isPoetics;
+                ownedPoeticsExchange = poeticsExchange;
+            }
             if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
             {
                 companyActionUiOwned = true;
@@ -1591,6 +1610,23 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 confirmationToken.DiagnosticDetails);
         }
         return accepted;
+    }
+
+    private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ReadPoeticsExchangeReceipt(
+        EvaluatedShopOffer offer, int runtimeRow)
+    {
+        if (!IsPoeticsCleanupContext() || offer.Offer.NpcId != shopUiNpcBaseId
+            || offer.Offer.TerritoryId != shopUiTerritory)
+            return null;
+
+        var exchange = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+        var shop = AgentShop.Instance();
+        if (exchange == null || !exchange->IsVisible || !exchange->IsReady || exchange->Id == 0
+            || shop == null || shop->AddonId != exchange->Id || shop->EventReceiver == null)
+            return null;
+        return ValidateShopUi(offer) is { State: ShopUiValidationState.Valid, RuntimeRow: var row } && row == runtimeRow
+            ? ((nint)exchange, exchange->Id, (nint)shop->EventReceiver, offer)
+            : null;
     }
 
     public bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount)
@@ -1740,6 +1776,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     private bool OwnsShopCleanupUi()
     {
+        if (poeticsExchangeCleanup) return GetPoeticsCleanupAddon(requireReady: false) != null;
         if (shopUiCharacter == 0) return true;
         if (CharacterId != shopUiCharacter || IsBetweenAreas) return false;
         ulong nativeShopNpc = 0, nativeSelectorNpc = 0;
@@ -1781,7 +1818,92 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 target != 0 && target != shopUiNpc);
     }
 
+    private bool IsPoeticsCleanupContext()
+    {
+        var target = targetManager.Target?.GameObjectId ?? 0;
+        return shopUiCharacter != 0 && CharacterId == shopUiCharacter && !IsBetweenAreas
+            && shopUiTerritory == CurrentTerritoryId && shopUiNpc != 0
+            && (target == 0 || target == shopUiNpc);
+    }
+
+    private AtkUnitBase* GetPoeticsCleanupAddon(bool requireReady)
+    {
+        if (ownedPoeticsExchange is not { } owned || !IsPoeticsCleanupContext() || HasUnexpectedConfirmation || IsTalkVisible)
+            return null;
+
+        var manager = RaptureAtkUnitManager.Instance();
+        var exchange = manager->GetAddonByName("ShopExchangeCurrency");
+        var selector = EventHandlerSelector.Instance();
+        var ownsSelector = selector != null && selector->Target != null
+            && (ulong)selector->Target->GetGameObjectId() == shopUiNpc;
+        if (exchange != null && exchange->IsVisible)
+        {
+            if (IsSelectionMenuVisible && !ownsSelector) return null;
+            if (!MatchesPoeticsExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver))
+                return null;
+            if (!requireReady) return exchange;
+            if (!exchange->IsReady) return null;
+            var validation = ValidateShopUi(owned.Offer);
+            if (validation.State == ShopUiValidationState.Mismatch)
+                ownedPoeticsExchange = null;
+            return validation.State == ShopUiValidationState.Valid
+                && MatchesPoeticsExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver)
+                ? exchange : null;
+        }
+
+        // A returning menu must prove its own NPC and expose one unambiguous addon.
+        if (!ownsSelector || IsAnyShopVisible) return null;
+        var iconMenu = manager->GetAddonByName("SelectIconString");
+        var textMenu = manager->GetAddonByName("SelectString");
+        var iconVisible = iconMenu != null && iconMenu->IsVisible;
+        var textVisible = textMenu != null && textMenu->IsVisible;
+        if (iconVisible == textVisible) return null;
+        var menu = iconVisible ? iconMenu : textMenu;
+        return !requireReady || menu->IsReady ? menu : null;
+    }
+
+    private static bool MatchesPoeticsExchangeBinding(AtkUnitBase* exchange, nint addon, uint addonId, nint receiver)
+    {
+        var shop = AgentShop.Instance();
+        return exchange != null && (nint)exchange == addon && exchange->Id == addonId
+            && shop != null && shop->AddonId == addonId && (nint)shop->EventReceiver == receiver;
+    }
+
+    private bool ClosePoeticsCleanupAddon()
+    {
+        var addon = GetPoeticsCleanupAddon(requireReady: true);
+        if (addon == null) return false;
+        try
+        {
+            AtkValue cancel = default;
+            cancel.SetInt(-1);
+            addon->FireCallback(1, &cancel, true);
+            log.Debug("[ADS][Shop] Dispatched the owned Poetics UI cancel callback.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Debug(ex, "[ADS][Shop] Failed to dispatch the owned Poetics UI cancel callback.");
+            return false;
+        }
+    }
+
     private void CloseShopUiOnce()
+    {
+        var dispatched = poeticsExchangeCleanup ? ClosePoeticsCleanupAddon() : CloseLegacyShopUi();
+        lastShopCleanupDispatched = dispatched;
+        if (dispatched || !shopListOwnsUiCleanup)
+            nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
+        inclusionRouteKey = string.Empty;
+        inclusionSelectionStage = 0;
+        grandCompanyRouteKey = string.Empty;
+        grandCompanySelectionStage = 0;
+        readableOwnedSelectYesNoPrompt = null;
+        unreadableOwnedSelectYesnoWarningLogged = false;
+        confirmationToken = null;
+    }
+
+    private bool CloseLegacyShopUi()
     {
         var dispatched = IsTalkVisible && TryAdvanceAchievementDialogue();
         foreach (var addon in UiAdapters.Select(adapter => adapter.AddonName).Distinct())
@@ -1800,16 +1922,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         dispatched |= CloseShopAddon("ShopExchangeCurrencyDialog");
         dispatched |= CloseShopAddon("SelectIconString");
         dispatched |= CloseShopAddon("SelectString");
-        lastShopCleanupDispatched = dispatched;
-        if (dispatched || !shopListOwnsUiCleanup)
-            nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
-        inclusionRouteKey = string.Empty;
-        inclusionSelectionStage = 0;
-        grandCompanyRouteKey = string.Empty;
-        grandCompanySelectionStage = 0;
-        readableOwnedSelectYesNoPrompt = null;
-        unreadableOwnedSelectYesnoWarningLogged = false;
-        confirmationToken = null;
+        return dispatched;
     }
 
     internal void ContinueRelicUiCleanup()
@@ -1826,6 +1939,17 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
     public void UpdateOwnedShopCleanup()
     {
+        if (ownedPoeticsExchange is { } poetics)
+        {
+            if (!IsPoeticsCleanupContext())
+                ownedPoeticsExchange = null;
+            else if (poetics.Addon != 0 && !MatchesPoeticsExchangeBinding(
+                RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency"), poetics.Addon, poetics.AddonId, poetics.Receiver))
+            {
+                // The returning selector can still prove its NPC after the exchange has been destroyed.
+                ownedPoeticsExchange = (0, 0, 0, poetics.Offer);
+            }
+        }
         if (ownedMgpExchange is { } owned)
         {
             var exchange = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");

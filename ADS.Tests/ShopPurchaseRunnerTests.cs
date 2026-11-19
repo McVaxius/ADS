@@ -1734,6 +1734,80 @@ public sealed class ShopPurchaseRunnerTests
         runner.Cancel("test complete");
     }
 
+    [Theory]
+    [InlineData("player-returns")]
+    [InlineData("timeout")]
+    [InlineData("player-returns-late")]
+    [InlineData("player-present-but-unavailable")]
+    public void AcceptedTeleportWaitsForPlayerAfterZoningClears(string outcome)
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true };
+        runtime.TeleportArrivalResults.Enqueue(false);
+        var runner = new ShopPurchaseRunner(
+            new FakeCatalog(Resolution(1, [Offer(10, 100, 1, territoryId: 2)])),
+            runtime,
+            clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        runner.Update();
+
+        runtime.IsBetweenAreas = true;
+        runtime.HasLocalPlayer = false;
+        runtime.IsPlayerAvailable = false;
+        runner.Update();
+
+        runtime.CurrentTerritoryId = 2;
+        runtime.IsBetweenAreas = false;
+        runtime.HasLocalPlayer = outcome == "player-present-but-unavailable";
+        clock.Advance(TimeSpan.FromSeconds(3));
+        runner.Update();
+
+        Assert.Equal(1, runtime.TeleportCount);
+        Assert.Equal(0, runtime.MoveCount);
+        Assert.Empty(runtime.InteractedNpcIds);
+        Assert.Equal(0, runtime.SubmitCount);
+
+        if (runtime.HasLocalPlayer)
+        {
+            Assert.False(runner.IsRunning);
+            Assert.Equal(ShopPurchaseFailureCodes.Cancelled, runner.Status.FailureCode);
+            return;
+        }
+
+        Assert.True(runner.IsRunning, runner.Status.FailureMessage);
+        Assert.Equal("teleporting", runner.Status.Phase);
+
+        if (outcome is "timeout" or "player-returns-late")
+        {
+            clock.Advance(TimeSpan.FromSeconds(87));
+            runner.Update();
+            Assert.True(runner.IsRunning, runner.Status.FailureMessage);
+
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            if (outcome == "player-returns-late")
+            {
+                runtime.HasLocalPlayer = true;
+                runtime.IsPlayerAvailable = true;
+            }
+            runner.Update();
+            Assert.False(runner.IsRunning);
+            Assert.Equal(ShopPurchaseFailureCodes.Timeout, runner.Status.FailureCode);
+            Assert.Equal(1, runtime.TeleportCount);
+            Assert.Equal(0, runtime.MoveCount);
+            Assert.Empty(runtime.InteractedNpcIds);
+            Assert.Equal(0, runtime.SubmitCount);
+            return;
+        }
+
+        runtime.HasLocalPlayer = true;
+        runtime.IsPlayerAvailable = true;
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded, runner.Status.FailureMessage);
+        Assert.Equal(1, runtime.TeleportCount);
+        Assert.Equal(1, runtime.SubmitCount);
+    }
+
     [Fact]
     public void ConfirmedTeleportRebasesOnlyGilAndCompletesOneShotPurchase()
     {
@@ -2834,6 +2908,7 @@ public sealed class ShopPurchaseRunnerTests
                 CloseOwnedShopUi();
         }
         public bool IsBetweenAreas { get; set; }
+        public bool HasLocalPlayer { get; set; } = true;
         public bool IsPlayerAvailable { get; set; } = true;
         public uint CurrentTerritoryId { get; set; } = 1;
         public Vector3 PlayerPosition { get; set; } = Vector3.Zero;

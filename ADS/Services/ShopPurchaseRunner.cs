@@ -476,6 +476,14 @@ internal sealed class ShopPurchaseRunner
 
             if (!runtime.IsPlayerAvailable)
             {
+                if (phase == RunnerPhase.Teleporting && teleportCommandAccepted
+                    && companyActionOwner != 0 && !runtime.HasLocalPlayer)
+                {
+                    if (clock.UtcNow - phaseStartedAtUtc > TravelTimeout)
+                        Fail(ShopPurchaseFailureCodes.Timeout, "The local player did not load within 90 seconds of starting shop travel.");
+                    return;
+                }
+
                 Cancel("The player became unavailable during the shop purchase.");
                 return;
             }
@@ -647,6 +655,12 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
+        if (clock.UtcNow - phaseStartedAtUtc > TravelTimeout)
+        {
+            TryFallbackOrFail(ShopPurchaseFailureCodes.Timeout, "Travel to the selected shop timed out.");
+            return;
+        }
+
         if (runtime.CurrentTerritoryId == selected.Route.TerritoryId)
         {
             RebaselineTrackedGilAfterTeleport();
@@ -656,12 +670,6 @@ internal sealed class ShopPurchaseRunner
                 return;
             }
             BeginNavigation();
-            return;
-        }
-
-        if (clock.UtcNow - phaseStartedAtUtc > TravelTimeout)
-        {
-            TryFallbackOrFail(ShopPurchaseFailureCodes.Timeout, "Travel to the selected shop timed out.");
             return;
         }
 

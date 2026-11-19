@@ -1,3 +1,8 @@
+2026-11-19 - 2.0.0.29 - Shop travel and Poetics cleanup
+
+- **Fixed shop travel** so ADS waits for the character to load after teleport before starting navigation.
+- **Fixed Poetics shop cleanup** so ADS can close its verified exchange after the game clears the vendor target.
+
 2026-11-19 - 2.0.0.28 - Shop cleanup deadline
 
 - **Fixed Shop Lists cleanup** so ADS reports a failure if it cannot confirm closure within eight seconds. Verified purchases still count.
