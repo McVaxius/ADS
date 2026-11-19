@@ -865,11 +865,13 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Theory]
-    [InlineData(ShopListMode.FillOrderOverMultipleRuns, false)]
-    [InlineData(ShopListMode.TargetedRefill, false)]
-    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity, false)]
-    [InlineData(ShopListMode.FillOrderOverMultipleRuns, true)]
-    public void ShopListBatchDoesNotPublishTerminalSuccessUntilCleanupIsProven(ShopListMode mode, bool cleanupExpires)
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, false, false)]
+    [InlineData(ShopListMode.TargetedRefill, false, false)]
+    [InlineData(ShopListMode.SpendUntilCurrencyOrCapacity, false, false)]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, true, false)]
+    [InlineData(ShopListMode.FillOrderOverMultipleRuns, true, true)]
+    public void ShopListBatchDoesNotPublishTerminalSuccessUntilCleanupIsProven(
+        ShopListMode mode, bool cleanupExpires, bool clearAfterDeadline)
     {
         var clock = new FakeClock();
         var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, CleanupBlocked = true, CloseUiAllowed = false };
@@ -914,24 +916,25 @@ public sealed class ShopPurchaseRunnerTests
         Assert.False(utility.ShopListBatchStatus.Done);
 
         if (cleanupExpires)
-        {
-            clock.Advance(TimeSpan.FromMilliseconds(6_984));
-            runtime.ExpectedShopVisible = true;
-        }
-        else
-            runtime.CleanupBlocked = false;
+            clock.Advance(TimeSpan.FromMilliseconds(clearAfterDeadline ? 6_985 : 6_984));
+        var cleanupStillBlocked = cleanupExpires && !clearAfterDeadline;
+        runtime.CleanupBlocked = cleanupStillBlocked;
+        runtime.ExpectedShopVisible = cleanupStillBlocked;
 
         utility.Update();
         Assert.False(utility.IsRunning);
         Assert.True(utility.ShopListBatchStatus.Done);
         Assert.Equal(!cleanupExpires, utility.ShopListBatchStatus.Succeeded);
         Assert.NotNull(utility.ShopListBatchStatus.CompletedAtUtc);
-        Assert.Equal(cleanupExpires, runtime.IsAnyShopVisible);
+        Assert.Equal(cleanupStillBlocked, runtime.IsAnyShopVisible);
         Assert.Equal(2, runtime.CloseUiCount);
         if (cleanupExpires)
         {
             Assert.Equal(ShopPurchaseFailureCodes.UiMismatch, utility.ShopListBatchStatus.FailureCode);
-            Assert.Equal("Order cleanup failed: Synthetic shop cleanup is pending (1 verified item(s) purchased this run).",
+            var detail = clearAfterDeadline
+                ? "closure was not confirmed before the eight-second deadline"
+                : "Synthetic shop cleanup is pending";
+            Assert.Equal($"Order cleanup failed: {detail} (1 verified item(s) purchased this run).",
                 utility.ShopListBatchStatus.FailureMessage);
         }
         Assert.Equal(1, runtime.SubmitCount);

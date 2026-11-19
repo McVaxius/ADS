@@ -4401,17 +4401,19 @@ public sealed unsafe class UtilityAutomationService
         {
             shopRuntime.ContinueShopListCleanup(terminal.DeadlineUtc, attemptClose && shopClock.UtcNow < terminal.DeadlineUtc);
             var blocker = shopRuntime.ShopListCleanupBlocker;
-            if (blocker != null)
+            var deadlineExpired = shopClock.UtcNow >= terminal.DeadlineUtc;
+            if (blocker != null && !deadlineExpired)
             {
-                if (shopClock.UtcNow < terminal.DeadlineUtc)
-                {
-                    SyncShopListBatchStatus(message: $"Finishing order cleanup: {blocker}.");
-                    return;
-                }
-                terminal = (false, FormatShopListCleanupFailure(blocker), ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
+                SyncShopListBatchStatus(message: $"Finishing order cleanup: {blocker}.");
+                return;
             }
+            if (blocker != null)
+                terminal = (false, FormatShopListCleanupFailure(blocker), ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
             else if (shopListBatchCancelRequested)
                 terminal = (false, "Order cancelled; verified progress was retained.", ShopPurchaseFailureCodes.Cancelled, terminal.DeadlineUtc);
+            else if (terminal.Succeeded && deadlineExpired)
+                terminal = (false, FormatShopListCleanupFailure("closure was not confirmed before the eight-second deadline"),
+                    ShopPurchaseFailureCodes.UiMismatch, terminal.DeadlineUtc);
         }
         catch (Exception ex)
         {

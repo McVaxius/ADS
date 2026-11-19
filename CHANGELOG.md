@@ -1,3 +1,7 @@
+2026-11-19 - 2.0.0.28 - Shop cleanup deadline
+
+- **Fixed Shop Lists cleanup** so ADS reports a failure if it cannot confirm closure within eight seconds. Verified purchases still count.
+
 2026-11-18 - 2.0.0.27 - Shop cleanup reporting
 
 - **Updated Shop Lists cleanup.** Cleanup failures now report how many items ADS verified as purchased during that run.
