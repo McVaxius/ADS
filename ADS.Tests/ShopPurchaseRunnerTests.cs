@@ -1367,6 +1367,68 @@ public sealed class ShopPurchaseRunnerTests
     }
 
     [Fact]
+    public void AurianaPoeticsRingUsesAccessoryPageAndExactPurchaseRow()
+    {
+        const uint ring = 8885;
+        const int quantity = 1;
+        var snapshot = PoeticsGearCatalogTests.CreateSnapshot();
+        var catalog = new ShopCatalogService(new FixedPoeticsGearSheets(snapshot));
+        var offer = Assert.Single(catalog.Resolve(ring, quantity).Offers);
+        Assert.Equal(1008119u, offer.NpcId);
+        Assert.Equal(156u, offer.TerritoryId);
+        Assert.Equal(1769533u, offer.ShopId);
+        Assert.Equal(offer.ShopId, Assert.Single(offer.CallbackPath).HandlerId);
+        Assert.Equal(280u, Assert.Single(offer.Currencies).AmountPerTransaction);
+        Assert.True(ExchangeShopRuntimeValidator.UsesAurianaPoeticsGearPages(offer));
+        Assert.Equal(9u, ExchangeShopRuntimeValidator.AurianaPoeticsGearTab(3)); // Head
+        Assert.Equal(10u, ExchangeShopRuntimeValidator.AurianaPoeticsGearTab(12)); // Ring
+
+        var shopRows = snapshot.SpecialShopRows.Where(row => row.ShopId == offer.ShopId).OrderBy(row => row.RowIndex).ToArray();
+        var receives = shopRows.Select(row => row.ReceiveItems.Single(item => item.ItemId != 0))
+            .Select(item => new ShopRuntimeExchangeItem(item.ItemId, item.Count)).ToArray();
+
+        ShopUiValidationResult ValidatePage(IEnumerable<SpecialShopSheetRow> page)
+        {
+            var visible = page.ToArray();
+            var values = Enumerable.Repeat(-1L, 1432).ToArray();
+            values[3] = receives.Length;
+            values[4] = visible.Length;
+            for (var row = 0; row < visible.Length; ++row)
+            {
+                var callback = visible[row].RowIndex;
+                values[1066 + row] = receives[callback].ItemId;
+                values[456 + row] = visible[row].Costs.Single(cost => cost.Amount > 0).Amount;
+                values[1310 + row] = callback;
+            }
+            return ExchangeShopRuntimeValidator.ValidateCurrency(values, offer.ShopName, receives, 28, offer.ShopName,
+                ring, offer.ReceiveCount, offer.Currencies, aurianaGearShop: true);
+        }
+
+        Assert.Equal(ShopUiValidationState.Mismatch, ValidatePage(shopRows.Take(25)).State);
+        var accessoryPage = ValidatePage(shopRows.Skip(25));
+        Assert.Equal(ShopUiValidationState.Valid, accessoryPage.State);
+        Assert.Equal(34, accessoryPage.RuntimeRow);
+        Assert.Equal(offer.SheetRowIndex, accessoryPage.RuntimeRow);
+
+        var runtime = new FakeRuntime { CurrentTerritoryId = 156, ArriveOnMove = true,
+            ApplyItemDelta = true, ApplyCurrencyDelta = true, Validation = accessoryPage };
+        runtime.SetCurrency(Poetics, 1_000);
+        runtime.SelectionMenuNpcIds.Add(offer.NpcId);
+        runtime.NpcWithinInteractionReach.Add(offer.NpcId);
+        var clock = new FakeClock();
+        var runner = new ShopPurchaseRunner(catalog, runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(ring, quantity), false, Poetics));
+        DriveWithTime(runner, clock);
+
+        Assert.True(runner.Status.Succeeded, runner.Status.StatusMessage);
+        Assert.Equal(offer.NpcId, Assert.Single(runtime.SubmittedNpcIds));
+        Assert.Equal(accessoryPage.RuntimeRow, Assert.Single(runtime.SubmittedRuntimeRows));
+        Assert.Equal(quantity, Assert.Single(runtime.SubmittedBatches));
+        Assert.Equal((long)quantity, runtime.GetItemCount(ring));
+        Assert.Equal(720L, runtime.GetAvailableCurrency(offer.Currencies[0]));
+    }
+
+    [Fact]
     public void ExchangeAllocatedButEmptyCostsWaitWithoutAcceptingTheRow()
     {
         var result = ExchangeShopRuntimeValidator.Validate("Poetics", [new(6267, 1)],

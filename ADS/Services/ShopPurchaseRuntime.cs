@@ -140,6 +140,19 @@ internal static class ShopRuntimeCostMatcher
 
 internal static class ExchangeShopRuntimeValidator
 {
+    internal static bool UsesAurianaPoeticsGearPages(ShopOffer offer)
+        => offer.Kind == ShopOfferKind.SpecialShopTomestone && offer.NpcId == 1008119
+            && offer.TerritoryId == 156 && offer.ShopId is 1769533 or 1769534
+            && offer.Currencies.Count == 1
+            && offer.Currencies[0].Identity == new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28);
+
+    internal static uint AurianaPoeticsGearTab(uint equipSlotCategory) => equipSlotCategory switch
+    {
+        >= 3 and <= 8 => 9,  // Armor
+        >= 9 and <= 12 => 10, // Accessories
+        _ => 0,
+    };
+
     // Current ECommons ShopExchangeCurrency layout; AgentShop's cost slots stay empty
     // for this addon. Keep its item/bundle data as an independent row check.
     internal static ShopUiValidationResult ValidateCurrency(
@@ -151,14 +164,16 @@ internal static class ExchangeShopRuntimeValidator
         uint expectedItemId,
         uint expectedReceiveCount,
         IReadOnlyList<ShopCurrencyCost> expectedCosts,
-        bool certificateShop = false)
+        bool certificateShop = false,
+        bool aurianaGearShop = false)
     {
         if (values.Length <= 4 || values[4] == 0)
             return ShopUiValidationResult.NotReady("ShopExchangeCurrency rows are not populated yet.");
         var count = values[4];
+        var indexedRows = certificateShop || (aurianaGearShop && count != receives.Length);
         if (count is < 1 or > 122 || values.Length < 1310 + count ||
-            (!certificateShop && receives.Length != count) ||
-            (certificateShop && (values[3] != receives.Length || receives.Length is < 1 or > 122)))
+            (!indexedRows && receives.Length != count) ||
+            (indexedRows && (values[3] != receives.Length || receives.Length is < 1 or > 122 || count > receives.Length)))
             return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency has an unsupported or incomplete row layout: values={values.Length}, rows={count}, receives={receives.Length}.");
         if (currencyItemId == 0 || expectedCosts.Count != 1 || expectedCosts[0].ItemId != currencyItemId)
             return ShopUiValidationResult.Mismatch("ShopExchangeCurrency's displayed currency does not uniquely match the expected currency item.");
@@ -174,7 +189,7 @@ internal static class ExchangeShopRuntimeValidator
             var callback = values[1310 + row];
             if (callback < 0 || callback >= receives.Length || !callbacks.Add(callback))
                 return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency row {row} has an invalid or duplicate callback index.");
-            var receive = receives[certificateShop ? (int)callback : row];
+            var receive = receives[indexedRows ? (int)callback : row];
             if (values[1066 + row] != receive.ItemId || price is <= 0 or > uint.MaxValue)
                 return ShopUiValidationResult.Mismatch($"ShopExchangeCurrency row {row} has inconsistent item, price, or callback data.");
             visibleReceives[row] = receive;
@@ -386,6 +401,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     }
     private bool achievementExchangeSelected;
     private bool achievementCategorySelected;
+    private (EvaluatedShopOffer Offer, uint Tab)? aurianaPageRequested;
     private DateTime ownedUiCleanupUntil;
     private bool shopListOwnsUiCleanup;
 
@@ -1474,6 +1490,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         gearSaleContextItem = null;
         GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
+        aurianaPageRequested = default;
         ownedUiCleanupUntil = default;
         shopListOwnsUiCleanup = false;
         return true;
@@ -1782,7 +1799,60 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             if (ReadUnsigned(addon->AtkValues[1066 + index]) == itemId) return ShopUiValidationResult.Valid(-1);
         return ShopUiValidationResult.NotReady("The certificate Others tab has not exposed the requested minion; no purchase submitted.");
     }
+
+    private ShopUiValidationResult EnsureAurianaPoeticsGearPage(EvaluatedShopOffer selected, ShopUiValidationResult mismatch)
+    {
+        var offer = selected.Offer;
+        if (!IsOwnedExchangeContext() || shopUiNpcBaseId != offer.NpcId)
+            return mismatch;
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency");
+        var agent = AgentShop.Instance();
+        if (addon == null || !addon->IsVisible || !addon->IsReady || addon->Id == 0 || addon->AtkValues == null
+            || agent == null || agent->AddonId != addon->Id || agent->EventReceiver == null
+            || !string.Equals(agent->ShopName.ToString(), offer.ShopName, StringComparison.Ordinal))
+            return mismatch;
+
+        var values = addon->AtkValues;
+        var total = agent->ItemReceiveCount;
+        var shown = addon->AtkValuesCount > 4 ? ReadUnsigned(values[4]) : 0;
+        if (total is < 1 or > 122 || shown < 1 || shown > total
+            || addon->AtkValuesCount < 1310 + shown || ReadUnsigned(values[3]) != total)
+            return mismatch;
+
+        // A visible item with a wrong price, bundle, or callback must fail validation.
+        for (var row = 0; row < shown; ++row)
+            if (ReadUnsigned(values[1066 + row]) == offer.ReceiveItemId)
+                return mismatch;
+
+        var matches = 0;
+        foreach (var receive in agent->ItemReceiveSpan)
+            if (receive.ItemId == offer.ReceiveItemId && receive.ItemCount == offer.ReceiveCount)
+                ++matches;
+        if (matches != 1)
+            return mismatch;
+
+        var item = Plugin.DataManager.GetExcelSheet<Item>().GetRowOrDefault(offer.ReceiveItemId);
+        var tabId = ExchangeShopRuntimeValidator.AurianaPoeticsGearTab(item?.EquipSlotCategory.RowId ?? 0);
+        if (tabId == 0)
+            return mismatch;
+        if (aurianaPageRequested is { } requested && requested.Offer.Offer.ShopId == offer.ShopId && requested.Tab == tabId)
+            return ShopUiValidationResult.NotReady("Waiting for the selected Auriana Poetics gear page.");
+
+        // ShopExchangeCurrency uses registered radio nodes 9 (Armor) and 10 (Accessories).
+        var node = addon->GetNodeById(tabId);
+        var tab = node == null || !node->IsVisible() ? null : node->GetAsAtkComponentRadioButton();
+        if (tab == null || !tab->AtkComponentButton.IsEnabled
+            || !GameInteractionHelper.TryClickAddonNodeButton("ShopExchangeCurrency", tabId, Plugin.GameGui, log))
+            return mismatch;
+
+        aurianaPageRequested = (selected, tabId);
+        return ShopUiValidationResult.NotReady("Waiting for the selected Auriana Poetics gear page.");
+    }
+
     public ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer)
+        => ValidateShopUi(offer, selectAurianaPage: true);
+
+    private ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer, bool selectAurianaPage)
     {
         if (HasUnexpectedConfirmation)
             return ShopUiValidationResult.Mismatch("An unexpected confirmation dialog appeared; ADS will not accept it.");
@@ -1816,7 +1886,11 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         try
         {
-            return adapter.Validate(offer);
+            var validation = adapter.Validate(offer);
+            if (selectAurianaPage && validation.State == ShopUiValidationState.Mismatch
+                && ExchangeShopRuntimeValidator.UsesAurianaPoeticsGearPages(offer.Offer))
+                return EnsureAurianaPoeticsGearPage(offer, validation);
+            return validation;
         }
         catch (Exception ex)
         {
@@ -1869,6 +1943,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 poeticsExchangeCleanup = isPoetics;
                 ownedPoeticsExchange = poeticsExchange;
                 ownedFeatherExchange = featherExchange;
+                if (poeticsExchange != null)
+                    aurianaPageRequested = null;
             }
             if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
             {
@@ -1922,7 +1998,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (exchange == null || !exchange->IsVisible || !exchange->IsReady || exchange->Id == 0
             || shop == null || shop->AddonId != exchange->Id || shop->EventReceiver == null)
             return null;
-        return ValidateShopUi(offer) is { State: ShopUiValidationState.Valid, RuntimeRow: var row } && row == runtimeRow
+        return ValidateShopUi(offer, selectAurianaPage: false) is { State: ShopUiValidationState.Valid, RuntimeRow: var row } && row == runtimeRow
             ? ((nint)exchange, exchange->Id, (nint)shop->EventReceiver, offer)
             : null;
     }
@@ -2362,9 +2438,17 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 return null;
             if (!requireReady) return exchange;
             if (!exchange->IsReady) return null;
-            var validation = ValidateShopUi(owned.Offer);
-            if (validation.State == ShopUiValidationState.Mismatch)
+            var validation = ValidateShopUi(owned.Offer, selectAurianaPage: false);
+            if (validation.State != ShopUiValidationState.Valid && aurianaPageRequested is { } requested
+                && requested.Offer.Offer.ShopId == owned.Offer.Offer.ShopId)
+            {
+                // ADS can change the page while keeping the same owned exchange open.
+                validation = ValidateShopUi(requested.Offer, selectAurianaPage: false);
+            }
+            else if (validation.State == ShopUiValidationState.Mismatch)
+            {
                 ownedPoeticsExchange = null;
+            }
             return validation.State == ShopUiValidationState.Valid
                 && MatchesExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver)
                 ? exchange : null;
@@ -3033,7 +3117,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 values[index] = ReadSigned(addon->AtkValues[index]);
             var currencyValidation = ExchangeShopRuntimeValidator.ValidateCurrency(values, agent->ShopName.ToString(), runtimeReceives,
                 currencyId, offer.Offer.ShopName, offer.Offer.ReceiveItemId, offer.Offer.ReceiveCount, offer.Offer.Currencies,
-                certificateShop: offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency);
+                certificateShop: offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency,
+                aurianaGearShop: ExchangeShopRuntimeValidator.UsesAurianaPoeticsGearPages(offer.Offer));
             if (currencyValidation.State == ShopUiValidationState.Mismatch && offer.Offer.Kind == ShopOfferKind.SpecialShopCurrency)
                 Plugin.Log.Information("[ADS][Shop] Certificate layout snapshot: valuesCount={Count}, name={Name}, icon={Icon}, currency={Currency}, header={Header}, receives={Receives}, rows={Rows}, targetOffsets={Offsets}",
                     addon->AtkValuesCount, agent->ShopName.ToString(), icon, currencyId,

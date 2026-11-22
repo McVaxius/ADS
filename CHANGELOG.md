@@ -1,3 +1,7 @@
+2026-11-22 - 2.0.0.32 - Auriana Poetics gear
+
+- **Fixed Auriana's Poetics gear shop.** ADS switches between Armor and Accessories and verifies the selected item before buying.
+
 2026-11-22 - 2.0.0.31 - Linux and Wine fonts
 
 - **Fixed Linux and Wine font loading.** The plugin now uses bundled fonts for its interface.
