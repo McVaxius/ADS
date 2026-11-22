@@ -1,6 +1,6 @@
-Unreleased
+2026-11-22 - 2.0.0.31 - Linux and Wine fonts
 
-- **Fixed UI font loading on Linux and Wine** by loading bundled Selawik fonts from the ADS install directory.
+- **Fixed Linux and Wine font loading.** The plugin now uses bundled fonts for its interface.
 - **Fixed the Higher or Lower texture exporter** so ADS finds the script shipped with the plugin.
 
 2026-11-22 - 2.0.0.30 - Silver Chocobo Feather exchanges
