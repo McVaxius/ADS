@@ -211,6 +211,79 @@ public sealed class ShopReliabilityExpansionTests
         Assert.Equal(4, nestedCallback);
     }
 
+    [Fact]
+    public unsafe void LimsaExchangeConfirmationRequiresTheNativeDialogRowAndQuantity()
+    {
+        var agent = new AgentShop { DialogAddonId = 41, SelectedItemIndex = 3, SelectedItemStackSize = 1 };
+
+        Assert.True(DalamudShopPurchaseRuntime.MatchesLimsaExchangeSelection(&agent, 41, 3, 1));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesLimsaExchangeSelection(&agent, 42, 3, 1));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesLimsaExchangeSelection(&agent, 41, 4, 1));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesLimsaExchangeSelection(&agent, 41, 3, 2));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesLimsaExchangeSelection(&agent, 0, 3, 1));
+    }
+
+    [Fact]
+    public void LimsaEquipWarningRequiresTheFullLocalizedTransactionPrompt()
+    {
+        const string expected = "You cannot currently equip this item.\nProceed with the transaction?";
+        Assert.True(DalamudShopPurchaseRuntime.MatchesEquipmentWarning(
+            "You cannot currently equip this item.\r\nProceed with the transaction?", expected));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesEquipmentWarning(
+            "This item is part of a registered gear set. Are you certain you wish to exchange it?", expected));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesEquipmentWarning(expected + " Additional transaction.", expected));
+        Assert.False(DalamudShopPurchaseRuntime.MatchesEquipmentWarning(" ", expected));
+    }
+
+    [Theory]
+    [InlineData(1_769_610u, 2)]
+    [InlineData(1_769_988u, 3)]
+    [InlineData(1_769_989u, 4)]
+    [InlineData(1_770_475u, 5)]
+    [InlineData(1_770_756u, 6)]
+    public void LimsaSalvagerTopicRequiresCompletedParentAndVerifiedTierMenu(uint shopId, int slot)
+    {
+        var parent = new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 7, 3_276_842);
+        var owner = (Character: 1uL, Territory: 128u, Entity: 2uL, BaseId: 1_006_005u);
+        string[] entries =
+        [
+            "Dream of the Fayth Exchange",
+            "Gold Chocobo Feather Exchange",
+            "Silver Chocobo Feather Exchange I ( \u2264 Lv. 50 Gear)",
+            "Silver Chocobo Feather Exchange II (Lv. 60 Gear)",
+            "Silver Chocobo Feather Exchange III (Lv. 70 Gear)",
+            "Silver Chocobo Feather Exchange IV (Lv. 80 Gear)",
+            "Silver Chocobo Feather Exchange V (Lv. 90 Gear)",
+        ];
+
+        var step = new ShopMenuPathStep(ShopMenuPathStepKind.TopicSelectShop, slot, shopId);
+        Assert.True(ShopMenuRouteResolver.IsLimsaSalvagerFeatherStep(owner.BaseId, step));
+        Assert.False(ShopMenuRouteResolver.IsLimsaSalvagerFeatherStep(1_006_004u, step));
+        Assert.False(ShopMenuRouteResolver.IsLimsaSalvagerFeatherStep(owner.BaseId, step with { HandlerId = 1_769_607u }));
+        var label = entries[slot];
+        var tierLabels = entries[2..];
+        Assert.True(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, owner, label, tierLabels, entries, out var index));
+        Assert.Equal(slot, index);
+
+        var noTarget = (owner.Character, owner.Territory, Entity: 0uL, BaseId: 0u);
+        Assert.True(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, noTarget, label, tierLabels, entries, out index));
+        Assert.Equal(slot, index);
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, noTarget, label, tierLabels, [label], out index));
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, (owner.Character, 133u, 0uL, 0u), label, tierLabels, entries, out index));
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, (99uL, owner.Territory, 0uL, 0u), label, tierLabels, entries, out index));
+
+        Array.Reverse(entries);
+        Assert.True(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, noTarget, label, tierLabels, entries, out index));
+        Assert.Equal(entries.Length - slot - 1, index);
+
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, noTarget, label, tierLabels, [.. entries, label], out index));
+        Assert.Equal(-1, index);
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(parent, owner, (1uL, 128u, 3uL, 1_006_005u), label, tierLabels, entries, out index));
+        Assert.Equal(-1, index);
+        Assert.False(ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(null, owner, noTarget, label, tierLabels, entries, out index));
+        Assert.Equal(-1, index);
+    }
+
     [Theory]
     [InlineData(0, 1)]
     [InlineData(1, 0)]

@@ -28,6 +28,7 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
     public bool CompanyAction { get; init; }
     public bool ClaimAchievementCertificates { get; init; }
     public bool AllowTravel { get; init; } = true;
+    internal bool KeepShopOpen { get; init; }
     public const int MaximumQuantity = 9_999;
 
     public static bool TryCreate(uint itemId, int quantity, out ShopPurchaseRequest request, out string error)
@@ -99,6 +100,12 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (!TryParseJson(root, out request, out error)) return false;
+            if (root.TryGetProperty("keepShopOpen", out var keepOpen)
+                && keepOpen.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                error = "Currency purchase keepShopOpen must be a boolean when provided.";
+                return false;
+            }
             var allowTravel = true;
             if (root.TryGetProperty("allowTravel", out var travelElement))
             {
@@ -121,7 +128,8 @@ public readonly record struct ShopPurchaseRequest(uint ItemId, int Quantity)
                 return false;
             }
             currency = new ShopCurrencyIdentity(kind, currencyItemId);
-            request = request with { OperationId = operationId, MaximumCurrencySpend = maximumSpend, AllowTravel = allowTravel };
+            request = request with { OperationId = operationId, MaximumCurrencySpend = maximumSpend,
+                AllowTravel = allowTravel, KeepShopOpen = keepOpen.ValueKind == JsonValueKind.True };
             return true;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentException)
@@ -593,4 +601,5 @@ public sealed record ShopPurchaseStatusSnapshot(
     public bool CompanyAction { get; init; }
     public long AchievementCertificatesClaimed { get; init; }
     public bool NavigationReleased { get; init; } = true;
+    public bool ShopHeldOpen { get; init; }
 }

@@ -668,6 +668,7 @@ public sealed unsafe class UtilityAutomationService
     /// one. <see cref="Cancel"/> cannot: it early-returns unless a run is active, which a finished chain
     /// never is.</summary>
     public bool ReleaseHeldShopUi() => shopPurchaseRunner.ReleaseHeldShopUi();
+    internal bool ReleaseHeldShopUi(string operationId) => shopPurchaseRunner.ReleaseHeldShopUi(operationId);
     internal void ContinueRelicPurchaseCleanup() => shopPurchaseRuntime.ContinueRelicUiCleanup();
     public bool ExtractMateriaDone => extractMateriaDone;
     public bool? ExtractMateriaSucceeded => extractMateriaSucceeded;
@@ -1471,7 +1472,7 @@ public sealed unsafe class UtilityAutomationService
         var accepted = currency.HasValue
             ? beforeSubmit != null
                 ? shopPurchaseRunner.Start(request, false, currency.Value, beforeSubmit, verified!, confirmationGuard)
-                : shopPurchaseRunner.Start(request, false, currency.Value)
+                : shopPurchaseRunner.Start(request, request.KeepShopOpen, currency.Value)
             : shopPurchaseRunner.Start(request);
         if (!accepted)
         {

@@ -15,9 +15,10 @@ internal sealed class ShopConfirmationToken
     private readonly bool isCompanyAction;
     private bool consumed;
 
-    public ShopConfirmationToken(EvaluatedShopOffer offer, int transactions, DateTime createdAtUtc)
+    public ShopConfirmationToken(EvaluatedShopOffer offer, int transactions, DateTime createdAtUtc, int runtimeRow = -1)
     {
         ItemId = offer.Offer.ReceiveItemId;
+        RuntimeRow = runtimeRow;
         previewCurrency = offer.Offer.Kind switch
         {
             ShopOfferKind.SpecialShopTomestone => ShopCurrencyKind.Tomestone,
@@ -40,6 +41,7 @@ internal sealed class ShopConfirmationToken
     }
 
     public uint ItemId { get; }
+    public int RuntimeRow { get; }
     public string ItemName { get; }
     public int Quantity { get; }
     public DateTime CreatedAtUtc { get; }
@@ -106,10 +108,11 @@ internal sealed class ShopConfirmationToken
         return true;
     }
 
-    private bool CanConsume(DateTime observedAtUtc)
-        => !consumed
-            && observedAtUtc >= CreatedAtUtc
+    public bool IsWithinLifetime(DateTime observedAtUtc)
+        => observedAtUtc >= CreatedAtUtc
             && observedAtUtc - CreatedAtUtc <= ShopPurchaseTiming.ConfirmationAndVerificationTimeout;
+
+    private bool CanConsume(DateTime observedAtUtc) => !consumed && IsWithinLifetime(observedAtUtc);
 
     private static bool ContainsExactDisplayNumber(string prompt, long value)
     {

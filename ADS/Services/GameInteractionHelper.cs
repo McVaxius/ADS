@@ -100,25 +100,29 @@ public static class GameInteractionHelper
             if (addonPtr == nint.Zero)
                 return false;
 
-            var addon = (AddonSelectYesno*)addonPtr;
-            if (addon == null || !addon->AtkUnitBase.IsVisible)
-                return false;
-
-            var promptNode = addon->PromptText;
-            if (promptNode == null || !promptNode->NodeText.StringPtr.HasValue)
-                return false;
-
-            // The return matcher must preserve French <nbsp> spacing just like the evaluator.
-            promptText = preserveVisibleSpacing
-                ? new ReadOnlySeString(promptNode->NodeText.AsSpan().ToArray()).ToString()
-                : MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr)).TextValue?.Trim() ?? string.Empty;
-            return !string.IsNullOrWhiteSpace(promptText);
+            return TryGetSelectYesNoPromptText((AddonSelectYesno*)addonPtr, out promptText, preserveVisibleSpacing);
         }
         catch
         {
             promptText = string.Empty;
             return false;
         }
+    }
+
+    internal static unsafe bool TryGetSelectYesNoPromptText(AddonSelectYesno* addon, out string promptText,
+        bool preserveVisibleSpacing = false)
+    {
+        promptText = string.Empty;
+        if (addon == null || !addon->AtkUnitBase.IsVisible)
+            return false;
+        var promptNode = addon->PromptText;
+        if (promptNode == null || !promptNode->NodeText.StringPtr.HasValue)
+            return false;
+        // The return matcher preserves French <nbsp> spacing just like the evaluator.
+        promptText = preserveVisibleSpacing
+            ? new ReadOnlySeString(promptNode->NodeText.AsSpan().ToArray()).ToString()
+            : MemoryHelper.ReadSeStringNullTerminated(new IntPtr(promptNode->NodeText.StringPtr)).TextValue?.Trim() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(promptText);
     }
 
     internal static bool TryAcceptReturnToEntrance(IPluginLog? log)
@@ -152,9 +156,9 @@ public static class GameInteractionHelper
                 if (HasUnresolvedReturnPayload(evaluated.ToMacroString()))
                     continue;
 
-                var expected = NormalizeReturnPrompt(evaluated.ToString());
-                if (expected.Contains(NormalizeReturnPrompt(destination.ToString()), StringComparison.Ordinal)
-                    && expected == NormalizeReturnPrompt(prompt))
+                var expected = NormalizeAddonPrompt(evaluated.ToString());
+                if (expected.Contains(NormalizeAddonPrompt(destination.ToString()), StringComparison.Ordinal)
+                    && expected == NormalizeAddonPrompt(prompt))
                     return true;
             }
             catch (Exception)
@@ -170,7 +174,7 @@ public static class GameInteractionHelper
         => Regex.IsMatch(Regex.Replace(macro,
             @"<(?:-|br|nbsp|shy|colortype\(\d+\)|edgecolortype\(\d+\)|color\([^)]*\)|edgecolor\([^)]*\))>", string.Empty), "<[^>]+>");
 
-    private static string NormalizeReturnPrompt(string value)
+    internal static string NormalizeAddonPrompt(string value)
     {
         var result = new StringBuilder();
         var space = false;

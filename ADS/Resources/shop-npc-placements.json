@@ -589,6 +589,16 @@
     },
     {
       "npcId": 1006004,
+      "territoryId": 133,
+      "territoryName": "Old Gridania",
+      "mapId": 3,
+      "x": -61.234497,
+      "z": -141.31384,
+      "source": "item-vendor-location-correction",
+      "replaceExisting": false
+    },
+    {
+      "npcId": 1006005,
       "territoryId": 128,
       "territoryName": "Limsa Lominsa Upper Decks",
       "mapId": 11,
@@ -598,13 +608,13 @@
       "replaceExisting": false
     },
     {
-      "npcId": 1006005,
-      "territoryId": 133,
-      "territoryName": "Old Gridania",
-      "mapId": 3,
-      "x": -61.234497,
-      "z": -141.31384,
-      "source": "item-vendor-location-correction",
+      "npcId": 1006006,
+      "territoryId": 131,
+      "territoryName": "Ul'dah - Steps of Thal",
+      "mapId": 14,
+      "x": 70.82446,
+      "z": 96.51226,
+      "source": "bg/ffxiv/wil_w1/twn/w1t2/level/planevent.lgb",
       "replaceExisting": false
     },
     {

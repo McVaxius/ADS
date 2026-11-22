@@ -64,7 +64,7 @@ internal sealed class ShopPurchaseRunner
     private ulong companyActionFreeCompany;
 
     private long ReadOutputCount(uint itemId) => request.CompanyAction
-        ? runtime.GetCompanyActionCount(itemId) : runtime.GetItemCount(itemId);
+        ? runtime.GetCompanyActionCount(itemId) : runtime.GetPurchaseOutputCount(itemId);
     private long ReadOutputCapacity(uint itemId, uint stackSize) => request.CompanyAction
         ? runtime.GetCompanyActionCapacity() : runtime.GetInventoryCapacity(itemId, stackSize);
     private ShopCatalogResolution? resolution;
@@ -77,6 +77,7 @@ internal sealed class ShopPurchaseRunner
     private DateTime lastActionAtUtc = DateTime.MinValue;
     private int phaseAttempts;
     private int menuPathIndex;
+    private bool limsaExchangeOpenSent;
     private long initialItemCount;
     private long lastVerifiedItemCount;
     private bool anyPurchaseCallbackSent;
@@ -136,7 +137,15 @@ internal sealed class ShopPurchaseRunner
         get
         {
             RefreshTerminalNavigationRelease();
-            return status with { LastStartError = lastStartError, OperationId = request.OperationId, CompanyAction = request.CompanyAction, AchievementCertificatesClaimed = achievementCertificatesClaimed, NavigationReleased = !navigationOwned };
+            return status with
+            {
+                LastStartError = lastStartError,
+                OperationId = request.OperationId,
+                CompanyAction = request.CompanyAction,
+                AchievementCertificatesClaimed = achievementCertificatesClaimed,
+                NavigationReleased = !navigationOwned,
+                ShopHeldOpen = request.KeepShopOpen && shopUiOwned && status.Succeeded == true && runtime.IsAnyShopVisible,
+            };
         }
     }
     internal string? LastStartFailureCode => lastStartFailureCode;
@@ -240,6 +249,9 @@ internal sealed class ShopPurchaseRunner
         return true;
     }
 
+    internal bool ReleaseHeldShopUi(string operationId) =>
+        request.KeepShopOpen && request.OperationId == operationId && ReleaseHeldShopUi();
+
     public bool Start(ShopPurchaseRequest purchaseRequest)
         => StartCore(purchaseRequest, null, null);
 
@@ -286,6 +298,9 @@ internal sealed class ShopPurchaseRunner
             (purchaseRequest.MaximumCurrencySpend.HasValue &&
              (!requiredCurrency.HasValue || string.IsNullOrWhiteSpace(purchaseRequest.OperationId))))
             return RejectStart("A capped currency purchase requires an operation ID and exact currency.", ShopPurchaseFailureCodes.InvalidRequest);
+        if (purchaseRequest.KeepShopOpen && (requiredCurrency != ShopMenuRouteResolver.SilverFeatherCurrency
+            || purchaseRequest.Quantity != 1 || purchaseRequest.MaximumCurrencySpend != 5))
+            return RejectStart("Shop reuse for a currency purchase requires a single five-feather exchange.", ShopPurchaseFailureCodes.InvalidRequest);
         if (purchaseRequest.ClaimAchievementCertificates && (purchaseRequest.CompanyAction ||
             requiredCurrency != new ShopCurrencyIdentity(ShopCurrencyKind.CurrencyManager, 21172)))
             return RejectStart("Certificate claiming requires an exact Achievement Certificate purchase.", ShopPurchaseFailureCodes.InvalidRequest);
@@ -315,8 +330,10 @@ internal sealed class ShopPurchaseRunner
             return RejectStart($"Shop catalog resolution failed: {ex.Message}", ShopPurchaseFailureCodes.UnsupportedOffer);
         }
 
-        if (purchaseRequest.AllowTravel && nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
-            return RejectStart("The selected shop route requires the Lifestream plugin.", ShopPurchaseFailureCodes.MissingDependency);
+        if (purchaseRequest.KeepShopOpen && (nextSelection.Selected is not { Offer: var featherOffer }
+            || !ShopMenuRouteResolver.IsSilverFeatherExchange(featherOffer)))
+            return RejectStart(nextSelection.Selected == null ? nextSelection.Message : "No supported five-feather exchange is available.",
+                nextSelection.FailureCode ?? ShopPurchaseFailureCodes.UnsupportedOffer);
 
         // Deferred from the entry gate: a shop is on screen, so decide whether it is the one this
         // offer needs. IsExpectedShopVisible only matches the addon KIND, but that is enough to enter
@@ -325,11 +342,24 @@ internal sealed class ShopPurchaseRunner
         var reuseOpenShop = false;
         if (runtime.IsAnyShopVisible)
         {
+            if (request.KeepShopOpen)
+            {
+                if (request.OperationId != purchaseRequest.OperationId)
+                    return RejectStart("The visible shop belongs to another feather exchange.", ShopPurchaseFailureCodes.UiMismatch);
+                var openOffer = new[] { nextSelection.Selected }.Concat(nextSelection.IdenticalCostFallbacks)
+                    .FirstOrDefault(candidate => candidate != null && runtime.IsOwnedFeatherExchangeVisible(candidate));
+                if (openOffer == null)
+                    return RejectStart("The visible shop does not match this owned feather exchange.", ShopPurchaseFailureCodes.UiMismatch);
+                nextSelection = nextSelection with { Selected = openOffer, IdenticalCostFallbacks = [] };
+            }
+
             if (nextSelection.Selected != null && runtime.IsExpectedShopVisible(nextSelection.Selected.Offer.Kind))
                 reuseOpenShop = true;
             else
                 return RejectStart(DescribeBlockingUi("A different shop is already open; close it before starting shop purchasing."), ShopPurchaseFailureCodes.UiMismatch);
         }
+        if (!reuseOpenShop && purchaseRequest.AllowTravel && nextSelection.Selected?.Route?.RequiresTeleport == true && !runtime.HasLifestream)
+            return RejectStart("The selected shop route requires the Lifestream plugin.", ShopPurchaseFailureCodes.MissingDependency);
 
         request = purchaseRequest;
         companyActionOwner = runtime.CharacterId;
@@ -1114,7 +1144,9 @@ internal sealed class ShopPurchaseRunner
             return;
         }
 
-        if (runtime.IsExpectedShopVisible(selected.Offer.Kind))
+        var needsLimsaExchangeOpen = ShopMenuRouteResolver.RequiresLimsaSalvagerExchangeOpen(selected.Offer)
+            && !limsaExchangeOpenSent;
+        if (!needsLimsaExchangeOpen && runtime.IsExpectedShopVisible(selected.Offer.Kind))
         {
             SetPhase(RunnerPhase.ValidatingUi, "Validating the live shop row against sheet data.");
             return;
@@ -1123,6 +1155,16 @@ internal sealed class ShopPurchaseRunner
         if (clock.UtcNow - phaseStartedAtUtc > ShopOpeningTimeout)
         {
             TryFallbackOrFail(ShopPurchaseFailureCodes.Timeout, "The supported shop addon did not open in time.");
+            return;
+        }
+
+        if (needsLimsaExchangeOpen && menuPathIndex == selected.Offer.CallbackPath.Count)
+        {
+            if (runtime.TryOpenLimsaSalvagerExchange(selected.Offer))
+            {
+                limsaExchangeOpenSent = true;
+                SetStatus("Opening the selected Limsa Lv. 90 item exchange.");
+            }
             return;
         }
 
@@ -1150,9 +1192,10 @@ internal sealed class ShopPurchaseRunner
         }
 
         var step = selected.Offer.CallbackPath[menuPathIndex];
+        ShopMenuPathStep? completedParent = menuPathIndex > 0 ? selected.Offer.CallbackPath[menuPathIndex - 1] : null;
         phaseAttempts++;
         lastActionAtUtc = clock.UtcNow;
-        if (!runtime.TrySelectMenu(step, selected.Offer.NpcId))
+        if (!runtime.TrySelectMenu(step, selected.Offer.NpcId, completedParent))
             return;
         menuPathIndex++;
         phaseAttempts = 0;
@@ -1219,9 +1262,10 @@ internal sealed class ShopPurchaseRunner
         }
 
         var remainingTransactions = status.RemainingQuantity / (int)selected.Offer.ReceiveCount;
-        if (selected.Offer.AllOutputs.Any(output =>
-                ReadOutputCapacity(output.ItemId, Math.Max(1, output.StackSize))
-                    < checked((long)output.Count * remainingTransactions)))
+        var outputs = selected.Offer.AllOutputs;
+        if (outputs.Any(output => ReadOutputCapacity(output.ItemId, Math.Max(1, output.StackSize))
+                    < checked((long)output.Count * remainingTransactions))
+            || (!request.CompanyAction && outputs.Count > 1 && !runtime.CanFitPurchaseOutputs(outputs, remainingTransactions)))
         {
             Fail(ShopPurchaseFailureCodes.InventoryCapacity, "Inventory no longer has capacity for every output in the remaining exchange.");
             return;
@@ -1483,10 +1527,11 @@ internal sealed class ShopPurchaseRunner
             runtime.IsAetheryteUnlocked,
             runtime.IsQuestComplete,
             runtime.GetAvailableCurrency,
-            companyAction ? runtime.GetCompanyActionCount : runtime.GetItemCount,
+            companyAction ? runtime.GetCompanyActionCount : runtime.GetPurchaseOutputCount,
             companyAction ? (_, _) => runtime.GetCompanyActionCapacity() : runtime.GetInventoryCapacity,
             () => companyAction ? runtime.FreeCompanyGrandCompany : runtime.CurrentGrandCompany,
-            () => companyAction ? runtime.FreeCompanyRank : runtime.CurrentGrandCompanyRank);
+            () => companyAction ? runtime.FreeCompanyRank : runtime.CurrentGrandCompanyRank,
+            companyAction ? null : runtime.CanFitPurchaseOutputs);
 
     private (ShopCatalogResolution Resolution, ShopOfferSelectionResult Selection) ResolvePlan(
         ShopPurchaseRequest purchaseRequest,
@@ -1587,7 +1632,10 @@ internal sealed class ShopPurchaseRunner
         phaseAttempts = 0;
         lastValidationDiagnostic = string.Empty;
         if (next == RunnerPhase.OpeningMenu)
+        {
             menuPathIndex = 0;
+            limsaExchangeOpenSent = false;
+        }
         SetStatus(message);
         diagnostic($"Phase {PhaseName(previous)} -> {PhaseName(next)}: {message}");
     }

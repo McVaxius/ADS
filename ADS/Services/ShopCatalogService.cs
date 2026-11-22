@@ -879,11 +879,21 @@ internal static class ShopCatalogBuilder
                     continue;
                 }
 
+                var isSalvagerFeatherExchange = template.Currencies is [{ Kind: ShopCurrencyKind.Item, ItemId: 12995, AmountPerTransaction: 5 }]
+                    && link.CallbackPath.Any(step => step.Kind == ShopMenuPathStepKind.ENpcData && step.HandlerId == 3276842);
                 foreach (var placement in placements)
                 {
+                    (uint TerritoryId, uint AetheryteId, uint AethernetId) transfer = (link.NpcId, placement.TerritoryId) switch
+                    {
+                        (1008145, 133) => (132u, 2u, 27u), // Jonathas, via Lancers' Guild
+                        (1006005, 128) when isSalvagerFeatherExchange => (129u, 8u, 41u), // The Aftcastle
+                        (1006004, 133) when isSalvagerFeatherExchange => (132u, 2u, 30u), // Mih Khetto's Amphitheatre
+                        (1006006, 131) when isSalvagerFeatherExchange => (130u, 9u, 36u), // Miners' Guild
+                        _ => default,
+                    };
                     var aetheryteRoutes = snapshot.Aetherytes
                         .Where(aetheryte => aetheryte.TerritoryId == placement.TerritoryId ||
-                            link.NpcId == 1008145 && placement.TerritoryId == 133 && aetheryte.AetheryteId == 2 && aetheryte.TerritoryId == 132)
+                            transfer.AetheryteId != 0 && aetheryte.AetheryteId == transfer.AetheryteId && aetheryte.TerritoryId == transfer.TerritoryId)
                         .Select(aetheryte => new ShopRouteCandidate(
                             aetheryte.AetheryteId,
                             aetheryte.Name,
@@ -891,8 +901,8 @@ internal static class ShopCatalogBuilder
                             Vector2.Distance(
                                 new Vector2(aetheryte.Position.X, aetheryte.Position.Z),
                                 new Vector2(placement.Position.X, placement.Position.Z)),
-                            aetheryte.TerritoryId != placement.TerritoryId ? 132u : 0u,
-                            aetheryte.TerritoryId != placement.TerritoryId ? 27u : 0u))
+                            aetheryte.TerritoryId != placement.TerritoryId ? transfer.TerritoryId : 0u,
+                            aetheryte.TerritoryId != placement.TerritoryId ? transfer.AethernetId : 0u))
                         .OrderBy(route => route.DistanceToNpc)
                         .ThenBy(route => route.AetheryteId)
                         .ToArray();
@@ -906,6 +916,18 @@ internal static class ShopCatalogBuilder
                     var runtimeKind = link.LinkKind == ShopNpcLinkKind.InclusionShop
                         ? ShopOfferKind.InclusionShop
                         : template.Kind;
+                    // The offline catalog stores only X/Z. Use known heights for these exact feather offers.
+                    float? knownHeight = isSalvagerFeatherExchange && placement.Source == ShopNpcPlacementSource.OfflineCatalog
+                        ? placement switch
+                        {
+                            { NpcId: 1006005, TerritoryId: 128, MapId: 11, Position: { X: 5.355835f, Z: 155.22998f } } => 44.50f, // Measured in game.
+                            { NpcId: 1006006, TerritoryId: 131, MapId: 14, Position: { X: 70.82446f, Z: 96.51226f } } => 14.005f, // Authored scene.
+                            _ => null,
+                        }
+                        : null;
+                    var npcPosition = knownHeight is { } height
+                        ? new Vector3(placement.Position.X, height, placement.Position.Z)
+                        : placement.Position;
                     var offer = new ShopOffer(
                         runtimeKind,
                         template.ShopId,
@@ -915,7 +937,7 @@ internal static class ShopCatalogBuilder
                         link.NpcName,
                         placement.TerritoryId,
                         placement.TerritoryName,
-                        placement.Position,
+                        npcPosition,
                         link.CallbackPath,
                         link.LinkKind,
                         placement.Source,
@@ -930,7 +952,7 @@ internal static class ShopCatalogBuilder
                         requiredQuests,
                         template.HasUnknownGate || link.HasUnknownGate,
                         aetheryteRoutes,
-                        placement.RequiresFloorResolution,
+                        placement.RequiresFloorResolution && !knownHeight.HasValue,
                         template.Outputs,
                         template.RequiredGrandCompany,
                         template.RequiredGrandCompanyRank,
@@ -1039,7 +1061,8 @@ internal sealed record ShopSelectionContext(
     Func<uint, long> GetItemCount,
     Func<uint, uint, long> GetInventoryCapacity,
     Func<byte>? GetGrandCompany = null,
-    Func<byte>? GetGrandCompanyRank = null);
+    Func<byte>? GetGrandCompanyRank = null,
+    Func<IReadOnlyList<ShopOfferOutput>, int, bool>? CanFitPurchaseOutputs = null);
 
 internal static class ShopOfferSelector
 {
@@ -1220,7 +1243,8 @@ internal static class ShopOfferSelector
         var capacitySatisfied = targetCapacity >= resolution.RequestedQuantity
             && (!resolution.IsUnique
                 || (resolution.RequestedQuantity == 1 && context.GetItemCount(resolution.ItemId) == 0));
-        foreach (var output in offer.AllOutputs)
+        var outputs = offer.AllOutputs;
+        foreach (var output in outputs)
         {
             long total;
             try
@@ -1240,6 +1264,9 @@ internal static class ShopOfferSelector
                 break;
             }
         }
+        if (capacitySatisfied && outputs.Count > 1 && context.CanFitPurchaseOutputs?.Invoke(outputs, offer.TransactionsRequired) == false)
+            capacitySatisfied = false;
+
         ResolvedShopRoute? route = null;
         if (offer.TerritoryId == context.CurrentTerritoryId)
         {

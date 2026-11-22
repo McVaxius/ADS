@@ -552,6 +552,95 @@ public sealed class ShopCatalogTests
         Assert.InRange(route.DistanceToNpc, 184f, 185f);
     }
 
+    [Theory]
+    [InlineData(1_006_005u, 128u, 11u, 129u, 8u, 41u)]
+    [InlineData(1_006_004u, 133u, 3u, 132u, 2u, 30u)]
+    [InlineData(1_006_006u, 131u, 14u, 130u, 9u, 36u)]
+    public void CalamitySalvagerFeatherOfferUsesExactCityTransfer(
+        uint npcId, uint vendorTerritory, uint vendorMap, uint crystalTerritory, uint crystalId, uint shardId)
+    {
+        const uint topicId = 3_276_842;
+        const uint shopId = 1_770_756;
+        const uint sword = 40_090;
+        const uint shield = 40_109;
+        const uint feathers = 12_995;
+        var placeholder = new ShopNpcEventReference(ShopNpcEventKind.Unsupported, 0);
+        var npcEvents = Enumerable.Repeat(placeholder, 7).Append(new(ShopNpcEventKind.TopicSelect, topicId)).ToArray();
+        var topicShops = Enumerable.Repeat(placeholder, 6).Append(new(ShopNpcEventKind.SpecialShop, shopId)).ToArray();
+        var links = ShopNpcLinkBuilder.Build(
+            new HashSet<uint>(),
+            new HashSet<uint> { shopId },
+            [new ShopNpcEventSheetRow(npcId, "Calamity Salvager", npcEvents)],
+            [new ShopTopicSelectSheetRow(topicId, topicShops)],
+            []);
+        var placement = Assert.Single(ShopOfflineNpcPlacementCatalog.LoadEmbedded(), row => row.NpcId == npcId).ToSheetRow();
+        Assert.Equal(vendorTerritory, placement.TerritoryId);
+        Assert.Equal(vendorMap, placement.MapId);
+        Vector3? exactPosition = npcId switch
+        {
+            1_006_005u => new Vector3(5.355835f, 44.50f, 155.22998f),
+            1_006_006u => new Vector3(70.82446f, 14.005f, 96.51226f),
+            _ => null,
+        };
+        var expectedPosition = exactPosition ?? placement.Position;
+        var crystalName = crystalId switch
+        {
+            8 => "Limsa Lominsa Lower Decks",
+            9 => "Ul'dah - Steps of Nald",
+            _ => "New Gridania",
+        };
+
+        var snapshot = new ShopCatalogSnapshot(
+            new Dictionary<uint, ShopItemSheetRow>
+            {
+                [sword] = new(sword, "Augmented Polaris Point", 1, 0, true),
+                [shield] = new(shield, "Augmented Vessel", 1, 0, true),
+                [feathers] = new(feathers, "Silver Chocobo Feather", 999, 0, false),
+            },
+            [],
+            [new SpecialShopSheetRow(shopId, "Silver Chocobo Feather Exchange V (Lv. 90 Gear)", 0,
+                [(sword, 1u, false), (shield, 1u, false)], [new(feathers, 5, 0, 0)], 2, [], false)],
+            links,
+            [placement],
+            [new ShopAetheryteSheetRow(crystalId, crystalName, crystalTerritory, Vector3.Zero)],
+            []);
+
+        var resolution = ShopCatalogBuilder.Resolve(snapshot, sword, 1);
+        var offer = Assert.Single(resolution.Offers);
+        Assert.Equal(ShopOfferKind.SpecialShopItem, offer.Kind);
+        Assert.Equal(npcId, offer.NpcId);
+        Assert.Equal(new[] { sword, shield }, offer.AllOutputs.Select(output => output.ItemId));
+        Assert.Equal(
+            new ShopMenuPathStep[] { new(ShopMenuPathStepKind.ENpcData, 7, topicId), new(ShopMenuPathStepKind.TopicSelectShop, 6, shopId) },
+            offer.CallbackPath);
+        var currency = new ShopCurrencyIdentity(ShopCurrencyKind.Item, feathers);
+        var cost = Assert.Single(offer.Currencies);
+        Assert.Equal(currency, cost.Identity);
+        Assert.Equal(5u, cost.AmountPerTransaction);
+        Assert.Equal(1, offer.TransactionsRequired);
+
+        var remote = Context(156, new Dictionary<ShopCurrencyIdentity, long> { [currency] = 5 }) with
+        {
+            IsAetheryteUnlocked = id => id == crystalId,
+        };
+        var remoteRoute = Assert.IsType<ResolvedShopRoute>(ShopOfferSelector.Select(resolution, remote, currency).Selected?.Route);
+        Assert.True(remoteRoute.RequiresTeleport);
+        Assert.Equal(crystalTerritory, remoteRoute.TransferTerritoryId);
+        Assert.Equal(crystalId, remoteRoute.AetheryteId);
+        Assert.Equal(shardId, remoteRoute.AethernetId);
+        Assert.Equal(vendorTerritory, remoteRoute.TerritoryId);
+        Assert.Equal(expectedPosition, remoteRoute.NpcPosition);
+        Assert.Equal(!exactPosition.HasValue, remoteRoute.RequiresFloorResolution);
+
+        var locked = remote with { IsAetheryteUnlocked = _ => false };
+        Assert.Equal(ShopPurchaseFailureCodes.NoRoute, ShopOfferSelector.Select(resolution, locked, currency).FailureCode);
+        var local = locked with { CurrentTerritoryId = vendorTerritory, CurrentPosition = expectedPosition + new Vector3(20, 0, 0) };
+        var localRoute = Assert.IsType<ResolvedShopRoute>(ShopOfferSelector.Select(resolution, local, currency).Selected?.Route);
+        Assert.False(localRoute.RequiresTeleport);
+        Assert.InRange(localRoute.RouteDistance, 19.99f, 20.01f);
+        Assert.Equal(0u, localRoute.AethernetId);
+    }
+
     [Fact]
     public void RegularGilFixtureUsesItemPriceAndRequestedUnits()
     {

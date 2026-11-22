@@ -1,3 +1,9 @@
+2026-11-22 - 2.0.0.30 - Silver Chocobo Feather exchanges
+
+- **Added Calamity Salvager exchanges** with travel routes in Limsa Lominsa, Gridania, and Ul'dah.
+- **Fixed the Limsa Lv. 90 purchase flow** so ADS selects the bundle, accepts the verified equipment warning, and closes the exchange and final dialogue after the last purchase.
+- **Fixed gear purchase verification** so ADS checks space for the full bundle and counts gear delivered to inventory or the Armoury Chest.
+
 2026-11-19 - 2.0.0.29 - Shop travel and Poetics cleanup
 
 - **Fixed shop travel** so ADS waits for the character to load after teleport before starting navigation.

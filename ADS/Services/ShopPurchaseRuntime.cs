@@ -283,8 +283,10 @@ internal interface IShopPurchaseRuntime
     bool IsAetheryteUnlocked(uint aetheryteId);
     bool IsQuestComplete(uint questId);
     long GetItemCount(uint itemId);
+    long GetPurchaseOutputCount(uint itemId) => GetItemCount(itemId);
     long GetAvailableCurrency(ShopCurrencyCost currency);
     long GetInventoryCapacity(uint itemId, uint stackSize);
+    bool CanFitPurchaseOutputs(IReadOnlyList<ShopOfferOutput> outputs, int transactions) => true;
     bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition);
     bool TryTeleport(ResolvedShopRoute route);
     bool TryAethernetTransfer(ResolvedShopRoute route) => false;
@@ -297,8 +299,10 @@ internal interface IShopPurchaseRuntime
     bool PrepareInteraction() => true;
     string DescribeNpcAvailability(uint npcId) => $"NPC {npcId} availability not exposed by this runtime.";
     bool IsExpectedShopVisible(ShopOfferKind kind);
+    bool IsOwnedFeatherExchangeVisible(EvaluatedShopOffer offer) => false;
     bool TrySelectMenu(int index);
-    bool TrySelectMenu(ShopMenuPathStep step, uint npcId) => TrySelectMenu(step.Index);
+    bool TrySelectMenu(ShopMenuPathStep step, uint npcId, ShopMenuPathStep? completedParent = null) => TrySelectMenu(step.Index);
+    bool TryOpenLimsaSalvagerExchange(ShopOffer offer) => false;
     ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer);
     bool SubmitPurchase(EvaluatedShopOffer offer, int runtimeRow, int transactionCount);
     bool IsOwnedConfirmationPending(EvaluatedShopOffer offer, int transactionCount) => false;
@@ -346,6 +350,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private string grandCompanyRouteKey = string.Empty;
     private int grandCompanySelectionStage;
     private ShopConfirmationToken? confirmationToken;
+    private nint confirmedLimsaExchangeDialog;
+    private (nint Addon, uint Id, bool Confirmed)? limsaEquipWarning;
     private string? readableOwnedSelectYesNoPrompt;
     private bool unreadableOwnedSelectYesnoWarningLogged;
     private DateTime nextRelicUiCleanupUtc;
@@ -359,6 +365,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedMgpExchange;
     private bool poeticsExchangeCleanup;
     private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ownedPoeticsExchange;
+    private (nint Addon, uint AddonId, nint Receiver, ShopOffer Offer)? ownedFeatherExchange;
     private GearCleanupCandidate? gearSaleContextItem;
     private uint gearSaleConfirmedAddon;
     private string? gearSaleConfirmedPrompt;
@@ -581,6 +588,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         ownedUiCleanupUntil = default;
         shopListOwnsUiCleanup = false;
         ownedPoeticsExchange = null;
+        ownedFeatherExchange = null;
     }
     public byte CurrentGrandCompany
     {
@@ -1033,14 +1041,18 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         }
     }
 
-    public long GetItemCount(uint itemId)
+    public long GetItemCount(uint itemId) => ReadItemCount(itemId, includeArmoury: false);
+
+    public long GetPurchaseOutputCount(uint itemId) => ReadItemCount(itemId, includeArmoury: true);
+
+    private static long ReadItemCount(uint itemId, bool includeArmoury)
     {
         try
         {
             var manager = InventoryManager.Instance();
             return manager == null
                 ? 0
-                : Math.Max(0, manager->GetInventoryItemCount(itemId, false, false, false));
+                : Math.Max(0, manager->GetInventoryItemCount(itemId, false, false, includeArmoury));
         }
         catch
         {
@@ -1098,40 +1110,129 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         try
         {
-            long capacity = 0;
             var manager = InventoryManager.Instance();
             if (manager == null)
                 return 0;
-            foreach (var inventoryType in RegularInventoryTypes)
-            {
-                var container = manager->GetInventoryContainer(inventoryType);
-                if (container == null)
-                    continue;
-                for (var index = 0; index < container->Size; index++)
-                {
-                    var slot = container->GetInventorySlot(index);
-                    if (slot == null || slot->ItemId == 0)
-                    {
-                        capacity = checked(capacity + stackSize);
-                        continue;
-                    }
 
-                    if (DesynthPolicyService.NormalizeBaseItemId(slot->ItemId) != itemId || slot->Quantity >= stackSize)
-                        continue;
-                    capacity = checked(capacity + stackSize - slot->Quantity);
-                }
-            }
+            var freeSlots = (long)manager->GetEmptySlotsInBag();
+            var armoury = GetArmouryDestination(itemId, stackSize);
+            if (armoury.HasValue)
+                freeSlots += CountFreeSlots(manager->GetInventoryContainer(armoury.Value));
 
-            return capacity;
-        }
-        catch (OverflowException)
-        {
-            return long.MaxValue;
+            return checked(freeSlots * stackSize + GetBagStackSpace(manager, itemId, stackSize));
         }
         catch
         {
             return 0;
         }
+    }
+
+    public bool CanFitPurchaseOutputs(IReadOnlyList<ShopOfferOutput> outputs, int transactions)
+    {
+        try
+        {
+            var manager = InventoryManager.Instance();
+            if (manager == null)
+                return false;
+
+            var requiredSlots = new (InventoryType? Armoury, long Slots)[outputs.Count];
+            for (var index = 0; index < outputs.Count; index++)
+            {
+                var output = outputs[index];
+                var stackSize = Math.Max(1u, output.StackSize);
+                var units = checked((long)output.Count * transactions);
+                var unstacked = Math.Max(0, units - GetBagStackSpace(manager, output.ItemId, stackSize));
+                requiredSlots[index] = (GetArmouryDestination(output.ItemId, stackSize),
+                    unstacked / stackSize + (unstacked % stackSize == 0 ? 0 : 1));
+            }
+
+            return FitsPurchaseOutputs(requiredSlots, manager->GetEmptySlotsInBag(),
+                type => CountFreeSlots(manager->GetInventoryContainer(type)));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static bool FitsPurchaseOutputs(
+        IEnumerable<(InventoryType? Armoury, long Slots)> outputs,
+        long bagSlots,
+        Func<InventoryType, long> getFreeArmourySlots)
+    {
+        foreach (var pool in outputs.GroupBy(output => output.Armoury))
+        {
+            var needed = pool.Sum(output => output.Slots);
+            if (pool.Key is { } armoury)
+                needed = Math.Max(0, needed - getFreeArmourySlots(armoury));
+            bagSlots -= needed;
+            if (bagSlots < 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static long GetBagStackSpace(InventoryManager* manager, uint itemId, uint stackSize)
+    {
+        if (stackSize <= 1)
+            return 0;
+
+        long capacity = 0;
+        foreach (var type in RegularInventoryTypes)
+        {
+            var container = manager->GetInventoryContainer(type);
+            if (container == null || !container->IsLoaded)
+                continue;
+
+            for (var index = 0; index < container->Size; index++)
+            {
+                var slot = container->GetInventorySlot(index);
+                if (slot != null && !slot->IsSymbolic && slot->ItemId == itemId
+                    && (slot->Flags & InventoryItem.ItemFlags.HighQuality) == 0 && slot->Quantity < stackSize)
+                    capacity += stackSize - slot->Quantity;
+            }
+        }
+
+        return capacity;
+    }
+
+    private static int CountFreeSlots(InventoryContainer* container)
+    {
+        if (container == null || !container->IsLoaded)
+            return 0;
+
+        var free = 0;
+        for (var index = 0; index < container->Size; index++)
+        {
+            var slot = container->GetInventorySlot(index);
+            if (slot != null && slot->ItemId == 0 && !slot->IsSymbolic)
+                free++;
+        }
+
+        return free;
+    }
+
+    private static InventoryType? GetArmouryDestination(uint itemId, uint stackSize)
+    {
+        if (stackSize != 1 || !Plugin.DataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item)
+            || !item.EquipSlotCategory.IsValid)
+            return null;
+
+        var category = item.EquipSlotCategory.Value;
+        if (category.MainHand == 1) return InventoryType.ArmoryMainHand;
+        if (category.OffHand == 1) return InventoryType.ArmoryOffHand;
+        if (category.Head == 1) return InventoryType.ArmoryHead;
+        if (category.Body == 1) return InventoryType.ArmoryBody;
+        if (category.Gloves == 1) return InventoryType.ArmoryHands;
+        if (category.Legs == 1) return InventoryType.ArmoryLegs;
+        if (category.Feet == 1) return InventoryType.ArmoryFeets;
+        if (category.Ears == 1) return InventoryType.ArmoryEar;
+        if (category.Neck == 1) return InventoryType.ArmoryNeck;
+        if (category.Wrists == 1) return InventoryType.ArmoryWrist;
+        if (category.FingerL == 1 || category.FingerR == 1) return InventoryType.ArmoryRings;
+        if (category.SoulCrystal == 1) return InventoryType.ArmorySoulCrystal;
+        return null;
     }
 
     public bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition)
@@ -1181,8 +1282,21 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (route.AethernetId == 0 || CurrentTerritoryId != route.TransferTerritoryId || IsBetweenAreas) return false;
         try
         {
-            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc() ||
-                Plugin.PluginInterface.GetIpcSubscriber<uint>("Lifestream.GetActiveAetheryte").InvokeFunc() != route.AetheryteId)
+            if (Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc())
+                return false;
+
+            var (isSalvagerRoute, command) = ResolveSalvagerAethernetCommand(route, static rowId =>
+            {
+                var sheet = Plugin.DataManager.GetExcelSheet<Aetheryte>();
+                return sheet.TryGetRow(rowId, out var row)
+                    ? (row.Territory.RowId, row.AethernetGroup, row.IsAetheryte, row.AethernetName.ValueNullable?.Name.ToString().Trim())
+                    : default;
+            });
+            // The named transfer refreshes the active crystal and can approach it when needed.
+            if (isSalvagerRoute)
+                return command != null && commandManager.ProcessCommand(command);
+
+            if (Plugin.PluginInterface.GetIpcSubscriber<uint>("Lifestream.GetActiveAetheryte").InvokeFunc() != route.AetheryteId)
                 return false;
             return Plugin.PluginInterface.GetIpcSubscriber<uint, bool>("Lifestream.AethernetTeleportById").InvokeFunc(route.AethernetId);
         }
@@ -1191,6 +1305,25 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             log.Debug(ex, "[ADS][Shop] Lifestream aethernet transfer was unavailable.");
             return false;
         }
+    }
+
+    internal static (bool IsSalvagerRoute, string? Command) ResolveSalvagerAethernetCommand(
+        ResolvedShopRoute route,
+        Func<uint, (uint TerritoryId, uint Group, bool IsAetheryte, string? ShardName)> readAetheryte)
+    {
+        if ((route.TransferTerritoryId, route.TerritoryId, route.AetheryteId, route.AethernetId)
+            is not ((129u, 128u, 8u, 41u) or (132u, 133u, 2u, 30u) or (130u, 131u, 9u, 36u)))
+            return (false, null);
+
+        var crystal = readAetheryte(route.AetheryteId);
+        var shard = readAetheryte(route.AethernetId);
+        if (!crystal.IsAetheryte || crystal.TerritoryId != route.TransferTerritoryId
+            || shard.IsAetheryte || shard.TerritoryId != route.TerritoryId
+            || crystal.Group == 0 || crystal.Group != shard.Group
+            || string.IsNullOrWhiteSpace(shard.ShardName))
+            return (true, null);
+
+        return (true, $"/li {shard.ShardName}");
     }
 
     public bool PrepareNavigation(Vector3 destination)
@@ -1337,6 +1470,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         ownedMgpExchange = null;
         poeticsExchangeCleanup = false;
         ownedPoeticsExchange = null;
+        ownedFeatherExchange = null;
         gearSaleContextItem = null;
         GearSaleUnitPrice = -1;
         achievementExchangeSelected = achievementCategorySelected = false;
@@ -1367,7 +1501,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             && GameInteractionHelper.TryFireAddonCallback("SelectString", true, index);
     }
 
-    public bool TrySelectMenu(ShopMenuPathStep step, uint npcId)
+    public bool TrySelectMenu(ShopMenuPathStep step, uint npcId, ShopMenuPathStep? completedParent = null)
     {
         // Jonathas enters his CustomTalk directly. A unique, localized exchange
         // entry proves that this outer handler is already open; do not guess a
@@ -1387,6 +1521,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         try
         {
+            if (ShopMenuRouteResolver.IsLimsaSalvagerFeatherStep(npcId, step))
+                return TrySelectLimsaSalvagerExchange(step.HandlerId, completedParent);
+
             var selector = EventHandlerSelector.Instance();
             var events = EventFramework.Instance();
             if (!IsSelectionMenuVisible || events == null || shopUiCharacter == 0 || CharacterId != shopUiCharacter
@@ -1427,6 +1564,139 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             log.Warning(ex, "[ADS][Shop] Failed to resolve the selected NPC's live event-handler menu.");
             return false;
         }
+    }
+
+    private bool TrySelectLimsaSalvagerExchange(uint shopId, ShopMenuPathStep? completedParent)
+    {
+        var parentMatches = completedParent is
+            { Kind: ShopMenuPathStepKind.ENpcData, HandlerId: ShopMenuRouteResolver.LimsaSalvagerTopicId };
+        bool? ownerMatches = null;
+        bool? visible = null;
+        bool? ready = null;
+        bool? typedMembership = null;
+        int? popupEntries = null;
+        int? exactMatches = null;
+        var callbackReached = false;
+        var stage = "logged-in state";
+
+        try
+        {
+            if (!IsLoggedIn)
+                return false;
+            stage = "between-areas state";
+            if (IsBetweenAreas)
+                return false;
+            stage = "SelectString visibility";
+            var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("SelectString");
+            visible = addon != null && addon->IsVisible;
+            if (visible != true)
+                return false;
+            stage = "SelectString readiness";
+            ready = addon->IsReady;
+            if (ready != true)
+                return false;
+
+            var data = Plugin.DataManager;
+            stage = "TopicSelect row lookup";
+            if (!data.GetExcelSheet<TopicSelect>().TryGetRow(ShopMenuRouteResolver.LimsaSalvagerTopicId, out var topic))
+                return false;
+            stage = "typed SpecialShop membership";
+            typedMembership = topic.Shop.Any(reference => reference.RowId == shopId && reference.Is<SpecialShop>());
+            if (typedMembership != true)
+                return false;
+            stage = "SpecialShop row lookup";
+            var shops = data.GetExcelSheet<SpecialShop>();
+            if (!shops.TryGetRow(shopId, out var shop))
+                return false;
+
+            stage = "tier label lookup";
+            if (!TryReadFeatherTierLabels(shops, out var tierLabels))
+                return false;
+
+            stage = "popup entries";
+            var menu = new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.SelectString(addon);
+            var entries = menu.Entries;
+            popupEntries = entries.Length;
+            var labels = entries.Select(entry => entry.Text).ToArray();
+            stage = "owner and label resolution";
+            var owner = (Character: shopUiCharacter, Territory: shopUiTerritory, Entity: shopUiNpc, BaseId: shopUiNpcBaseId);
+            var target = targetManager.Target;
+            var current = (Character: CharacterId, Territory: CurrentTerritoryId,
+                Entity: target?.GameObjectId ?? 0, BaseId: target?.BaseId ?? 0);
+
+            ownerMatches = ShopMenuRouteResolver.MatchesLimsaSalvagerOwner(owner, current);
+            var shopLabel = shop.Name.ToString();
+            if (!ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(
+                    completedParent, owner, current, shopLabel, tierLabels, labels, out var liveIndex))
+            {
+                var expected = shopLabel.Trim();
+                exactMatches = labels.Count(label => string.Equals(label?.Trim(), expected, StringComparison.Ordinal));
+                return false;
+            }
+
+            exactMatches = 1;
+            var selection = new AtkValue { Type = AtkValueType.Int, Int = liveIndex };
+            stage = "callback dispatch";
+            callbackReached = true;
+            addon->FireCallback(1u, &selection, true);
+            return true;
+        }
+        finally
+        {
+            log.Debug(
+                "[ADS][Shop] Limsa Salvager submenu attempt. Stage={Stage}, ParentMatches={ParentMatches}, " +
+                "OwnerMatches={OwnerMatches}, " +
+                "SelectStringVisible={SelectStringVisible}, SelectStringReady={SelectStringReady}, " +
+                "TypedMembership={TypedMembership}, PopupEntries={PopupEntries}, ExactMatches={ExactMatches}, " +
+                "CallbackReached={CallbackReached}.",
+                stage, parentMatches, ownerMatches?.ToString() ?? "unexamined",
+                visible?.ToString() ?? "unexamined",
+                ready?.ToString() ?? "unexamined", typedMembership?.ToString() ?? "unexamined",
+                popupEntries?.ToString() ?? "unexamined", exactMatches?.ToString() ?? "unexamined", callbackReached);
+        }
+    }
+
+    private static bool TryReadFeatherTierLabels(Lumina.Excel.ExcelSheet<SpecialShop> shops, out string[] labels)
+    {
+        var tierShopIds = ShopMenuRouteResolver.LimsaSalvagerFeatherShops;
+        labels = new string[tierShopIds.Length];
+        for (var index = 0; index < labels.Length; index++)
+        {
+            if (!shops.TryGetRow(tierShopIds[index], out var tier))
+                return false;
+            labels[index] = tier.Name.ToString();
+        }
+        return true;
+    }
+
+    public bool TryOpenLimsaSalvagerExchange(ShopOffer offer)
+    {
+        if (!ShopMenuRouteResolver.RequiresLimsaSalvagerExchangeOpen(offer)
+            || IsSelectionMenuVisible || HasUnexpectedConfirmation)
+            return false;
+
+        if (!OwnsLimsaSalvagerInteraction())
+            return false;
+
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeItem");
+        var agent = AgentShop.Instance();
+        if (addon == null || !addon->IsReady || agent == null || !agent->IsAgentActive()
+            || agent->AddonId != addon->Id
+            || !string.Equals(agent->ShopName.ToString(), offer.ShopName, StringComparison.Ordinal))
+            return false;
+
+        var open = new AtkValue { Type = AtkValueType.Int, Int = 5 };
+        addon->FireCallback(1u, &open, true);
+        log.Debug("[ADS][Shop] Dispatched the owned Limsa Lv. 90 ShopExchangeItem open callback.");
+        return true;
+    }
+
+    private bool OwnsLimsaSalvagerInteraction()
+    {
+        var target = targetManager.Target;
+        return ShopMenuRouteResolver.MatchesLimsaSalvagerOwner(
+            (shopUiCharacter, shopUiTerritory, shopUiNpc, shopUiNpcBaseId),
+            (CharacterId, CurrentTerritoryId, target?.GameObjectId ?? 0, target?.BaseId ?? 0));
     }
 
     public bool IsTalkVisible => GameInteractionHelper.IsAddonVisible("Talk");
@@ -1563,6 +1833,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             && offer.Offer.Currencies[0].Identity == new ShopCurrencyIdentity(ShopCurrencyKind.Tomestone, 28);
         var interaction = (shopUiCharacter, shopUiTerritory, shopUiNpc);
         var poeticsExchange = isPoetics ? ReadPoeticsExchangeReceipt(offer, runtimeRow) : null;
+        var featherExchange = ReadFeatherExchangeReceipt(offer, runtimeRow);
+        if (ShopMenuRouteResolver.IsSilverFeatherExchange(offer.Offer) && featherExchange == null)
+            return false;
         if (offer.Offer.Kind == ShopOfferKind.SpecialShopMgp && shopUiCharacter != 0 && shopUiNpc != 0 &&
             CharacterId == shopUiCharacter && (targetManager.Target == null || targetManager.Target.GameObjectId == shopUiNpc))
         {
@@ -1595,6 +1868,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             {
                 poeticsExchangeCleanup = isPoetics;
                 ownedPoeticsExchange = poeticsExchange;
+                ownedFeatherExchange = featherExchange;
             }
             if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
             {
@@ -1603,7 +1877,9 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 CloseShopAddon("FreeCompany");
             }
             readableOwnedSelectYesNoPrompt = null;
-            confirmationToken = new ShopConfirmationToken(offer, transactionCount, DateTime.UtcNow);
+            confirmedLimsaExchangeDialog = 0;
+            limsaEquipWarning = null;
+            confirmationToken = new ShopConfirmationToken(offer, transactionCount, DateTime.UtcNow, runtimeRow);
             unreadableOwnedSelectYesnoWarningLogged = false;
             log.Information(
                 "[ADS][Shop] Armed owned confirmation token: {Token}",
@@ -1612,10 +1888,32 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         return accepted;
     }
 
+    private (nint Addon, uint AddonId, nint Receiver, ShopOffer Offer)? ReadFeatherExchangeReceipt(
+        EvaluatedShopOffer offer, int runtimeRow)
+    {
+        if (!ShopMenuRouteResolver.IsSilverFeatherExchange(offer.Offer) || !IsOwnedExchangeContext()
+            || offer.Offer.NpcId != shopUiNpcBaseId || offer.Offer.TerritoryId != shopUiTerritory)
+            return null;
+
+        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeItem");
+        var agent = AgentShop.Instance();
+        return addon != null && addon->IsVisible && addon->IsReady && addon->Id != 0
+            && agent != null && agent->IsAgentActive() && agent->AddonId == addon->Id && agent->EventReceiver != null
+            && ValidateExchangeShop(offer) is { State: ShopUiValidationState.Valid, RuntimeRow: var row } && row == runtimeRow
+            ? ((nint)addon, addon->Id, (nint)agent->EventReceiver, offer.Offer) : null;
+    }
+
+    public bool IsOwnedFeatherExchangeVisible(EvaluatedShopOffer offer) =>
+        ownedFeatherExchange is { } owned && IsOwnedExchangeContext()
+        && ShopMenuRouteResolver.IsSilverFeatherExchange(offer.Offer)
+        && (owned.Offer.ShopId, owned.Offer.NpcId, owned.Offer.TerritoryId) ==
+            (offer.Offer.ShopId, offer.Offer.NpcId, offer.Offer.TerritoryId)
+        && MatchesFeatherExchange(RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeItem"), owned);
+
     private (nint Addon, uint AddonId, nint Receiver, EvaluatedShopOffer Offer)? ReadPoeticsExchangeReceipt(
         EvaluatedShopOffer offer, int runtimeRow)
     {
-        if (!IsPoeticsCleanupContext() || offer.Offer.NpcId != shopUiNpcBaseId
+        if (!IsOwnedExchangeContext() || offer.Offer.NpcId != shopUiNpcBaseId
             || offer.Offer.TerritoryId != shopUiTerritory)
             return null;
 
@@ -1633,6 +1931,22 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     {
         readableOwnedSelectYesNoPrompt = null;
         var token = confirmationToken;
+        if (token != null && HasLimsaEquipWarning(offer.Offer))
+            return ReadLimsaEquipWarning(offer.Offer, token, transactionCount, out _, out _) == LimsaWarningStep.Wait;
+
+        if (token != null && ShopMenuRouteResolver.RequiresLimsaSalvagerExchangeOpen(offer.Offer)
+            && GameInteractionHelper.IsAddonVisible("ShopExchangeItemDialog")
+            && !GameInteractionHelper.IsAddonVisible("SelectYesno"))
+        {
+            if (token.IsConsumed)
+            {
+                var visible = RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeItemDialog");
+                return visible != null && visible->IsVisible && (nint)visible == confirmedLimsaExchangeDialog;
+            }
+            var dialog = ReadLimsaExchangeDialog(offer.Offer, token, transactionCount);
+            return dialog != null && (!dialog->IsReady || FindExchangeButtonClick(dialog) == null);
+        }
+
         if (token is not { IsConsumed: false }
             || transactionCount <= 0
             || token.ItemId != offer.Offer.ReceiveItemId
@@ -1655,7 +1969,37 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     public bool TryAcceptOwnedConfirmation(EvaluatedShopOffer offer, int transactionCount)
     {
         var token = confirmationToken;
-        if (token == null || token.IsConsumed || transactionCount <= 0)
+        if (token == null || transactionCount <= 0)
+            return false;
+        if (HasLimsaEquipWarning(offer.Offer))
+        {
+            var step = ReadLimsaEquipWarning(offer.Offer, token, transactionCount, out var warning, out var buttonClick);
+            if (step is not (LimsaWarningStep.CheckProceed or LimsaWarningStep.Confirm))
+                return false;
+            var listener = buttonClick->Listener;
+            if (listener->VirtualTable == null || listener->VirtualTable->ReceiveEvent == null)
+                return false;
+
+            limsaEquipWarning = ((nint)warning, warning->AtkUnitBase.Id, step == LimsaWarningStep.Confirm);
+            if (step == LimsaWarningStep.CheckProceed)
+            {
+                // The checkbox changes its own state before notifying the dialog.
+                var proceed = warning->ConfirmCheckBox;
+                proceed->SetChecked(true);
+                if (!proceed->IsChecked || !GameInteractionHelper.TryDispatchRegisteredClick(buttonClick))
+                    return false;
+
+                log.Information("[ADS][Shop] Checked Proceed and notified the owned Limsa equipment warning.");
+                return true;
+            }
+
+            if (!GameInteractionHelper.TryDispatchRegisteredClick(buttonClick))
+                return false;
+
+            log.Information("[ADS][Shop] Dispatched OK for the owned Limsa equipment warning after Proceed was checked.");
+            return true;
+        }
+        if (token.IsConsumed)
             return false;
         var now = DateTime.UtcNow;
         if (GameInteractionHelper.IsAddonVisible("SelectYesno"))
@@ -1720,11 +2064,162 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
 
         if (GameInteractionHelper.IsAddonVisible("ShopExchangeItemDialog"))
         {
+            if (ShopMenuRouteResolver.RequiresLimsaSalvagerExchangeOpen(offer.Offer))
+            {
+                var dialog = ReadLimsaExchangeDialog(offer.Offer, token, transactionCount);
+                var click = dialog != null && dialog->IsReady ? FindExchangeButtonClick(dialog) : null;
+                if (click == null)
+                {
+                    log.Warning("[ADS][Shop] Could not bind the Limsa Lv. 90 confirmation to the selected row, quantity and Exchange button.");
+                    return false;
+                }
+                if (ValidateExchangeShop(offer) is not { State: ShopUiValidationState.Valid, RuntimeRow: var row }
+                    || row != token.RuntimeRow
+                    || !token.TryConsumeStructured(offer.Offer.ReceiveItemId,
+                        checked((int)((long)offer.Offer.ReceiveCount * transactionCount)), costs, now))
+                    return false;
+
+                if (!GameInteractionHelper.TryDispatchRegisteredClick(click))
+                    return false;
+                confirmedLimsaExchangeDialog = (nint)dialog;
+                log.Information("[ADS][Shop] Dispatched Exchange for the verified Limsa Lv. 90 bundle.");
+                return true;
+            }
             if (!token.TryConsumeStructured(token.ItemId, token.Quantity, costs, now))
                 return false;
             return GameInteractionHelper.TryClickAddonNodeButton("ShopExchangeItemDialog", 18, Plugin.GameGui, log);
         }
         return false;
+    }
+
+    private AtkUnitBase* ReadLimsaExchangeDialog(ShopOffer offer, ShopConfirmationToken token, int transactions)
+    {
+        if (!OwnsLimsaSalvagerInteraction() || token.ItemId != offer.ReceiveItemId || transactions <= 0)
+            return null;
+        var manager = RaptureAtkUnitManager.Instance();
+        var dialog = manager->GetAddonByName("ShopExchangeItemDialog");
+        var shop = manager->GetAddonByName("ShopExchangeItem");
+        var agent = AgentShop.Instance();
+        return dialog != null && dialog->IsVisible && shop != null && agent != null && agent->IsAgentActive()
+            && agent->AddonId == shop->Id && string.Equals(agent->ShopName.ToString(), offer.ShopName, StringComparison.Ordinal)
+            && MatchesLimsaExchangeSelection(agent, dialog->Id, token.RuntimeRow, transactions)
+            ? dialog : null;
+    }
+
+    internal static bool MatchesLimsaExchangeSelection(AgentShop* agent, uint dialogId, int runtimeRow, int transactions)
+        => agent != null && dialogId != 0 && agent->DialogAddonId == dialogId
+            && runtimeRow >= 0 && agent->SelectedItemIndex == runtimeRow
+            && transactions > 0 && agent->SelectedItemStackSize == transactions;
+
+    private enum LimsaWarningStep { Unowned, Wait, CheckProceed, Confirm }
+
+    private bool HasLimsaEquipWarning(ShopOffer offer) => confirmedLimsaExchangeDialog != 0
+        && ShopMenuRouteResolver.RequiresLimsaSalvagerExchangeOpen(offer)
+        && GameInteractionHelper.IsAddonVisible("SelectYesno");
+
+    private LimsaWarningStep ReadLimsaEquipWarning(ShopOffer offer, ShopConfirmationToken token, int transactions,
+        out AddonSelectYesno* warning, out AtkEvent* click)
+    {
+        warning = null;
+        click = null;
+        if (!token.IsConsumed || !token.IsWithinLifetime(DateTime.UtcNow) || !OwnsLimsaSalvagerInteraction()
+            || transactions <= 0 || token.ItemId != offer.ReceiveItemId
+            || token.Quantity != (long)offer.ReceiveCount * transactions)
+            return LimsaWarningStep.Unowned;
+
+        var manager = RaptureAtkUnitManager.Instance();
+        warning = (AddonSelectYesno*)manager->GetAddonByName("SelectYesno");
+        var shop = manager->GetAddonByName("ShopExchangeItem");
+        var agent = AgentShop.Instance();
+        if (warning == null || !warning->AtkUnitBase.IsVisible || shop == null || !shop->IsVisible
+            || agent == null || !agent->IsAgentActive() || agent->AddonId != shop->Id
+            || warning->AtkUnitBase.BlockedParentId != shop->Id
+            || !string.Equals(agent->ShopName.ToString(), offer.ShopName, StringComparison.Ordinal)
+            || (limsaEquipWarning is { } prior && (prior.Addon != (nint)warning || prior.Id != warning->AtkUnitBase.Id)))
+            return LimsaWarningStep.Unowned;
+
+        if (!warning->AtkUnitBase.IsReady || !GameInteractionHelper.TryGetSelectYesNoPromptText(warning, out var prompt))
+            return LimsaWarningStep.Wait;
+
+        var rows = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>(Plugin.ClientState.ClientLanguage);
+        if (!MatchesEquipmentWarning(prompt, rows.GetRowOrDefault(2436)?.Text.ToString())
+            && !MatchesEquipmentWarning(prompt, rows.GetRowOrDefault(11502)?.Text.ToString()))
+            return LimsaWarningStep.Unowned;
+
+        var proceed = warning->ConfirmCheckBox;
+        if (limsaEquipWarning is { Confirmed: true } || proceed == null)
+            return LimsaWarningStep.Wait;
+        if (!proceed->IsChecked)
+        {
+            if (limsaEquipWarning.HasValue || !proceed->IsEnabled)
+                return LimsaWarningStep.Wait;
+            var owner = proceed->AtkComponentButton.AtkComponentBase.OwnerNode;
+            click = FindShopConfirmationClick(&warning->AtkUnitBase, owner == null ? null : &owner->AtkResNode, 3);
+            return click == null ? LimsaWarningStep.Wait : LimsaWarningStep.CheckProceed;
+        }
+
+        var affirmative = warning->YesButton;
+        if (affirmative == null || !affirmative->IsEnabled)
+            return LimsaWarningStep.Wait;
+        var affirmativeOwner = affirmative->AtkComponentBase.OwnerNode;
+        click = FindShopConfirmationClick(&warning->AtkUnitBase,
+            affirmativeOwner == null ? null : &affirmativeOwner->AtkResNode, 0);
+        return click == null ? LimsaWarningStep.Wait : LimsaWarningStep.Confirm;
+    }
+
+    internal static bool MatchesEquipmentWarning(string? prompt, string? expected)
+        => !string.IsNullOrWhiteSpace(prompt) && !string.IsNullOrWhiteSpace(expected)
+            && string.Equals(GameInteractionHelper.NormalizeAddonPrompt(prompt),
+                GameInteractionHelper.NormalizeAddonPrompt(expected), StringComparison.Ordinal);
+
+    private static AtkEvent* FindExchangeButtonClick(AtkUnitBase* dialog)
+    {
+        var label = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(4774).Text.ToString().Trim();
+        if (dialog->UldManager.NodeList == null || dialog->UldManager.NodeListCount > 512 || string.IsNullOrEmpty(label))
+            return null;
+
+        AtkEvent* selected = null;
+        for (var index = 0; index < dialog->UldManager.NodeListCount; index++)
+        {
+            var node = dialog->UldManager.NodeList[index];
+            if (node == null || !node->IsVisible() || (ushort)node->Type < 1000)
+                continue;
+            var component = ((AtkComponentNode*)node)->Component;
+            if (component == null || component->GetComponentType() != ComponentType.Button)
+                continue;
+            var button = (AtkComponentButton*)component;
+            if (!button->IsEnabled || button->ButtonTextNode == null
+                || !string.Equals(button->ButtonTextNode->NodeText.ToString().Trim(), label, StringComparison.Ordinal))
+                continue;
+
+            if (selected != null)
+                return null;
+            selected = FindShopConfirmationClick(dialog, node);
+            if (selected == null)
+                return null;
+        }
+        return selected;
+    }
+
+    private static AtkEvent* FindShopConfirmationClick(AtkUnitBase* dialog, AtkResNode* node, uint? parameter = null)
+    {
+        if (node == null || !node->IsVisible())
+            return null;
+        AtkEvent* selected = null;
+        var count = 0;
+        for (var current = node->AtkEventManager.Event; current != null; current = current->NextEvent)
+        {
+            if (++count > 32)
+                return null;
+            if (current->State.EventType != AtkEventType.ButtonClick || current->Listener != (AtkEventListener*)dialog
+                || (parameter.HasValue && current->Param != parameter.Value)
+                || current->State.StateFlags.HasFlag(AtkEventStateFlags.IsGlobalEvent))
+                continue;
+            if (selected != null)
+                return null;
+            selected = current;
+        }
+        return selected;
     }
 
     public void CloseOwnedShopUi() => CloseOwnedShopUiCore(null);
@@ -1740,7 +2235,8 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             if (!RetainOwnedShopCleanup() || DateTime.UtcNow >= deadlineUtc.Value)
                 return;
         }
-        if (!OwnsShopCleanupUi())
+        if (!OwnsShopCleanupUi() && !(ownedFeatherExchange.HasValue && IsOwnedExchangeContext()
+            && !HasUnexpectedConfirmation && !IsAnyShopVisible && !IsSelectionMenuVisible && !IsTalkVisible))
             return;
         if (!deadlineUtc.HasValue)
             ownedUiCleanupUntil = shopUiCharacter == 0 ? default : DateTime.UtcNow.AddSeconds(10);
@@ -1777,6 +2273,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     private bool OwnsShopCleanupUi()
     {
         if (poeticsExchangeCleanup) return GetPoeticsCleanupAddon(requireReady: false) != null;
+        if (ownedFeatherExchange.HasValue) return GetFeatherCleanupAddon(requireReady: false) != null;
         if (shopUiCharacter == 0) return true;
         if (CharacterId != shopUiCharacter || IsBetweenAreas) return false;
         ulong nativeShopNpc = 0, nativeSelectorNpc = 0;
@@ -1818,7 +2315,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
                 target != 0 && target != shopUiNpc);
     }
 
-    private bool IsPoeticsCleanupContext()
+    private bool IsOwnedExchangeContext()
     {
         var target = targetManager.Target?.GameObjectId ?? 0;
         return shopUiCharacter != 0 && CharacterId == shopUiCharacter && !IsBetweenAreas
@@ -1826,9 +2323,31 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             && (target == 0 || target == shopUiNpc);
     }
 
+    private static bool MatchesFeatherExchange(AtkUnitBase* addon,
+        (nint Addon, uint AddonId, nint Receiver, ShopOffer Offer) owned)
+    {
+        var agent = AgentShop.Instance();
+        return addon != null && addon->IsVisible && agent != null && agent->IsAgentActive()
+            && MatchesExchangeBinding(addon, owned.Addon, owned.AddonId, owned.Receiver)
+            && string.Equals(agent->ShopName.ToString(), owned.Offer.ShopName, StringComparison.Ordinal);
+    }
+
+    private AtkUnitBase* GetFeatherCleanupAddon(bool requireReady)
+    {
+        if (ownedFeatherExchange is not { } owned || !IsOwnedExchangeContext() || HasUnexpectedConfirmation || IsTalkVisible)
+            return null;
+
+        var manager = RaptureAtkUnitManager.Instance();
+        var exchange = manager->GetAddonByName("ShopExchangeItem");
+        if (exchange != null && exchange->IsVisible)
+            return !IsSelectionMenuVisible && MatchesFeatherExchange(exchange, owned)
+                && (!requireReady || exchange->IsReady) ? exchange : null;
+        return GetOwnedReturningMenu(manager, requireReady, owned.Offer);
+    }
+
     private AtkUnitBase* GetPoeticsCleanupAddon(bool requireReady)
     {
-        if (ownedPoeticsExchange is not { } owned || !IsPoeticsCleanupContext() || HasUnexpectedConfirmation || IsTalkVisible)
+        if (ownedPoeticsExchange is not { } owned || !IsOwnedExchangeContext() || HasUnexpectedConfirmation || IsTalkVisible)
             return null;
 
         var manager = RaptureAtkUnitManager.Instance();
@@ -1839,7 +2358,7 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
         if (exchange != null && exchange->IsVisible)
         {
             if (IsSelectionMenuVisible && !ownsSelector) return null;
-            if (!MatchesPoeticsExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver))
+            if (!MatchesExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver))
                 return null;
             if (!requireReady) return exchange;
             if (!exchange->IsReady) return null;
@@ -1847,50 +2366,85 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
             if (validation.State == ShopUiValidationState.Mismatch)
                 ownedPoeticsExchange = null;
             return validation.State == ShopUiValidationState.Valid
-                && MatchesPoeticsExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver)
+                && MatchesExchangeBinding(exchange, owned.Addon, owned.AddonId, owned.Receiver)
                 ? exchange : null;
         }
 
         // A returning menu must prove its own NPC and expose one unambiguous addon.
-        if (!ownsSelector || IsAnyShopVisible) return null;
+        return GetOwnedReturningMenu(manager, requireReady);
+    }
+
+    private AtkUnitBase* GetOwnedReturningMenu(
+        RaptureAtkUnitManager* manager, bool requireReady, ShopOffer? featherOffer = null)
+    {
+        if (IsAnyShopVisible) return null;
+
+        var selector = EventHandlerSelector.Instance();
+        var selectorNpc = selector != null && selector->Target != null
+            ? (ulong)selector->Target->GetGameObjectId() : 0;
         var iconMenu = manager->GetAddonByName("SelectIconString");
         var textMenu = manager->GetAddonByName("SelectString");
         var iconVisible = iconMenu != null && iconMenu->IsVisible;
         var textVisible = textMenu != null && textMenu->IsVisible;
         if (iconVisible == textVisible) return null;
         var menu = iconVisible ? iconMenu : textMenu;
-        return !requireReady || menu->IsReady ? menu : null;
+        if (selectorNpc != 0)
+            return selectorNpc == shopUiNpc && (!requireReady || menu->IsReady) ? menu : null;
+
+        // The custom tier popup can return without an EventHandlerSelector target.
+        // Only the sheet-backed menu reached by the verified exchange can be cancelled.
+        if (!textVisible || featherOffer is not { NpcId: 1006005 } offer
+            || !ShopMenuRouteResolver.IsSilverFeatherExchange(offer)
+            || offer.CallbackPath is not [var parent, { Kind: ShopMenuPathStepKind.TopicSelectShop, HandlerId: var shopId }]
+            || shopId != offer.ShopId || !OwnsLimsaSalvagerInteraction())
+            return null;
+        if (!menu->IsReady)
+            return requireReady ? null : menu;
+
+        var popup = new ECommons.UIHelpers.AddonMasterImplementations.AddonMaster.SelectString(menu);
+        if (popup.EntryCount == 0)
+            return requireReady ? null : menu;
+        if (popup.EntryCount is < 5 or > 32
+            || !TryReadFeatherTierLabels(Plugin.DataManager.GetExcelSheet<SpecialShop>(), out var tierLabels))
+            return null;
+        var target = targetManager.Target;
+        var owner = (shopUiCharacter, shopUiTerritory, shopUiNpc, shopUiNpcBaseId);
+        var current = (CharacterId, CurrentTerritoryId, target?.GameObjectId ?? 0, target?.BaseId ?? 0);
+        var labels = popup.Entries.Select(entry => entry.Text).ToArray();
+        return ShopMenuRouteResolver.TryResolveLimsaSalvagerTopicIndex(
+            parent, owner, current, offer.ShopName, tierLabels, labels, out _) ? menu : null;
     }
 
-    private static bool MatchesPoeticsExchangeBinding(AtkUnitBase* exchange, nint addon, uint addonId, nint receiver)
+    private static bool MatchesExchangeBinding(AtkUnitBase* exchange, nint addon, uint addonId, nint receiver)
     {
         var shop = AgentShop.Instance();
         return exchange != null && (nint)exchange == addon && exchange->Id == addonId
             && shop != null && shop->AddonId == addonId && (nint)shop->EventReceiver == receiver;
     }
 
-    private bool ClosePoeticsCleanupAddon()
+    private bool CloseTrackedExchangeAddon(AtkUnitBase* addon)
     {
-        var addon = GetPoeticsCleanupAddon(requireReady: true);
         if (addon == null) return false;
         try
         {
             AtkValue cancel = default;
             cancel.SetInt(-1);
             addon->FireCallback(1, &cancel, true);
-            log.Debug("[ADS][Shop] Dispatched the owned Poetics UI cancel callback.");
+            log.Debug("[ADS][Shop] Dispatched the owned exchange UI cancel callback.");
             return true;
         }
         catch (Exception ex)
         {
-            log.Debug(ex, "[ADS][Shop] Failed to dispatch the owned Poetics UI cancel callback.");
+            log.Debug(ex, "[ADS][Shop] Failed to dispatch the owned exchange UI cancel callback.");
             return false;
         }
     }
 
     private void CloseShopUiOnce()
     {
-        var dispatched = poeticsExchangeCleanup ? ClosePoeticsCleanupAddon() : CloseLegacyShopUi();
+        var dispatched = poeticsExchangeCleanup ? CloseTrackedExchangeAddon(GetPoeticsCleanupAddon(requireReady: true))
+            : ownedFeatherExchange.HasValue ? CloseTrackedExchangeAddon(GetFeatherCleanupAddon(requireReady: true))
+            : CloseLegacyShopUi();
         lastShopCleanupDispatched = dispatched;
         if (dispatched || !shopListOwnsUiCleanup)
             nextRelicUiCleanupUtc = DateTime.UtcNow.AddSeconds(1);
@@ -1941,14 +2495,22 @@ internal sealed unsafe class DalamudShopPurchaseRuntime(
     {
         if (ownedPoeticsExchange is { } poetics)
         {
-            if (!IsPoeticsCleanupContext())
+            if (!IsOwnedExchangeContext())
                 ownedPoeticsExchange = null;
-            else if (poetics.Addon != 0 && !MatchesPoeticsExchangeBinding(
+            else if (poetics.Addon != 0 && !MatchesExchangeBinding(
                 RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeCurrency"), poetics.Addon, poetics.AddonId, poetics.Receiver))
             {
                 // The returning selector can still prove its NPC after the exchange has been destroyed.
                 ownedPoeticsExchange = (0, 0, 0, poetics.Offer);
             }
+        }
+        if (ownedFeatherExchange is { } feather)
+        {
+            if (CharacterId != shopUiCharacter || CurrentTerritoryId != shopUiTerritory || IsBetweenAreas)
+                ownedFeatherExchange = null;
+            else if (feather.Addon != 0 && !MatchesExchangeBinding(
+                RaptureAtkUnitManager.Instance()->GetAddonByName("ShopExchangeItem"), feather.Addon, feather.AddonId, feather.Receiver))
+                ownedFeatherExchange = (0, 0, 0, feather.Offer);
         }
         if (ownedMgpExchange is { } owned)
         {

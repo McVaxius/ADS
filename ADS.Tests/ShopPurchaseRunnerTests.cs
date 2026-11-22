@@ -1,6 +1,7 @@
 using System.Numerics;
 using ADS.Models;
 using ADS.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace ADS.Tests;
 
@@ -306,23 +307,73 @@ public sealed class ShopPurchaseRunnerTests
     [InlineData("stuck-at-main", false)]
     [InlineData("character-changed", false)]
     [InlineData("cancelled", false)]
-    public void JonathasTransferRequiresActualOldGridaniaArrival(string scenario, bool succeeds)
+    [InlineData("salvager-arrived", true)]
+    [InlineData("salvager-stuck-at-main", false)]
+    [InlineData("salvager-cancelled", false)]
+    public void CityTransferRequiresActualVendorTerritoryArrival(string scenario, bool succeeds)
     {
+        var isSalvager = scenario.StartsWith("salvager-", StringComparison.Ordinal);
         var clock = new FakeClock();
-        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, AethernetArrives = scenario != "stuck-at-main" };
-        var offer = Offer(1769813, 1008145, 1, 133) with
-        { AetheryteRoutes = [new(2, "Gridania", Vector3.Zero, 100, 132, 27)] };
+        var runtime = new FakeRuntime
+        {
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+            AethernetArrives = !isSalvager && scenario != "stuck-at-main",
+        };
+        var offer = isSalvager
+            ? Offer(1770756, 1006005, 1, 128) with { AetheryteRoutes = [new(8, "Limsa Lominsa Lower Decks", Vector3.Zero, 100, 129, 41)] }
+            : Offer(1769813, 1008145, 1, 133) with { AetheryteRoutes = [new(2, "Gridania", Vector3.Zero, 100, 132, 27)] };
         var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
         Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
         DriveUntil(runner, () => runner.Status.Phase == "teleporting");
-        Assert.Equal(132u, runtime.CurrentTerritoryId);
+        var crystal = Assert.Single(offer.AetheryteRoutes);
+        Assert.Equal(crystal.TransferTerritoryId, runtime.CurrentTerritoryId);
         Assert.Empty(runtime.InteractedNpcIds);
+
+        var route = new ResolvedShopRoute(offer.TerritoryId, offer.TerritoryName, offer.NpcPosition, true,
+            crystal.AetheryteId, crystal.AetheryteName, crystal.DistanceToNpc,
+            TransferTerritoryId: crystal.TransferTerritoryId, AethernetId: crystal.AethernetId);
+        var (usesNamedTransfer, command) = DalamudShopPurchaseRuntime.ResolveSalvagerAethernetCommand(route, id => id switch
+        {
+            8 => (129u, 1u, true, null),
+            41 => (128u, 1u, false, "The Aftcastle"),
+            _ => default,
+        });
+        Assert.Equal(isSalvager, usesNamedTransfer);
+        Assert.Equal(isSalvager ? "/li The Aftcastle" : null, command);
+
+        if (isSalvager)
+        {
+            var invalid = DalamudShopPurchaseRuntime.ResolveSalvagerAethernetCommand(route,
+                id => id == 8 ? (129u, 1u, true, null) : (128u, 2u, false, "The Aftcastle"));
+            Assert.True(invalid.IsSalvagerRoute);
+            Assert.Null(invalid.Command);
+
+            clock.Advance(TimeSpan.FromSeconds(2.1));
+            runner.Update();
+            Assert.Equal(1, runtime.AethernetTransfers);
+            clock.Advance(TimeSpan.FromSeconds(2.1));
+            runner.Update();
+            Assert.Equal(1, runtime.AethernetTransfers);
+            Assert.Equal(crystal.TransferTerritoryId, runtime.CurrentTerritoryId);
+            Assert.Equal(0, runtime.MoveCount);
+            Assert.Equal(0, runtime.MenuSelectCount);
+            Assert.Empty(runtime.InteractedNpcIds);
+            Assert.Equal(0, runtime.SubmitCount);
+            if (succeeds) runtime.CurrentTerritoryId = offer.TerritoryId;
+        }
+
         if (scenario == "character-changed") runtime.CharacterId++;
-        if (scenario == "cancelled") runner.Cancel("FULL STOP");
+        if (scenario is "cancelled" or "salvager-cancelled") runner.Cancel("FULL STOP");
         DriveWithTime(runner, clock);
         Assert.Equal(succeeds, runner.Status.Succeeded);
         Assert.Equal(1, runtime.TeleportCount);
-        Assert.Equal(scenario is "arrived" or "stuck-at-main" ? 1 : 0, runtime.AethernetTransfers);
+        Assert.Equal(isSalvager || scenario is "arrived" or "stuck-at-main" ? 1 : 0, runtime.AethernetTransfers);
+        if (isSalvager && succeeds)
+        {
+            Assert.Equal(1006005u, Assert.Single(runtime.InteractedNpcIds));
+            Assert.Equal(1006005u, Assert.Single(runtime.SubmittedNpcIds));
+        }
         if (!succeeds) { Assert.Empty(runtime.InteractedNpcIds); Assert.Equal(0, runtime.SubmitCount); }
     }
 
@@ -2540,6 +2591,164 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(1, runtime.SubmitCount);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void FeatherBundleVerifiesBothGearReceiptsAndFiveFeatherDebit(bool primaryInArmoury, bool secondaryInArmoury)
+    {
+        var clock = new FakeClock();
+        var currency = new ShopCurrencyCost(ShopCurrencyKind.Item, 12995, "Silver Chocobo Feather", 5);
+        var offer = Offer(10, 100, 1) with
+        {
+            Currencies = [currency],
+            Outputs = [new(100, "Weapon", 1, 1, false), new(200, "Armor", 1, 1, false)],
+        };
+        var runtime = new FakeRuntime { ApplyItemDelta = true, ApplyCurrencyDelta = true, ItemCount = 3 };
+        runtime.ArmouryItemCounts[200] = 4;
+        if (primaryInArmoury) runtime.ArmouryDestinations.Add(100);
+        if (secondaryInArmoury) runtime.ArmouryDestinations.Add(200);
+        runtime.SetCurrency(currency.Identity, 10);
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, currency.Identity));
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(1, runner.VerifiedAcquiredQuantity);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(4, runtime.GetPurchaseOutputCount(100));
+        Assert.Equal(5, runtime.GetPurchaseOutputCount(200));
+        Assert.Equal(primaryInArmoury ? 3 : 4, runtime.GetItemCount(100));
+        Assert.Equal(secondaryInArmoury ? 0 : 1, runtime.GetItemCount(200));
+        Assert.Equal(5, runtime.GetAvailableCurrency(currency));
+    }
+
+    [Fact]
+    public void FeatherBundleWithMissingArmouryReceiptNeverVerifies()
+    {
+        var clock = new FakeClock();
+        var currency = new ShopCurrencyCost(ShopCurrencyKind.Item, 12995, "Silver Chocobo Feather", 5);
+        var offer = Offer(10, 100, 1) with
+        {
+            Currencies = [currency],
+            Outputs = [new(100, "Weapon", 1, 1, false), new(200, "Armor", 1, 1, false)],
+        };
+        var runtime = new FakeRuntime { ApplyItemDelta = false, ApplyCurrencyDelta = true };
+        runtime.SetCurrency(currency.Identity, 10);
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1), false, currency.Identity));
+        DriveUntil(runner, () => runtime.SubmitCount == 1);
+        runtime.ArmouryItemCounts[100] = 1;
+        runner.Update();
+        Assert.Null(runner.Status.Succeeded);
+
+        clock.Advance(ShopPurchaseTiming.ConfirmationAndVerificationTimeout.Add(TimeSpan.FromTicks(1)));
+        runner.Update();
+
+        Assert.False(runner.Status.Succeeded);
+        Assert.Equal(ShopPurchaseFailureCodes.Timeout, runner.Status.FailureCode);
+        Assert.Equal(0, runner.VerifiedAcquiredQuantity);
+        Assert.Equal(1, runtime.SubmitCount);
+        Assert.Equal(5, runtime.GetAvailableCurrency(currency));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FeatherBundleRequiresCombinedCapacityBeforeSubmitting(bool spaceLostAfterStart)
+    {
+        var runtime = new FakeRuntime { BundleFits = spaceLostAfterStart };
+        var offer = Offer(10, 100, 1) with
+        {
+            Outputs = [new(100, "Weapon", 1, 1, false), new(200, "Armor", 1, 1, false)],
+        };
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, new FakeClock());
+
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+        runtime.BundleFits = false;
+        Drive(runner);
+
+        Assert.False(runner.Status.Succeeded);
+        Assert.Equal(ShopPurchaseFailureCodes.InventoryCapacity, runner.Status.FailureCode);
+        Assert.Equal(0, runtime.SubmitCount);
+    }
+
+    [Fact]
+    public void FeatherChainReusesVerifiedRowsAndClosesOnlyAfterTheLastBundle()
+    {
+        var clock = new FakeClock();
+        var runtime = new FakeRuntime { CurrentTerritoryId = 128, LimsaExchangeCanOpen = true, MenuStepsRemaining = 2,
+            ApplyItemDelta = true, ApplyCurrencyDelta = true, OwnedFeatherExchangeVisible = true };
+        runtime.SelectionMenuNpcIds.Add(1006005);
+        runtime.ArmouryDestinations.UnionWith([101u, 201u]);
+        var cost = new ShopCurrencyCost(ShopCurrencyKind.Item, 12995, "Silver Chocobo Feather", 5);
+        runtime.AdjustCurrency(cost.Identity, 10);
+        var first = Offer(1770756, 1006005, 1, 128,
+            [new(ShopMenuPathStepKind.ENpcData, 7, 3276842), new(ShopMenuPathStepKind.TopicSelectShop, 6, 1770756)]) with
+        {
+            Currencies = [cost],
+            Outputs = [new(100, "First weapon", 1, 1, false), new(101, "First armor", 1, 1, false)],
+        };
+        var second = first with
+        {
+            ReceiveItemId = 200,
+            ReceiveItemName = "Second weapon",
+            Outputs = [new(200, "Second weapon", 1, 1, false), new(201, "Second armor", 1, 1, false)],
+        };
+        var catalog = new FakeCatalog(Resolution(1, [first]));
+        var runner = new ShopPurchaseRunner(catalog, runtime, clock);
+        var request = new ShopPurchaseRequest(100, 1) { OperationId = "feather-chain", MaximumCurrencySpend = 5, KeepShopOpen = true };
+        Assert.True(runner.Start(request, request.KeepShopOpen, cost.Identity));
+        DriveWithTime(runner, clock);
+        Assert.True(runner.Status.Succeeded);
+        Assert.True(runner.Status.ShopHeldOpen);
+        Assert.Equal(5, runtime.GetAvailableCurrency(cost));
+        Assert.Equal(1, runtime.GetPurchaseOutputCount(101));
+        Assert.Equal(0, runtime.CloseUiCount);
+        Assert.False(runner.ReleaseHeldShopUi("foreign-chain"));
+
+        catalog.Resolution = Resolution(1, [second]) with { ItemId = 200 };
+        runtime.Validation = ShopUiValidationResult.Valid(5);
+        var last = request with { ItemId = 200, KeepShopOpen = false };
+        Assert.False(runner.Start(last with { OperationId = "foreign-chain" }, last.KeepShopOpen, cost.Identity));
+        runtime.OwnedFeatherExchangeVisible = false;
+        Assert.False(runner.Start(last, last.KeepShopOpen, cost.Identity));
+        Assert.Equal(1, runtime.SubmitCount);
+        runtime.OwnedFeatherExchangeVisible = true;
+        Assert.True(runner.Start(last, last.KeepShopOpen, cost.Identity));
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.False(runner.Status.ShopHeldOpen);
+        Assert.Equal(0, runtime.GetAvailableCurrency(cost));
+        Assert.Equal(1, runtime.GetPurchaseOutputCount(200));
+        Assert.Equal(1, runtime.GetPurchaseOutputCount(201));
+        Assert.Equal([0, 5], runtime.SubmittedRuntimeRows);
+        Assert.Single(runtime.InteractedNpcIds);
+        Assert.Single(runtime.Events, entry => entry == "open-limsa-exchange");
+        Assert.Equal(1, runtime.CloseUiCount);
+        Assert.False(runtime.IsAnyShopVisible);
+    }
+
+    [Fact]
+    public void BundleCapacityCountsSharedBagAndArmourySlotsOnce()
+    {
+        var weapon = ((InventoryType?)InventoryType.ArmoryMainHand, 1L);
+        var body = ((InventoryType?)InventoryType.ArmoryBody, 1L);
+        var bagItem = ((InventoryType?)null, 1L);
+
+        Assert.True(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, body], 0, _ => 1));
+        Assert.True(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, body], 1,
+            type => type == InventoryType.ArmoryMainHand ? 1 : 0));
+        Assert.False(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, body], 1, _ => 0));
+        Assert.False(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, weapon], 0, _ => 1));
+        Assert.True(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, weapon], 1, _ => 1));
+        Assert.False(DalamudShopPurchaseRuntime.FitsPurchaseOutputs([weapon, bagItem], 0, _ => 1));
+    }
+
     [Fact]
     public void RejectedStartOnlyUpdatesLastStartError()
     {
@@ -2767,6 +2976,46 @@ public sealed class ShopPurchaseRunnerTests
         Assert.Equal(0, runtime.CloseUiCount);
     }
 
+    [Fact]
+    public void LimsaLevel90CompletesBothMenuStepsAndOpensTheExchangeOnceBeforePurchase()
+    {
+        var runtime = new FakeRuntime
+        {
+            CurrentTerritoryId = 128,
+            MenuStepsRemaining = 2,
+            ApplyItemDelta = true,
+            ApplyCurrencyDelta = true,
+        };
+        runtime.SelectionMenuNpcIds.Add(1006005);
+        var clock = new FakeClock();
+        var offer = Offer(1770756, 1006005, 1, 128,
+        [
+            new(ShopMenuPathStepKind.ENpcData, 7, 3276842),
+            new(ShopMenuPathStepKind.TopicSelectShop, 6, 1770756),
+        ]);
+        var runner = new ShopPurchaseRunner(new FakeCatalog(Resolution(1, [offer])), runtime, clock);
+        Assert.True(runner.Start(new ShopPurchaseRequest(100, 1)));
+
+        for (var tick = 0; tick < 10 && runtime.MenuSelectCount < 2; tick++)
+        {
+            runner.Update();
+            clock.Advance(TimeSpan.FromSeconds(2));
+        }
+        Assert.Equal(2, runtime.MenuSelectCount);
+        runner.Update();
+        Assert.Equal(0, runtime.SubmitCount);
+        Assert.DoesNotContain("open-limsa-exchange", runtime.Events);
+
+        runtime.LimsaExchangeCanOpen = true;
+        Drive(runner);
+
+        Assert.True(runner.Status.Succeeded);
+        Assert.Equal(
+            ["select-menu:7", "select-menu:6", "open-limsa-exchange", "submit:1006005"],
+            runtime.Events.Where(entry => entry.StartsWith("select-menu:", StringComparison.Ordinal)
+                || entry == "open-limsa-exchange" || entry.StartsWith("submit:", StringComparison.Ordinal)));
+    }
+
     private static ShopPurchaseRunner CreateRunner(int quantity, FakeRuntime runtime, FakeClock clock)
         => new(new FakeCatalog(Resolution(quantity, [Offer(10, 100, quantity)])), runtime, clock);
 
@@ -2803,7 +3052,8 @@ public sealed class ShopPurchaseRunnerTests
     private static ShopCatalogResolution Resolution(int quantity, IReadOnlyList<ShopOffer> offers)
         => new(100, "Fixture Item", 999, false, quantity, offers, 0, 0, 0);
 
-    private static ShopOffer Offer(uint shopId, uint npcId, int transactions, uint territoryId = 1)
+    private static ShopOffer Offer(uint shopId, uint npcId, int transactions, uint territoryId = 1,
+        IReadOnlyList<ShopMenuPathStep>? menu = null)
         => new(
             ShopOfferKind.SpecialShopItem,
             shopId,
@@ -2814,7 +3064,7 @@ public sealed class ShopPurchaseRunnerTests
             territoryId,
             $"Fixture Territory {territoryId}",
             Vector3.Zero,
-            [new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 0, shopId)],
+            menu ?? [new ShopMenuPathStep(ShopMenuPathStepKind.ENpcData, 0, shopId)],
             ShopNpcLinkKind.DirectShop,
             ShopNpcPlacementSource.Level,
             0,
@@ -2858,8 +3108,9 @@ public sealed class ShopPurchaseRunnerTests
 
     private sealed class FakeCatalog(ShopCatalogResolution resolution) : IShopCatalog
     {
-        public ShopCatalogResolution Resolve(uint itemId, int quantity) => resolution;
-        public ShopCatalogResolution ResolveCompanyAction(uint actionId, int quantity, byte grandCompany) => resolution;
+        public ShopCatalogResolution Resolution { get; set; } = resolution;
+        public ShopCatalogResolution Resolve(uint itemId, int quantity) => Resolution;
+        public ShopCatalogResolution ResolveCompanyAction(uint actionId, int quantity, byte grandCompany) => Resolution;
     }
 
     private sealed class FakeClock : IShopPurchaseClock
@@ -2930,8 +3181,11 @@ public sealed class ShopPurchaseRunnerTests
         public int AcceptedConfirmationCount { get; private set; }
         public long ItemCount { get; set; }
         public long Capacity { get; set; } = 100_000;
+        public bool BundleFits { get; set; } = true;
         public void SetCurrency(ShopCurrencyIdentity currency, long amount) => currencies[currency] = amount;
         private readonly Dictionary<uint, long> additionalItemCounts = [];
+        public Dictionary<uint, long> ArmouryItemCounts { get; } = [];
+        public HashSet<uint> ArmouryDestinations { get; } = [];
         public void SetItemCount(uint itemId, long quantity) => additionalItemCounts[itemId] = quantity;
         public int SubmitCount { get; private set; }
         public int TeleportCount { get; private set; }
@@ -2946,6 +3200,7 @@ public sealed class ShopPurchaseRunnerTests
         public int FloorResolveCount { get; private set; }
         public Vector3 FloorPosition { get; set; } = new(1, 0, 1);
         public List<int> SubmittedBatches { get; } = [];
+        public List<int> SubmittedRuntimeRows { get; } = [];
         public List<uint> SubmittedNpcIds { get; } = [];
         public List<uint> TeleportedAetherytes { get; } = [];
         public List<int> StopCountsAtSubmit { get; } = [];
@@ -2970,9 +3225,12 @@ public sealed class ShopPurchaseRunnerTests
         public bool IsQuestComplete(uint questId) => true;
         public long GetItemCount(uint itemId)
             => itemId == 100 ? ItemCount : additionalItemCounts.GetValueOrDefault(itemId);
+        public long GetPurchaseOutputCount(uint itemId)
+            => GetItemCount(itemId) + ArmouryItemCounts.GetValueOrDefault(itemId);
         public long GetAvailableCurrency(ShopCurrencyCost currency)
             => currencies.TryGetValue(currency.Identity, out var value) ? value : 0;
         public long GetInventoryCapacity(uint itemId, uint stackSize) => Capacity;
+        public bool CanFitPurchaseOutputs(IReadOnlyList<ShopOfferOutput> outputs, int transactions) => BundleFits;
         public bool TryResolveFloor(Vector3 approximatePosition, out Vector3 floorPosition)
         {
             FloorResolveCount++;
@@ -3054,17 +3312,30 @@ public sealed class ShopPurchaseRunnerTests
         }
 
         public bool IsExpectedShopVisible(ShopOfferKind kind) => ExpectedShopVisible;
+        public bool OwnedFeatherExchangeVisible { get; set; }
+        public bool IsOwnedFeatherExchangeVisible(EvaluatedShopOffer offer) => ExpectedShopVisible && OwnedFeatherExchangeVisible;
+        public int MenuStepsRemaining { get; set; } = 1;
+        public bool LimsaExchangeCanOpen { get; set; }
+
         public bool TrySelectMenu(int index)
         {
             MenuSelectCount++;
             Events.Add($"select-menu:{index}");
             var accepted = MenuSelectResults.Count == 0 || MenuSelectResults.Dequeue();
-            if (accepted)
+            if (accepted && --MenuStepsRemaining <= 0)
             {
                 IsSelectionMenuVisible = false;
                 ExpectedShopVisible = true;
             }
             return accepted;
+        }
+
+        public bool TryOpenLimsaSalvagerExchange(ShopOffer offer)
+        {
+            if (!LimsaExchangeCanOpen)
+                return false;
+            Events.Add("open-limsa-exchange");
+            return true;
         }
 
         public ShopUiValidationResult ValidateShopUi(EvaluatedShopOffer offer)
@@ -3074,6 +3345,7 @@ public sealed class ShopPurchaseRunnerTests
         {
             SubmitCount++;
             SubmittedNpcIds.Add(offer.Offer.NpcId);
+            SubmittedRuntimeRows.Add(runtimeRow);
             SubmittedBatches.Add(transactionCount);
             StopCountsAtSubmit.Add(StopNavigationCount);
             Events.Add($"submit:{offer.Offer.NpcId}");
@@ -3084,6 +3356,8 @@ public sealed class ShopPurchaseRunnerTests
                     var delta = (long)output.Count * transactionCount;
                     if (offer.Offer.Kind == ShopOfferKind.CompanyActionShop)
                         CompanyActionCount += delta;
+                    else if (ArmouryDestinations.Contains(output.ItemId))
+                        ArmouryItemCounts[output.ItemId] = ArmouryItemCounts.GetValueOrDefault(output.ItemId) + delta;
                     else if (output.ItemId == 100)
                         ItemCount += delta;
                     else
