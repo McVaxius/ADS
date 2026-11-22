@@ -30,7 +30,7 @@ public sealed class TreasureDungeonRoleTests
         using var diagnostics = new TreasureHighLowDiagnosticService(gameGui,
             DispatchProxy.Create<IObjectTable, DiagnosticProxy>(), clientState,
             DispatchProxy.Create<IDataManager, DiagnosticProxy>(),
-            DispatchProxy.Create<IPluginLog, DiagnosticProxy>(), configuration, directory.Path);
+            DispatchProxy.Create<IPluginLog, DiagnosticProxy>(), configuration, directory.Path, directory.Path);
         var context = TestDutyContextFactory.Create(territoryId: territory, inDuty: inDuty, betweenAreas: betweenAreas);
         if (!enabled && territory == 712)
             Assert.True(diagnostics.TagKnownBoard("1", "2", "test"));

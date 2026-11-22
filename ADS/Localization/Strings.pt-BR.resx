@@ -1651,7 +1651,7 @@
     <value>Linha copiada para {0}/{1} como base64.</value>
   </data>
   <data name="Copied the active Base64 preset. Stable preset and row IDs were preserved." xml:space="preserve">
-    <value>Copiou a predefinição Base64 ativa. Predefinições estáveis ​​e IDs de linha foram preservados.</value>
+    <value>Copiou a predefinição Base64 ativa. Predefinições estáveis e IDs de linha foram preservados.</value>
   </data>
   <data name="Copied {0}" xml:space="preserve">
     <value>Copiado {0}</value>
@@ -3250,7 +3250,7 @@
     <value>Tag da placa superior/inferior na fila: left={0} right={1} label='{2}'.</value>
   </data>
   <data name="Higher/Lower diagnostics and automation remain separately configurable." xml:space="preserve">
-    <value>O diagnóstico e a automação superior/inferior permanecem configuráveis ​​separadamente.</value>
+    <value>O diagnóstico e a automação superior/inferior permanecem configuráveis separadamente.</value>
   </data>
   <data name="Higher/Lower export failed: {0}" xml:space="preserve">
     <value>Falha na exportação superior/inferior: {0}</value>
@@ -4777,7 +4777,7 @@
     <value>Nenhum monstro vivo, âncora de acompanhamento ou elementos interativos de progressão elegíveis estão atualmente visíveis em {0}, e ADS inferiu a função de abridor de mapa/default treasure de {1}. ADS está usando o ponto de rota de abertura de masmorra de tesouro de autoria {2}. O alcance da rota do tesouro é XZ &lt;= 4y, não é verdade 3D XYZ; a pré-varredura de fronteira atualmente usa XZ &lt;= 6y.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, and Lumina produced 0 usable frontier labels for this territory. ADS is projecting a synthetic forward scout waypoint ({1}) from the last live-truth movement heading instead of backtracking to stale ghosts. Cached ghost counts remain {2} monster / {3} interactable." xml:space="preserve">
-    <value>Nenhum monstro vivo, âncora de acompanhamento ou elementos interativos de progressão elegíveis estão atualmente visíveis em {0}, e Lumina produziu 0 rótulos de fronteira utilizáveis ​​para este território. ADS está projetando um waypoint de reconhecimento avançado sintético ({1}) a partir do último movimento de verdade ao vivo, em vez de retroceder para fantasmas obsoletos. As contagens de fantasmas em cache permanecem interagidas com o monstro {2} / {3}.</value>
+    <value>Nenhum monstro vivo, âncora de acompanhamento ou elementos interativos de progressão elegíveis estão atualmente visíveis em {0}, e Lumina produziu 0 rótulos de fronteira utilizáveis para este território. ADS está projetando um waypoint de reconhecimento avançado sintético ({1}) a partir do último movimento de verdade ao vivo, em vez de retroceder para fantasmas obsoletos. As contagens de fantasmas em cache permanecem interagidas com o monstro {2} / {3}.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is seeking the game-authored area boundary marker toward map {1} ({2}). Proximity does not complete this frontier point; the existing unsafe-transition hold remains authoritative when the crossing begins." xml:space="preserve">
     <value>Nenhum monstro vivo, âncora de acompanhamento ou elementos interativos de progressão elegíveis estão atualmente visíveis em {0}, então ADS está buscando o marcador de limite de área de autoria do jogo em direção ao mapa {1} ({2}). A proximidade não completa este ponto fronteiriço; a restrição de transição insegura existente permanece válida quando a travessia começa.</value>
@@ -7783,7 +7783,7 @@
     <value>Não há nenhuma operação de controle ADS ativa para controlar.</value>
   </data>
   <data name="These entries come from the Lumina MapMarker range for the current live map row only, converted from marker texture-space back to world X/Z so you can inspect named labels and the DataType 1 area-boundary indicators used by frontier seeking." xml:space="preserve">
-    <value>Essas entradas vêm do intervalo Lumina MapMarker apenas para a linha atual do mapa ao vivo, convertidas do espaço de textura do marcador de volta para o mundo X/Z para que você possa inspecionar rótulos nomeados e os indicadores de limite de área DataType 1 usados ​​pela busca de fronteira.</value>
+    <value>Essas entradas vêm do intervalo Lumina MapMarker apenas para a linha atual do mapa ao vivo, convertidas do espaço de textura do marcador de volta para o mundo X/Z para que você possa inspecionar rótulos nomeados e os indicadores de limite de área DataType 1 usados pela busca de fronteira.</value>
   </data>
   <data name="This can be undone once, until the next draft mutation, reload, or preset switch. Filters and selection do not invalidate it." xml:space="preserve">
     <value>Isso pode ser desfeito uma vez, até a próxima mutação de rascunho, recarga ou troca de predefinição. Filtros e seleção não o invalidam.</value>
@@ -10900,10 +10900,10 @@
     <value>Predefinição {0} criada/updated.</value>
   </data>
   <data name="{0} produced no vendor-purchasable rows; parsed {1}, skipped/unresolved {2}. " xml:space="preserve">
-    <value>{0} não produziu linhas compráveis ​​pelo fornecedor; {1} analisado, /unresolved {2} ignorado. </value>
+    <value>{0} não produziu linhas compráveis pelo fornecedor; {1} analisado, /unresolved {2} ignorado. </value>
   </data>
   <data name="{0} produced no vendor-purchasable rows; parsed {1}, skipped/unresolved {2}. {3}" xml:space="preserve">
-    <value>{0} não produziu linhas compráveis ​​pelo fornecedor; {1} analisado, /unresolved {2} ignorado. {3}</value>
+    <value>{0} não produziu linhas compráveis pelo fornecedor; {1} analisado, /unresolved {2} ignorado. {3}</value>
   </data>
   <data name="{0} registry entry not found." xml:space="preserve">
     <value>Entrada de registro {0} não encontrada.</value>

@@ -1,7 +1,7 @@
 using System.Collections;
 using AethertekUI;
+using AethertekUI.Dalamud;
 using ADS.Windows;
-using Dalamud;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.ManagedFontAtlas;
@@ -11,6 +11,7 @@ namespace ADS.Localization;
 internal sealed class UiFonts : IDisposable
 {
     private readonly IFontAtlas atlas;
+    private readonly string assetRoot;
     private IFontHandle[] handles = [];
     private UiLanguage? applied;
     private IReadOnlyList<string> required = [];
@@ -20,8 +21,9 @@ internal sealed class UiFonts : IDisposable
     internal bool HindiMenuAvailable { get; private set; } = true;
     internal bool Ready => handles.Length > 0 && handles.All(h => h.Available && h.LoadException is null);
 
-    internal UiFonts(IUiBuilder uiBuilder)
+    internal UiFonts(IUiBuilder uiBuilder, string assetRoot)
     {
+        this.assetRoot = assetRoot;
         atlas = uiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.Async, true, "ADS languages");
     }
 
@@ -68,25 +70,8 @@ internal sealed class UiFonts : IDisposable
             .Cast<DictionaryEntry>().Select(entry => (string)entry.Value!);
 
     private IFontHandle Create(UiFontRole role, UiLanguage language, ushort[] ranges)
-        => atlas.NewDelegateFontHandle(step => step.OnPreBuild(toolkit =>
-        {
-            toolkit.NewImAtlas.TexDesiredWidth = 4096;
-            toolkit.NewImAtlas.TexDesiredHeight = 4096;
-            var size = AdsPresentation.AtlasHeight(role);
-            var fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
-            toolkit.Font = toolkit.AddFontFromFile(Path.Combine(fonts, AdsPresentation.FontFiles[(int)role]),
-                new SafeFontConfig { SizePx = size, GlyphRanges = ranges });
-            toolkit.AddFontFromFile(Path.Combine(fonts, "seguisym.ttf"),
-                new SafeFontConfig { SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font });
-            toolkit.AddDalamudAssetFont(DalamudAsset.NotoSansCjkRegular, new SafeFontConfig
-            {
-                SizePx = size, GlyphRanges = ranges, MergeFont = toolkit.Font,
-                // Bundled faces share glyph coverage; select the active locale's regional forms.
-                FontNo = language switch { UiLanguage.Korean => 1, UiLanguage.SimplifiedChinese => 2, UiLanguage.TraditionalChinese => 3, _ => 0 },
-            });
-            toolkit.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
-            toolkit.AddGameSymbol(new SafeFontConfig { SizePx = size, MergeFont = toolkit.Font });
-        }));
+        => MaterialFontAtlas.CreateFont(atlas, AdsPresentation.FontWeights[(int)role],
+            AdsPresentation.AtlasHeight(role), ranges, Ui.CultureFor(language).Name, assetRoot);
 
     private void FontChanged(IFontHandle handle, ILockedImFont font) => Interlocked.Increment(ref generation);
 

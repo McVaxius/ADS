@@ -1,6 +1,7 @@
 using System.Numerics;
 using ADS.Localization;
 using AethertekUI;
+using AethertekUI.Dalamud;
 using Dalamud.Bindings.ImGui;
 
 namespace ADS.Windows;
@@ -23,7 +24,12 @@ internal static class AdsPresentation
     // Approved ADS-review-v2 and ADS-compact-review-v1, measured in logical pixels.
     internal const uint ReferenceAccent = 0x0067FF;
     internal static readonly float[] FontSizes = [14, 16, 32, 20, 18, 16, 18, 12, 14];
-    internal static readonly string[] FontFiles = ["segoeui.ttf", "seguisb.ttf", "segoeuib.ttf", "seguisb.ttf", "seguisb.ttf", "seguisb.ttf", "segoeuib.ttf", "segoeui.ttf", "seguisb.ttf"];
+    internal static readonly MaterialFontWeight[] FontWeights =
+    [
+        MaterialFontWeight.Regular, MaterialFontWeight.Semibold, MaterialFontWeight.Bold,
+        MaterialFontWeight.Semibold, MaterialFontWeight.Semibold, MaterialFontWeight.Semibold,
+        MaterialFontWeight.Bold, MaterialFontWeight.Regular, MaterialFontWeight.Semibold,
+    ];
     internal static float AtlasHeight(UiFontRole role) => FontSizes[(int)role] * 4 / 3;
     internal static bool Compact => MaterialTheme.Current.Density == MaterialDensity.Compact;
     internal static bool IsMaterial => MaterialTheme.Current.IsGlassmorphism

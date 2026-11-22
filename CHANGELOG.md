@@ -1,3 +1,8 @@
+Unreleased
+
+- **Fixed UI font loading on Linux and Wine** by loading bundled Selawik fonts from the ADS install directory.
+- **Fixed the Higher or Lower texture exporter** so ADS finds the script shipped with the plugin.
+
 2026-11-22 - 2.0.0.30 - Silver Chocobo Feather exchanges
 
 - **Added Calamity Salvager exchanges** with travel routes in Limsa Lominsa, Gridania, and Ul'dah.

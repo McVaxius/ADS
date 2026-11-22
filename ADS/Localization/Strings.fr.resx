@@ -9355,7 +9355,7 @@
     <value>pour {0} options en direct ; indice local {1} </value>
   </data>
   <data name="for {0} live options; local index {1} and sheet index {2} are diagnostic only." xml:space="preserve">
-    <value>pour {0} options en direct ; L'index local {1} ​​et l'index de feuille {2} sont uniquement diagnostiques.</value>
+    <value>pour {0} options en direct ; L'index local {1} et l'index de feuille {2} sont uniquement diagnostiques.</value>
   </data>
   <data name="force-march Map XZ destination" xml:space="preserve">
     <value>marche forcée Carte XZ destination</value>

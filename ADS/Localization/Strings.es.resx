@@ -9355,7 +9355,7 @@
     <value>para {0} opciones en vivo; índice local {1} </value>
   </data>
   <data name="for {0} live options; local index {1} and sheet index {2} are diagnostic only." xml:space="preserve">
-    <value>para {0} opciones en vivo; El índice local {1} ​​y el índice de hoja {2} son solo de diagnóstico.</value>
+    <value>para {0} opciones en vivo; El índice local {1} y el índice de hoja {2} son solo de diagnóstico.</value>
   </data>
   <data name="force-march Map XZ destination" xml:space="preserve">
     <value>Marcha forzada Mapa XZ destino</value>
@@ -10483,10 +10483,10 @@
     <value>{0} Siguiendo al presentador en vivo {1} ({2:0.0}y) hasta que aparezca un monstruo vivo o un objeto interactuable.</value>
   </data>
   <data name="{0} Following through on the committed {1} so ADS does not bounce between loot and competing objectives." xml:space="preserve">
-    <value>{0} Cumplir con el {1} ​​comprometido para que ADS no rebote entre el botín y los objetivos en competencia.</value>
+    <value>{0} Cumplir con el {1} comprometido para que ADS no rebote entre el botín y los objetivos en competencia.</value>
   </data>
   <data name="{0} Following through on the committed {1} until ADS reaches the {2} or hits BetweenAreas." xml:space="preserve">
-    <value>{0} Continuar con el {1} ​​confirmado hasta que ADS llegue al {2} o llegue a BetweenAreas.</value>
+    <value>{0} Continuar con el {1} confirmado hasta que ADS llegue al {2} o llegue a BetweenAreas.</value>
   </data>
   <data name="{0} Following through on the previously selected interactable." xml:space="preserve">
     <value>{0} Continuar con el interactuable seleccionado previamente.</value>
@@ -10579,7 +10579,7 @@
     <value>{0} Ajuste preestablecido insertado en la lista de ajustes preestablecidos del usuario.</value>
   </data>
   <data name="{0} Reached committed {1} {2}. ADS ghosted this manual handoff and is waiting for live progression truth." xml:space="preserve">
-    <value>{0} Se alcanzó el {1} ​​{2} comprometido. ADS omitió esta transferencia manual y está esperando la verdad de la progresión en vivo.</value>
+    <value>{0} Se alcanzó el {1} {2} comprometido. ADS omitió esta transferencia manual y está esperando la verdad de la progresión en vivo.</value>
   </data>
   <data name="{0} Reached force-march {1} {2} (3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}). ADS ghosted this manual handoff and will not resume it after combat." xml:space="preserve">
     <value>{0} Se alcanzó la marcha forzada {1} {2} (3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}). ADS omitió esta transferencia manual y no la reanudará después del combate.</value>

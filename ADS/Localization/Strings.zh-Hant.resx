@@ -1651,7 +1651,7 @@
     <value>已將 {0} / {1} 的行複製為 base64。</value>
   </data>
   <data name="Copied the active Base64 preset. Stable preset and row IDs were preserved." xml:space="preserve">
-    <value>複製活動的 Ba​​se64 預設。保留了穩定的預設和行 ID。</value>
+    <value>複製活動的 Base64 預設。保留了穩定的預設和行 ID。</value>
   </data>
   <data name="Copied {0}" xml:space="preserve">
     <value>已複製 {0}</value>
@@ -2869,7 +2869,7 @@
     <value>只有在沒有其他活體怪物或可交互物存在時，才將 Cid 作為純活主播進行關注；切勿將 Cid 宣傳為幽靈目標。</value>
   </data>
   <data name="Follow Cid or another moving BattleNpc." xml:space="preserve">
-    <value>跟隨 Cid 或其他移動的 Ba​​ttleNpc。</value>
+    <value>跟隨 Cid 或其他移動的 BattleNpc。</value>
   </data>
   <data name="Follow a moving friendly anchor." xml:space="preserve">
     <value>跟著移動的友善錨。</value>
@@ -7438,7 +7438,7 @@
     <value>TeamCraft 文字不包含供應商部分；活動預設未更改。</value>
   </data>
   <data name="Teleport command accepted on send {0}; zoning monitoring is active without resends." xml:space="preserve">
-    <value>發送 {0} 時接受傳送命令；分區監控處於活動狀態，無需重新發​​送。</value>
+    <value>發送 {0} 時接受傳送命令；分區監控處於活動狀態，無需重新發送。</value>
   </data>
   <data name="Teleport command accepted; waiting up to 90 seconds to enter {0}." xml:space="preserve">
     <value>接受傳送指令；等待最多 90 秒才能進入 {0}。</value>
@@ -10516,7 +10516,7 @@
     <value>{0}超聚焦目標{1}不再可定位；FrenRider 租約發布。</value>
   </data>
   <data name="{0} Hyper-focused exact target {1} at {2:0.0}y; FrenRider lease active and combat owns actions." xml:space="preserve">
-    <value>{0} 高度集中的精確目標 {1}，位於 {2:0.0}y；FrenRider 租賃主動和戰鬥​​擁有行動。</value>
+    <value>{0} 高度集中的精確目標 {1}，位於 {2:0.0}y；FrenRider 租賃主動和戰鬥擁有行動。</value>
   </data>
   <data name="{0} Hyper-focused {1} ({2:0.0}y); FrenRider lease active and ADS is approaching the exact target to {3:0.0}y." xml:space="preserve">
     <value>{0}高度專注{1} ({2:0.0}y)；FrenRider 租賃已激活，ADS 正在接近 {3:0.0}y 的確切目標。</value>

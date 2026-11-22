@@ -658,7 +658,7 @@
     <value>AgentShop 수신 행은 아직 채워지지 않았습니다.</value>
   </data>
   <data name="AgentShop validated SpecialShop '{0}', item {1}, bundle {2}, and exact costs at row {3}." xml:space="preserve">
-    <value>AgentShop은 SpecialShop '{0}', 품목 ​​{1}, 번들 {2} 및 {3} 행의 정확한 비용을 검증했습니다.</value>
+    <value>AgentShop은 SpecialShop '{0}', 품목 {1}, 번들 {2} 및 {3} 행의 정확한 비용을 검증했습니다.</value>
   </data>
   <data name="All" xml:space="preserve">
     <value>전체</value>
@@ -4801,7 +4801,7 @@
     <value>현재 라이브 몬스터, 후속 앵커 또는 진행 상호 작용 가능 항목이 표시되지 않지만 {0}는 구성된 거리/Y 게이트({2:0.0}y, Y {3:0.0}) 내에서 여전히 {1}의 고스트와 일치합니다. ADS는 더 강력한 실제 진실에서 벗어나는 대신 규칙 기반 유령을 복구 목표로 사용하고 있습니다.</value>
   </data>
   <data name="No live progression interactable priority was resolved on this tick." xml:space="preserve">
-    <value>이 틱에서는 ​​실시간 진행 상호작용 가능 우선순위가 해결되지 않았습니다.</value>
+    <value>이 틱에서는 실시간 진행 상호작용 가능 우선순위가 해결되지 않았습니다.</value>
   </data>
   <data name="No local player is available." xml:space="preserve">
     <value>로컬 플레이어를 사용할 수 없습니다.</value>
@@ -7576,7 +7576,7 @@
     <value>바인딩된 캐릭터는 로그인되어 준비되어 있어야 합니다.</value>
   </data>
   <data name="The certificate Others tab has not exposed the requested minion; no purchase submitted." xml:space="preserve">
-    <value>인증서 기타 탭은 요청된 미니언을 노출하지 않았습니다. 제출된 구매가 ​​없습니다.</value>
+    <value>인증서 기타 탭은 요청된 미니언을 노출하지 않았습니다. 제출된 구매가 없습니다.</value>
   </data>
   <data name="The certificate shop is still opening." xml:space="preserve">
     <value>인증샵은 아직 오픈중입니다.</value>
@@ -7795,7 +7795,7 @@
     <value>이 정확한 연결은 이미 반복 불가능한 행을 완료했습니다.</value>
   </data>
   <data name="This instanced duty has no ADS catalog row yet. Runtime still keys off live instanced-duty truth, but family/maturity metadata is uncatalogued." xml:space="preserve">
-    <value>이 인스턴스 인스턴스에는 아직 ADS 카탈로그 행이 없습니다. 런타임은 여전히 ​​라이브 인스턴스 인스턴스 진실을 차단하지만 family/maturity metadata는 카탈로그에 포함되어 있지 않습니다.</value>
+    <value>이 인스턴스 인스턴스에는 아직 ADS 카탈로그 행이 없습니다. 런타임은 여전히 라이브 인스턴스 인스턴스 진실을 차단하지만 family/maturity metadata는 카탈로그에 포함되어 있지 않습니다.</value>
   </data>
   <data name="This list fills an order over multiple runs. Update DAD/the calling plugin to support finite-order quantity progress before running it." xml:space="preserve">
     <value>이 목록은 여러 번의 실행을 통해 주문을 채웁니다. 실행하기 전에 유한 주문 수량 진행을 지원하도록 DAD/the calling 플러그인을 업데이트하세요.</value>
@@ -7954,7 +7954,7 @@
     <value>보물 추종자 출구 모니터가 {0}: {1} 이후 정리를 보냈습니다.</value>
   </data>
   <data name="Treasure follower loot sweep is enabled, and {0} stayed inside the follower loot gate at XZ {1:0.0}/{2:0.0}, 3D {3:0.0}, Y {4:0.0}/{5:0.0}. Sacks are repeatable and stay eligible until they disappear; non-sack containers are one-shot and ADS ignores them after one successful check until duty reset. Sacks sort before other treasure containers (rank {6}), then priority {7}, then distance, so ADS selected this loot before follower route movement." xml:space="preserve">
-    <value>보물 추종자 전리품 청소가 활성화되었으며 {0}는 XZ {1:0.0}/{2:0.0}, 3D {3:0.0}, Y {4:0.0}/{5:0.0}의 추종자 전리품 게이트 내부에 머물었습니다. 자루는 반복 가능하며 사라질 때까지 자격을 유지합니다. 비색 컨테이너는 일회성이며 ADS는 ​​인스턴스가 재설정될 때까지 한 번의 성공적인 확인 후 이를 무시합니다. 자루는 다른 보물 컨테이너({6} 등급)보다 먼저 정렬되고 그 다음 우선 순위 {7}, 그 다음 거리이므로 ADS는 추종자 경로 이동 전에 이 전리품을 선택했습니다.</value>
+    <value>보물 추종자 전리품 청소가 활성화되었으며 {0}는 XZ {1:0.0}/{2:0.0}, 3D {3:0.0}, Y {4:0.0}/{5:0.0}의 추종자 전리품 게이트 내부에 머물었습니다. 자루는 반복 가능하며 사라질 때까지 자격을 유지합니다. 비색 컨테이너는 일회성이며 ADS는 인스턴스가 재설정될 때까지 한 번의 성공적인 확인 후 이를 무시합니다. 자루는 다른 보물 컨테이너({6} 등급)보다 먼저 정렬되고 그 다음 우선 순위 {7}, 그 다음 거리이므로 ADS는 추종자 경로 이동 전에 이 전리품을 선택했습니다.</value>
   </data>
   <data name="Treasure follower route did not resolve a live/static passage target; holding instead of heading scout." xml:space="preserve">
     <value>보물 추종자 경로가 live/static passage 대상을 해결하지 못했습니다. 스카우트를 향하는 대신 홀딩.</value>
@@ -8368,7 +8368,7 @@
     <value>확인된 구매로 {0} 항목을 획득했습니다.</value>
   </data>
   <data name="Verified purchase does not match its saved checkpoint." xml:space="preserve">
-    <value>확인된 구매가 ​​저장된 체크포인트와 일치하지 않습니다.</value>
+    <value>확인된 구매가 저장된 체크포인트와 일치하지 않습니다.</value>
   </data>
   <data name="Verify BMRAI/VBM follow status and opener age." xml:space="preserve">
     <value>BMRAI/VBM가 상태와 오프너 수명을 따르는지 확인하세요.</value>
@@ -10405,7 +10405,7 @@
     <value>{0} 활성 보물 경로: {1} 내장 대체 경로.</value>
   </data>
   <data name="{0} Advancing through {1} {2} (XZ {3:0.0}y, Y {4:0.0}) {5}. ADS will keep seeking the game marker until the existing unsafe-transition hold takes over. {6}" xml:space="preserve">
-    <value>{0} {1} {2} (XZ {3:0.0}y, Y {4:0.0}) {5}를 통해 전진합니다. ADS는 ​​기존의 안전하지 않은 전환 홀드가 인계될 때까지 게임 마커를 계속 찾습니다. {6}</value>
+    <value>{0} {1} {2} (XZ {3:0.0}y, Y {4:0.0}) {5}를 통해 전진합니다. ADS는 기존의 안전하지 않은 전환 홀드가 인계될 때까지 게임 마커를 계속 찾습니다. {6}</value>
   </data>
   <data name="{0} Advancing toward {1} {2} (3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}; ghost radius {6:0.0}y) {7}{8} {9}{10}" xml:space="preserve">
     <value>{0} {1} {2}를 향해 전진 (3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}; 고스트 반경 {6:0.0}y) {7}{8} {9}{10}</value>
@@ -10582,7 +10582,7 @@
     <value>{0} 커밋된 {1} {2}에 도달했습니다. ADS는 이 수동 핸드오프를 고스트하고 실시간 진행 진실을 기다리고 있습니다.</value>
   </data>
   <data name="{0} Reached force-march {1} {2} (3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}). ADS ghosted this manual handoff and will not resume it after combat." xml:space="preserve">
-    <value>{0} 강제 행진 {1} {2}에 도달했습니다(3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}). ADS는 ​​이 수동 핸드오프를 고스트 처리했으며 전투 후에는 재개하지 않습니다.</value>
+    <value>{0} 강제 행진 {1} {2}에 도달했습니다(3D {3:0.0}y, XZ {4:0.0}y, Y {5:0.0}). ADS는 이 수동 핸드오프를 고스트 처리했으며 전투 후에는 재개하지 않습니다.</value>
   </data>
   <data name="{0} Reached force-march {1} {2} (XZ {3:0.0}y, Y {4:0.0}). ADS ghosted this manual handoff and will not resume it after combat." xml:space="preserve">
     <value>{0} 강제 행진 {1} {2}(XZ {3:0.0}y, Y {4:0.0})에 도달했습니다. ADS는 이 수동 핸드오프를 고스트 처리했으며 전투 후에는 재개하지 않습니다.</value>

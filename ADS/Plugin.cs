@@ -227,7 +227,8 @@ public sealed class Plugin : IDalamudPlugin
         var loadedExistingConfiguration = loadedConfiguration is not null;
         Configuration = loadedConfiguration ?? new Configuration();
         Ui.SetLanguage(Ui.ResolveLanguage(Configuration.UiLanguage, ClientState.ClientLanguage));
-        Fonts = new UiFonts(PluginInterface.UiBuilder);
+        var assetRoot = PluginInterface.AssemblyLocation.DirectoryName!;
+        Fonts = new UiFonts(PluginInterface.UiBuilder, assetRoot);
         Appearance = new UiAppearance(this);
         var configurationChanged = ApplyConfigurationMigrations(Configuration);
         if (configurationChanged)
@@ -277,7 +278,7 @@ public sealed class Plugin : IDalamudPlugin
             message => ToastGui.ShowNormal(message),
             message => Log.Warning(message));
         DialogAutomationService = new DialogAutomationService(GameGui, DialogYesNoRuleService, Log);
-        TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory);
+        TreasureHighLowDiagnosticService = new TreasureHighLowDiagnosticService(GameGui, ObjectTable, ClientState, DataManager, Log, Configuration, configDirectory, assetRoot);
         HigherLowerServerEventTraceService = new HigherLowerServerEventTraceService(ObjectTable, ClientState, PartyList, SigScanner, GameInteropProvider, TreasureHighLowDiagnosticService, Log);
         ExecutionService.ReadCrystalTowerEvents = HigherLowerServerEventTraceService.GetRowsSnapshot;
         ExplorerSnapshotExportService = new ExplorerSnapshotExportService(ObjectTable, Log, configDirectory);

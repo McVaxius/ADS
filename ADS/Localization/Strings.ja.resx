@@ -5836,7 +5836,7 @@
     <value>購入バッチが確認されました。次のバッチの前にショップを再検証します。</value>
   </data>
   <data name="Purchase completed without a selected shop identity." xml:space="preserve">
-    <value>ショップ ID を選択せず​​に購入が完了しました。</value>
+    <value>ショップ ID を選択せずに購入が完了しました。</value>
   </data>
   <data name="Purchase ended without a verified completion." xml:space="preserve">
     <value>完了が確認されないまま購入が終了しました。</value>
@@ -8470,7 +8470,7 @@
     <value>{0} へのフィールドエーテライトのテレポートが完了するのを待っています。</value>
   </data>
   <data name="Waiting for the inn teleport to {0} to finish." xml:space="preserve">
-    <value>{0} への宿屋​​のテレポートが完了するのを待っています。</value>
+    <value>{0} への宿屋のテレポートが完了するのを待っています。</value>
   </data>
   <data name="Waiting for the navigation mesh before moving toward {0}." xml:space="preserve">
     <value>{0} に向かう前にナビゲーション メッシュを待機しています。</value>

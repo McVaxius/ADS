@@ -4783,16 +4783,16 @@
     <value>Derzeit sind in {0} keine lebenden Monster, Follow-Anker oder geeigneten Fortschrittsinteraktionen sichtbar, daher sucht ADS nach der vom Spiel erstellten Bereichsgrenzmarkierung in Richtung Karte {1} ({2}). Nähe vervollständigt diesen Grenzpunkt nicht; Der bestehende Haltebereich für unsichere Übergänge bleibt bei Beginn der Überfahrt maßgebend.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is using the next unvisited human-authored Map XZ destination {1} ({2}) before stale ghost recovery. It navigates on the current player Y plane and ghosts the destination once the player is within 1y on X/Z." xml:space="preserve">
-    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Map XZ-Ziel {1} ​​({2}), bevor veraltete Geister wiederhergestellt werden. Es navigiert auf der Y-Ebene des aktuellen Spielers und zeigt das Ziel an, sobald sich der Spieler innerhalb von 1 Jahr auf X/Z befindet.</value>
+    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Map XZ-Ziel {1} ({2}), bevor veraltete Geister wiederhergestellt werden. Es navigiert auf der Y-Ebene des aktuellen Spielers und zeigt das Ziel an, sobald sich der Spieler innerhalb von 1 Jahr auf X/Z befindet.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is using the next unvisited human-authored XYZ destination {1} ({2}) before stale ghost recovery. It navigates to the authored world X/Y/Z point directly and ghosts the destination once execution reaches the 1y 3D arrival rule." xml:space="preserve">
-    <value>In {0} sind derzeit keine lebenden Monster, Follow-Anker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte XYZ-Ziel {1} ​​({2}), bevor veraltete Geister wiederhergestellt werden. Es navigiert direkt zum X/Y/Z-Punkt der erstellten Welt und zeigt das Ziel an, sobald die Ausführung die 1-jährige 3D-Ankunftsregel erreicht.</value>
+    <value>In {0} sind derzeit keine lebenden Monster, Follow-Anker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte XYZ-Ziel {1} ({2}), bevor veraltete Geister wiederhergestellt werden. Es navigiert direkt zum X/Y/Z-Punkt der erstellten Welt und zeigt das Ziel an, sobald die Ausführung die 1-jährige 3D-Ankunftsregel erreicht.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is using the next unvisited human-authored force-march Map XZ destination {1} ({2}) before stale ghost recovery. This authored bypass waypoint keeps advancing even while incidental local combat is active and ghosts once the player is within 1y on X/Z." xml:space="preserve">
-    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Force-March-Map-XZ-Ziel {1} ​​({2}), bevor veraltete Geister wiederhergestellt werden. Dieser erstellte Bypass-Wegpunkt schreitet auch dann weiter voran, wenn gelegentliche lokale Kämpfe aktiv sind und Geister auftreten, sobald sich der Spieler innerhalb von 1 Jahr auf X/Z befindet.</value>
+    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Force-March-Map-XZ-Ziel {1} ({2}), bevor veraltete Geister wiederhergestellt werden. Dieser erstellte Bypass-Wegpunkt schreitet auch dann weiter voran, wenn gelegentliche lokale Kämpfe aktiv sind und Geister auftreten, sobald sich der Spieler innerhalb von 1 Jahr auf X/Z befindet.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is using the next unvisited human-authored force-march XYZ destination {1} ({2}) before stale ghost recovery. This authored bypass waypoint keeps advancing even while incidental local combat is active and ghosts once execution reaches the 1y 3D arrival rule." xml:space="preserve">
-    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Force-March-XYZ-Ziel {1} ​​({2}), bevor veraltete Geister wiederhergestellt werden. Dieser erstellte Bypass-Wegpunkt schreitet auch dann weiter voran, wenn gelegentliche lokale Kämpfe aktiv sind und Geister auftreten, sobald die Ausführung die 1-jährige 3D-Ankunftsregel erreicht.</value>
+    <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS das nächste nicht besuchte, von Menschen erstellte Force-March-XYZ-Ziel {1} ({2}), bevor veraltete Geister wiederhergestellt werden. Dieser erstellte Bypass-Wegpunkt schreitet auch dann weiter voran, wenn gelegentliche lokale Kämpfe aktiv sind und Geister auftreten, sobald die Ausführung die 1-jährige 3D-Ankunftsregel erreicht.</value>
   </data>
   <data name="No live monsters, follow anchors, or eligible progression interactables are currently visible in {0}, so ADS is using the next unvisited map label ({1}) as a forward frontier waypoint instead of backtracking to stale ghosts. Cached ghost counts remain {2} monster / {3} interactable. Frontier progress: {4}/{5}." xml:space="preserve">
     <value>Derzeit sind in {0} keine lebenden Monster, Verfolgeranker oder geeigneten Fortschrittsinteraktionen sichtbar, daher verwendet ADS die nächste unbesuchte Kartenbezeichnung ({1}) als Vorwärts-Grenzwegpunkt, anstatt zu veralteten Geistern zurückzuverfolgen. Die Anzahl der zwischengespeicherten Geister bleibt bei {2} Monstern / {3} interagierbar. Grenzfortschritt: {4}/{5}.</value>
@@ -10417,10 +10417,10 @@
     <value>{0} BMRAI/VBM besitzt eine Schatzsucherbewegung; ADS sendet kein vnav für {1}. {2}</value>
   </data>
   <data name="{0} BossFight target {1} already reached {2:0.0}y in this combat. ADS is holding progression and combat owns movement until combat clears." xml:space="preserve">
-    <value>{0} BossFight-Ziel {1} ​​hat in diesem Kampf bereits {2:0.0}y erreicht. ADS hält den Fortschritt und der Kampf behält seine Bewegung bei, bis der Kampf vorbei ist.</value>
+    <value>{0} BossFight-Ziel {1} hat in diesem Kampf bereits {2:0.0}y erreicht. ADS hält den Fortschritt und der Kampf behält seine Bewegung bei, bis der Kampf vorbei ist.</value>
   </data>
   <data name="{0} BossFight target {1} reached {2:0.0}y (&lt;= {3:0.0}y). ADS stopped navigation and combat owns movement until combat clears." xml:space="preserve">
-    <value>{0} BossFight-Ziel {1} ​​hat {2:0.0}y (&lt;= {3:0.0}y) erreicht. ADS stoppte die Navigation und die Kampfbewegung, bis der Kampf beendet ist.</value>
+    <value>{0} BossFight-Ziel {1} hat {2:0.0}y (&lt;= {3:0.0}y) erreicht. ADS stoppte die Navigation und die Kampfbewegung, bis der Kampf beendet ist.</value>
   </data>
   <data name="{0} Close-XZ fallback engaged after {1:0}s with no XZ progress (XZ {2:0.0}y, 3D {3:0.0}y, Y {4:0.0})." xml:space="preserve">
     <value>{0} Close-XZ-Fallback nach {1:0}s ohne XZ-Fortschritt aktiviert (XZ {2:0.0}y, 3D {3:0.0}y, Y {4:0.0}).</value>
@@ -10513,10 +10513,10 @@
     <value>{0} Hyperfokus-Ziel ist in der Live-BattleNpc-Wahrheit nicht mehr verfügbar; FrenRider-Leasing freigegeben.</value>
   </data>
   <data name="{0} Hyper-focus target {1} was no longer targetable; FrenRider lease released." xml:space="preserve">
-    <value>{0} Hyperfokus-Ziel {1} ​​konnte nicht mehr anvisiert werden; FrenRider-Leasing freigegeben.</value>
+    <value>{0} Hyperfokus-Ziel {1} konnte nicht mehr anvisiert werden; FrenRider-Leasing freigegeben.</value>
   </data>
   <data name="{0} Hyper-focused exact target {1} at {2:0.0}y; FrenRider lease active and combat owns actions." xml:space="preserve">
-    <value>{0} Hyperfokussiertes exaktes Ziel {1} ​​bei {2:0.0}y; FrenRider Leasing aktiv und Kampf besitzt Aktionen.</value>
+    <value>{0} Hyperfokussiertes exaktes Ziel {1} bei {2:0.0}y; FrenRider Leasing aktiv und Kampf besitzt Aktionen.</value>
   </data>
   <data name="{0} Hyper-focused {1} ({2:0.0}y); FrenRider lease active and ADS is approaching the exact target to {3:0.0}y." xml:space="preserve">
     <value>{0} Hyperfokussiert {1} ({2:0.0}y); FrenRider-Leasing aktiv und ADS nähert sich dem genauen Ziel bis {3:0.0}y.</value>
@@ -10546,7 +10546,7 @@
     <value>{0} Die Position des lokalen Spielers war beim Auflösen von {1} nicht verfügbar.</value>
   </data>
   <data name="{0} Local player position was unavailable while retaining hyper-focus target {1}." xml:space="preserve">
-    <value>{0} Die Position des lokalen Spielers war nicht verfügbar, während das Hyperfokus-Ziel {1} ​​beibehalten wurde.</value>
+    <value>{0} Die Position des lokalen Spielers war nicht verfügbar, während das Hyperfokus-Ziel {1} beibehalten wurde.</value>
   </data>
   <data name="{0} Mounted Praetorium combat fired {1} at {2}, {3}." xml:space="preserve">
     <value>{0} Berittenes Prätorium feuerte {1} auf {2}, {3}.</value>
@@ -11068,7 +11068,7 @@
     <value>{0}; Werde es noch einmal versuchen.</value>
   </data>
   <data name="{0}ADS selected live boss-fight target {1} via {2}. BossFight BattleNpc rules beat nearby trash, treasure, ghosts, and frontier/manual follow-through once the rule distance/Y gates pass." xml:space="preserve">
-    <value>{0}ADS hat über {2} das Live-Bosskampfziel {1} ​​ausgewählt. Die BossFight BattleNpc-Regeln besiegen Müll, Schätze, Geister in der Nähe und Grenze/manuelle Verfolgung, sobald die Regelentfernung/Y-Tore überschritten werden.</value>
+    <value>{0}ADS hat über {2} das Live-Bosskampfziel {1} ausgewählt. Die BossFight BattleNpc-Regeln besiegen Müll, Schätze, Geister in der Nähe und Grenze/manuelle Verfolgung, sobald die Regelentfernung/Y-Tore überschritten werden.</value>
   </data>
   <data name="{0}Both sides have active priority rules at {1}, so ADS spent the tie on Y-space: the marked {2} interactable is closer in Y-space ({3:0.0} vs {4:0.0}) while staying inside the distance tie window." xml:space="preserve">
     <value>{0}Beide Seiten haben aktive Prioritätsregeln bei {1}, daher hat ADS den Gleichstand im Y-Raum ausgegeben: Der markierte interagierbare {2} liegt näher im Y-Raum ({3:0.0} vs. {4:0.0}), während er innerhalb des Abstandsgleichheitsfensters bleibt.</value>

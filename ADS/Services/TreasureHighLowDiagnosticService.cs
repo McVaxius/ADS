@@ -57,6 +57,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
     private readonly string diagnosticDirectory;
     private readonly string datamineDirectory;
     private readonly string cardMapPath;
+    private readonly string textureExportScriptPath;
 
     private string lastSignature = string.Empty;
     private string lastAddonSignature = string.Empty;
@@ -134,7 +135,8 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         IDataManager dataManager,
         IPluginLog log,
         Configuration configuration,
-        string configDirectory)
+        string configDirectory,
+        string assetRoot)
     {
         this.gameGui = gameGui;
         this.objectTable = objectTable;
@@ -145,6 +147,7 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         diagnosticDirectory = Path.Combine(configDirectory, "HigherLowerDiagnostics");
         datamineDirectory = Path.Combine(diagnosticDirectory, "Datamine");
         cardMapPath = Path.Combine(configDirectory, "higher-lower-card-map.json");
+        textureExportScriptPath = Path.Combine(assetRoot, "Tools", TextureExportScriptName);
     }
 
     public void BeginFrameworkTick()
@@ -1633,15 +1636,14 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
 
     private TextureConversionResult RunTextureExportConverter(string manifestPath)
     {
-        var scriptPath = ResolveTextureExportScriptPath();
-        if (string.IsNullOrWhiteSpace(scriptPath))
+        if (!File.Exists(textureExportScriptPath))
             return new TextureConversionResult(false, string.Empty, "converter script not found");
 
         var depRoot = Path.Combine(diagnosticDirectory, "_pydeps");
         foreach (var (fileName, args) in new[]
                  {
-                     ("python", new[] { scriptPath, "--manifest", manifestPath, "--dep-root", depRoot }),
-                     ("py", new[] { "-3", scriptPath, "--manifest", manifestPath, "--dep-root", depRoot }),
+                     ("python", new[] { textureExportScriptPath, "--manifest", manifestPath, "--dep-root", depRoot }),
+                     ("py", new[] { "-3", textureExportScriptPath, "--manifest", manifestPath, "--dep-root", depRoot }),
                  })
         {
             try
@@ -1688,23 +1690,6 @@ public sealed class TreasureHighLowDiagnosticService : IDisposable
         }
 
         return new TextureConversionResult(false, string.Empty, "python executable not found");
-    }
-
-    private static string? ResolveTextureExportScriptPath()
-    {
-        var baseDirectory = AppContext.BaseDirectory;
-        foreach (var path in new[]
-                 {
-                     Path.Combine(baseDirectory, "Tools", TextureExportScriptName),
-                     Path.Combine(baseDirectory, TextureExportScriptName),
-                     Path.Combine(Directory.GetCurrentDirectory(), "Tools", TextureExportScriptName),
-                 })
-        {
-            if (File.Exists(path))
-                return path;
-        }
-
-        return null;
     }
 
     private string CreateUniqueExportDirectory(string timestamp)
