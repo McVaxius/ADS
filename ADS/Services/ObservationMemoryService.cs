@@ -151,7 +151,8 @@ public sealed class ObservationMemoryService
 
             var name = gameObject.Name.TextValue.Trim();
             var objectKey = BuildKey(gameObject);
-            if (IsExcludedBattleNpc(gameObject))
+            if (IsExcludedBattleNpc(gameObject)
+                || IsEnemyPartiesExitNpc(context, gameObject.ObjectKind, gameObject.BaseId))
             {
                 ForgetObservationKey(objectKey);
                 continue;
@@ -335,6 +336,7 @@ public sealed class ObservationMemoryService
         var interactableGhosts = knownInteractables.Values
             .Where(x => !liveInteractables.ContainsKey(x.Key))
             .Where(x => !IsPartyMemberObservation(x, partyMembers))
+            .Where(x => !IsEnemyPartiesExitNpc(context, x.ObjectKind, x.DataId))
             .Where(x => !objectPriorityRuleService.ShouldIgnoreInteractable(context, x))
             .Where(x => !IsSuppressedInteractionGhost(x))
             .Where(x => !IsSuppressedByRetiredInteractableCluster(x.Position))
@@ -664,6 +666,11 @@ public sealed class ObservationMemoryService
 
         treasureSuppressionUntil.Clear();
     }
+
+    // Tiroro offers to leave Basic Training: Enemy Parties before the duty is complete.
+    private static bool IsEnemyPartiesExitNpc(DutyContextSnapshot context, ObjectKind kind, uint baseId)
+        => context is { ContentFinderConditionId: 42, TerritoryTypeId: 214 }
+            && kind == ObjectKind.EventNpc && baseId is 1004745 or 1004746;
 
     private static bool IsExcludedBattleNpc(IGameObject gameObject)
         => gameObject.ObjectKind == ObjectKind.BattleNpc

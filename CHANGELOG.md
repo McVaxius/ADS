@@ -1,3 +1,7 @@
+2026-11-27 - 2.0.0.33 - Guildhest exit fix
+
+- **Fixed Basic Training: Enemy Parties.** ADS skips Tiroro's exit prompt during progression so it can continue to the final pack.
+
 2026-11-22 - 2.0.0.32 - Auriana Poetics gear
 
 - **Fixed Auriana's Poetics gear shop.** ADS switches between Armor and Accessories and verifies the selected item before buying.

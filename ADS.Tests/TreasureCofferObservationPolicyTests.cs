@@ -170,6 +170,49 @@ public sealed class TreasureCofferObservationPolicyTests
         Assert.Equal(4, fixture.Service.Current.LiveInteractables.Count);
     }
 
+    [Theory]
+    [InlineData(42u, 214u, ObjectKind.EventNpc, 1004745u, true)]
+    [InlineData(42u, 214u, ObjectKind.EventNpc, 1004746u, true)]
+    [InlineData(42u, 215u, ObjectKind.EventNpc, 1004746u, false)]
+    [InlineData(43u, 214u, ObjectKind.EventNpc, 1004746u, false)]
+    [InlineData(42u, 214u, ObjectKind.EventObj, 1004746u, false)]
+    [InlineData(42u, 214u, ObjectKind.EventNpc, 1004747u, false)]
+    public void EnemyPartiesDoesNotObserveTiroroAsProgression(
+        uint cfc, uint territory, ObjectKind kind, uint baseId, bool ignored)
+    {
+        const string localizedName = "Localized guide";
+        var guide = GameObject(localizedName, kind);
+        ((GameObjectProxy)(object)guide).BaseId = baseId;
+        using var fixture = new ObservationFixture(
+            TestDutyContextFactory.Create(territoryId: territory, cfcId: cfc),
+            [guide],
+            new ObjectPriorityRule
+            {
+                ObjectKind = kind.ToString(),
+                BaseId = baseId,
+                Classification = InteractableClass.Required.ToString(),
+                Priority = 0,
+            });
+
+        fixture.Service.Update(fixture.Context, considerTreasureCoffers: false);
+
+        if (ignored)
+            Assert.Empty(fixture.Service.Current.LiveInteractables);
+        else
+            Assert.Equal(InteractableClass.Required, Assert.Single(fixture.Service.Current.LiveInteractables).Classification);
+        Assert.Empty(fixture.Service.Current.InteractableGhosts);
+
+        var guideProxy = (GameObjectProxy)(object)guide;
+        guideProxy.IsTargetable = false;
+        var known = GetPrivateDictionary<string, ObservedInteractable>(fixture.Service, "knownInteractables");
+        known["remembered-guide"] = Interactable("remembered-guide", localizedName, kind, InteractableClass.Required, baseId);
+
+        fixture.Service.Update(fixture.Context, considerTreasureCoffers: false);
+
+        Assert.Empty(fixture.Service.Current.LiveInteractables);
+        Assert.Equal(!ignored, fixture.Service.Current.InteractableGhosts.Any(item => item.Key == "remembered-guide"));
+    }
+
     private static ObjectPriorityRule Rule(string name, InteractableClass classification)
         => new()
         {
@@ -224,12 +267,13 @@ public sealed class TreasureCofferObservationPolicyTests
         string key,
         string name,
         ObjectKind objectKind,
-        InteractableClass classification)
+        InteractableClass classification,
+        uint baseId = 100)
         => new()
         {
             Key = key,
             GameObjectId = 1,
-            DataId = 100,
+            DataId = baseId,
             MapId = 1,
             ObjectKind = objectKind,
             Name = name,
