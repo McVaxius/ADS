@@ -39,6 +39,13 @@ internal sealed class UiAppearance : IDisposable
 
     internal void Draw()
     {
+        Ui.SetLanguage(Ui.ResolveLanguage(plugin.Configuration.UiLanguage, Plugin.ClientState.ClientLanguage));
+        if (!plugin.WindowSystem.Windows.Any(window => window.IsOpen))
+        {
+            ReleaseWindowResources();
+            return;
+        }
+
         var requested = false;
         var completed = false;
         try { imagePicker.Draw(); completed = DrawOwner(out requested); }
@@ -49,8 +56,6 @@ internal sealed class UiAppearance : IDisposable
     {
         requested = false;
         BackgroundRequested = false;
-        Ui.SetLanguage(Ui.ResolveLanguage(plugin.Configuration.UiLanguage, Plugin.ClientState.ClientLanguage));
-        if (!plugin.WindowSystem.Windows.Any(window => window.IsOpen)) return false;
         shapedText ??= new(Plugin.TextureProvider);
         using var text = shapedText.Push();
         var savedColors = plugin.Configuration.UiColors ?? new MaterialColorSettings();
@@ -78,6 +83,7 @@ internal sealed class UiAppearance : IDisposable
         }
         if (!plugin.Fonts.Prepare(Ui.Language, shapedText.Renderer))
         {
+            DisposeBackgroundGlass();
             if (!fontErrorLogged && plugin.Fonts.LoadException is { } error)
             { Plugin.Log.Error(error, "[ADS] Required UI fonts failed to load."); fontErrorLogged = true; }
             using var statusPalette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale,
@@ -118,9 +124,16 @@ internal sealed class UiAppearance : IDisposable
         var imageEnabled = StylingEnabled && colorDraft.Mode == MaterialColorMode.Glassmorphism &&
             colorDraft.GlassBackground == MaterialGlassBackground.Image;
         requested = BackgroundRequested = blurEnabled || imageEnabled;
-        if (requested) backgroundGlass ??= new(Plugin.PluginInterface, Plugin.Log);
-        backgroundGlass?.ConfigureImage(Plugin.TextureProvider, imageEnabled, colorDraft.GlassImagePath);
-        backgroundGlass?.BeginFrame();
+        if (requested)
+        {
+            backgroundGlass ??= new(Plugin.PluginInterface, Plugin.Log);
+            backgroundGlass.BeginFrame(blurEnabled, imageEnabled);
+            backgroundGlass.ConfigureImage(Plugin.TextureProvider, imageEnabled, colorDraft.GlassImagePath);
+        }
+        else
+        {
+            DisposeBackgroundGlass();
+        }
         using var rendererScope = MaterialSkin.PushBackgroundRenderer(requested ? backgroundGlass : null,
             blurEnabled, colorDraft.BackgroundBlurPercent / 100f);
         using var palette = MaterialTheme.Push(theme, ImGuiHelpers.GlobalScale,
@@ -612,12 +625,28 @@ internal sealed class UiAppearance : IDisposable
 
     private void ReleaseResources() => backgroundGlass?.ReleaseResources();
 
+    private void DisposeBackgroundGlass()
+    {
+        backgroundGlass?.Dispose();
+        backgroundGlass = null;
+    }
+
+    private void ReleaseWindowResources()
+    {
+        if (shapedText is null) return;
+        imagePicker.Reset();
+        DisposeBackgroundGlass();
+        uiSoundPlayer?.Dispose();
+        uiSoundPlayer = null;
+        plugin.Fonts.Release();
+        shapedText.Dispose();
+        shapedText = null;
+        fontErrorLogged = false;
+    }
+
     public void Dispose()
     {
         Plugin.PluginInterface.UiBuilder.ResizeBuffers -= ReleaseResources;
-        imagePicker.Reset();
-        backgroundGlass?.Dispose();
-        uiSoundPlayer?.Dispose();
-        shapedText?.Dispose();
+        ReleaseWindowResources();
     }
 }

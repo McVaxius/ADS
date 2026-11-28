@@ -10,38 +10,50 @@ namespace ADS.Localization;
 
 internal sealed class UiFonts : IDisposable
 {
-    private readonly IFontAtlas atlas;
+    private readonly IUiBuilder uiBuilder;
     private readonly string assetRoot;
-    private IFontHandle[] handles = [];
+    private IFontAtlas? atlas;
+    private readonly List<IFontHandle> handles = [];
     private UiLanguage? applied;
     private IReadOnlyList<string> required = [];
     private int generation;
     private int checkedGeneration = -1;
     internal Exception? LoadException { get; private set; }
     internal bool HindiMenuAvailable { get; private set; } = true;
-    internal bool Ready => handles.Length > 0 && handles.All(h => h.Available && h.LoadException is null);
+    internal bool Ready => handles.Count > 0 && handles.All(h => h.Available && h.LoadException is null);
 
     internal UiFonts(IUiBuilder uiBuilder, string assetRoot)
     {
+        this.uiBuilder = uiBuilder;
         this.assetRoot = assetRoot;
-        atlas = uiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.Async, true, "ADS languages");
-        atlas.BuildStepChange += MaterialFontAtlas.ReleaseRasterizedInputs;
     }
 
     internal bool Prepare(UiLanguage language, MaterialTextRenderer shapingRenderer)
     {
         if (applied != language)
         {
-            foreach (var handle in handles) { handle.ImFontChanged -= FontChanged; handle.Dispose(); }
-            applied = language;
-            LoadException = null;
-            checkedGeneration = -1;
+            Release();
             required = RequiredText(language);
             var ranges = required.SelectMany(MaterialText.NativeGlyphText)
                 .Concat(Enumerable.Range(0x20, 0x500 - 0x20).Select(value => (char)value)).ToGlyphRange();
-            using (atlas.SuppressAutoRebuild())
-                handles = AdsPresentation.FontSizes.Select((_, index) => Create((UiFontRole)index, language, ranges)).ToArray();
-            foreach (var handle in handles) handle.ImFontChanged += FontChanged;
+            atlas = uiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.OnNewFrame, true, "ADS languages");
+            atlas.BuildStepChange += MaterialFontAtlas.ReleaseRasterizedInputs;
+            try
+            {
+                foreach (var role in Enum.GetValues<UiFontRole>())
+                {
+                    var handle = MaterialFontAtlas.CreateFont(atlas, AdsPresentation.FontWeights[(int)role],
+                        AdsPresentation.AtlasHeight(role), ranges, Ui.CultureFor(language).Name, assetRoot);
+                    handles.Add(handle);
+                    handle.ImFontChanged += FontChanged;
+                }
+                applied = language;
+            }
+            catch
+            {
+                Release();
+                throw;
+            }
         }
         var nativeError = handles.FirstOrDefault(handle => handle.LoadException is not null)?.LoadException;
         if (!Ready || nativeError is not null) { LoadException = nativeError ?? LoadException; return false; }
@@ -70,15 +82,11 @@ internal sealed class UiFonts : IDisposable
         => Ui.Resources.GetResourceSet(Ui.CultureFor(language), true, false)!
             .Cast<DictionaryEntry>().Select(entry => (string)entry.Value!);
 
-    private IFontHandle Create(UiFontRole role, UiLanguage language, ushort[] ranges)
-        => MaterialFontAtlas.CreateFont(atlas, AdsPresentation.FontWeights[(int)role],
-            AdsPresentation.AtlasHeight(role), ranges, Ui.CultureFor(language).Name, assetRoot);
-
     private void FontChanged(IFontHandle handle, ILockedImFont font) => Interlocked.Increment(ref generation);
 
     private unsafe void CheckGlyphs()
     {
-        for (var index = 0; index < handles.Length; index++)
+        for (var index = 0; index < handles.Count; index++)
         {
             using var font = handles[index].Lock();
             foreach (var character in required.SelectMany(MaterialText.NativeGlyphText).Where(c => !char.IsControl(c)).Distinct())
@@ -91,10 +99,23 @@ internal sealed class UiFonts : IDisposable
     internal IDisposable PushPicker(UiLanguage language) => Push(UiFontRole.Body);
     internal IDisposable Push(UiFontRole role) => handles[(int)role].Push();
 
-    public void Dispose()
+    internal void Release()
     {
-        foreach (var handle in handles) { handle.ImFontChanged -= FontChanged; handle.Dispose(); }
+        if (atlas is null) return;
         atlas.BuildStepChange -= MaterialFontAtlas.ReleaseRasterizedInputs;
+        foreach (var handle in handles)
+        {
+            handle.ImFontChanged -= FontChanged;
+            handle.Dispose();
+        }
+        handles.Clear();
         atlas.Dispose();
+        atlas = null;
+        applied = null;
+        checkedGeneration = -1;
+        required = [];
+        LoadException = null;
     }
+
+    public void Dispose() => Release();
 }

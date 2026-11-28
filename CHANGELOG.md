@@ -1,3 +1,7 @@
+2026-11-28 - 2.0.0.35 - On-demand interface resources
+
+- **Reduced interface memory use while windows are closed.** ADS loads fonts and backdrop resources when needed and releases them when the last window closes.
+
 2026-11-27 - 2.0.0.34 - Lower font memory usage
 
 - **Reduced interface font memory.** ADS releases font source buffers after building its interface fonts.
