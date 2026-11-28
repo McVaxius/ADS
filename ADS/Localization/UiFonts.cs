@@ -25,6 +25,7 @@ internal sealed class UiFonts : IDisposable
     {
         this.assetRoot = assetRoot;
         atlas = uiBuilder.CreateFontAtlas(FontAtlasAutoRebuildMode.Async, true, "ADS languages");
+        atlas.BuildStepChange += MaterialFontAtlas.ReleaseRasterizedInputs;
     }
 
     internal bool Prepare(UiLanguage language, MaterialTextRenderer shapingRenderer)
@@ -93,6 +94,7 @@ internal sealed class UiFonts : IDisposable
     public void Dispose()
     {
         foreach (var handle in handles) { handle.ImFontChanged -= FontChanged; handle.Dispose(); }
+        atlas.BuildStepChange -= MaterialFontAtlas.ReleaseRasterizedInputs;
         atlas.Dispose();
     }
 }

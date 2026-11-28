@@ -1,3 +1,7 @@
+2026-11-27 - 2.0.0.34 - Lower font memory usage
+
+- **Reduced interface font memory.** ADS releases font source buffers after building its interface fonts.
+
 2026-11-27 - 2.0.0.33 - Guildhest exit fix
 
 - **Fixed Basic Training: Enemy Parties.** ADS skips Tiroro's exit prompt during progression so it can continue to the final pack.
